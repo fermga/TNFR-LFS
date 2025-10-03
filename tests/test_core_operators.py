@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from math import sqrt
-from statistics import mean, pstdev
+from statistics import mean, pstdev, pvariance
+from typing import List
 
 import pytest
 
@@ -312,6 +313,68 @@ def test_orchestrator_consumes_fixture_segments(synthetic_records):
     assert isinstance(report["dissonance_breakdown"], DissonanceBreakdown)
     assert report["dissonance_breakdown"].value == pytest.approx(report["dissonance"])
 
+
+def test_orchestrator_reports_microsector_variability(monkeypatch):
+    segment_a = [_build_record(0.0, 5000.0, 0.1, 0.5, 0.2, 0.5, 0.8)] * 2
+    segment_b = [_build_record(2.0, 4800.0, 0.2, 0.6, 0.25, 0.4, 0.78)] * 2
+    delta_values = [[0.1, 0.3], [0.2, 0.4]]
+    si_values = [[0.8, 0.82], [0.78, 0.76]]
+
+    def _fake_recepcion(segment):
+        index = _fake_recepcion.call_count
+        _fake_recepcion.call_count += 1
+        bundles: List[EPIBundle] = []
+        timestamp = 0.0
+        for delta, si in zip(delta_values[index], si_values[index]):
+            bundles.append(
+                EPIBundle(
+                    timestamp=timestamp,
+                    epi=0.0,
+                    delta_nfr=delta,
+                    sense_index=si,
+                    tyres=TyresNode(delta_nfr=delta, sense_index=si),
+                    suspension=SuspensionNode(delta_nfr=delta, sense_index=si),
+                    chassis=ChassisNode(delta_nfr=delta, sense_index=si),
+                    brakes=BrakesNode(delta_nfr=0.0, sense_index=si),
+                    transmission=TransmissionNode(delta_nfr=0.0, sense_index=si),
+                    track=TrackNode(delta_nfr=0.0, sense_index=si),
+                    driver=DriverNode(delta_nfr=0.0, sense_index=si),
+                )
+            )
+            timestamp += 1.0
+        return bundles
+
+    _fake_recepcion.call_count = 0
+    monkeypatch.setattr("tnfr_lfs.core.operators.recepcion_operator", _fake_recepcion)
+
+    microsectors = [
+        _build_microsector(0, 0, 1, 2, apex_target=0.0),
+        _build_microsector(1, 1, 2, 3, apex_target=0.0),
+    ]
+
+    results = orchestrate_delta_metrics(
+        [segment_a, segment_b],
+        target_delta_nfr=0.0,
+        target_sense_index=0.8,
+        coherence_window=1,
+        microsectors=microsectors,
+    )
+
+    variability = results["microsector_variability"]
+    assert len(variability) == 2
+    first = variability[0]
+    assert first["overall"]["samples"] == 3
+    assert first["overall"]["delta_nfr"]["variance"] == pytest.approx(
+        pvariance([0.1, 0.3, 0.2])
+    )
+    assert first["overall"]["sense_index"]["variance"] == pytest.approx(
+        pvariance([0.8, 0.82, 0.78])
+    )
+    assert set(first["laps"]) == {"Vuelta 1", "Vuelta 2"}
+    assert first["laps"]["Vuelta 1"]["samples"] == 2
+    assert first["laps"]["Vuelta 1"]["delta_nfr"]["variance"] == pytest.approx(0.01)
+    assert first["laps"]["Vuelta 2"]["samples"] == 1
+    assert first["laps"]["Vuelta 2"]["delta_nfr"]["variance"] == pytest.approx(0.0)
 
 def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
     bundles = [

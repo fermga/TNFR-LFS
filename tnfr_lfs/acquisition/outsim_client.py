@@ -131,22 +131,47 @@ class OutSimClient:
 
         header_columns = [column.strip() for column in header.split(self.schema.delimiter)]
         is_legacy = tuple(header_columns) == LEGACY_COLUMNS
-        if not is_legacy and tuple(header_columns) != tuple(self.schema.columns):
-            raise TelemetryFormatError(
-                f"Unexpected header {header_columns!r}. Expected {self.schema.columns!r}"
-            )
+        lap_column_present = False
+        if not is_legacy:
+            schema_columns = tuple(self.schema.columns)
+            normalised_header = tuple(column.lower() for column in header_columns)
+            normalised_schema = tuple(column.lower() for column in schema_columns)
+            if normalised_header == normalised_schema:
+                pass
+            elif (
+                len(header_columns) == len(schema_columns) + 1
+                and normalised_header[:-1] == normalised_schema
+                and normalised_header[-1] == "lap"
+            ):
+                lap_column_present = True
+            else:
+                raise TelemetryFormatError(
+                    f"Unexpected header {header_columns!r}. Expected {self.schema.columns!r}"
+                )
 
         records: List[TelemetryRecord] = []
         for line in iterator:
             if not line.strip():
                 continue
             values = [value.strip() for value in line.split(self.schema.delimiter)]
-            expected_len = len(LEGACY_COLUMNS) if is_legacy else len(self.schema.columns)
+            expected_len = len(LEGACY_COLUMNS)
+            if not is_legacy:
+                expected_len = len(self.schema.columns) + (1 if lap_column_present else 0)
             if len(values) != expected_len:
                 raise TelemetryFormatError(
                     f"Expected {expected_len} columns, got {len(values)}: {values!r}"
                 )
             try:
+                lap_value = None
+                if lap_column_present:
+                    lap_token = values[-1].strip()
+                    if lap_token:
+                        try:
+                            int_token = int(float(lap_token))
+                        except ValueError:
+                            lap_value = lap_token
+                        else:
+                            lap_value = int_token
                 if is_legacy:
                     record = TelemetryRecord(
                         timestamp=float(values[0]),
@@ -175,35 +200,38 @@ class OutSimClient:
                         suspension_travel_rear=LEGACY_DEFAULTS["suspension_travel_rear"],
                         suspension_velocity_front=LEGACY_DEFAULTS["suspension_velocity_front"],
                         suspension_velocity_rear=LEGACY_DEFAULTS["suspension_velocity_rear"],
+                        lap=None,
                     )
                 else:
+                    base_values = values[: len(self.schema.columns)]
                     record = TelemetryRecord(
-                        timestamp=float(values[0]),
-                        vertical_load=float(values[1]),
-                        slip_ratio=float(values[2]),
-                        lateral_accel=float(values[3]),
-                        longitudinal_accel=float(values[4]),
-                        yaw=float(values[5]),
-                        pitch=float(values[6]),
-                        roll=float(values[7]),
-                        brake_pressure=float(values[8]),
-                        locking=float(values[9]),
-                        nfr=float(values[10]),
-                        si=float(values[11]),
-                        speed=float(values[12]),
-                        yaw_rate=float(values[13]),
-                        slip_angle=float(values[14]),
-                        steer=float(values[15]),
-                        throttle=float(values[16]),
-                        gear=int(float(values[17])),
-                        vertical_load_front=float(values[18]),
-                        vertical_load_rear=float(values[19]),
-                        mu_eff_front=float(values[20]),
-                        mu_eff_rear=float(values[21]),
-                        suspension_travel_front=float(values[22]),
-                        suspension_travel_rear=float(values[23]),
-                        suspension_velocity_front=float(values[24]),
-                        suspension_velocity_rear=float(values[25]),
+                        timestamp=float(base_values[0]),
+                        vertical_load=float(base_values[1]),
+                        slip_ratio=float(base_values[2]),
+                        lateral_accel=float(base_values[3]),
+                        longitudinal_accel=float(base_values[4]),
+                        yaw=float(base_values[5]),
+                        pitch=float(base_values[6]),
+                        roll=float(base_values[7]),
+                        brake_pressure=float(base_values[8]),
+                        locking=float(base_values[9]),
+                        nfr=float(base_values[10]),
+                        si=float(base_values[11]),
+                        speed=float(base_values[12]),
+                        yaw_rate=float(base_values[13]),
+                        slip_angle=float(base_values[14]),
+                        steer=float(base_values[15]),
+                        throttle=float(base_values[16]),
+                        gear=int(float(base_values[17])),
+                        vertical_load_front=float(base_values[18]),
+                        vertical_load_rear=float(base_values[19]),
+                        mu_eff_front=float(base_values[20]),
+                        mu_eff_rear=float(base_values[21]),
+                        suspension_travel_front=float(base_values[22]),
+                        suspension_travel_rear=float(base_values[23]),
+                        suspension_velocity_front=float(base_values[24]),
+                        suspension_velocity_rear=float(base_values[25]),
+                        lap=lap_value,
                     )
             except ValueError as exc:  # pragma: no cover - defensive branch
                 raise TelemetryFormatError(f"Cannot parse telemetry values: {values!r}") from exc

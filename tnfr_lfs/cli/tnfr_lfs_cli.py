@@ -481,6 +481,8 @@ def _generate_out_reports(
     bundles: Bundles,
     microsectors: Sequence[Microsector],
     destination: Path,
+    *,
+    microsector_variability: Sequence[Mapping[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     destination.mkdir(parents=True, exist_ok=True)
     sense_map = _sense_index_map(bundles, microsectors)
@@ -514,6 +516,10 @@ def _generate_out_reports(
         )
     with breakdown_path.open("w", encoding="utf8") as handle:
         json.dump(breakdown, handle, indent=2, sort_keys=True)
+    variability_data = [dict(entry) for entry in microsector_variability or ()]
+    variability_path = destination / "microsector_variability.json"
+    with variability_path.open("w", encoding="utf8") as handle:
+        json.dump(variability_data, handle, indent=2, sort_keys=True)
     return {
         "sense_index_map": {"path": str(sense_path), "data": sense_map},
         "modal_resonance": {
@@ -535,6 +541,10 @@ def _generate_out_reports(
             },
         },
         "delta_breakdown": {"path": str(breakdown_path), "data": breakdown},
+        "microsector_variability": {
+            "path": str(variability_path),
+            "data": variability_data,
+        },
     }
 
 _TELEMETRY_DEFAULTS: Mapping[str, Any] = {
@@ -557,6 +567,7 @@ _TELEMETRY_DEFAULTS: Mapping[str, Any] = {
     "suspension_travel_rear": 0.0,
     "suspension_velocity_front": 0.0,
     "suspension_velocity_rear": 0.0,
+    "lap": None,
 }
 
 
@@ -1035,8 +1046,9 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
     bundles, microsectors = _compute_insights(records)
+    lap_segments = _group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
-        [records],
+        lap_segments,
         namespace.target_delta,
         namespace.target_si,
         coherence_window=namespace.coherence_window,
@@ -1055,6 +1067,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         bundles,
         microsectors,
         _resolve_output_dir(config) / namespace.telemetry.stem,
+        microsector_variability=metrics.get("microsector_variability"),
     )
     phase_templates = _phase_templates_from_config(config, "analyze")
     payload: Dict[str, Any] = {
@@ -1106,8 +1119,9 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
     bundles, microsectors = _compute_insights(records)
+    lap_segments = _group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
-        [records],
+        lap_segments,
         namespace.target_delta,
         namespace.target_si,
         coherence_window=namespace.coherence_window,
@@ -1119,6 +1133,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         bundles,
         microsectors,
         _resolve_output_dir(config) / namespace.telemetry.stem,
+        microsector_variability=metrics.get("microsector_variability"),
     )
     payload: Dict[str, Any] = {
         "objectives": metrics.get("objectives", {}),
@@ -1130,6 +1145,8 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         "recursive_trace": metrics.get("recursive_trace", []),
         "pairwise_coupling": metrics.get("pairwise_coupling", {}),
         "dissonance_breakdown": metrics.get("dissonance_breakdown"),
+        "microsector_variability": metrics.get("microsector_variability", []),
+        "lap_sequence": metrics.get("lap_sequence", []),
         "series": bundles if bundles else metrics.get("bundles", []),
         "reports": reports,
     }
@@ -1187,6 +1204,37 @@ def _render_payload(payload: Mapping[str, Any], exporter_name: str) -> str:
     rendered = exporter(dict(payload))
     print(rendered)
     return rendered
+
+
+def _group_records_by_lap(records: Records) -> List[Records]:
+    if not records:
+        return []
+    labels: List[Any] = []
+    last_label: Any = None
+    for record in records:
+        lap_value = getattr(record, "lap", None)
+        if lap_value is not None:
+            last_label = lap_value
+        labels.append(last_label)
+    if labels and labels[0] is None:
+        first_label = next((label for label in labels if label is not None), None)
+        if first_label is not None:
+            labels = [label if label is not None else first_label for label in labels]
+    unique_labels = {label for label in labels if label is not None}
+    if len(unique_labels) <= 1:
+        return [records]
+    groups: List[Records] = []
+    current_group: List[TelemetryRecord] = []
+    current_label: Any = labels[0]
+    for record, label in zip(records, labels):
+        if current_group and label != current_label:
+            groups.append(current_group)
+            current_group = []
+        current_group.append(record)
+        current_label = label
+    if current_group:
+        groups.append(current_group)
+    return groups or [records]
 
 
 def _compute_insights(records: Records) -> tuple[Bundles, Sequence[Microsector]]:

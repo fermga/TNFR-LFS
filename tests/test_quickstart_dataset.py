@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
@@ -65,3 +66,37 @@ def test_quickstart_dataset_pipeline(
         assert payload["telemetry_samples"] == 17
     if command == "suggest":
         assert payload["recommendations"]
+
+
+def test_analyze_reports_microsector_variability_by_lap(
+    tmp_path: Path, synthetic_records
+) -> None:
+    samples_per_lap = 12
+    laps = []
+    offset = 0.0
+    for lap_index in range(2):
+        lap_records = []
+        for record in synthetic_records[:samples_per_lap]:
+            payload = asdict(record)
+            payload["timestamp"] = float(payload["timestamp"]) + offset
+            payload["lap"] = f"lap-{lap_index + 1}"
+            lap_records.append(payload)
+        laps.extend(lap_records)
+        offset += 100.0
+    dataset_path = tmp_path / "multi_lap.json"
+    dataset_path.write_text(json.dumps(laps), encoding="utf8")
+
+    payload = json.loads(
+        run_cli(["analyze", str(dataset_path), "--export", "json"])
+    )
+
+    metrics = payload["metrics"]
+    variability = metrics["microsector_variability"]
+    assert variability
+    lap_labels = set()
+    for entry in variability:
+        lap_labels.update(entry.get("laps", {}).keys())
+    assert {"lap-1", "lap-2"} <= lap_labels
+    reports = payload["reports"]
+    assert "microsector_variability" in reports
+    assert reports["microsector_variability"]["data"]
