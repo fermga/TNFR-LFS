@@ -11,6 +11,7 @@ class TyresNode:
 
     delta_nfr: float
     sense_index: float
+    nu_f: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class SuspensionNode:
 
     delta_nfr: float
     sense_index: float
+    nu_f: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,7 @@ class ChassisNode:
 
     delta_nfr: float
     sense_index: float
+    nu_f: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,7 @@ class BrakesNode:
 
     delta_nfr: float
     sense_index: float
+    nu_f: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -43,6 +47,7 @@ class TransmissionNode:
 
     delta_nfr: float
     sense_index: float
+    nu_f: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -51,6 +56,7 @@ class TrackNode:
 
     delta_nfr: float
     sense_index: float
+    nu_f: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -59,6 +65,7 @@ class DriverNode:
 
     delta_nfr: float
     sense_index: float
+    nu_f: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -76,4 +83,6 @@ class EPIBundle:
     transmission: TransmissionNode
     track: TrackNode
     driver: DriverNode
+    dEPI_dt: float = 0.0
+    integrated_epi: float = 0.0
 

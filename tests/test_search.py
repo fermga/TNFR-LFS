@@ -16,21 +16,32 @@ from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.recommender.search import DEFAULT_DECISION_LIBRARY, SetupPlanner, objective_score
 
 
+BASE_NU_F = {
+    "tyres": 0.18,
+    "suspension": 0.14,
+    "chassis": 0.12,
+    "brakes": 0.16,
+    "transmission": 0.11,
+    "track": 0.08,
+    "driver": 0.05,
+}
+
+
 def _build_bundle(timestamp: float, delta_nfr: float, si: float) -> EPIBundle:
     share = delta_nfr / 6
-    tyre_node = TyresNode(delta_nfr=share, sense_index=si)
+    tyre_node = TyresNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["tyres"])
     return EPIBundle(
         timestamp=timestamp,
         epi=0.0,
         delta_nfr=delta_nfr,
         sense_index=si,
         tyres=tyre_node,
-        suspension=SuspensionNode(delta_nfr=share, sense_index=si),
-        chassis=ChassisNode(delta_nfr=share, sense_index=si),
-        brakes=BrakesNode(delta_nfr=share, sense_index=si),
-        transmission=TransmissionNode(delta_nfr=share, sense_index=si),
-        track=TrackNode(delta_nfr=share, sense_index=si),
-        driver=DriverNode(delta_nfr=share, sense_index=si),
+        suspension=SuspensionNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["suspension"]),
+        chassis=ChassisNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["chassis"]),
+        brakes=BrakesNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["brakes"]),
+        transmission=TransmissionNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["transmission"]),
+        track=TrackNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["track"]),
+        driver=DriverNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["driver"]),
     )
 
 

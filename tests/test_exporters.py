@@ -12,16 +12,27 @@ from tnfr_lfs.exporters import csv_exporter, json_exporter, markdown_exporter
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan, serialise_setup_plan
 
 
+BASE_NU_F = {
+    "tyres": 0.18,
+    "suspension": 0.14,
+    "chassis": 0.12,
+    "brakes": 0.16,
+    "transmission": 0.11,
+    "track": 0.08,
+    "driver": 0.05,
+}
+
+
 def build_payload():
     def build_nodes(delta_nfr: float, sense_index: float):
         return dict(
-            tyres=TyresNode(delta_nfr=delta_nfr / 7, sense_index=sense_index),
-            suspension=SuspensionNode(delta_nfr=delta_nfr / 7, sense_index=sense_index),
-            chassis=ChassisNode(delta_nfr=delta_nfr / 7, sense_index=sense_index),
-            brakes=BrakesNode(delta_nfr=delta_nfr / 7, sense_index=sense_index),
-            transmission=TransmissionNode(delta_nfr=delta_nfr / 7, sense_index=sense_index),
-            track=TrackNode(delta_nfr=delta_nfr / 7, sense_index=sense_index),
-            driver=DriverNode(delta_nfr=delta_nfr / 7, sense_index=sense_index),
+            tyres=TyresNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["tyres"]),
+            suspension=SuspensionNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["suspension"]),
+            chassis=ChassisNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["chassis"]),
+            brakes=BrakesNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["brakes"]),
+            transmission=TransmissionNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["transmission"]),
+            track=TrackNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["track"]),
+            driver=DriverNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["driver"]),
         )
 
     results = [

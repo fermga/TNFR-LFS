@@ -22,6 +22,14 @@ def test_delta_calculation_against_baseline(synthetic_records):
     assert bundle.delta_nfr == pytest.approx(sample.nfr - baseline.nfr)
     assert 0.0 <= bundle.sense_index <= 1.0
     assert bundle.track.delta_nfr + bundle.suspension.delta_nfr != 0.0
+    assert bundle.dEPI_dt == pytest.approx(
+        sum(
+            getattr(bundle, node).nu_f * getattr(bundle, node).delta_nfr
+            for node in ("tyres", "suspension", "chassis", "brakes", "transmission", "track", "driver")
+        ),
+        rel=1e-6,
+    )
+    assert bundle.integrated_epi == pytest.approx(bundle.epi)
 
 
 def test_epi_extractor_creates_structured_nodes(synthetic_bundles):
@@ -36,6 +44,8 @@ def test_epi_extractor_creates_structured_nodes(synthetic_bundles):
     assert isinstance(pivot.track, TrackNode)
     assert isinstance(pivot.driver, DriverNode)
     assert 0.0 <= pivot.tyres.sense_index <= 1.0
+    assert pivot.tyres.nu_f > 0
+    assert pivot.suspension.nu_f > 0
     assert 0.0 <= pivot.track.sense_index <= 1.0
     assert sum(
         node.delta_nfr for node in (
@@ -48,6 +58,11 @@ def test_epi_extractor_creates_structured_nodes(synthetic_bundles):
             pivot.driver,
         )
     ) == pytest.approx(pivot.delta_nfr, rel=1e-6)
+    assert pivot.dEPI_dt != pytest.approx(0.0)
+    previous = synthetic_bundles[4]
+    dt = pivot.timestamp - previous.timestamp
+    expected_integral = previous.integrated_epi + pivot.dEPI_dt * dt
+    assert pivot.integrated_epi == pytest.approx(expected_integral, rel=1e-3)
 
 
 def test_epi_weights_shift_balance_between_load_and_slip(synthetic_records):

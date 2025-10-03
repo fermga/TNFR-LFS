@@ -11,6 +11,23 @@ from .epi import EPIExtractor, TelemetryRecord
 from .epi_models import EPIBundle
 
 
+def evolve_epi(
+    prev_epi: float,
+    delta_map: Mapping[str, float],
+    dt: float,
+    nu_f_by_node: Mapping[str, float],
+) -> tuple[float, float]:
+    """Integrate the Event Performance Index using explicit Euler steps."""
+
+    if dt < 0.0:
+        raise ValueError("dt must be non-negative")
+    derivative = 0.0
+    for node, weight in nu_f_by_node.items():
+        derivative += weight * delta_map.get(node, 0.0)
+    new_epi = prev_epi + (derivative * dt)
+    return new_epi, derivative
+
+
 def emission_operator(target_delta_nfr: float, target_sense_index: float) -> Dict[str, float]:
     """Return normalised objectives for ΔNFR and sense index targets."""
 
@@ -181,5 +198,6 @@ __all__ = [
     "resonance_operator",
     "recursividad_operator",
     "orchestrate_delta_metrics",
+    "evolve_epi",
 ]
 

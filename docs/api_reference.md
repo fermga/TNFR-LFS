@@ -25,6 +25,12 @@ Use :func:`tnfr_lfs.core.coherence.sense_index` together with
 :func:`tnfr_lfs.core.coherence.compute_node_delta_nfr` to build custom
 analytics pipelines.
 
+Each :class:`EPIBundle` records the per-node natural frequency ``nu_f`` (Hz),
+allowing downstream tooling to weigh ΔNFR contributions using documented
+subsystem dynamics.  Bundles now expose the derivative ``dEPI_dt`` and the
+cumulatively integrated ``integrated_epi`` value obtained through explicit
+Euler integration.
+
 ### Operator utilities
 
 ```
@@ -36,6 +42,7 @@ tnfr_lfs.core.operators.acoplamiento_operator(series_a: Sequence[float], series_
 tnfr_lfs.core.operators.resonance_operator(series: Sequence[float]) -> float
 tnfr_lfs.core.operators.recursividad_operator(series: Sequence[float], *, seed: float = 0.0, decay: float = 0.5) -> List[float]
 tnfr_lfs.core.operators.orchestrate_delta_metrics(telemetry_segments: Sequence[Sequence[TelemetryRecord]], target_delta_nfr: float, target_sense_index: float, *, coherence_window: int = 3, recursion_decay: float = 0.4) -> Mapping[str, object]
+tnfr_lfs.core.operators.evolve_epi(prev_epi: float, delta_map: Mapping[str, float], dt: float, nu_f_by_node: Mapping[str, float]) -> Tuple[float, float]
 ```
 
 These functions compose an end-to-end ΔNFR/Sense Index pipeline covering

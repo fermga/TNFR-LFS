@@ -12,6 +12,7 @@ from tnfr_lfs.core.operators import (
     acoplamiento_operator,
     coherence_operator,
     dissonance_operator,
+    evolve_epi,
     emission_operator,
     orchestrate_delta_metrics,
     recepcion_operator,
@@ -46,6 +47,17 @@ def test_coherence_operator_reduces_jitter_without_bias():
 
     assert mean(smoothed) == pytest.approx(mean(raw_series), rel=1e-9)
     assert pstdev(smoothed) < pstdev(raw_series)
+
+
+def test_evolve_epi_runs_euler_step():
+    prev = 0.45
+    deltas = {"tyres": 1.2, "suspension": -0.6, "driver": 0.4}
+    nu_map = {"tyres": 0.18, "suspension": 0.14, "driver": 0.05}
+    new_epi, derivative = evolve_epi(prev, deltas, 0.1, nu_map)
+
+    expected_derivative = 0.18 * 1.2 + 0.14 * -0.6 + 0.05 * 0.4
+    assert derivative == pytest.approx(expected_derivative, rel=1e-9)
+    assert new_epi == pytest.approx(prev + expected_derivative * 0.1, rel=1e-9)
 
 
 def test_orchestrator_pipeline_builds_consistent_metrics():
