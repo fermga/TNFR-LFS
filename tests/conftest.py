@@ -19,6 +19,16 @@ from tnfr_lfs.recommender.rules import ThresholdProfile
 
 
 @pytest.fixture(scope="session")
+def quickstart_dataset_path() -> Path:
+    """Baseline dataset referenced by the quickstart flow."""
+
+    dataset = ROOT / "data" / "BL1_XFG_baseline.csv"
+    if not dataset.exists():  # pragma: no cover - defensive guard for local runs
+        raise FileNotFoundError(dataset)
+    return dataset
+
+
+@pytest.fixture(scope="session")
 def synthetic_stint_path() -> Path:
     """Location of the bundled synthetic telemetry stint."""
 

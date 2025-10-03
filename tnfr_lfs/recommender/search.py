@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from statistics import fmean
-from typing import Callable, Dict, Iterable, List, Mapping, MutableMapping, Sequence
+from typing import Callable, Dict, Mapping, MutableMapping, Sequence
 
 from ..core.epi_models import EPIBundle
 from ..core.segmentation import Microsector

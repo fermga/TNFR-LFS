@@ -5,6 +5,19 @@ exercise the EPI extractor, segmentation heuristics and CLI pipelines.  This
 directory documents how to rebuild them if the telemetry model changes in the
 future.
 
+## `data/BL1_XFG_baseline.csv`
+
+* Dataset de referencia para el flujo de quickstart y las pruebas de CLI.
+* Replica el stint sintético de 17 muestras utilizado en `tests/data` pero
+  vive en la raíz del repositorio para el consumo de usuarios.
+* Mantén los mismos encabezados para conservar compatibilidad con el script
+  `examples/quickstart.sh` y con las funciones tipadas en
+  `typing_targets.quickstart_dataset`.
+
+Para regenerarlo puedes copiar el contenido de `tests/data/synthetic_stint.csv`
+o volver a ejecutar el script indicado abajo, guardando el resultado en
+`data/BL1_XFG_baseline.csv`.
+
 ## `data/synthetic_stint.csv`
 
 * 17-sample telemetry stint that contains two distinct cornering events.
