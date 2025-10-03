@@ -64,8 +64,17 @@ tnfr_lfs.core.segmentation.Goal
 The segmentation module aligns telemetry samples with their EPI bundles to
 derive microsectors that follow curvature, support events, and ΔNFR
 signatures.  Each :class:`Microsector` exposes phase boundaries for entry,
-apex, and exit, together with the :class:`Goal` objects that define the
-target ΔNFR and Sense Index for each phase.
+apex, and exit together with an ``active_phase`` selector and the
+``dominant_nodes`` mapping that lists the subsystems driving each phase.
+The per-phase :class:`Goal` instances define not only the target ΔNFR and
+Sense Index averages but also:
+
+* ``nu_f_target`` – the weighted natural frequency of the fastest nodes in the
+  phase.
+* ``slip_lat_window`` / ``slip_long_window`` – allowable slip bands derived
+  from the telemetry means under lateral/longitudinal load.
+* ``yaw_rate_window`` – the expected yaw-rate envelope for the phase.
+* ``dominant_nodes`` – the subsystems whose ΔNFR signature anchors the goal.
 
 ## Recommendation Engine
 
