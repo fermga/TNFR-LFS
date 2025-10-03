@@ -483,68 +483,224 @@ def _generate_out_reports(
     destination: Path,
     *,
     microsector_variability: Sequence[Mapping[str, Any]] | None = None,
+    metrics: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     destination.mkdir(parents=True, exist_ok=True)
     sense_map = _sense_index_map(bundles, microsectors)
     resonance = analyse_modal_resonance(records)
     breakdown = _delta_breakdown_summary(bundles)
+    metrics = dict(metrics or {})
+
+    def _floatify(value: Any, *, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
+    def _floatify_mapping(mapping: Mapping[str, Any]) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {}
+        for key, value in mapping.items():
+            if isinstance(value, Mapping):
+                payload[str(key)] = _floatify_mapping(value)
+            else:
+                payload[str(key)] = _floatify(value, default=0.0)
+        return payload
+
     sense_path = destination / "sense_index_map.json"
     resonance_path = destination / "modal_resonance.json"
     breakdown_path = destination / "delta_breakdown.json"
+    occupancy_path = destination / "window_occupancy.json"
+    pairwise_path = destination / "pairwise_coupling.json"
+    dissonance_path = destination / "dissonance_breakdown.json"
+    memory_path = destination / "sense_memory.json"
+    summary_path = destination / "metrics_summary.md"
+
+    occupancy_payload: List[Dict[str, Any]] = []
+    for entry in sense_map:
+        occupancy_payload.append(
+            {
+                "microsector": entry.get("microsector"),
+                "label": entry.get("label"),
+                "window_occupancy": {
+                    phase: {
+                        metric: _floatify(value, default=0.0)
+                        for metric, value in (entry.get("window_occupancy", {}).get(phase, {}) or {}).items()
+                    }
+                    for phase in ("entry", "apex", "exit")
+                },
+            }
+        )
+
     with sense_path.open("w", encoding="utf8") as handle:
         json.dump(sense_map, handle, indent=2, sort_keys=True)
-    with resonance_path.open("w", encoding="utf8") as handle:
-        json.dump(
-            {
-                axis: {
-                    "sample_rate": analysis.sample_rate,
-                    "total_energy": analysis.total_energy,
-                    "peaks": [
-                        {
-                            "frequency": peak.frequency,
-                            "energy": peak.energy,
-                            "classification": peak.classification,
-                        }
-                        for peak in analysis.peaks
-                    ],
+    resonance_payload = {
+        axis: {
+            "sample_rate": analysis.sample_rate,
+            "total_energy": analysis.total_energy,
+            "peaks": [
+                {
+                    "frequency": peak.frequency,
+                    "energy": peak.energy,
+                    "classification": peak.classification,
                 }
-                for axis, analysis in resonance.items()
-            },
-            handle,
-            indent=2,
-            sort_keys=True,
-        )
+                for peak in analysis.peaks
+            ],
+        }
+        for axis, analysis in resonance.items()
+    }
+    with resonance_path.open("w", encoding="utf8") as handle:
+        json.dump(resonance_payload, handle, indent=2, sort_keys=True)
     with breakdown_path.open("w", encoding="utf8") as handle:
         json.dump(breakdown, handle, indent=2, sort_keys=True)
+    with occupancy_path.open("w", encoding="utf8") as handle:
+        json.dump(occupancy_payload, handle, indent=2, sort_keys=True)
+
+    pairwise_payload: Dict[str, Any] = {}
+    raw_pairwise = metrics.get("pairwise_coupling")
+    if isinstance(raw_pairwise, Mapping):
+        pairwise_payload = _floatify_mapping(raw_pairwise)
+    coupling_payload = {
+        "global": {
+            "delta_nfr_vs_sense_index": _floatify(metrics.get("coupling")),
+            "resonance_index": _floatify(metrics.get("resonance")),
+            "dissonance": _floatify(metrics.get("dissonance")),
+        },
+        "pairwise": pairwise_payload,
+    }
+    with pairwise_path.open("w", encoding="utf8") as handle:
+        json.dump(coupling_payload, handle, indent=2, sort_keys=True)
+
+    dissonance_breakdown = metrics.get("dissonance_breakdown")
+    if dissonance_breakdown is None:
+        dissonance_payload: Dict[str, Any] = {}
+    else:
+        try:
+            dissonance_payload = {
+                key: _floatify(value)
+                for key, value in asdict(dissonance_breakdown).items()
+            }
+        except TypeError:
+            if isinstance(dissonance_breakdown, Mapping):
+                dissonance_payload = {
+                    key: _floatify(value) for key, value in dissonance_breakdown.items()
+                }
+            else:
+                dissonance_payload = {"value": _floatify(dissonance_breakdown)}
+    with dissonance_path.open("w", encoding="utf8") as handle:
+        json.dump(dissonance_payload, handle, indent=2, sort_keys=True)
+
+    sense_memory = metrics.get("sense_memory")
+    if isinstance(sense_memory, Mapping):
+        memory_payload = {
+            "series": [_floatify(value) for value in sense_memory.get("series", []) if isinstance(value, (int, float))],
+            "memory": [_floatify(value) for value in sense_memory.get("memory", []) if isinstance(value, (int, float))],
+            "average": _floatify(sense_memory.get("average")),
+            "decay": _floatify(sense_memory.get("decay")),
+        }
+    else:
+        memory_payload = {"series": [], "memory": [], "average": 0.0, "decay": 0.0}
+    with memory_path.open("w", encoding="utf8") as handle:
+        json.dump(memory_payload, handle, indent=2, sort_keys=True)
+
+    summary_lines: List[str] = [
+        "# Resumen de métricas avanzadas",
+        "",
+        "## Resonancia modal",
+    ]
+    for axis, analysis in sorted(resonance_payload.items()):
+        summary_lines.append(
+            f"- **{axis}** · energía total {analysis['total_energy']:.3f} (Fs={analysis['sample_rate']:.1f} Hz)"
+        )
+        if analysis["peaks"]:
+            for peak in analysis["peaks"]:
+                summary_lines.append(
+                    "  - "
+                    f"{peak['classification']} @ {peak['frequency']:.3f} Hz "
+                    f"({peak['energy']:.3f})"
+                )
+        else:
+            summary_lines.append("  - Sin picos detectados")
+
+    if dissonance_payload:
+        summary_lines.extend(
+            [
+                "",
+                "## Disonancia útil",
+                f"- Magnitud útil: {dissonance_payload.get('useful_magnitude', 0.0):.3f}",
+                f"- Eventos útiles: {int(dissonance_payload.get('useful_events', 0))}",
+                f"- Magnitud parasitaria: {dissonance_payload.get('parasitic_magnitude', 0.0):.3f}",
+            ]
+        )
+
+    summary_lines.extend(
+        [
+            "",
+            "## Acoplamientos",
+            f"- Acoplamiento global ΔNFR↔Si: {coupling_payload['global']['delta_nfr_vs_sense_index']:.3f}",
+            f"- Índice de resonancia global: {coupling_payload['global']['resonance_index']:.3f}",
+        ]
+    )
+    if pairwise_payload:
+        summary_lines.append("- Pares analizados:")
+        for domain, pairs in sorted(pairwise_payload.items()):
+            summary_lines.append(f"  - {domain}:")
+            for pair, value in sorted(pairs.items()):
+                summary_lines.append(f"    - {pair}: {value:.3f}")
+
+    if memory_payload["memory"] or memory_payload["series"]:
+        summary_lines.extend(
+            [
+                "",
+                "## Memoria del índice de sensibilidad",
+                f"- Promedio suavizado: {memory_payload['average']:.3f}",
+                f"- Último valor de memoria: {memory_payload['memory'][-1]:.3f}",
+                f"- Factor de decaimiento: {memory_payload['decay']:.3f}",
+            ]
+        )
+    else:
+        summary_lines.extend(
+            [
+                "",
+                "## Memoria del índice de sensibilidad",
+                "- No se registraron muestras para la traza de memoria.",
+            ]
+        )
+
+    if occupancy_payload:
+        summary_lines.extend(["", "## Ocupación de ventanas"])
+        phase_totals: Dict[str, List[float]] = {"entry": [], "apex": [], "exit": []}
+        for entry in occupancy_payload:
+            for phase, values in entry.get("window_occupancy", {}).items():
+                total = sum(_floatify(value) for value in values.values())
+                phase_totals.setdefault(phase, []).append(total)
+        for phase, values in sorted(phase_totals.items()):
+            if not values:
+                continue
+            summary_lines.append(
+                f"- {phase}: promedio {sum(values) / len(values):.3f} (ver window_occupancy.json para detalle)"
+            )
+
+    summary_text = "\n".join(summary_lines) + "\n"
+    with summary_path.open("w", encoding="utf8") as handle:
+        handle.write(summary_text)
+
     variability_data = [dict(entry) for entry in microsector_variability or ()]
     variability_path = destination / "microsector_variability.json"
     with variability_path.open("w", encoding="utf8") as handle:
         json.dump(variability_data, handle, indent=2, sort_keys=True)
     return {
         "sense_index_map": {"path": str(sense_path), "data": sense_map},
-        "modal_resonance": {
-            "path": str(resonance_path),
-            "data": {
-                axis: {
-                    "sample_rate": analysis.sample_rate,
-                    "total_energy": analysis.total_energy,
-                    "peaks": [
-                        {
-                            "frequency": peak.frequency,
-                            "energy": peak.energy,
-                            "classification": peak.classification,
-                        }
-                        for peak in analysis.peaks
-                    ],
-                }
-                for axis, analysis in resonance.items()
-            },
-        },
+        "modal_resonance": {"path": str(resonance_path), "data": resonance_payload},
         "delta_breakdown": {"path": str(breakdown_path), "data": breakdown},
+        "window_occupancy": {"path": str(occupancy_path), "data": occupancy_payload},
         "microsector_variability": {
             "path": str(variability_path),
             "data": variability_data,
         },
+        "pairwise_coupling": {"path": str(pairwise_path), "data": coupling_payload},
+        "dissonance_breakdown": {"path": str(dissonance_path), "data": dissonance_payload},
+        "sense_memory": {"path": str(memory_path), "data": memory_payload},
+        "metrics_summary": {"path": str(summary_path), "data": summary_text},
     }
 
 _TELEMETRY_DEFAULTS: Mapping[str, Any] = {
@@ -1068,6 +1224,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         microsectors,
         _resolve_output_dir(config) / namespace.telemetry.stem,
         microsector_variability=metrics.get("microsector_variability"),
+        metrics=metrics,
     )
     phase_templates = _phase_templates_from_config(config, "analyze")
     intermediate_metrics = {
@@ -1105,6 +1262,16 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
     bundles, microsectors = _compute_insights(records)
+    lap_segments = _group_records_by_lap(records)
+    suggest_cfg = dict(config.get("suggest", {}))
+    metrics = orchestrate_delta_metrics(
+        lap_segments,
+        float(suggest_cfg.get("target_delta", 0.0)),
+        float(suggest_cfg.get("target_si", 0.75)),
+        coherence_window=int(suggest_cfg.get("coherence_window", 3)),
+        recursion_decay=float(suggest_cfg.get("recursion_decay", 0.4)),
+        microsectors=microsectors,
+    )
     engine = RecommendationEngine()
     recommendations = engine.generate(
         bundles, microsectors, car_model=namespace.car_model, track_name=namespace.track
@@ -1121,6 +1288,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         bundles,
         microsectors,
         _resolve_output_dir(config) / namespace.telemetry.stem,
+        metrics=metrics,
     )
     payload = {
         "series": bundles,
@@ -1131,6 +1299,16 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         "phase_messages": phase_messages,
         "reports": reports,
     }
+    if metrics:
+        payload["metrics"] = {
+            "delta_nfr": metrics.get("delta_nfr", 0.0),
+            "sense_index": metrics.get("sense_index", 0.0),
+            "dissonance": metrics.get("dissonance", 0.0),
+            "coupling": metrics.get("coupling", 0.0),
+            "resonance": metrics.get("resonance", 0.0),
+            "pairwise_coupling": metrics.get("pairwise_coupling"),
+            "dissonance_breakdown": metrics.get("dissonance_breakdown"),
+        }
     return _render_payload(payload, namespace.export)
 
 
@@ -1152,6 +1330,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         microsectors,
         _resolve_output_dir(config) / namespace.telemetry.stem,
         microsector_variability=metrics.get("microsector_variability"),
+        metrics=metrics,
     )
     payload: Dict[str, Any] = {
         "objectives": metrics.get("objectives", {}),
