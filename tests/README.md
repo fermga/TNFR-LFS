@@ -104,3 +104,23 @@ Path("tests/data/car_track_profiles.json").write_text(
     encoding="utf8",
 )
 ```
+
+## Acceptance orchestration fixtures
+
+The `acceptance_bundle_series`, `acceptance_records` and
+`acceptance_microsectors` fixtures exercise the nodal stage, window occupancy
+metrics and modal coupling/resonance operators without relying on the full EPI
+extractor.  They feed deterministic bundles and segmentation metadata to
+`orchestrate_delta_metrics` so that the acceptance tests can validate:
+
+* Monotonic smoothing of the Sense Index time series.
+* Pairwise coupling per node and global resonance values derived from the
+  smoothed series.
+* ν_f weighting effects over the entropy-aware Sense Index calculation.
+* Convergence of the recursive memory and mutation operators.
+
+Run the scenarios with:
+
+```bash
+pytest tests/test_acceptance_pipeline.py
+```
