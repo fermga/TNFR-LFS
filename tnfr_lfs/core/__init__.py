@@ -1,7 +1,7 @@
 """Core computation utilities for TNFR-LFS."""
 
 from .coherence import compute_node_delta_nfr, sense_index
-from .epi import DeltaCalculator, EPIExtractor, TelemetryRecord
+from .epi import DeltaCalculator, EPIExtractor, TelemetryRecord, delta_nfr_by_node
 from .epi_models import EPIBundle
 from .operators import (
     acoplamiento_operator,
@@ -21,6 +21,7 @@ __all__ = [
     "EPIExtractor",
     "DeltaCalculator",
     "EPIBundle",
+    "delta_nfr_by_node",
     "compute_node_delta_nfr",
     "sense_index",
     "emission_operator",

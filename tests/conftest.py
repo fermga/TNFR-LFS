@@ -40,6 +40,11 @@ def synthetic_records(synthetic_stint_path: Path) -> List[TelemetryRecord]:
                     slip_ratio=float(row["slip_ratio"]),
                     lateral_accel=float(row["lateral_accel"]),
                     longitudinal_accel=float(row["longitudinal_accel"]),
+                    yaw=float(row["yaw"]),
+                    pitch=float(row["pitch"]),
+                    roll=float(row["roll"]),
+                    brake_pressure=float(row["brake_pressure"]),
+                    locking=float(row["locking"]),
                     nfr=float(row["nfr"]),
                     si=float(row["si"]),
                 )

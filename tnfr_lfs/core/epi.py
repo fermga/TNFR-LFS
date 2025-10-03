@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, replace
 from statistics import mean
 from typing import Dict, List, Mapping, Optional, Sequence
 
-from .coherence import compute_node_delta_nfr, sense_index
+from .coherence import sense_index
 from .epi_models import (
     BrakesNode,
     ChassisNode,
@@ -41,8 +42,86 @@ class TelemetryRecord:
     slip_ratio: float
     lateral_accel: float
     longitudinal_accel: float
+    yaw: float
+    pitch: float
+    roll: float
+    brake_pressure: float
+    locking: float
     nfr: float
     si: float
+    reference: Optional["TelemetryRecord"] = None
+
+
+def _angle_difference(value: float, reference: float) -> float:
+    """Return the wrapped angular delta between ``value`` and ``reference``."""
+
+    delta = value - reference
+    if not math.isfinite(delta):
+        return 0.0
+    wrapped = (delta + math.pi) % (2.0 * math.pi)
+    return wrapped - math.pi
+
+
+def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
+    """Compute ΔNFR contributions for each subsystem.
+
+    The function expects ``record`` to optionally provide a ``reference``
+    sample, typically the baseline derived from the telemetry stint.  When a
+    reference is available the signal strength for every subsystem is
+    measured relative to it, otherwise the calculation degenerates into a
+    uniform distribution.
+    """
+
+    baseline = record.reference or record
+    delta_nfr = record.nfr - baseline.nfr
+
+    def _abs_delta(value: float, base: float) -> float:
+        delta_value = value - base
+        if not math.isfinite(delta_value):
+            return 0.0
+        return abs(delta_value)
+
+    slip_delta = _abs_delta(record.slip_ratio, baseline.slip_ratio)
+    load_delta = _abs_delta(record.vertical_load, baseline.vertical_load)
+    lat_delta = _abs_delta(record.lateral_accel, baseline.lateral_accel)
+    long_delta = _abs_delta(record.longitudinal_accel, baseline.longitudinal_accel)
+    yaw_delta = abs(_angle_difference(record.yaw, baseline.yaw))
+    pitch_delta = _abs_delta(record.pitch, baseline.pitch)
+    roll_delta = _abs_delta(record.roll, baseline.roll)
+    brake_delta = _abs_delta(record.brake_pressure, baseline.brake_pressure)
+    locking_delta = _abs_delta(record.locking, baseline.locking)
+    si_delta = _abs_delta(record.si, baseline.si)
+
+    track_load = record.vertical_load * record.lateral_accel
+    baseline_track_load = baseline.vertical_load * baseline.lateral_accel
+    track_delta = abs(track_load - baseline_track_load)
+
+    node_signals = {
+        "tyres": (slip_delta * 0.6) + (locking_delta * 0.25) + (load_delta * 0.15),
+        "suspension": (load_delta * 0.5) + (pitch_delta * 0.25) + (roll_delta * 0.25),
+        "chassis": (lat_delta * 0.6) + (roll_delta * 0.25) + (yaw_delta * 0.15),
+        "brakes": (brake_delta * 0.5)
+        + (locking_delta * 0.3)
+        + (abs(min(0.0, record.longitudinal_accel - baseline.longitudinal_accel)) * 0.2),
+        "transmission": (long_delta * 0.5) + (slip_delta * 0.3) + (yaw_delta * 0.2),
+        "track": (track_delta * 0.7) + (yaw_delta * 0.3),
+        "driver": (si_delta * 0.6) + (yaw_delta * 0.15) + (pitch_delta * 0.15) + (roll_delta * 0.1),
+    }
+
+    total_signal = sum(node_signals.values())
+    if total_signal <= 1e-9 or not math.isfinite(total_signal):
+        node_count = len(node_signals)
+        if node_count == 0:
+            return {}
+        uniform_share = delta_nfr / float(node_count)
+        return {node: uniform_share for node in node_signals}
+
+    magnitude = abs(delta_nfr)
+    sign = 1.0 if delta_nfr >= 0.0 else -1.0
+    return {
+        node: sign * magnitude * (signal / total_signal)
+        for node, signal in node_signals.items()
+    }
 
 
 def resolve_nu_f_by_node(record: TelemetryRecord) -> Dict[str, float]:
@@ -124,6 +203,11 @@ class DeltaCalculator:
             slip_ratio=mean(record.slip_ratio for record in records),
             lateral_accel=mean(record.lateral_accel for record in records),
             longitudinal_accel=mean(record.longitudinal_accel for record in records),
+            yaw=mean(record.yaw for record in records),
+            pitch=mean(record.pitch for record in records),
+            roll=mean(record.roll for record in records),
+            brake_pressure=mean(record.brake_pressure for record in records),
+            locking=mean(record.locking for record in records),
             nfr=mean(record.nfr for record in records),
             si=mean(record.si for record in records),
         )
@@ -139,8 +223,8 @@ class DeltaCalculator:
         nu_f_by_node: Optional[Mapping[str, float]] = None,
     ) -> EPIBundle:
         delta_nfr = record.nfr - baseline.nfr
-        feature_map = DeltaCalculator._feature_map(record, baseline)
-        node_deltas = compute_node_delta_nfr(delta_nfr, feature_map)
+        node_record = replace(record, reference=baseline)
+        node_deltas = delta_nfr_by_node(node_record)
         global_si = sense_index(delta_nfr, node_deltas, baseline.nfr)
         nu_f_map = dict(nu_f_by_node or resolve_nu_f_by_node(record))
         nodes = DeltaCalculator._build_nodes(node_deltas, delta_nfr, nu_f_map)
@@ -168,26 +252,6 @@ class DeltaCalculator:
             track=nodes["track"],
             driver=nodes["driver"],
         )
-
-    @staticmethod
-    def _feature_map(
-        record: TelemetryRecord, baseline: TelemetryRecord
-    ) -> Mapping[str, float]:
-        return {
-            "tyres": abs(record.slip_ratio - baseline.slip_ratio),
-            "suspension": abs(record.vertical_load - baseline.vertical_load),
-            "chassis": abs(record.lateral_accel - baseline.lateral_accel),
-            "brakes": abs(record.longitudinal_accel - baseline.longitudinal_accel),
-            "transmission": abs(
-                (record.longitudinal_accel + record.slip_ratio)
-                - (baseline.longitudinal_accel + baseline.slip_ratio)
-            ),
-            "track": abs(
-                (record.vertical_load * record.lateral_accel)
-                - (baseline.vertical_load * baseline.lateral_accel)
-            ),
-            "driver": abs(record.si - baseline.si),
-        }
 
     @staticmethod
     def _build_nodes(

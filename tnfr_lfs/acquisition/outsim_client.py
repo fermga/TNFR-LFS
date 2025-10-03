@@ -41,6 +41,11 @@ DEFAULT_SCHEMA = TelemetrySchema(
         "slip_ratio",
         "lateral_accel",
         "longitudinal_accel",
+        "yaw",
+        "pitch",
+        "roll",
+        "brake_pressure",
+        "locking",
         "nfr",
         "si",
     ),
@@ -100,8 +105,13 @@ class OutSimClient:
                     slip_ratio=float(values[2]),
                     lateral_accel=float(values[3]),
                     longitudinal_accel=float(values[4]),
-                    nfr=float(values[5]),
-                    si=float(values[6]),
+                    yaw=float(values[5]),
+                    pitch=float(values[6]),
+                    roll=float(values[7]),
+                    brake_pressure=float(values[8]),
+                    locking=float(values[9]),
+                    nfr=float(values[10]),
+                    si=float(values[11]),
                 )
             except ValueError as exc:  # pragma: no cover - defensive branch
                 raise TelemetryFormatError(f"Cannot parse telemetry values: {values!r}") from exc

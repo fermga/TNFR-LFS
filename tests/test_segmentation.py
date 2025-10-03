@@ -32,6 +32,11 @@ def test_segment_microsectors_returns_empty_when_no_curvature():
             slip_ratio=0.02,
             lateral_accel=0.2,
             longitudinal_accel=0.1,
+            yaw=0.0,
+            pitch=0.0,
+            roll=0.0,
+            brake_pressure=0.0,
+            locking=0.0,
             nfr=500,
             si=0.9,
         )
