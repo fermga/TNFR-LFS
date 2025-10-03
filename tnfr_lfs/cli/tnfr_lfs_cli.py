@@ -29,7 +29,7 @@ from ..acquisition import (
     OutSimUDPClient,
     TelemetryFusion,
 )
-from ..core.epi import EPIExtractor, TelemetryRecord
+from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
 from ..core.operators import orchestrate_delta_metrics
 from ..core.segmentation import Microsector, segment_microsectors
 from ..exporters import exporters_registry
@@ -463,6 +463,38 @@ def _yaw_roll_spectrum(records: Records) -> Dict[str, Any]:
     }
 
 
+def _delta_breakdown_summary(bundles: Bundles) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "samples": len(bundles),
+        "per_node": {
+            node: {"delta_nfr_total": 0.0, "breakdown": {}}
+            for node in NU_F_NODE_DEFAULTS
+        },
+    }
+    if not bundles:
+        return summary
+
+    for bundle in bundles:
+        breakdown = getattr(bundle, "delta_breakdown", {}) or {}
+        for node, features in breakdown.items():
+            node_entry = summary["per_node"].setdefault(
+                node, {"delta_nfr_total": 0.0, "breakdown": {}}
+            )
+            node_total = sum(features.values())
+            node_entry["delta_nfr_total"] += float(node_total)
+            feature_map = node_entry["breakdown"]
+            for name, value in features.items():
+                feature_map[name] = feature_map.get(name, 0.0) + float(value)
+
+    for node, node_entry in summary["per_node"].items():
+        node_entry["delta_nfr_total"] = float(node_entry["delta_nfr_total"])
+        node_entry["breakdown"] = {
+            name: float(value) for name, value in node_entry["breakdown"].items()
+        }
+
+    return summary
+
+
 def _generate_out_reports(
     records: Records,
     bundles: Bundles,
@@ -472,15 +504,20 @@ def _generate_out_reports(
     destination.mkdir(parents=True, exist_ok=True)
     sense_map = _sense_index_map(bundles, microsectors)
     spectrum = _yaw_roll_spectrum(records)
+    breakdown = _delta_breakdown_summary(bundles)
     sense_path = destination / "sense_index_map.json"
     spectrum_path = destination / "yaw_roll_spectrum.json"
+    breakdown_path = destination / "delta_breakdown.json"
     with sense_path.open("w", encoding="utf8") as handle:
         json.dump(sense_map, handle, indent=2, sort_keys=True)
     with spectrum_path.open("w", encoding="utf8") as handle:
         json.dump(spectrum, handle, indent=2, sort_keys=True)
+    with breakdown_path.open("w", encoding="utf8") as handle:
+        json.dump(breakdown, handle, indent=2, sort_keys=True)
     return {
         "sense_index_map": {"path": str(sense_path), "data": sense_map},
         "yaw_roll_spectrum": {"path": str(spectrum_path), "data": spectrum},
+        "delta_breakdown": {"path": str(breakdown_path), "data": breakdown},
     }
 
 _TELEMETRY_DEFAULTS: Mapping[str, Any] = {

@@ -106,9 +106,16 @@ def test_analyze_pipeline_json_export(
     report_paths = payload["reports"]
     sense_path = Path(report_paths["sense_index_map"]["path"])
     spectrum_path = Path(report_paths["yaw_roll_spectrum"]["path"])
+    breakdown_path = Path(report_paths["delta_breakdown"]["path"])
     assert sense_path.exists()
     assert spectrum_path.exists()
+    assert breakdown_path.exists()
     assert payload["reports"]["sense_index_map"]["data"]
+    breakdown_data = payload["reports"]["delta_breakdown"]["data"]
+    assert breakdown_data["samples"] == len(payload["series"])
+    tyres_summary = breakdown_data["per_node"]["tyres"]
+    tyres_total = sum(tyres_summary["breakdown"].values())
+    assert tyres_total == pytest.approx(tyres_summary["delta_nfr_total"], rel=1e-6, abs=1e-9)
 
 
 def test_suggest_pipeline(
@@ -140,6 +147,7 @@ def test_suggest_pipeline(
     assert isinstance(payload["recommendations"], list)
     assert payload["phase_messages"]
     assert Path(payload["reports"]["yaw_roll_spectrum"]["path"]).exists()
+    assert Path(payload["reports"]["delta_breakdown"]["path"]).exists()
     assert any(
         "BAS-" in rec.get("rationale", "") or "ADV-" in rec.get("rationale", "")
         for rec in payload["recommendations"]
@@ -172,6 +180,7 @@ def test_report_generation(
     assert "delta_nfr" in payload
     assert "sense_index" in payload
     assert Path(payload["reports"]["sense_index_map"]["path"]).exists()
+    assert Path(payload["reports"]["delta_breakdown"]["path"]).exists()
 
 
 def test_write_set_markdown_export(

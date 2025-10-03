@@ -39,9 +39,21 @@ def build_payload():
             driver=DriverNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["driver"]),
         )
 
+    def build_breakdown(delta_nfr: float):
+        share = delta_nfr / 7
+        return {
+            "tyres": {"slip_ratio": share},
+            "suspension": {"travel_front": share},
+            "chassis": {"yaw_rate": share},
+            "brakes": {"pressure": share},
+            "transmission": {"throttle": share},
+            "track": {"vertical_load": share},
+            "driver": {"style_index": share},
+        }
+
     results = [
-        EPIBundle(0.0, 0.45, -5.0, 0.82, **build_nodes(-5.0, 0.82)),
-        EPIBundle(0.1, 0.50, 10.0, 0.74, **build_nodes(10.0, 0.74)),
+        EPIBundle(0.0, 0.45, -5.0, 0.82, delta_breakdown=build_breakdown(-5.0), **build_nodes(-5.0, 0.82)),
+        EPIBundle(0.1, 0.50, 10.0, 0.74, delta_breakdown=build_breakdown(10.0), **build_nodes(10.0, 0.74)),
     ]
     return {"series": results, "meta": {"session": "FP1"}}
 
@@ -50,6 +62,7 @@ def test_json_exporter_serialises_payload():
     payload = build_payload()
     output = json_exporter(payload)
     assert "\"session\": \"FP1\"" in output
+    assert "delta_breakdown" in output
 
 
 def test_csv_exporter_renders_rows():

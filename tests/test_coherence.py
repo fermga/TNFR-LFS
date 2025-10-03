@@ -58,6 +58,10 @@ def test_compute_node_delta_nfr_allows_non_prefixed_keys():
     assert pytest.approx(sum(distribution.values()), rel=1e-6) == delta
 
 
+def test_compute_node_delta_nfr_returns_empty_for_missing_features():
+    assert compute_node_delta_nfr("track", 5.0, {}) == {}
+
+
 def test_sense_index_penalises_large_delta_with_entropy():
     node_deltas = {"tyres": 6.0, "suspension": 3.0, "driver": 3.0}
     baseline = 520.0
