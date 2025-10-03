@@ -82,6 +82,11 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         "apex": {"__default__": 1.0},
         "exit": {"__default__": 1.0},
     }
+    window_occupancy = {
+        "entry": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+    }
     filtered_measures = {
         "thermal_load": 5200.0,
         "style_index": 0.9,
@@ -150,6 +155,7 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         filtered_measures=filtered_measures,
         recursivity_trace=(),
         last_mutation=None,
+        window_occupancy=window_occupancy,
     )
 
     results = [
@@ -233,6 +239,11 @@ def test_track_specific_profile_tightens_entry_threshold():
         "style_index": 0.9,
         "grip_rel": 1.0,
     }
+    window_occupancy = {
+        "entry": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+    }
     microsector = Microsector(
         index=4,
         start_time=0.0,
@@ -304,6 +315,7 @@ def test_track_specific_profile_tightens_entry_threshold():
         filtered_measures=filtered_measures,
         recursivity_trace=(),
         last_mutation=None,
+        window_occupancy=window_occupancy,
     )
 
     results = [

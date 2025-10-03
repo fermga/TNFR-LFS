@@ -59,6 +59,11 @@ def _microsector() -> Microsector:
         "apex": {"__default__": 1.0},
         "exit": {"__default__": 1.0},
     }
+    window_occupancy = {
+        "entry": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+    }
     filtered_measures = {
         "thermal_load": 5000.0,
         "style_index": 0.9,
@@ -123,6 +128,7 @@ def _microsector() -> Microsector:
         filtered_measures=filtered_measures,
         recursivity_trace=(),
         last_mutation=None,
+        window_occupancy=window_occupancy,
     )
 
 

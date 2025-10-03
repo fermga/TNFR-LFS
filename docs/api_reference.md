@@ -77,6 +77,8 @@ Sense Index averages but also:
   from the telemetry means under lateral/longitudinal load.
 * ``yaw_rate_window`` – the expected yaw-rate envelope for the phase.
 * ``dominant_nodes`` – the subsystems whose ΔNFR signature anchors the goal.
+* ``window_occupancy`` – percentage of telemetry samples that remain within
+  each window for entry, apex, and exit.
 
 ## Recommendation Engine
 
