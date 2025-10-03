@@ -14,8 +14,10 @@ from tnfr_lfs.core.operators import (
     dissonance_operator,
     evolve_epi,
     emission_operator,
+    mutation_operator,
     orchestrate_delta_metrics,
     recepcion_operator,
+    recursivity_operator,
     recursividad_operator,
     resonance_operator,
 )
@@ -134,6 +136,97 @@ def test_recepcion_operator_wraps_epi_extractor():
 def test_recursividad_operator_requires_decay_in_range():
     with pytest.raises(ValueError):
         recursividad_operator([0.1, 0.2], decay=1.0)
+
+
+def test_recursivity_operator_tracks_state_and_phase_changes():
+    state: dict[str, dict[str, object]] = {}
+
+    first = recursivity_operator(
+        state,
+        "ms-1",
+        {"thermal_load": 420.0, "style_index": 0.82, "phase": "entry"},
+        decay=0.5,
+    )
+    assert first["filtered"]["thermal_load"] == pytest.approx(420.0)
+    assert not first["phase_changed"]
+
+    second = recursivity_operator(
+        state,
+        "ms-1",
+        {"thermal_load": 520.0, "style_index": 0.72, "phase": "entry"},
+        decay=0.5,
+    )
+    assert second["filtered"]["thermal_load"] == pytest.approx(470.0)
+    assert not second["phase_changed"]
+
+    third = recursivity_operator(
+        state,
+        "ms-1",
+        {"thermal_load": 360.0, "style_index": 0.9, "phase": "apex"},
+        decay=0.5,
+    )
+    assert third["phase_changed"]
+    assert third["filtered"]["thermal_load"] == pytest.approx(360.0)
+    assert state["ms-1"]["trace"][-1]["phase"] == "apex"
+
+    other = recursivity_operator(
+        state,
+        "ms-2",
+        {"thermal_load": 300.0, "style_index": 0.95, "phase": "entry"},
+        decay=0.5,
+    )
+    assert other["filtered"]["thermal_load"] == pytest.approx(300.0)
+    assert len(state) == 2
+
+
+def test_mutation_operator_detects_style_and_entropy_mutations():
+    state: dict[str, dict[str, object]] = {}
+    base_triggers = {
+        "microsector_id": "ms-5",
+        "current_archetype": "equilibrio",
+        "candidate_archetype": "apoyo",
+        "fallback_archetype": "recuperacion",
+        "entropy": 0.3,
+        "style_index": 0.82,
+        "style_reference": 0.82,
+        "phase": "entry",
+    }
+
+    initial = mutation_operator(state, base_triggers)
+    assert not initial["mutated"]
+    assert initial["archetype"] == "equilibrio"
+
+    style_shift = mutation_operator(
+        state,
+        {**base_triggers, "style_index": 0.55, "dynamic_conditions": True},
+    )
+    assert style_shift["mutated"]
+    assert style_shift["archetype"] == "apoyo"
+
+    entropy_spike = mutation_operator(
+        state,
+        {
+            **base_triggers,
+            "current_archetype": style_shift["archetype"],
+            "entropy": 0.92,
+            "style_index": 0.58,
+        },
+    )
+    assert entropy_spike["mutated"]
+    assert entropy_spike["archetype"] == "recuperacion"
+
+    phase_adjustment = mutation_operator(
+        state,
+        {
+            **base_triggers,
+            "current_archetype": entropy_spike["archetype"],
+            "style_index": 0.7,
+            "phase": "apex",
+        },
+    )
+    assert phase_adjustment["mutated"]
+    assert phase_adjustment["archetype"] == "apoyo"
+    assert state["ms-5"]["phase"] == "apex"
 
 
 def test_acoplamiento_and_resonance_behaviour():

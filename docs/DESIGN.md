@@ -76,6 +76,29 @@ evalúa ahora como ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H`` incorporando
 ritmo natural de cada nodo y la fase del microsector; la interpretación se
 detalla en :doc:`api_reference`.
 
+### Operadores de memoria y mutación
+
+Para mantener continuidad entre muestras y microsectores, el pipeline utiliza
+dos operadores con estado ubicados en ``tnfr_lfs.core.operators``:
+
+* ``recursivity_operator`` conserva una traza por microsector y filtra de
+  forma exponencial las métricas térmicas y de estilo (``thermal_load`` y
+  ``style_index``).  El operador detecta cambios de fase (entrada, vértice,
+  salida) y reinicia la memoria cuando corresponde para que el filtro no
+  contamine transiciones abruptas.
+* ``mutation_operator`` observa la entropía del reparto ΔNFR y las desviaciones
+  de estilo filtradas para decidir si el arquetipo táctico debe mutar hacia un
+  candidato alternativo o volver a un modo de recuperación.
+
+La segmentación de microsectores invoca ambos operadores: primero suaviza las
+medidas del microsector activo y después evalúa si la combinación de entropía,
+fase y condiciones dinámicas (eventos de frenada o apoyo) requiere mutar los
+objetivos generados por :func:`segment_microsectors`.  Cuando se produce una
+mutación, la segmentación recalcula los objetivos de entrada, vértice y salida
+con el nuevo arquetipo antes de integrarlos en el reporte.  De este modo el
+estado se conserva entre invocaciones y la estrategia resultante se adapta a
+las condiciones cambiantes del stint.
+
 ## Artefactos generados
 - `TNFR.pdf` se mantiene como artefacto compilado. Cualquier actualización sustantiva debe reflejarse primero en este `DESIGN.md`; el PDF puede regenerarse a partir del contenido actualizado y debe tratarse como derivado.
 
