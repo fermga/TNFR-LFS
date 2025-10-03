@@ -1,3 +1,7 @@
+from pathlib import Path
+
+import pytest
+
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -8,7 +12,7 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_lfs.exporters import csv_exporter, json_exporter, markdown_exporter
+from tnfr_lfs.exporters import csv_exporter, json_exporter, lfs_set_exporter, markdown_exporter
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan, serialise_setup_plan
 
 
@@ -94,3 +98,23 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "| Cambio | Ajuste | Racional |" in output
     assert "rear_ride_height" in output
     assert "Telemetry indicates oscillations" in output
+
+
+def test_lfs_set_exporter_writes_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    plan = build_setup_plan()
+    message = lfs_set_exporter({"setup_plan": plan, "set_output": "GEN_custom"})
+    destination = tmp_path / "LFS/data/setups/GEN_custom.set"
+    assert destination.exists()
+    contents = destination.read_text(encoding="utf8")
+    assert "rear_ride_height" in contents
+    assert "-1.500" in contents
+    assert "TNFR-LFS setup export" in contents
+    assert str(destination) in message
+
+
+def test_lfs_set_exporter_validates_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    plan = build_setup_plan()
+    with pytest.raises(ValueError):
+        lfs_set_exporter({"setup_plan": plan, "set_output": "invalid"})

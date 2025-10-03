@@ -10,6 +10,17 @@ from ..core.epi_models import EPIBundle
 from ..core.segmentation import Goal, Microsector
 
 
+MANUAL_REFERENCES = {
+    "braking": "Basic Setup Guide · Frenada óptima [BAS-FRE]",
+    "antiroll": "Advanced Setup Guide · Barras estabilizadoras [ADV-ARB]",
+    "differential": "Advanced Setup Guide · Configuración de diferenciales [ADV-DIF]",
+    "curbs": "Basic Setup Guide · Uso de pianos [BAS-CUR]",
+    "ride_height": "Advanced Setup Guide · Alturas y reparto de carga [ADV-RDH]",
+    "aero": "Basic Setup Guide · Balance aerodinámico [BAS-AER]",
+    "driver": "Basic Setup Guide · Constancia de pilotaje [BAS-DRV]",
+}
+
+
 @dataclass
 class Recommendation:
     """Represents an actionable recommendation."""
@@ -79,10 +90,14 @@ class LoadBalanceRule:
                 direction = "increase" if result.delta_nfr < 0 else "decrease"
                 yield Recommendation(
                     category="suspension",
-                    message=f"{direction.title()} Rear Ride height to rebalance load",
+                    message=(
+                        f"{direction.title()} Rear Ride height to rebalance load "
+                        f"({MANUAL_REFERENCES['ride_height']})"
+                    ),
                     rationale=(
                         "ΔNFR deviated by "
                         f"{result.delta_nfr:.1f} units relative to baseline at t={result.timestamp:.2f}."
+                        f" Consulta {MANUAL_REFERENCES['ride_height']} para reajustar alturas."
                     ),
                     priority=100,
                 )
@@ -103,11 +118,14 @@ class StabilityIndexRule:
             if result.sense_index < self.threshold:
                 yield Recommendation(
                     category="aero",
-                    message="Stabilise aero balance to recover sense index",
+                    message=(
+                        "Stabilise aero balance to recover sense index "
+                        f"({MANUAL_REFERENCES['aero']})"
+                    ),
                     rationale=(
                         "Sense index dropped to "
                         f"{result.sense_index:.2f} at t={result.timestamp:.2f}, below the threshold of "
-                        f"{self.threshold:.2f}."
+                        f"{self.threshold:.2f}. Consulta {MANUAL_REFERENCES['aero']} para reequilibrar la carga."
                     ),
                     priority=110,
                 )
@@ -131,10 +149,14 @@ class CoherenceRule:
             return [
                 Recommendation(
                     category="driver",
-                    message="Review driving inputs for consistency",
+                    message=(
+                        "Review driving inputs for consistency "
+                        f"({MANUAL_REFERENCES['driver']})"
+                    ),
                     rationale=(
                         "Average sense index across the analysed stint is "
-                        f"{average_si:.2f}, below the expected threshold of {self.min_average_si:.2f}."
+                        f"{average_si:.2f}, below the expected threshold of {self.min_average_si:.2f}. "
+                        f"Apóyate en {MANUAL_REFERENCES['driver']} para reforzar hábitos consistentes."
                     ),
                     priority=120,
                 )
@@ -176,12 +198,14 @@ class PhaseDeltaDeviationRule:
         category: str,
         phase_label: str,
         priority: int,
+        reference_key: str,
     ) -> None:
         self.phase = phase
         self.operator_label = operator_label
         self.category = category
         self.phase_label = phase_label
         self.priority = priority
+        self.reference_key = reference_key
 
     def evaluate(
         self,
@@ -211,11 +235,13 @@ class PhaseDeltaDeviationRule:
                     category=self.category,
                     message=(
                         f"{self.operator_label}: {action} ΔNFR en microsector {microsector.index}"
+                        f" ({MANUAL_REFERENCES[self.reference_key]})"
                     ),
                     rationale=(
                         f"El objetivo ΔNFR para la {self.phase_label} era {goal.target_delta_nfr:.2f}, "
                         f"pero la media registrada fue {actual_delta:.2f} ({deviation:+.2f}). "
-                        f"La tolerancia definida para {context.profile_label} es ±{tolerance:.2f}."
+                        f"La tolerancia definida para {context.profile_label} es ±{tolerance:.2f}. "
+                        f"Repasa {MANUAL_REFERENCES[self.reference_key]} para ajustar este tramo."
                     ),
                     priority=self.priority,
                 )
@@ -264,12 +290,14 @@ class CurbComplianceRule:
                     category="pianos",
                     message=(
                         f"Operador de pianos: {action} apoyo en microsector {microsector.index}"
+                        f" ({MANUAL_REFERENCES['curbs']})"
                     ),
                     rationale=(
                         "Los pianos registraron un ΔNFR medio de "
                         f"{actual_delta:.2f} frente al objetivo {goal.target_delta_nfr:.2f}. "
                         f"El desvío {deviation:+.2f} supera la tolerancia ±{tolerance:.2f} "
-                        f"configurada para {context.profile_label}."
+                        f"configurada para {context.profile_label}. "
+                        f"Sigue las pautas de {MANUAL_REFERENCES['curbs']} para modular el apoyo."
                     ),
                     priority=self.priority,
                 )
@@ -299,6 +327,7 @@ class RecommendationEngine:
                     category="entry",
                     phase_label="entrada",
                     priority=10,
+                    reference_key="braking",
                 ),
                 PhaseDeltaDeviationRule(
                     phase="apex",
@@ -306,6 +335,7 @@ class RecommendationEngine:
                     category="apex",
                     phase_label="vértice",
                     priority=20,
+                    reference_key="antiroll",
                 ),
                 CurbComplianceRule(priority=25),
                 PhaseDeltaDeviationRule(
@@ -314,6 +344,7 @@ class RecommendationEngine:
                     category="exit",
                     phase_label="salida",
                     priority=30,
+                    reference_key="differential",
                 ),
                 LoadBalanceRule(),
                 StabilityIndexRule(),
