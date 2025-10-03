@@ -294,6 +294,23 @@ def test_orchestrator_pipeline_builds_consistent_metrics():
         assert {"tyres↔suspension", "tyres↔chassis", "suspension↔chassis"} <= set(metrics)
         for value in metrics.values():
             assert -1.0 <= value <= 1.0
+    stages = results["stages"]
+    assert set(stages) == {"recepcion", "coherence", "nodal", "epi", "sense"}
+    reception_stage = stages["recepcion"]
+    assert reception_stage["sample_count"] == 4
+    assert len(reception_stage["lap_indices"]) == 4
+    coherence_stage = stages["coherence"]
+    assert len(coherence_stage["raw_delta"]) == reception_stage["sample_count"]
+    assert coherence_stage["bundles"] == results["bundles"]
+    epi_stage = stages["epi"]
+    assert results["epi_evolution"] == epi_stage
+    assert len(epi_stage["integrated"]) == reception_stage["sample_count"]
+    nodal_stage = stages["nodal"]
+    assert results["nodal_metrics"] == nodal_stage
+    assert set(nodal_stage["delta_by_node"]) == {"tyres", "suspension", "chassis"}
+    sense_stage = stages["sense"]
+    assert results["sense_memory"] == sense_stage
+    assert len(sense_stage["series"]) == reception_stage["sample_count"]
 
 
 def test_orchestrator_consumes_fixture_segments(synthetic_records):
@@ -312,6 +329,12 @@ def test_orchestrator_consumes_fixture_segments(synthetic_records):
     assert "pairwise_coupling" in report
     assert isinstance(report["dissonance_breakdown"], DissonanceBreakdown)
     assert report["dissonance_breakdown"].value == pytest.approx(report["dissonance"])
+    epi_stage = report["epi_evolution"]
+    assert len(epi_stage["integrated"]) == len(synthetic_records)
+    assert len(epi_stage["derivative"]) == len(synthetic_records)
+    nodal_stage = report["nodal_metrics"]
+    assert all(len(series) == len(synthetic_records) for series in nodal_stage["delta_by_node"].values())
+    assert report["sense_memory"]["memory"] == report["recursive_trace"]
 
 
 def test_orchestrator_reports_microsector_variability(monkeypatch):

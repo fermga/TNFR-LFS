@@ -1070,12 +1070,30 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         microsector_variability=metrics.get("microsector_variability"),
     )
     phase_templates = _phase_templates_from_config(config, "analyze")
+    intermediate_metrics = {
+        "epi_evolution": metrics.get("epi_evolution"),
+        "nodal_metrics": metrics.get("nodal_metrics"),
+        "sense_memory": metrics.get("sense_memory"),
+    }
+    summary_metrics = {
+        "delta_nfr": metrics.get("delta_nfr", 0.0),
+        "sense_index": metrics.get("sense_index", 0.0),
+        "dissonance": metrics.get("dissonance", 0.0),
+        "coupling": metrics.get("coupling", 0.0),
+        "resonance": metrics.get("resonance", 0.0),
+        "dissonance_breakdown": metrics.get("dissonance_breakdown"),
+        "pairwise_coupling": metrics.get("pairwise_coupling"),
+        "microsector_variability": metrics.get("microsector_variability", []),
+    }
     payload: Dict[str, Any] = {
         "series": bundles,
         "microsectors": microsectors,
         "telemetry_samples": len(records),
-        "metrics": {key: value for key, value in metrics.items() if key != "bundles"},
+        "metrics": summary_metrics,
         "smoothed_series": metrics.get("bundles", []),
+        "intermediate_metrics": intermediate_metrics,
+        "stages": metrics.get("stages"),
+        "objectives": metrics.get("objectives", {}),
         "phase_messages": phase_messages,
         "reports": reports,
     }
@@ -1149,6 +1167,12 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         "lap_sequence": metrics.get("lap_sequence", []),
         "series": bundles if bundles else metrics.get("bundles", []),
         "reports": reports,
+        "intermediate_metrics": {
+            "epi_evolution": metrics.get("epi_evolution"),
+            "nodal_metrics": metrics.get("nodal_metrics"),
+            "sense_memory": metrics.get("sense_memory"),
+        },
+        "stages": metrics.get("stages"),
     }
     phase_templates = _phase_templates_from_config(config, "report")
     if phase_templates:

@@ -7,7 +7,12 @@ from math import sqrt
 from statistics import mean, pvariance
 from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
 
-from .epi import EPIExtractor, TelemetryRecord
+from .epi import (
+    EPIExtractor,
+    TelemetryRecord,
+    delta_nfr_by_node,
+    resolve_nu_f_by_node,
+)
 from .epi_models import EPIBundle
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
@@ -461,6 +466,196 @@ def recursividad_operator(
     return trace
 
 
+def _stage_recepcion(
+    telemetry_segments: Sequence[Sequence[TelemetryRecord]],
+) -> tuple[Dict[str, object], List[TelemetryRecord]]:
+    bundles: List[EPIBundle] = []
+    lap_indices: List[int] = []
+    lap_metadata: List[Dict[str, object]] = []
+    flattened_records: List[TelemetryRecord] = []
+
+    for lap_index, segment in enumerate(telemetry_segments):
+        segment_records = list(segment)
+        flattened_records.extend(segment_records)
+        label_value = next(
+            (record.lap for record in segment_records if getattr(record, "lap", None) is not None),
+            None,
+        )
+        explicit = label_value is not None
+        label = str(label_value) if explicit else f"Vuelta {lap_index + 1}"
+        lap_metadata.append(
+            {
+                "index": lap_index,
+                "label": label,
+                "value": label_value,
+                "explicit": explicit,
+            }
+        )
+        segment_bundles = recepcion_operator(segment_records)
+        lap_indices.extend([lap_index] * len(segment_bundles))
+        bundles.extend(segment_bundles)
+
+    stage_payload = {
+        "bundles": bundles,
+        "lap_indices": lap_indices,
+        "lap_sequence": lap_metadata,
+        "sample_count": len(bundles),
+    }
+    return stage_payload, flattened_records
+
+
+def _stage_coherence(
+    bundles: Sequence[EPIBundle],
+    objectives: Mapping[str, float],
+    *,
+    coherence_window: int,
+    microsectors: Sequence["Microsector"] | None = None,
+) -> Dict[str, object]:
+    if not bundles:
+        empty_breakdown = DissonanceBreakdown(
+            value=0.0,
+            useful_magnitude=0.0,
+            parasitic_magnitude=0.0,
+            useful_ratio=0.0,
+            parasitic_ratio=0.0,
+            useful_percentage=0.0,
+            parasitic_percentage=0.0,
+            total_events=0,
+            useful_events=0,
+            parasitic_events=0,
+        )
+        return {
+            "raw_delta": [],
+            "raw_sense_index": [],
+            "smoothed_delta": [],
+            "smoothed_sense_index": [],
+            "bundles": [],
+            "dissonance": 0.0,
+            "dissonance_breakdown": empty_breakdown,
+            "coupling": 0.0,
+            "resonance": 0.0,
+        }
+
+    delta_series = [bundle.delta_nfr for bundle in bundles]
+    si_series = [bundle.sense_index for bundle in bundles]
+    smoothed_delta = coherence_operator(delta_series, window=coherence_window)
+    smoothed_si = coherence_operator(si_series, window=coherence_window)
+    clamped_si = [max(0.0, min(1.0, value)) for value in smoothed_si]
+    updated_bundles = _update_bundles(bundles, smoothed_delta, clamped_si)
+    breakdown = dissonance_breakdown_operator(
+        smoothed_delta,
+        objectives["delta_nfr"],
+        microsectors=microsectors,
+        bundles=updated_bundles,
+    )
+    dissonance = breakdown.value
+    coupling = acoplamiento_operator(smoothed_delta, clamped_si)
+    resonance = resonance_operator(clamped_si)
+
+    return {
+        "raw_delta": delta_series,
+        "raw_sense_index": si_series,
+        "smoothed_delta": smoothed_delta,
+        "smoothed_sense_index": clamped_si,
+        "bundles": updated_bundles,
+        "dissonance": dissonance,
+        "dissonance_breakdown": breakdown,
+        "coupling": coupling,
+        "resonance": resonance,
+    }
+
+
+def _stage_nodal_metrics(bundles: Sequence[EPIBundle]) -> Dict[str, object]:
+    node_pairs = (
+        ("tyres", "suspension"),
+        ("tyres", "chassis"),
+        ("suspension", "chassis"),
+    )
+    delta_by_node = {
+        "tyres": [bundle.tyres.delta_nfr for bundle in bundles],
+        "suspension": [bundle.suspension.delta_nfr for bundle in bundles],
+        "chassis": [bundle.chassis.delta_nfr for bundle in bundles],
+    }
+    si_by_node = {
+        "tyres": [bundle.tyres.sense_index for bundle in bundles],
+        "suspension": [bundle.suspension.sense_index for bundle in bundles],
+        "chassis": [bundle.chassis.sense_index for bundle in bundles],
+    }
+    pairwise_delta = pairwise_coupling_operator(delta_by_node, pairs=node_pairs)
+    pairwise_si = pairwise_coupling_operator(si_by_node, pairs=node_pairs)
+    return {
+        "delta_by_node": delta_by_node,
+        "sense_index_by_node": si_by_node,
+        "pairwise_coupling": {
+            "delta_nfr": pairwise_delta,
+            "sense_index": pairwise_si,
+        },
+    }
+
+
+def _stage_epi_evolution(records: Sequence[TelemetryRecord]) -> Dict[str, object]:
+    if not records:
+        return {
+            "integrated": [],
+            "derivative": [],
+            "per_node_integrated": {},
+            "per_node_derivative": {},
+        }
+
+    integrated_series: List[float] = []
+    derivative_series: List[float] = []
+    per_node_integrated: Dict[str, List[float]] = {}
+    per_node_derivative: Dict[str, List[float]] = {}
+    cumulative_by_node: Dict[str, float] = {}
+
+    prev_epi = 0.0
+    prev_timestamp = records[0].timestamp
+
+    for index, record in enumerate(records):
+        delta_map = delta_nfr_by_node(record)
+        nu_map = resolve_nu_f_by_node(record)
+        dt = 0.0 if index == 0 else max(0.0, record.timestamp - prev_timestamp)
+        new_epi, derivative, nodal = evolve_epi(prev_epi, delta_map, dt, nu_map)
+        integrated_series.append(new_epi)
+        derivative_series.append(derivative)
+        nodes = set(per_node_integrated) | set(nodal)
+        for node in nodes:
+            node_integral, node_derivative = nodal.get(node, (0.0, 0.0))
+            cumulative = cumulative_by_node.get(node, 0.0) + node_integral
+            cumulative_by_node[node] = cumulative
+            per_node_integrated.setdefault(node, []).append(cumulative)
+            per_node_derivative.setdefault(node, []).append(node_derivative)
+        prev_epi = new_epi
+        prev_timestamp = record.timestamp
+
+    return {
+        "integrated": integrated_series,
+        "derivative": derivative_series,
+        "per_node_integrated": per_node_integrated,
+        "per_node_derivative": per_node_derivative,
+    }
+
+
+def _stage_sense(
+    series: Sequence[float], *, recursion_decay: float
+) -> Dict[str, object]:
+    if not series:
+        return {
+            "series": [],
+            "memory": [],
+            "average": 0.0,
+            "decay": recursion_decay,
+        }
+
+    recursive_trace = recursividad_operator(series, seed=series[0], decay=recursion_decay)
+    return {
+        "series": list(series),
+        "memory": recursive_trace,
+        "average": mean(series),
+        "decay": recursion_decay,
+    }
+
+
 def _update_bundles(
     bundles: Sequence[EPIBundle],
     delta_series: Sequence[float],
@@ -569,28 +764,52 @@ def orchestrate_delta_metrics(
     """Pipeline orchestration producing aggregated ΔNFR and Si metrics."""
 
     objectives = emission_operator(target_delta_nfr, target_sense_index)
-    bundles: List[EPIBundle] = []
-    lap_indices: List[int] = []
-    lap_metadata: List[Dict[str, object]] = []
-    for lap_index, segment in enumerate(telemetry_segments):
-        label_value = next(
-            (record.lap for record in segment if getattr(record, "lap", None) is not None),
-            None,
+    reception_stage, flattened_records = _stage_recepcion(telemetry_segments)
+
+    if not reception_stage["bundles"]:
+        empty_breakdown = DissonanceBreakdown(
+            value=0.0,
+            useful_magnitude=0.0,
+            parasitic_magnitude=0.0,
+            useful_ratio=0.0,
+            parasitic_ratio=0.0,
+            useful_percentage=0.0,
+            parasitic_percentage=0.0,
+            total_events=0,
+            useful_events=0,
+            parasitic_events=0,
         )
-        explicit = label_value is not None
-        label = str(label_value) if explicit else f"Vuelta {lap_index + 1}"
-        lap_metadata.append(
-            {
-                "index": lap_index,
-                "label": label,
-                "value": label_value,
-                "explicit": explicit,
-            }
-        )
-        segment_bundles = recepcion_operator(segment)
-        lap_indices.extend([lap_index] * len(segment_bundles))
-        bundles.extend(segment_bundles)
-    if not bundles:
+        stages = {
+            "recepcion": reception_stage,
+            "coherence": {
+                "raw_delta": [],
+                "raw_sense_index": [],
+                "smoothed_delta": [],
+                "smoothed_sense_index": [],
+                "bundles": [],
+                "dissonance": 0.0,
+                "dissonance_breakdown": empty_breakdown,
+                "coupling": 0.0,
+                "resonance": 0.0,
+            },
+            "nodal": {
+                "delta_by_node": {},
+                "sense_index_by_node": {},
+                "pairwise_coupling": {"delta_nfr": {}, "sense_index": {}},
+            },
+            "epi": {
+                "integrated": [],
+                "derivative": [],
+                "per_node_integrated": {},
+                "per_node_derivative": {},
+            },
+            "sense": {
+                "series": [],
+                "memory": [],
+                "average": 0.0,
+                "decay": recursion_decay,
+            },
+        }
         return {
             "objectives": objectives,
             "bundles": [],
@@ -599,86 +818,68 @@ def orchestrate_delta_metrics(
             "delta_nfr": 0.0,
             "sense_index": 0.0,
             "dissonance": 0.0,
+            "dissonance_breakdown": empty_breakdown,
             "coupling": 0.0,
             "resonance": 0.0,
             "recursive_trace": [],
-            "lap_sequence": lap_metadata,
-            "dissonance_breakdown": DissonanceBreakdown(
-                value=0.0,
-                useful_magnitude=0.0,
-                parasitic_magnitude=0.0,
-                useful_ratio=0.0,
-                parasitic_ratio=0.0,
-                useful_percentage=0.0,
-                parasitic_percentage=0.0,
-                total_events=0,
-                useful_events=0,
-                parasitic_events=0,
-            ),
+            "lap_sequence": reception_stage["lap_sequence"],
             "microsector_variability": [],
+            "pairwise_coupling": {"delta_nfr": {}, "sense_index": {}},
+            "nodal_metrics": stages["nodal"],
+            "epi_evolution": stages["epi"],
+            "sense_memory": stages["sense"],
+            "stages": stages,
         }
 
-    delta_series = [bundle.delta_nfr for bundle in bundles]
-    si_series = [bundle.sense_index for bundle in bundles]
-    smoothed_delta = coherence_operator(delta_series, window=coherence_window)
-    smoothed_si = coherence_operator(si_series, window=coherence_window)
-    clamped_si = [max(0.0, min(1.0, value)) for value in smoothed_si]
-    updated_bundles = _update_bundles(bundles, smoothed_delta, clamped_si)
-    breakdown = dissonance_breakdown_operator(
-        smoothed_delta,
-        objectives["delta_nfr"],
+    coherence_stage = _stage_coherence(
+        reception_stage["bundles"],
+        objectives,
+        coherence_window=coherence_window,
         microsectors=microsectors,
-        bundles=updated_bundles,
     )
-    dissonance = breakdown.value
-    coupling = acoplamiento_operator(smoothed_delta, clamped_si)
-    resonance = resonance_operator(clamped_si)
-    recursive_trace = recursividad_operator(
-        clamped_si, seed=clamped_si[0], decay=recursion_decay
+    nodal_stage = _stage_nodal_metrics(coherence_stage["bundles"])
+    epi_stage = _stage_epi_evolution(flattened_records)
+    sense_stage = _stage_sense(
+        coherence_stage["smoothed_sense_index"], recursion_decay=recursion_decay
     )
     variability = _microsector_variability(
         microsectors,
-        updated_bundles,
-        lap_indices,
-        lap_metadata,
+        coherence_stage["bundles"],
+        reception_stage["lap_indices"],
+        reception_stage["lap_sequence"],
     )
 
-    node_pairs = (
-        ("tyres", "suspension"),
-        ("tyres", "chassis"),
-        ("suspension", "chassis"),
-    )
-    delta_by_node = {
-        "tyres": [bundle.tyres.delta_nfr for bundle in updated_bundles],
-        "suspension": [bundle.suspension.delta_nfr for bundle in updated_bundles],
-        "chassis": [bundle.chassis.delta_nfr for bundle in updated_bundles],
+    stages = {
+        "recepcion": reception_stage,
+        "coherence": coherence_stage,
+        "nodal": nodal_stage,
+        "epi": epi_stage,
+        "sense": sense_stage,
     }
-    si_by_node = {
-        "tyres": [bundle.tyres.sense_index for bundle in updated_bundles],
-        "suspension": [bundle.suspension.sense_index for bundle in updated_bundles],
-        "chassis": [bundle.chassis.sense_index for bundle in updated_bundles],
-    }
-    pairwise_delta = pairwise_coupling_operator(delta_by_node, pairs=node_pairs)
-    pairwise_si = pairwise_coupling_operator(si_by_node, pairs=node_pairs)
 
     return {
         "objectives": objectives,
-        "bundles": updated_bundles,
-        "delta_nfr_series": smoothed_delta,
-        "sense_index_series": clamped_si,
-        "delta_nfr": mean(smoothed_delta),
-        "sense_index": mean(clamped_si),
-        "dissonance": dissonance,
-        "dissonance_breakdown": breakdown,
-        "coupling": coupling,
-        "resonance": resonance,
-        "recursive_trace": recursive_trace,
-        "lap_sequence": lap_metadata,
+        "bundles": coherence_stage["bundles"],
+        "delta_nfr_series": coherence_stage["smoothed_delta"],
+        "sense_index_series": coherence_stage["smoothed_sense_index"],
+        "delta_nfr": mean(coherence_stage["smoothed_delta"])
+        if coherence_stage["smoothed_delta"]
+        else 0.0,
+        "sense_index": mean(coherence_stage["smoothed_sense_index"])
+        if coherence_stage["smoothed_sense_index"]
+        else 0.0,
+        "dissonance": coherence_stage["dissonance"],
+        "dissonance_breakdown": coherence_stage["dissonance_breakdown"],
+        "coupling": coherence_stage["coupling"],
+        "resonance": coherence_stage["resonance"],
+        "recursive_trace": sense_stage["memory"],
+        "lap_sequence": reception_stage["lap_sequence"],
         "microsector_variability": variability,
-        "pairwise_coupling": {
-            "delta_nfr": pairwise_delta,
-            "sense_index": pairwise_si,
-        },
+        "pairwise_coupling": nodal_stage["pairwise_coupling"],
+        "nodal_metrics": nodal_stage,
+        "epi_evolution": epi_stage,
+        "sense_memory": sense_stage,
+        "stages": stages,
     }
 
 

@@ -103,6 +103,13 @@ def test_analyze_pipeline_json_export(
     assert len(payload["microsectors"]) == 2
     assert "microsectors" in captured.out
     assert payload["phase_messages"]
+    assert "intermediate_metrics" in payload
+    epi_metrics = payload["intermediate_metrics"]["epi_evolution"]
+    assert len(epi_metrics["integrated"]) == len(payload["series"])
+    nodal_metrics = payload["intermediate_metrics"]["nodal_metrics"]
+    assert set(nodal_metrics["delta_by_node"]) == {"tyres", "suspension", "chassis"}
+    memory = payload["intermediate_metrics"]["sense_memory"]
+    assert len(memory["memory"]) == len(payload["series"])
     report_paths = payload["reports"]
     sense_path = Path(report_paths["sense_index_map"]["path"])
     resonance_path = Path(report_paths["modal_resonance"]["path"])
@@ -187,6 +194,9 @@ def test_report_generation(
     assert "sense_index" in payload
     assert Path(payload["reports"]["sense_index_map"]["path"]).exists()
     assert Path(payload["reports"]["delta_breakdown"]["path"]).exists()
+    assert "intermediate_metrics" in payload
+    assert "epi_evolution" in payload["intermediate_metrics"]
+    assert payload["intermediate_metrics"]["sense_memory"]["memory"] == payload["recursive_trace"]
 
 
 def test_write_set_markdown_export(
