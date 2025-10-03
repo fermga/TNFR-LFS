@@ -16,6 +16,10 @@
 - Definición de los estados de resonancia (latente, activado, expandido, en cascada).
 - Ecuaciones de transición entre estados con parámetros de acoplamiento \(\alpha\), \(\beta\), \(\gamma\) y \(\delta\).
 - Tabla de ejemplos por dominio (arte glífico, redes culturales, sistemas biológicos).
+- En la implementación de referencia, cada nodo del EPI conserva su frecuencia
+  natural ``nu_f`` (Hz) según la tabla `NU_F_NODE_DEFAULTS`, lo que permite
+  integrar explícitamente la dinámica ``dEPI/dt`` mediante el operador
+  :func:`evolve_epi` descrito en ``tnfr_lfs.core.operators``.
 
 ## 3. Arquitectura nodal y protocolos simbióticos
 - Diseño de nodos (núcleo simbiótico, envolvente de interacción, interfaces glíficas).
