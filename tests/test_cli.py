@@ -94,6 +94,10 @@ def test_suggest_pipeline(
     assert isinstance(payload["recommendations"], list)
     assert payload["phase_messages"]
     assert Path(payload["reports"]["yaw_roll_spectrum"]["path"]).exists()
+    assert any(
+        "BAS-" in rec.get("rationale", "") or "ADV-" in rec.get("rationale", "")
+        for rec in payload["recommendations"]
+    )
 
 
 def test_report_generation(
@@ -151,6 +155,66 @@ def test_write_set_markdown_export(
     ])
 
     assert "| Cambio |" in output
+
+
+def test_write_set_lfs_export(
+    tmp_path: Path,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    baseline_path = tmp_path / "baseline.jsonl"
+    run_cli([
+        "baseline",
+        str(baseline_path),
+        "--simulate",
+        str(synthetic_stint_path),
+    ])
+
+    message = run_cli([
+        "write-set",
+        str(baseline_path),
+        "--export",
+        "set",
+        "--car-model",
+        "generic_gt",
+        "--session",
+        "stint-1",
+        "--set-output",
+        "GEN_race",
+    ])
+
+    destination = tmp_path / "LFS/data/setups/GEN_race.set"
+    assert destination.exists()
+    assert "GEN_race" in message
+    assert "TNFR-LFS setup export" in destination.read_text(encoding="utf8")
+
+
+def test_write_set_lfs_rejects_invalid_name(
+    tmp_path: Path,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    baseline_path = tmp_path / "baseline.jsonl"
+    run_cli([
+        "baseline",
+        str(baseline_path),
+        "--simulate",
+        str(synthetic_stint_path),
+    ])
+
+    with pytest.raises(ValueError):
+        run_cli([
+            "write-set",
+            str(baseline_path),
+            "--export",
+            "set",
+            "--car-model",
+            "generic_gt",
+            "--set-output",
+            "bad_name",
+        ])
 
 
 def test_cli_end_to_end_pipeline(

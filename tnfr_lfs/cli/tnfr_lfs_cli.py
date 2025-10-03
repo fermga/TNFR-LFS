@@ -652,6 +652,14 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         default=None,
         help="Optional session label attached to the generated setup plan.",
     )
+    write_set_parser.add_argument(
+        "--set-output",
+        default=None,
+        help=(
+            "Nombre base del archivo .set que se guardará bajo LFS/data/setups. "
+            "Debe comenzar por el prefijo del coche."
+        ),
+    )
     write_set_parser.set_defaults(handler=_handle_write_set)
 
     return parser
@@ -922,6 +930,7 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         "objective_value": plan.objective_value,
         "recommendations": plan.recommendations,
         "series": plan.telemetry,
+        "set_output": namespace.set_output,
     }
     return _render_payload(payload, namespace.export)
 
