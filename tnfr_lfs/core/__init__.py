@@ -16,6 +16,7 @@ from .operators import (
     recursividad_operator,
     resonance_operator,
 )
+from .resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
 from .segmentation import Goal, Microsector, segment_microsectors
 
 __all__ = [
@@ -40,4 +41,7 @@ __all__ = [
     "Goal",
     "Microsector",
     "segment_microsectors",
+    "analyse_modal_resonance",
+    "ModalPeak",
+    "ModalAnalysis",
 ]

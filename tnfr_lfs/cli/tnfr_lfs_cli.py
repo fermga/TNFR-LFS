@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import socket
 from dataclasses import asdict
@@ -30,6 +29,7 @@ from ..acquisition import (
     TelemetryFusion,
 )
 from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
+from ..core.resonance import analyse_modal_resonance
 from ..core.operators import orchestrate_delta_metrics
 from ..core.segmentation import Microsector, segment_microsectors
 from ..exporters import exporters_registry
@@ -415,54 +415,6 @@ def _sense_index_map(
     return results
 
 
-def _spectrum(values: Sequence[float], bins: int = 12) -> Dict[str, Any]:
-    if not values:
-        return {
-            "min": 0.0,
-            "max": 0.0,
-            "mean": 0.0,
-            "rms": 0.0,
-            "centres": [],
-            "counts": [],
-        }
-    minimum = min(values)
-    maximum = max(values)
-    average = mean(values)
-    rms = math.sqrt(sum(value * value for value in values) / len(values))
-    if maximum - minimum <= 1e-9:
-        centres = [float(minimum)]
-        counts = [len(values)]
-    else:
-        step = (maximum - minimum) / bins
-        centres = [float(minimum + (index + 0.5) * step) for index in range(bins)]
-        counts = [0 for _ in range(bins)]
-        for value in values:
-            if step <= 0:
-                bucket = 0
-            else:
-                bucket = int((value - minimum) / step)
-                if bucket >= bins:
-                    bucket = bins - 1
-            counts[bucket] += 1
-    return {
-        "min": float(minimum),
-        "max": float(maximum),
-        "mean": float(average),
-        "rms": float(rms),
-        "centres": centres,
-        "counts": counts,
-    }
-
-
-def _yaw_roll_spectrum(records: Records) -> Dict[str, Any]:
-    yaw_values = [record.yaw for record in records]
-    roll_values = [record.roll for record in records]
-    return {
-        "yaw": _spectrum(yaw_values),
-        "roll": _spectrum(roll_values),
-    }
-
-
 def _delta_breakdown_summary(bundles: Bundles) -> Dict[str, Any]:
     summary: Dict[str, Any] = {
         "samples": len(bundles),
@@ -503,20 +455,56 @@ def _generate_out_reports(
 ) -> Dict[str, Any]:
     destination.mkdir(parents=True, exist_ok=True)
     sense_map = _sense_index_map(bundles, microsectors)
-    spectrum = _yaw_roll_spectrum(records)
+    resonance = analyse_modal_resonance(records)
     breakdown = _delta_breakdown_summary(bundles)
     sense_path = destination / "sense_index_map.json"
-    spectrum_path = destination / "yaw_roll_spectrum.json"
+    resonance_path = destination / "modal_resonance.json"
     breakdown_path = destination / "delta_breakdown.json"
     with sense_path.open("w", encoding="utf8") as handle:
         json.dump(sense_map, handle, indent=2, sort_keys=True)
-    with spectrum_path.open("w", encoding="utf8") as handle:
-        json.dump(spectrum, handle, indent=2, sort_keys=True)
+    with resonance_path.open("w", encoding="utf8") as handle:
+        json.dump(
+            {
+                axis: {
+                    "sample_rate": analysis.sample_rate,
+                    "total_energy": analysis.total_energy,
+                    "peaks": [
+                        {
+                            "frequency": peak.frequency,
+                            "energy": peak.energy,
+                            "classification": peak.classification,
+                        }
+                        for peak in analysis.peaks
+                    ],
+                }
+                for axis, analysis in resonance.items()
+            },
+            handle,
+            indent=2,
+            sort_keys=True,
+        )
     with breakdown_path.open("w", encoding="utf8") as handle:
         json.dump(breakdown, handle, indent=2, sort_keys=True)
     return {
         "sense_index_map": {"path": str(sense_path), "data": sense_map},
-        "yaw_roll_spectrum": {"path": str(spectrum_path), "data": spectrum},
+        "modal_resonance": {
+            "path": str(resonance_path),
+            "data": {
+                axis: {
+                    "sample_rate": analysis.sample_rate,
+                    "total_energy": analysis.total_energy,
+                    "peaks": [
+                        {
+                            "frequency": peak.frequency,
+                            "energy": peak.energy,
+                            "classification": peak.classification,
+                        }
+                        for peak in analysis.peaks
+                    ],
+                }
+                for axis, analysis in resonance.items()
+            },
+        },
         "delta_breakdown": {"path": str(breakdown_path), "data": breakdown},
     }
 
