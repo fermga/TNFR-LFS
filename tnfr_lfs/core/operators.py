@@ -1,4 +1,4 @@
-"""High-level TNFR-LFS operators for telemetry analytics pipelines."""
+"""High-level TNFR × LFS operators for telemetry analytics pipelines."""
 
 from __future__ import annotations
 

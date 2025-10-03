@@ -1,6 +1,6 @@
 # Tutorials
 
-This section walks through the full TNFR-LFS workflow, from capturing a
+This section walks through the full TNFR × LFS workflow, from capturing a
 baseline to producing an explainable setup report.  The examples assume
 you installed the project in editable mode using ``pip install -e .``.
 
