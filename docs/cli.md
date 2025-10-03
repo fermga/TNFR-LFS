@@ -105,9 +105,9 @@ exporter (``json`` by default).  The payload now includes a
 ``phase_messages`` array that summarises per-phase ΔNFR↓ deviations with
 actionable hints together with a ``reports`` block.  Each invocation
 persists ``out/<baseline-stem>/sense_index_map.json`` and
-``out/<baseline-stem>/yaw_roll_spectrum.json`` (configurable via the
+``out/<baseline-stem>/modal_resonance.json`` (configurable via the
 ``paths.output_dir`` setting) so external tooling can reuse the Sense
-Index heatmap and yaw/roll spectrum without re-running the CLI.
+Index heatmap and modal resonance analysis without re-running the CLI.
 
 ### ``suggest``
 
@@ -125,8 +125,8 @@ produce explainable ΔNFR/Sense Index reports.  ``--target-delta`` and
 ``--target-si`` define the desired objectives.  The emitted report now
 exposes the same telemetry artefacts as ``analyze``/``suggest`` under the
 ``reports`` key so downstream automations (dashboards or notebooks) can
-ingest the Sense Index map and yaw/roll spectrum while keeping the
-command line output concise.
+ingest the Sense Index map and modal resonance breakdown while keeping
+the command line output concise.
 
 ### ``write-set``
 

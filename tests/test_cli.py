@@ -105,12 +105,18 @@ def test_analyze_pipeline_json_export(
     assert payload["phase_messages"]
     report_paths = payload["reports"]
     sense_path = Path(report_paths["sense_index_map"]["path"])
-    spectrum_path = Path(report_paths["yaw_roll_spectrum"]["path"])
+    resonance_path = Path(report_paths["modal_resonance"]["path"])
     breakdown_path = Path(report_paths["delta_breakdown"]["path"])
     assert sense_path.exists()
-    assert spectrum_path.exists()
+    assert resonance_path.exists()
     assert breakdown_path.exists()
     assert payload["reports"]["sense_index_map"]["data"]
+    resonance_data = payload["reports"]["modal_resonance"]["data"]
+    assert set(resonance_data) >= {"yaw", "roll", "pitch"}
+    for axis, axis_data in resonance_data.items():
+        assert "sample_rate" in axis_data
+        assert "total_energy" in axis_data
+        assert isinstance(axis_data.get("peaks", []), list)
     breakdown_data = payload["reports"]["delta_breakdown"]["data"]
     assert breakdown_data["samples"] == len(payload["series"])
     tyres_summary = breakdown_data["per_node"]["tyres"]
@@ -146,7 +152,7 @@ def test_suggest_pipeline(
     assert "recommendations" in payload
     assert isinstance(payload["recommendations"], list)
     assert payload["phase_messages"]
-    assert Path(payload["reports"]["yaw_roll_spectrum"]["path"]).exists()
+    assert Path(payload["reports"]["modal_resonance"]["path"]).exists()
     assert Path(payload["reports"]["delta_breakdown"]["path"]).exists()
     assert any(
         "BAS-" in rec.get("rationale", "") or "ADV-" in rec.get("rationale", "")
