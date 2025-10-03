@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, replace
 from statistics import mean
+from collections.abc import Mapping as MappingABC
 from typing import Dict, List, Mapping, Optional, Sequence
 
 from .coherence import sense_index
@@ -187,8 +188,38 @@ def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
     }
 
 
-def resolve_nu_f_by_node(record: TelemetryRecord) -> Dict[str, float]:
-    """Return the natural frequency per node for a telemetry sample."""
+def resolve_nu_f_by_node(
+    record: TelemetryRecord,
+    *,
+    phase: str | None = None,
+    phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
+) -> Dict[str, float]:
+    """Return the natural frequency per node for a telemetry sample.
+
+    The base natural frequencies documented in ``NU_F_NODE_DEFAULTS`` are
+    modulated by the instantaneous telemetry readings and optionally by the
+    phase-aware weighting profiles derived from the segmentation layer.  This
+    allows phases that emphasise a subsystem to increase its natural frequency
+    which in turn penalises the global sense index more aggressively.
+    """
+
+    def _phase_weight(node: str) -> float:
+        if not phase or not phase_weights or not isinstance(phase_weights, MappingABC):
+            return 1.0
+        profile: Mapping[str, float] | float | None = phase_weights.get(phase)
+        if profile is None:
+            profile = phase_weights.get("__default__")
+        if profile is None:
+            return 1.0
+        if isinstance(profile, MappingABC):
+            if node in profile:
+                return float(profile[node])
+            if "__default__" in profile:
+                return float(profile["__default__"])
+            return 1.0
+        if isinstance(profile, (int, float)):
+            return float(profile)
+        return 1.0
 
     # Slip excursions modulate the tyre's natural frequency, while the
     # suspension node reacts to sustained load deviations.  Other
@@ -200,13 +231,15 @@ def resolve_nu_f_by_node(record: TelemetryRecord) -> Dict[str, float]:
     mapping: Dict[str, float] = {}
     for node, base_value in NU_F_NODE_DEFAULTS.items():
         if node == "tyres":
-            mapping[node] = base_value * slip_modifier
+            value = base_value * slip_modifier
         elif node == "suspension":
-            mapping[node] = base_value * load_modifier
+            value = base_value * load_modifier
         elif node == "driver":
-            mapping[node] = base_value * sense_modifier
+            value = base_value * sense_modifier
         else:
-            mapping[node] = base_value
+            value = base_value
+        phase_modifier = max(0.5, min(3.0, _phase_weight(node)))
+        mapping[node] = value * phase_modifier
     return mapping
 
 
