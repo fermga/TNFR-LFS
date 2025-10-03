@@ -420,6 +420,14 @@ def _sense_index_map(
         entry["filtered_measures"] = filtered_payload
         entry["grip_rel"] = filtered_payload.get("grip_rel", 0.0)
         entry["filtered_style_index"] = filtered_payload.get("style_index")
+        occupancy_payload: Dict[str, Dict[str, float]] = {}
+        for phase in ("entry", "apex", "exit"):
+            phase_occupancy = microsector.window_occupancy.get(phase, {})
+            occupancy_payload[phase] = {
+                metric: round(float(value), 4)
+                for metric, value in phase_occupancy.items()
+            }
+        entry["window_occupancy"] = occupancy_payload
         mutation = microsector.last_mutation
         if mutation:
             entry["mutation"] = {

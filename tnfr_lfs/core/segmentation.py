@@ -81,6 +81,7 @@ class Microsector:
     filtered_measures: Mapping[str, float]
     recursivity_trace: Tuple[Mapping[str, float | str | None], ...]
     last_mutation: Mapping[str, object] | None
+    window_occupancy: Mapping[PhaseLiteral, Mapping[str, float]]
 
     def phase_indices(self, phase: PhaseLiteral) -> range:
         """Return the range of sample indices assigned to ``phase``."""
@@ -345,6 +346,7 @@ def segment_microsectors(
                 )
                 for key, value in (mutation_info or {}).items()
             }
+        occupancy = _compute_window_occupancy(goals, phase_samples, records)
         microsectors.append(
             Microsector(
                 index=spec["index"],
@@ -364,6 +366,7 @@ def segment_microsectors(
                 filtered_measures=dict(filtered_measures),
                 recursivity_trace=rec_trace,
                 last_mutation=dict(mutation_details) if mutation_details is not None else None,
+                window_occupancy=occupancy,
             )
         )
 
@@ -667,6 +670,36 @@ def _initial_phase_weight_map(
         weights[phase] = profile
 
     return weights
+
+
+def _compute_window_occupancy(
+    goals: Sequence[Goal],
+    phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]],
+    records: Sequence[TelemetryRecord],
+) -> Dict[PhaseLiteral, Dict[str, float]]:
+    def _percentage(values: Sequence[float], window: Tuple[float, float]) -> float:
+        if not values:
+            return 0.0
+        lower, upper = window
+        if lower > upper:
+            lower, upper = upper, lower
+        total = len(values)
+        if total == 0:
+            return 0.0
+        count = sum(1 for value in values if lower <= value <= upper)
+        return 100.0 * count / total
+
+    occupancy: Dict[PhaseLiteral, Dict[str, float]] = {}
+    for goal in goals:
+        indices = phase_samples.get(goal.phase, ())
+        slip_values = [records[i].slip_ratio for i in indices]
+        yaw_rates = [_compute_yaw_rate(records, idx) for idx in indices]
+        occupancy[goal.phase] = {
+            "slip_lat": _percentage(slip_values, goal.slip_lat_window),
+            "slip_long": _percentage(slip_values, goal.slip_long_window),
+            "yaw_rate": _percentage(yaw_rates, goal.yaw_rate_window),
+        }
+    return occupancy
 
 
 def _adjust_phase_weights_with_dominance(

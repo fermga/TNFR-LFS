@@ -149,6 +149,11 @@ def _build_microsector(
         "style_index": 0.9,
         "grip_rel": 1.0,
     }
+    window_occupancy = {
+        "entry": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+    }
     return Microsector(
         index=index,
         start_time=float(entry_idx),
@@ -167,6 +172,7 @@ def _build_microsector(
         filtered_measures=filtered_measures,
         recursivity_trace=(),
         last_mutation=None,
+        window_occupancy=window_occupancy,
     )
 
 

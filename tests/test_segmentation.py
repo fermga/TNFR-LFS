@@ -100,6 +100,39 @@ def _yaw_rate(records: list[TelemetryRecord], index: int) -> float:
     return wrapped / dt
 
 
+def test_window_occupancy_matches_goal_windows(
+    synthetic_microsectors,
+    synthetic_records,
+):
+    for microsector in synthetic_microsectors:
+        for goal in microsector.goals:
+            occupancy = microsector.window_occupancy.get(goal.phase, {})
+            indices = list(microsector.phase_indices(goal.phase))
+            slip_values = [synthetic_records[i].slip_ratio for i in indices]
+            yaw_rates = [_yaw_rate(synthetic_records, idx) for idx in indices]
+
+            def _percentage(values: list[float], window: tuple[float, float]) -> float:
+                if not values:
+                    return 0.0
+                lower, upper = window
+                if lower > upper:
+                    lower, upper = upper, lower
+                count = sum(1 for value in values if lower <= value <= upper)
+                return 100.0 * count / len(values)
+
+            expected_lat = _percentage(slip_values, goal.slip_lat_window)
+            expected_long = _percentage(slip_values, goal.slip_long_window)
+            expected_yaw = _percentage(yaw_rates, goal.yaw_rate_window)
+
+            assert occupancy
+            assert 0.0 <= occupancy.get("slip_lat", -1.0) <= 100.0
+            assert 0.0 <= occupancy.get("slip_long", -1.0) <= 100.0
+            assert 0.0 <= occupancy.get("yaw_rate", -1.0) <= 100.0
+            assert occupancy["slip_lat"] == pytest.approx(expected_lat, abs=1e-6)
+            assert occupancy["slip_long"] == pytest.approx(expected_long, abs=1e-6)
+            assert occupancy["yaw_rate"] == pytest.approx(expected_yaw, abs=1e-6)
+
+
 def test_goal_targets_match_phase_averages(
     synthetic_microsectors,
     synthetic_records,
