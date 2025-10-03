@@ -125,6 +125,7 @@ class EPIBundle:
     transmission: TransmissionNode
     track: TrackNode
     driver: DriverNode
+    delta_breakdown: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     dEPI_dt: float = 0.0
     integrated_epi: float = 0.0
     node_evolution: Mapping[str, tuple[float, float]] = field(default_factory=dict)

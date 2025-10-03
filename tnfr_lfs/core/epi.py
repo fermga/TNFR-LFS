@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from statistics import mean
 from collections.abc import Mapping as MappingABC
 from typing import Dict, List, Mapping, Optional, Sequence
 
-from .coherence import sense_index
+from .coherence import compute_node_delta_nfr, sense_index
 from .epi_models import (
     BrakesNode,
     ChassisNode,
@@ -79,25 +79,16 @@ def _angle_difference(value: float, reference: float) -> float:
     return wrapped - math.pi
 
 
-def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
-    """Compute ΔNFR contributions for each subsystem.
+def _abs_delta(value: float, base: float) -> float:
+    delta_value = value - base
+    if not math.isfinite(delta_value):
+        return 0.0
+    return abs(delta_value)
 
-    The function expects ``record`` to optionally provide a ``reference``
-    sample, typically the baseline derived from the telemetry stint.  When a
-    reference is available the signal strength for every subsystem is
-    measured relative to it, otherwise the calculation degenerates into a
-    uniform distribution.
-    """
 
-    baseline = record.reference or record
-    delta_nfr = record.nfr - baseline.nfr
-
-    def _abs_delta(value: float, base: float) -> float:
-        delta_value = value - base
-        if not math.isfinite(delta_value):
-            return 0.0
-        return abs(delta_value)
-
+def _node_feature_contributions(
+    record: TelemetryRecord, baseline: TelemetryRecord
+) -> Dict[str, Dict[str, float]]:
     slip_delta = _abs_delta(record.slip_ratio, baseline.slip_ratio)
     slip_angle_delta = abs(_angle_difference(record.slip_angle, baseline.slip_angle))
     lat_delta = _abs_delta(record.lateral_accel, baseline.lateral_accel)
@@ -143,35 +134,61 @@ def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
     brake_longitudinal_delta = max(0.0, baseline.longitudinal_accel - record.longitudinal_accel)
     drive_longitudinal_delta = max(0.0, record.longitudinal_accel - baseline.longitudinal_accel)
 
-    node_signals = {
-        "tyres": (slip_delta * 0.35)
-        + (slip_angle_delta * 0.25)
-        + ((mu_front_delta + mu_rear_delta) * 0.2)
-        + (locking_delta * 0.2),
-        "suspension": ((travel_front_delta + travel_rear_delta) * 0.35)
-        + ((velocity_front_delta + velocity_rear_delta) * 0.4)
-        + ((load_front_delta + load_rear_delta) * 0.25),
-        "chassis": (yaw_rate_delta * 0.4) + (lat_delta * 0.35) + (roll_delta * 0.15) + (pitch_delta * 0.1),
-        "brakes": (brake_delta * 0.4)
-        + (locking_delta * 0.25)
-        + (brake_longitudinal_delta * 0.2)
-        + (load_front_delta * 0.15),
-        "transmission": (throttle_delta * 0.3)
-        + (drive_longitudinal_delta * 0.25)
-        + (slip_delta * 0.2)
-        + (gear_delta * 0.15)
-        + (speed_delta * 0.1),
-        "track": ((mu_front_delta + mu_rear_delta) * 0.3)
-        + (abs(axle_balance) * 0.25)
-        + (abs(axle_velocity_balance) * 0.2)
-        + (yaw_delta * 0.15)
-        + (load_delta * 0.1),
-        "driver": (si_delta * 0.35)
-        + (steer_delta * 0.25)
-        + (throttle_delta * 0.2)
-        + (yaw_rate_delta * 0.2),
+    return {
+        "tyres": {
+            "slip_ratio": slip_delta * 0.35,
+            "slip_angle": slip_angle_delta * 0.25,
+            "mu_eff_front": mu_front_delta * 0.2,
+            "mu_eff_rear": mu_rear_delta * 0.2,
+            "locking": locking_delta * 0.2,
+        },
+        "suspension": {
+            "travel_front": travel_front_delta * 0.35,
+            "travel_rear": travel_rear_delta * 0.35,
+            "velocity_front": velocity_front_delta * 0.4,
+            "velocity_rear": velocity_rear_delta * 0.4,
+            "load_front": load_front_delta * 0.25,
+            "load_rear": load_rear_delta * 0.25,
+        },
+        "chassis": {
+            "yaw_rate": yaw_rate_delta * 0.4,
+            "lateral_accel": lat_delta * 0.35,
+            "roll": roll_delta * 0.15,
+            "pitch": pitch_delta * 0.1,
+        },
+        "brakes": {
+            "pressure": brake_delta * 0.4,
+            "locking": locking_delta * 0.25,
+            "longitudinal_decel": brake_longitudinal_delta * 0.2,
+            "load_front": load_front_delta * 0.15,
+        },
+        "transmission": {
+            "throttle": throttle_delta * 0.3,
+            "longitudinal_accel": drive_longitudinal_delta * 0.25,
+            "slip_ratio": slip_delta * 0.2,
+            "gear": gear_delta * 0.15,
+            "speed": speed_delta * 0.1,
+        },
+        "track": {
+            "mu_eff_front": mu_front_delta * 0.3,
+            "mu_eff_rear": mu_rear_delta * 0.3,
+            "axle_load_balance": abs(axle_balance) * 0.25,
+            "axle_velocity_balance": abs(axle_velocity_balance) * 0.2,
+            "yaw": yaw_delta * 0.15,
+            "vertical_load": load_delta * 0.1,
+        },
+        "driver": {
+            "style_index": si_delta * 0.35,
+            "steer": steer_delta * 0.25,
+            "throttle": throttle_delta * 0.2,
+            "yaw_rate": yaw_rate_delta * 0.2,
+        },
     }
 
+
+def _distribute_node_delta(
+    delta_nfr: float, node_signals: Mapping[str, float]
+) -> Dict[str, float]:
     total_signal = sum(node_signals.values())
     if total_signal <= 1e-9 or not math.isfinite(total_signal):
         node_count = len(node_signals)
@@ -186,6 +203,25 @@ def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
         node: sign * magnitude * (signal / total_signal)
         for node, signal in node_signals.items()
     }
+
+
+def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
+    """Compute ΔNFR contributions for each subsystem.
+
+    The function expects ``record`` to optionally provide a ``reference``
+    sample, typically the baseline derived from the telemetry stint.  When a
+    reference is available the signal strength for every subsystem is
+    measured relative to it, otherwise the calculation degenerates into a
+    uniform distribution.
+    """
+
+    baseline = record.reference or record
+    delta_nfr = record.nfr - baseline.nfr
+    feature_contributions = _node_feature_contributions(record, baseline)
+    node_signals = {
+        node: sum(values.values()) for node, values in feature_contributions.items()
+    }
+    return _distribute_node_delta(delta_nfr, node_signals)
 
 
 def resolve_nu_f_by_node(
@@ -335,8 +371,11 @@ class DeltaCalculator:
         phase_weights: Optional[Mapping[str, Mapping[str, float] | float]] = None,
     ) -> EPIBundle:
         delta_nfr = record.nfr - baseline.nfr
-        node_record = replace(record, reference=baseline)
-        node_deltas = delta_nfr_by_node(node_record)
+        feature_contributions = _node_feature_contributions(record, baseline)
+        node_signals = {
+            node: sum(values.values()) for node, values in feature_contributions.items()
+        }
+        node_deltas = _distribute_node_delta(delta_nfr, node_signals)
         nu_f_map = dict(nu_f_by_node or resolve_nu_f_by_node(record))
         phase_weight_map = phase_weights or DEFAULT_PHASE_WEIGHTS
         global_si = sense_index(
@@ -361,6 +400,10 @@ class DeltaCalculator:
                 return prev_epi + (derivative * dt), derivative, nodal
 
         integrated_epi, derivative, nodal_evolution = evolve_epi(previous_state, node_deltas, dt, nu_f_map)
+        delta_breakdown = {
+            node: compute_node_delta_nfr(node, node_deltas.get(node, 0.0), features, prefix=False)
+            for node, features in feature_contributions.items()
+        }
         nodes = DeltaCalculator._build_nodes(
             record, node_deltas, delta_nfr, nu_f_map, nodal_evolution
         )
@@ -369,6 +412,7 @@ class DeltaCalculator:
             epi=epi_value,
             delta_nfr=delta_nfr,
             sense_index=global_si,
+            delta_breakdown=delta_breakdown,
             dEPI_dt=derivative,
             integrated_epi=integrated_epi,
             node_evolution=dict(nodal_evolution),

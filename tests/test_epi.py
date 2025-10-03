@@ -268,6 +268,19 @@ def test_epi_extractor_creates_structured_nodes(synthetic_bundles, synthetic_rec
     assert pivot.driver.steer == pytest.approx(source_record.steer)
 
 
+def test_delta_breakdown_matches_node_totals(synthetic_bundles):
+    bundle = synthetic_bundles[3]
+
+    assert bundle.delta_breakdown
+    accumulated = 0.0
+    for node, breakdown in bundle.delta_breakdown.items():
+        node_total = sum(breakdown.values())
+        model = getattr(bundle, node)
+        assert node_total == pytest.approx(model.delta_nfr, rel=1e-6, abs=1e-9)
+        accumulated += node_total
+    assert accumulated == pytest.approx(bundle.delta_nfr, rel=1e-6, abs=1e-9)
+
+
 def test_epi_weights_shift_balance_between_load_and_slip(synthetic_records):
     default_results = EPIExtractor().extract(synthetic_records)
     slip_focused = EPIExtractor(load_weight=0.2, slip_weight=0.8).extract(synthetic_records)
