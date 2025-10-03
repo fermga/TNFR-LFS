@@ -30,6 +30,20 @@ def test_delta_calculation_against_baseline(synthetic_records):
         rel=1e-6,
     )
     assert bundle.integrated_epi == pytest.approx(bundle.epi)
+    assert set(bundle.node_evolution) >= {
+        "tyres",
+        "suspension",
+        "chassis",
+        "brakes",
+        "transmission",
+        "track",
+        "driver",
+    }
+    for node in ("tyres", "suspension", "chassis", "brakes", "transmission", "track", "driver"):
+        integral, derivative = bundle.node_evolution[node]
+        node_model = getattr(bundle, node)
+        assert node_model.dEPI_dt == pytest.approx(derivative)
+        assert node_model.integrated_epi == pytest.approx(integral)
 
 
 def test_delta_nfr_by_node_emphasises_braking_signals():
@@ -195,6 +209,21 @@ def test_epi_extractor_creates_structured_nodes(synthetic_bundles):
     dt = pivot.timestamp - previous.timestamp
     expected_integral = previous.integrated_epi + pivot.dEPI_dt * dt
     assert pivot.integrated_epi == pytest.approx(expected_integral, rel=1e-3)
+    nodal_derivative_sum = sum(
+        getattr(pivot, node).dEPI_dt
+        for node in ("tyres", "suspension", "chassis", "brakes", "transmission", "track", "driver")
+    )
+    assert nodal_derivative_sum == pytest.approx(pivot.dEPI_dt, rel=1e-6)
+    nodal_integral_sum = sum(
+        getattr(pivot, node).integrated_epi
+        for node in ("tyres", "suspension", "chassis", "brakes", "transmission", "track", "driver")
+    )
+    assert nodal_integral_sum == pytest.approx(pivot.dEPI_dt * dt, rel=1e-6, abs=1e-9)
+    for node in ("tyres", "suspension", "chassis", "brakes", "transmission", "track", "driver"):
+        integral, derivative = pivot.node_evolution[node]
+        model = getattr(pivot, node)
+        assert integral == pytest.approx(model.integrated_epi, rel=1e-6, abs=1e-9)
+        assert derivative == pytest.approx(model.dEPI_dt, rel=1e-6)
 
 
 def test_epi_weights_shift_balance_between_load_and_slip(synthetic_records):

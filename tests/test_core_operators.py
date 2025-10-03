@@ -101,11 +101,16 @@ def test_evolve_epi_runs_euler_step():
     prev = 0.45
     deltas = {"tyres": 1.2, "suspension": -0.6, "driver": 0.4}
     nu_map = {"tyres": 0.18, "suspension": 0.14, "driver": 0.05}
-    new_epi, derivative = evolve_epi(prev, deltas, 0.1, nu_map)
+    new_epi, derivative, nodal = evolve_epi(prev, deltas, 0.1, nu_map)
 
     expected_derivative = 0.18 * 1.2 + 0.14 * -0.6 + 0.05 * 0.4
     assert derivative == pytest.approx(expected_derivative, rel=1e-9)
     assert new_epi == pytest.approx(prev + expected_derivative * 0.1, rel=1e-9)
+    assert {"tyres", "suspension", "driver"} <= set(nodal)
+    nodal_derivative = sum(component[1] for component in nodal.values())
+    nodal_integral = sum(component[0] for component in nodal.values())
+    assert nodal_derivative == pytest.approx(derivative, rel=1e-9)
+    assert nodal_integral == pytest.approx(expected_derivative * 0.1, rel=1e-9)
 
 
 def test_sense_index_penalises_active_phase_weights():

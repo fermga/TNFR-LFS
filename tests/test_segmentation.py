@@ -173,3 +173,12 @@ def test_integrator_matches_derivative_series(
         assert bundle.dEPI_dt == pytest.approx(derivative_expected, rel=1e-6, abs=1e-6)
         expected_integrated = synthetic_bundles[index - 1].integrated_epi + (bundle.dEPI_dt * dt)
         assert bundle.integrated_epi == pytest.approx(expected_integrated, rel=1e-6, abs=1e-6)
+        for node in nodes:
+            integral, derivative = bundle.node_evolution[node]
+            node_model = getattr(bundle, node)
+            assert node_model.dEPI_dt == pytest.approx(derivative, rel=1e-6, abs=1e-9)
+            assert node_model.integrated_epi == pytest.approx(integral, rel=1e-6, abs=1e-9)
+        nodal_derivative = sum(bundle.node_evolution[node][1] for node in nodes)
+        nodal_integral = sum(bundle.node_evolution[node][0] for node in nodes)
+        assert nodal_derivative == pytest.approx(bundle.dEPI_dt, rel=1e-6)
+        assert nodal_integral == pytest.approx(bundle.dEPI_dt * dt, rel=1e-6, abs=1e-9)
