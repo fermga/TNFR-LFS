@@ -2,7 +2,36 @@
 
 This section walks through the full TNFR × LFS workflow, from capturing a
 baseline to producing an explainable setup report.  The examples assume
-you installed the project in editable mode using ``pip install -e .``.
+you installed the project in editable mode using ``pip install -e .`` and
+that Live for Speed has been prepared with the recommended telemetry
+configuration.
+
+## 0. Enable telemetry in ``cfg.txt``
+
+Locate the simulator ``cfg.txt`` file and adjust the streaming blocks:
+
+```text
+OutSim Mode 1
+OutSim IP 127.0.0.1
+OutSim Port 4123
+
+OutGauge Mode 1
+OutGauge IP 127.0.0.1
+OutGauge Port 3000
+
+InSim IP 127.0.0.1
+InSim Port 29999
+```
+
+You can mirror the same values from the in-game console using ``/outsim 1 127.0.0.1 4123``,
+``/outgauge 1 127.0.0.1 3000`` and ``/insim 29999``.  Afterwards execute
+
+```bash
+tnfr-lfs diagnose /ruta/a/LFS/cfg.txt
+```
+
+to validate that OutSim/OutGauge are enabled and that the UDP ports are available before
+capturing telemetry.
 
 ## 1. Capture a baseline
 
