@@ -15,6 +15,10 @@ class TyresNode:
     nu_f: float = 0.0
     dEPI_dt: float = 0.0
     integrated_epi: float = 0.0
+    load: float = 0.0
+    slip_ratio: float = 0.0
+    mu_eff_front: float = 0.0
+    mu_eff_rear: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -26,6 +30,10 @@ class SuspensionNode:
     nu_f: float = 0.0
     dEPI_dt: float = 0.0
     integrated_epi: float = 0.0
+    travel_front: float = 0.0
+    travel_rear: float = 0.0
+    velocity_front: float = 0.0
+    velocity_rear: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -37,6 +45,12 @@ class ChassisNode:
     nu_f: float = 0.0
     dEPI_dt: float = 0.0
     integrated_epi: float = 0.0
+    yaw: float = 0.0
+    pitch: float = 0.0
+    roll: float = 0.0
+    yaw_rate: float = 0.0
+    lateral_accel: float = 0.0
+    longitudinal_accel: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -48,6 +62,8 @@ class BrakesNode:
     nu_f: float = 0.0
     dEPI_dt: float = 0.0
     integrated_epi: float = 0.0
+    brake_pressure: float = 0.0
+    locking: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -59,6 +75,10 @@ class TransmissionNode:
     nu_f: float = 0.0
     dEPI_dt: float = 0.0
     integrated_epi: float = 0.0
+    throttle: float = 0.0
+    gear: int = 0
+    speed: float = 0.0
+    longitudinal_accel: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -70,6 +90,10 @@ class TrackNode:
     nu_f: float = 0.0
     dEPI_dt: float = 0.0
     integrated_epi: float = 0.0
+    axle_load_balance: float = 0.0
+    axle_velocity_balance: float = 0.0
+    yaw: float = 0.0
+    lateral_accel: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -81,6 +105,9 @@ class DriverNode:
     nu_f: float = 0.0
     dEPI_dt: float = 0.0
     integrated_epi: float = 0.0
+    steer: float = 0.0
+    throttle: float = 0.0
+    style_index: float = 0.0
 
 
 @dataclass(frozen=True)
