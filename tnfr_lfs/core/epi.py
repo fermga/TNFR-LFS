@@ -347,16 +347,21 @@ class DeltaCalculator:
             active_phase=phase,
             w_phase=phase_weight_map,
         )
-        nodes = DeltaCalculator._build_nodes(node_deltas, delta_nfr, nu_f_map)
         previous_state = epi_value if prev_integrated_epi is None else prev_integrated_epi
         try:
             from .operators import evolve_epi
         except ImportError:  # pragma: no cover - defensive fallback during circular import
             def evolve_epi(prev_epi: float, delta_map: Mapping[str, float], dt: float, nu_map: Mapping[str, float]):
-                derivative = sum(nu_map.get(node, 0.0) * delta for node, delta in delta_map.items())
-                return prev_epi + (derivative * dt), derivative
+                nodal: Dict[str, tuple[float, float]] = {}
+                derivative = 0.0
+                for node in set(delta_map) | set(nu_map):
+                    node_derivative = nu_map.get(node, 0.0) * delta_map.get(node, 0.0)
+                    nodal[node] = (node_derivative * dt, node_derivative)
+                    derivative += node_derivative
+                return prev_epi + (derivative * dt), derivative, nodal
 
-        integrated_epi, derivative = evolve_epi(previous_state, node_deltas, dt, nu_f_map)
+        integrated_epi, derivative, nodal_evolution = evolve_epi(previous_state, node_deltas, dt, nu_f_map)
+        nodes = DeltaCalculator._build_nodes(node_deltas, delta_nfr, nu_f_map, nodal_evolution)
         return EPIBundle(
             timestamp=record.timestamp,
             epi=epi_value,
@@ -364,6 +369,7 @@ class DeltaCalculator:
             sense_index=global_si,
             dEPI_dt=derivative,
             integrated_epi=integrated_epi,
+            node_evolution=dict(nodal_evolution),
             tyres=nodes["tyres"],
             suspension=nodes["suspension"],
             chassis=nodes["chassis"],
@@ -375,48 +381,70 @@ class DeltaCalculator:
 
     @staticmethod
     def _build_nodes(
-        node_deltas: Mapping[str, float], delta_nfr: float, nu_f_by_node: Mapping[str, float]
+        node_deltas: Mapping[str, float],
+        delta_nfr: float,
+        nu_f_by_node: Mapping[str, float],
+        node_evolution: Mapping[str, tuple[float, float]] | None,
     ) -> Dict[str, object]:
+        node_evolution = node_evolution or {}
+
         def node_si(node_delta: float) -> float:
             if abs(delta_nfr) < 1e-9:
                 return 1.0
             ratio = min(1.0, abs(node_delta) / (abs(delta_nfr) + 1e-9))
             return max(0.0, min(1.0, 1.0 - ratio))
 
+        def node_state(node: str) -> tuple[float, float]:
+            return node_evolution.get(node, (0.0, 0.0))
+
         return {
             "tyres": TyresNode(
                 delta_nfr=node_deltas.get("tyres", 0.0),
                 sense_index=node_si(node_deltas.get("tyres", 0.0)),
                 nu_f=nu_f_by_node.get("tyres", 0.0),
+                integrated_epi=node_state("tyres")[0],
+                dEPI_dt=node_state("tyres")[1],
             ),
             "suspension": SuspensionNode(
                 delta_nfr=node_deltas.get("suspension", 0.0),
                 sense_index=node_si(node_deltas.get("suspension", 0.0)),
                 nu_f=nu_f_by_node.get("suspension", 0.0),
+                integrated_epi=node_state("suspension")[0],
+                dEPI_dt=node_state("suspension")[1],
             ),
             "chassis": ChassisNode(
                 delta_nfr=node_deltas.get("chassis", 0.0),
                 sense_index=node_si(node_deltas.get("chassis", 0.0)),
                 nu_f=nu_f_by_node.get("chassis", 0.0),
+                integrated_epi=node_state("chassis")[0],
+                dEPI_dt=node_state("chassis")[1],
             ),
             "brakes": BrakesNode(
                 delta_nfr=node_deltas.get("brakes", 0.0),
                 sense_index=node_si(node_deltas.get("brakes", 0.0)),
                 nu_f=nu_f_by_node.get("brakes", 0.0),
+                integrated_epi=node_state("brakes")[0],
+                dEPI_dt=node_state("brakes")[1],
             ),
             "transmission": TransmissionNode(
                 delta_nfr=node_deltas.get("transmission", 0.0),
                 sense_index=node_si(node_deltas.get("transmission", 0.0)),
                 nu_f=nu_f_by_node.get("transmission", 0.0),
+                integrated_epi=node_state("transmission")[0],
+                dEPI_dt=node_state("transmission")[1],
             ),
             "track": TrackNode(
                 delta_nfr=node_deltas.get("track", 0.0),
                 sense_index=node_si(node_deltas.get("track", 0.0)),
                 nu_f=nu_f_by_node.get("track", 0.0),
+                integrated_epi=node_state("track")[0],
+                dEPI_dt=node_state("track")[1],
             ),
             "driver": DriverNode(
                 delta_nfr=node_deltas.get("driver", 0.0),
                 sense_index=node_si(node_deltas.get("driver", 0.0)),
                 nu_f=nu_f_by_node.get("driver", 0.0),
+                integrated_epi=node_state("driver")[0],
+                dEPI_dt=node_state("driver")[1],
             ),
         }

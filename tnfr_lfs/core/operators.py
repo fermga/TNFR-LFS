@@ -16,16 +16,30 @@ def evolve_epi(
     delta_map: Mapping[str, float],
     dt: float,
     nu_f_by_node: Mapping[str, float],
-) -> tuple[float, float]:
-    """Integrate the Event Performance Index using explicit Euler steps."""
+) -> tuple[float, float, Dict[str, tuple[float, float]]]:
+    """Integrate the Event Performance Index using explicit Euler steps.
+
+    The integrator now returns the global derivative/integral together with a
+    per-node breakdown.  The nodal contribution dictionary maps the node name
+    to a ``(integral, derivative)`` tuple representing the instantaneous
+    change produced during ``dt``.
+    """
 
     if dt < 0.0:
         raise ValueError("dt must be non-negative")
+
+    nodal_evolution: Dict[str, tuple[float, float]] = {}
     derivative = 0.0
-    for node, weight in nu_f_by_node.items():
-        derivative += weight * delta_map.get(node, 0.0)
+    nodes = set(delta_map) | set(nu_f_by_node)
+    for node in nodes:
+        weight = nu_f_by_node.get(node, 0.0)
+        node_delta = delta_map.get(node, 0.0)
+        node_derivative = weight * node_delta
+        node_integral = node_derivative * dt
+        derivative += node_derivative
+        nodal_evolution[node] = (node_integral, node_derivative)
     new_epi = prev_epi + (derivative * dt)
-    return new_epi, derivative
+    return new_epi, derivative, nodal_evolution
 
 
 def emission_operator(target_delta_nfr: float, target_sense_index: float) -> Dict[str, float]:
