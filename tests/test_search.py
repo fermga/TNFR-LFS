@@ -46,6 +46,9 @@ def _build_bundle(timestamp: float, delta_nfr: float, si: float) -> EPIBundle:
 
 
 def _microsector() -> Microsector:
+    window = (-0.2, 0.2)
+    yaw_window = (-0.5, 0.5)
+    nodes = ("tyres", "suspension")
     return Microsector(
         index=0,
         start_time=0.0,
@@ -55,11 +58,50 @@ def _microsector() -> Microsector:
         support_event=True,
         delta_nfr_signature=2.0,
         goals=(
-            Goal(phase="entry", archetype="apoyo", description="", target_delta_nfr=0.0, target_sense_index=0.9),
-            Goal(phase="apex", archetype="apoyo", description="", target_delta_nfr=0.0, target_sense_index=0.9),
-            Goal(phase="exit", archetype="apoyo", description="", target_delta_nfr=0.0, target_sense_index=0.9),
+            Goal(
+                phase="entry",
+                archetype="apoyo",
+                description="",
+                target_delta_nfr=0.0,
+                target_sense_index=0.9,
+                nu_f_target=0.2,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=nodes,
+            ),
+            Goal(
+                phase="apex",
+                archetype="apoyo",
+                description="",
+                target_delta_nfr=0.0,
+                target_sense_index=0.9,
+                nu_f_target=0.2,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=nodes,
+            ),
+            Goal(
+                phase="exit",
+                archetype="apoyo",
+                description="",
+                target_delta_nfr=0.0,
+                target_sense_index=0.9,
+                nu_f_target=0.2,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=nodes,
+            ),
         ),
         phase_boundaries={"entry": (0, 2), "apex": (2, 4), "exit": (4, 6)},
+        active_phase="entry",
+        dominant_nodes={
+            "entry": nodes,
+            "apex": nodes,
+            "exit": nodes,
+        },
     )
 
 

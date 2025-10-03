@@ -17,11 +17,13 @@ engineering practice:
 
 from __future__ import annotations
 
+import math
+from collections import defaultdict
 from dataclasses import dataclass
-from statistics import mean
+from statistics import mean, pstdev
 from typing import Dict, List, Mapping, Sequence, Tuple
 
-from .epi import TelemetryRecord
+from .epi import TelemetryRecord, delta_nfr_by_node
 from .epi_models import EPIBundle
 
 # Thresholds derived from typical race car dynamics.  They can be tuned in
@@ -44,6 +46,11 @@ class Goal:
     description: str
     target_delta_nfr: float
     target_sense_index: float
+    nu_f_target: float
+    slip_lat_window: Tuple[float, float]
+    slip_long_window: Tuple[float, float]
+    yaw_rate_window: Tuple[float, float]
+    dominant_nodes: Tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -59,6 +66,8 @@ class Microsector:
     delta_nfr_signature: float
     goals: Tuple[Goal, Goal, Goal]
     phase_boundaries: Mapping[PhaseLiteral, Tuple[int, int]]
+    active_phase: PhaseLiteral
+    dominant_nodes: Mapping[PhaseLiteral, Tuple[str, ...]]
 
     def phase_indices(self, phase: PhaseLiteral) -> range:
         """Return the range of sample indices assigned to ``phase``."""
@@ -99,7 +108,16 @@ def segment_microsectors(
         delta_signature = mean(b.delta_nfr for b in bundles[start : end + 1])
         avg_si = mean(b.sense_index for b in bundles[start : end + 1])
         archetype = _classify_archetype(delta_signature, avg_si, brake_event, support_event)
-        goals = _build_goals(archetype, bundles, phase_boundaries)
+        goals, dominant_nodes = _build_goals(
+            archetype,
+            bundles,
+            records,
+            phase_boundaries,
+        )
+        active_goal = max(
+            goals,
+            key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
+        )
         microsectors.append(
             Microsector(
                 index=index,
@@ -111,6 +129,8 @@ def segment_microsectors(
                 delta_nfr_signature=delta_signature,
                 goals=goals,
                 phase_boundaries=phase_boundaries,
+                active_phase=active_goal.phase,
+                dominant_nodes=dict(dominant_nodes),
             )
         )
     return microsectors
@@ -191,20 +211,108 @@ def _classify_archetype(
     return "equilibrio"
 
 
+def _compute_yaw_rate(records: Sequence[TelemetryRecord], index: int) -> float:
+    if index <= 0 or index >= len(records):
+        return 0.0
+    current = records[index]
+    previous = records[index - 1]
+    dt = current.timestamp - previous.timestamp
+    if dt <= 1e-9:
+        return 0.0
+    delta = current.yaw - previous.yaw
+    wrapped = (delta + math.pi) % (2.0 * math.pi) - math.pi
+    return wrapped / dt
+
+
+def _safe_mean(values: Sequence[float], default: float = 0.0) -> float:
+    return mean(values) if values else default
+
+
+def _window(values: Sequence[float], scale: float, minimum: float = 0.01) -> Tuple[float, float]:
+    if not values:
+        return (0.0, 0.0)
+    centre = _safe_mean(values)
+    if len(values) > 1:
+        deviation = pstdev(values)
+    else:
+        deviation = 0.0
+    if not math.isfinite(deviation) or deviation < minimum:
+        deviation = max(minimum, abs(centre) * 0.05)
+    span = max(minimum, deviation * max(1.0, scale))
+    lower = centre - span
+    upper = centre + span
+    if lower > upper:
+        lower, upper = upper, lower
+    return (lower, upper)
+
+
 def _build_goals(
-    archetype: str, bundles: Sequence[EPIBundle], boundaries: Mapping[PhaseLiteral, Tuple[int, int]]
-) -> Tuple[Goal, Goal, Goal]:
+    archetype: str,
+    bundles: Sequence[EPIBundle],
+    records: Sequence[TelemetryRecord],
+    boundaries: Mapping[PhaseLiteral, Tuple[int, int]],
+) -> Tuple[Tuple[Goal, Goal, Goal], Mapping[PhaseLiteral, Tuple[str, ...]]]:
     descriptions = _goal_descriptions(archetype)
     goals: List[Goal] = []
+    dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = {}
     for phase in ("entry", "apex", "exit"):
         start, stop = boundaries[phase]
-        segment = bundles[start:stop]
+        indices = [idx for idx in range(start, min(stop, len(bundles)))]
+        segment = [bundles[idx] for idx in indices]
+        phase_records = [records[idx] for idx in indices]
         if segment:
             avg_delta = mean(bundle.delta_nfr for bundle in segment)
             avg_si = mean(bundle.sense_index for bundle in segment)
         else:
             avg_delta = 0.0
             avg_si = 1.0
+
+        node_metrics: Dict[str, Dict[str, float]] = defaultdict(lambda: {"abs_delta": 0.0, "nu_f_weight": 0.0})
+        for local_index, idx in enumerate(indices):
+            record = phase_records[local_index]
+            bundle = segment[local_index]
+            node_deltas = delta_nfr_by_node(record)
+            for node, delta in node_deltas.items():
+                weight = abs(delta)
+                node_metrics[node]["abs_delta"] += weight
+                nu_f = getattr(bundle, node).nu_f if hasattr(bundle, node) else 0.0
+                node_metrics[node]["nu_f_weight"] += weight * nu_f
+
+        sorted_nodes = sorted(
+            (node, metrics)
+            for node, metrics in node_metrics.items()
+            if metrics["abs_delta"] > 0.0
+        )
+        sorted_nodes.sort(key=lambda item: item[1]["abs_delta"], reverse=True)
+        phase_nodes = tuple(node for node, _ in sorted_nodes[:3])
+        if not phase_nodes and node_metrics:
+            phase_nodes = tuple(list(node_metrics.keys())[:3])
+        dominant_nodes[phase] = phase_nodes
+
+        total_weight = sum(node_metrics[node]["abs_delta"] for node in phase_nodes)
+        if total_weight > 0.0:
+            weighted_nu_f = sum(node_metrics[node]["nu_f_weight"] for node in phase_nodes)
+            nu_f_target = weighted_nu_f / total_weight
+        else:
+            nu_f_target = 0.0
+
+        sample_count = max(1, len(indices))
+        dominant_intensity = total_weight / sample_count
+        influence_factor = 1.0 + min(2.0, nu_f_target) + min(1.5, dominant_intensity / 5.0)
+
+        slip_values = [record.slip_ratio for record in phase_records]
+        lat_values = [record.lateral_accel for record in phase_records]
+        long_values = [record.longitudinal_accel for record in phase_records]
+        yaw_rates = [_compute_yaw_rate(records, idx) for idx in indices]
+
+        lat_scale = influence_factor * (1.0 + min(1.5, abs(_safe_mean(lat_values)) / 5.0))
+        long_scale = influence_factor * (1.0 + min(1.5, abs(_safe_mean(long_values)) / 5.0))
+        yaw_scale = influence_factor * (1.0 + min(1.5, abs(_safe_mean(yaw_rates)) / 2.0))
+
+        slip_lat_window = _window(slip_values, lat_scale)
+        slip_long_window = _window(slip_values, long_scale)
+        yaw_rate_window = _window(yaw_rates, yaw_scale, minimum=0.005)
+
         goals.append(
             Goal(
                 phase=phase,
@@ -212,9 +320,14 @@ def _build_goals(
                 description=descriptions[phase],
                 target_delta_nfr=avg_delta,
                 target_sense_index=avg_si,
+                nu_f_target=nu_f_target,
+                slip_lat_window=slip_lat_window,
+                slip_long_window=slip_long_window,
+                yaw_rate_window=yaw_rate_window,
+                dominant_nodes=phase_nodes,
             )
         )
-    return goals[0], goals[1], goals[2]
+    return (goals[0], goals[1], goals[2]), dominant_nodes
 
 
 def _goal_descriptions(archetype: str) -> Mapping[str, str]:

@@ -52,7 +52,11 @@ and exports the suggestions using the chosen exporter.  Use
 
 Combines the orchestration operators with the exporters registry to
 produce explainable ΔNFR/Sense Index reports.  ``--target-delta`` and
-``--target-si`` define the desired objectives.
+``--target-si`` define the desired objectives.  The emitted report now
+includes the dominant microsector phases (``active_phase``) and, for each
+entry/apex/exit goal, the ``nu_f_target`` together with the slip and
+yaw-rate tolerance windows derived from telemetry averages.  These
+windows surface the operative margins consumed by the current stint.
 
 ### ``write-set``
 

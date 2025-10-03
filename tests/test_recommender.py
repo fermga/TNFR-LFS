@@ -69,6 +69,9 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     entry_target = 1.0
     apex_target = 0.5
     exit_target = -0.2
+    window = (-0.3, 0.3)
+    yaw_window = (-0.6, 0.6)
+    nodes = ("tyres", "brakes")
     microsector = Microsector(
         index=3,
         start_time=0.0,
@@ -84,6 +87,11 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 description="",
                 target_delta_nfr=entry_target,
                 target_sense_index=0.9,
+                nu_f_target=0.25,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=nodes,
             ),
             Goal(
                 phase="apex",
@@ -91,6 +99,11 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 description="",
                 target_delta_nfr=apex_target,
                 target_sense_index=0.9,
+                nu_f_target=0.25,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=nodes,
             ),
             Goal(
                 phase="exit",
@@ -98,12 +111,23 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 description="",
                 target_delta_nfr=exit_target,
                 target_sense_index=0.9,
+                nu_f_target=0.25,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=nodes,
             ),
         ),
         phase_boundaries={
             "entry": (0, 2),
             "apex": (2, 4),
             "exit": (4, 6),
+        },
+        active_phase="entry",
+        dominant_nodes={
+            "entry": nodes,
+            "apex": nodes,
+            "exit": nodes,
         },
     )
 
