@@ -59,6 +59,11 @@ def _microsector() -> Microsector:
         "apex": {"__default__": 1.0},
         "exit": {"__default__": 1.0},
     }
+    filtered_measures = {
+        "thermal_load": 5000.0,
+        "style_index": 0.9,
+        "grip_rel": 1.0,
+    }
     return Microsector(
         index=0,
         start_time=0.0,
@@ -114,6 +119,10 @@ def _microsector() -> Microsector:
             "exit": nodes,
         },
         phase_weights=phase_weights,
+        grip_rel=1.0,
+        filtered_measures=filtered_measures,
+        recursivity_trace=(),
+        last_mutation=None,
     )
 
 

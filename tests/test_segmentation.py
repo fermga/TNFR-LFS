@@ -24,6 +24,10 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         assert isinstance(microsector, Microsector)
         assert microsector.brake_event is True
         assert microsector.support_event is True
+        assert microsector.grip_rel >= 0.0
+        assert set(microsector.filtered_measures) >= {"thermal_load", "style_index", "grip_rel"}
+        assert isinstance(microsector.recursivity_trace, tuple)
+        assert microsector.last_mutation is None
         phases = [goal.phase for goal in microsector.goals]
         assert phases == ["entry", "apex", "exit"]
         assert microsector.active_phase in phases
@@ -185,3 +189,34 @@ def test_integrator_matches_derivative_series(
         nodal_integral = sum(bundle.node_evolution[node][0] for node in nodes)
         assert nodal_derivative == pytest.approx(bundle.dEPI_dt, rel=1e-6)
         assert nodal_integral == pytest.approx(bundle.dEPI_dt * dt, rel=1e-6, abs=1e-9)
+
+
+def test_segment_microsectors_preserves_operator_state(
+    synthetic_records,
+    synthetic_bundles,
+):
+    operator_state: dict[str, dict[str, dict[str, object]]] = {}
+    first_pass = segment_microsectors(
+        synthetic_records,
+        list(synthetic_bundles),
+        operator_state=operator_state,
+    )
+    second_pass = segment_microsectors(
+        synthetic_records,
+        list(synthetic_bundles),
+        operator_state=operator_state,
+    )
+
+    assert len(first_pass) == len(second_pass) > 0
+    for before, after in zip(first_pass, second_pass):
+        assert before.recursivity_trace
+        assert after.recursivity_trace
+        assert len(after.recursivity_trace) >= len(before.recursivity_trace)
+        assert after.filtered_measures.get("style_index") is not None
+        assert after.filtered_measures.get("grip_rel") is not None
+        assert after.grip_rel == pytest.approx(
+            after.filtered_measures.get("grip_rel", after.grip_rel)
+        )
+        assert after.last_mutation is not None
+        assert before.last_mutation is not None
+        assert after.last_mutation.get("archetype") == before.last_mutation.get("archetype")

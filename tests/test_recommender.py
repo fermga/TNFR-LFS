@@ -82,6 +82,11 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         "apex": {"__default__": 1.0},
         "exit": {"__default__": 1.0},
     }
+    filtered_measures = {
+        "thermal_load": 5200.0,
+        "style_index": 0.9,
+        "grip_rel": 1.0,
+    }
     microsector = Microsector(
         index=3,
         start_time=0.0,
@@ -141,6 +146,10 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
             "exit": nodes,
         },
         phase_weights=phase_weights,
+        grip_rel=1.0,
+        filtered_measures=filtered_measures,
+        recursivity_trace=(),
+        last_mutation=None,
     )
 
     results = [
@@ -219,6 +228,11 @@ def test_track_specific_profile_tightens_entry_threshold():
     window = (-0.05, 0.05)
     yaw_window = (-0.3, 0.3)
     nodes = ("tyres", "brakes")
+    filtered_measures = {
+        "thermal_load": 5100.0,
+        "style_index": 0.9,
+        "grip_rel": 1.0,
+    }
     microsector = Microsector(
         index=4,
         start_time=0.0,
@@ -286,6 +300,10 @@ def test_track_specific_profile_tightens_entry_threshold():
             "apex": {"__default__": 1.0},
             "exit": {"__default__": 1.0},
         },
+        grip_rel=1.0,
+        filtered_measures=filtered_measures,
+        recursivity_trace=(),
+        last_mutation=None,
     )
 
     results = [
