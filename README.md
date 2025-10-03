@@ -2,6 +2,21 @@
 
 TNFR × LFS es el toolkit de análisis y automatización que operacionaliza la **Teoría de la Naturaleza Fractal-Resonante (TNFR)**. Mientras la teoría describe los fundamentos conceptuales (símbolos, glifos y métricas ΔNFR/ΔSi), el paquete suministra implementaciones reproducibles para instrumentar dichas ideas en flujos de trabajo de telemetría.
 
+## Quickstart
+
+### Requisitos previos
+- Python 3.9 o superior instalado y disponible en el PATH.
+- Un dataset de telemetría en `data/` (el repositorio incluye `data/BL1_XFG_baseline.csv`).
+
+### Ejecución
+Ejecuta el flujo end-to-end simulado con:
+
+```bash
+make quickstart
+```
+
+El objetivo invoca `examples/quickstart.sh`, que genera artefactos en `examples/out/` a partir del dataset y produce informes JSON y Markdown listos para inspeccionar.
+
 ## Documentación
 
 La documentación completa se encuentra en el directorio `docs/` y se publica con MkDocs.
