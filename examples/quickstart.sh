@@ -2,13 +2,18 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DATA_FILE="${ROOT_DIR}/tests/data/synthetic_stint.csv"
+DATA_FILE="${ROOT_DIR}/data/BL1_XFG_baseline.csv"
 OUT_DIR="${ROOT_DIR}/examples/out"
 BASELINE="${OUT_DIR}/baseline.jsonl"
 ANALYZE_JSON="${OUT_DIR}/analyze.json"
 SUGGEST_JSON="${OUT_DIR}/suggest.json"
 REPORT_JSON="${OUT_DIR}/report.json"
 PLOT_TXT="${OUT_DIR}/sense_index_plot.txt"
+
+if [[ ! -f "${DATA_FILE}" ]]; then
+    echo "Dataset de ejemplo no encontrado: ${DATA_FILE}" >&2
+    exit 1
+fi
 
 mkdir -p "${OUT_DIR}"
 

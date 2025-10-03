@@ -19,4 +19,6 @@ La documentación completa se encuentra en el directorio `docs/` y se publica co
 
 ## Desarrollo
 
-Consulta `pyproject.toml` para conocer los requisitos y scripts de desarrollo.
+Consulta `pyproject.toml` para conocer los requisitos y scripts de desarrollo y
+``docs/DEVELOPMENT.md`` para el flujo completo de verificación (``ruff``,
+``mypy --strict`` y ``pytest``).

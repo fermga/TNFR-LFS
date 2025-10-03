@@ -53,7 +53,7 @@ class TelemetryFusion:
     def fuse_to_bundle(self, outsim: OutSimPacket, outgauge: OutGaugePacket) -> EPIBundle:
         """Return an :class:`EPIBundle` for the latest fused sample."""
 
-        record = self.fuse(outsim, outgauge)
+        self.fuse(outsim, outgauge)
         bundles = self.extractor.extract(self._records)
         return bundles[-1]
 

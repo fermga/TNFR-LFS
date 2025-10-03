@@ -135,6 +135,8 @@ tnfr-lfs --config configs/tnfr-lfs.stint.toml analyze stint.jsonl
 
 The repository ships with ``examples/quickstart.sh`` which executes the
 end-to-end flow (CSV → baseline → analyze → suggest → report → write-set)
-using the bundled synthetic stint.  The script stores artefacts under
-``examples/out`` and generates a quick ASCII plot of the Sense Index
-series to visualise the lap at a glance.
+using the bundled baseline dataset ``data/BL1_XFG_baseline.csv``.  The
+script stores artefacts under ``examples/out`` and generates a quick ASCII
+plot of the Sense Index series to visualise the lap at a glance.  The
+dataset mirrors a short 17-sample stint captured at BL1/XFG pace so that
+the quickstart replicates realistic ΔNFR and Sense Index oscillations.

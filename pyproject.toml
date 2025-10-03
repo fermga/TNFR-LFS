@@ -17,7 +17,12 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+    "black>=24.4.0",
+]
 
 [project.urls]
 Homepage = "https://example.com/tnfr-lfs"
@@ -29,3 +34,20 @@ Homepage = "https://example.com/tnfr-lfs"
 minversion = "7.0"
 addopts = "-ra"
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+src = ["tnfr_lfs", "tests", "examples", "typing_targets"]
+
+[tool.ruff.lint]
+per-file-ignores = {"tests/conftest.py" = ["E402"]}
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+
+[tool.mypy]
+python_version = "3.9"
+files = ["typing_targets"]
+warn_unused_configs = true

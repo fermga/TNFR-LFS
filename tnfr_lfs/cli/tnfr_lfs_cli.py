@@ -10,7 +10,7 @@ from dataclasses import asdict
 from pathlib import Path
 from statistics import mean
 from time import monotonic, sleep
-from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Sequence
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
