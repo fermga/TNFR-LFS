@@ -40,23 +40,32 @@ persists the baseline as ``jsonl`` or ``parquet``.
 Reads a baseline (captured or simulated) and computes ΔNFR/Sense Index
 metrics.  The subcommand uses the core operators to orchestrate
 telemetry processing and emits a structured payload via the selected
-exporter (``json`` by default).
+exporter (``json`` by default).  The payload now includes a
+``phase_messages`` array that summarises per-phase ΔNFR↓ deviations with
+actionable hints together with a ``reports`` block.  Each invocation
+persists ``out/<baseline-stem>/sense_index_map.json`` and
+``out/<baseline-stem>/yaw_roll_spectrum.json`` (configurable via the
+``paths.output_dir`` setting) so external tooling can reuse the Sense
+Index heatmap and yaw/roll spectrum without re-running the CLI.
 
 ### ``suggest``
 
 Runs the rule-based recommendation engine on top of an existing baseline
 and exports the suggestions using the chosen exporter.  Use
 ``--car-model`` and ``--track`` to load different recommendation profiles.
+The exported payload mirrors ``analyze`` by embedding
+``phase_messages`` and the ``reports`` artefacts so the tuning rationale
+remains transparent when sharing the recommendations.
 
 ### ``report``
 
 Combines the orchestration operators with the exporters registry to
 produce explainable ΔNFR/Sense Index reports.  ``--target-delta`` and
 ``--target-si`` define the desired objectives.  The emitted report now
-includes the dominant microsector phases (``active_phase``) and, for each
-entry/apex/exit goal, the ``nu_f_target`` together with the slip and
-yaw-rate tolerance windows derived from telemetry averages.  These
-windows surface the operative margins consumed by the current stint.
+exposes the same telemetry artefacts as ``analyze``/``suggest`` under the
+``reports`` key so downstream automations (dashboards or notebooks) can
+ingest the Sense Index map and yaw/roll spectrum while keeping the
+command line output concise.
 
 ### ``write-set``
 
@@ -79,3 +88,53 @@ with the rule engine.  The resulting payload follows the
 Exporters normalise the dataclasses into JSON, CSV, or Markdown depending
 on the ``--export`` flag.  The Markdown exporter deduplicates rationales
 and expected effects to provide a readable handover document.
+## Configuration
+
+The CLI resolves defaults from a ``tnfr-lfs.toml`` file located in the
+current working directory, the path referenced by the
+``TNFR_LFS_CONFIG`` environment variable, or ``~/.config/tnfr-lfs.toml``
+as a fallback.  Any explicit CLI flag takes precedence, but the file can
+define sensible defaults for ports, exporters, car/track profiles and
+report locations:
+
+```toml
+[telemetry]
+host = "192.168.0.10"
+outsim_port = 4125
+outgauge_port = 3003
+
+[analyze]
+export = "json"
+
+[suggest]
+car_model = "gt3"
+track = "spa"
+
+[paths]
+output_dir = "out"
+
+[limits.delta_nfr]
+entry = 0.5
+apex = 0.4
+exit = 0.6
+```
+
+This configuration adjusts the default UDP ports used by ``baseline``,
+selects the exporter for analytics/reporting, sets the default
+car/track for ``suggest`` and overrides the tolerance used when
+highlighting ΔNFR↓ deviations in ``phase_messages``.
+
+Use ``--config`` to point to an alternative file on a per-invocation
+basis:
+
+```bash
+tnfr-lfs --config configs/tnfr-lfs.stint.toml analyze stint.jsonl
+```
+
+## Quickstart script
+
+The repository ships with ``examples/quickstart.sh`` which executes the
+end-to-end flow (CSV → baseline → analyze → suggest → report → write-set)
+using the bundled synthetic stint.  The script stores artefacts under
+``examples/out`` and generates a quick ASCII plot of the Sense Index
+series to visualise the lap at a glance.
