@@ -11,23 +11,33 @@ from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
 
 def test_compute_node_delta_nfr_respects_relative_weights():
     delta = 12.0
-    features = {"tyres": 2.0, "suspension": 1.0, "driver": 1.0}
+    features = {"slip": 2.0, "load": 1.0, "camber": 1.0}
 
-    distribution = compute_node_delta_nfr(delta, features)
+    distribution = compute_node_delta_nfr("tyres", delta, features)
 
     assert pytest.approx(sum(distribution.values()), rel=1e-6) == delta
-    assert distribution["tyres"] == pytest.approx(6.0)
-    assert distribution["suspension"] == distribution["driver"]
+    assert distribution["tyres.slip"] == pytest.approx(6.0)
+    assert distribution["tyres.load"] == distribution["tyres.camber"]
 
 
 def test_compute_node_delta_nfr_uniform_when_no_signal():
     delta = -9.0
-    features = {"tyres": 0.0, "suspension": 0.0, "brakes": 0.0}
+    features = {"slip": 0.0, "locking": 0.0, "temperature": 0.0}
 
-    distribution = compute_node_delta_nfr(delta, features)
+    distribution = compute_node_delta_nfr("tyres", delta, features)
 
     assert pytest.approx(sum(distribution.values()), rel=1e-6) == delta
     assert all(value == pytest.approx(-3.0) for value in distribution.values())
+
+
+def test_compute_node_delta_nfr_allows_non_prefixed_keys():
+    delta = 4.0
+    features = {"inner": 1.0, "outer": 1.0}
+
+    distribution = compute_node_delta_nfr("brakes", delta, features, prefix=False)
+
+    assert set(distribution.keys()) == {"inner", "outer"}
+    assert pytest.approx(sum(distribution.values()), rel=1e-6) == delta
 
 
 def test_sense_index_penalises_large_delta_with_entropy():

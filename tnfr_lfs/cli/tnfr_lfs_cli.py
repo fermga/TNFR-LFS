@@ -28,6 +28,20 @@ from ..recommender import RecommendationEngine, SetupPlanner
 Records = List[TelemetryRecord]
 Bundles = Sequence[Any]
 
+_TELEMETRY_DEFAULTS: Mapping[str, float] = {
+    "yaw": 0.0,
+    "pitch": 0.0,
+    "roll": 0.0,
+    "brake_pressure": 0.0,
+    "locking": 0.0,
+}
+
+
+def _coerce_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    data: Dict[str, Any] = dict(_TELEMETRY_DEFAULTS)
+    data.update(payload)
+    return data
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="TNFR Load & Force Synthesis")
@@ -463,7 +477,7 @@ def _load_records(source: Path) -> Records:
                 if not line.strip():
                     continue
                 payload = json.loads(line)
-                records.append(TelemetryRecord(**payload))
+                records.append(TelemetryRecord(**_coerce_payload(payload)))
         return records
     if suffix == ".parquet":
         try:
@@ -474,12 +488,12 @@ def _load_records(source: Path) -> Records:
         except ModuleNotFoundError:
             with source.open("r", encoding="utf8") as handle:
                 data = json.load(handle)
-        return [TelemetryRecord(**item) for item in data]
+        return [TelemetryRecord(**_coerce_payload(item)) for item in data]
     if suffix == ".json":
         with source.open("r", encoding="utf8") as handle:
             data = json.load(handle)
         if isinstance(data, list):
-            return [TelemetryRecord(**item) for item in data]
+            return [TelemetryRecord(**_coerce_payload(item)) for item in data]
         raise ValueError(f"JSON telemetry source {source} must contain a list of samples")
 
     raise ValueError(f"Unsupported telemetry format: {source}")

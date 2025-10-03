@@ -29,6 +29,12 @@ def _build_record(
     longitudinal_accel: float,
     nfr: float,
     si: float,
+    *,
+    yaw: float = 0.0,
+    pitch: float = 0.0,
+    roll: float = 0.0,
+    brake_pressure: float = 0.0,
+    locking: float = 0.0,
 ) -> TelemetryRecord:
     return TelemetryRecord(
         timestamp=timestamp,
@@ -36,6 +42,11 @@ def _build_record(
         slip_ratio=slip_ratio,
         lateral_accel=lateral_accel,
         longitudinal_accel=longitudinal_accel,
+        yaw=yaw,
+        pitch=pitch,
+        roll=roll,
+        brake_pressure=brake_pressure,
+        locking=locking,
         nfr=nfr,
         si=si,
     )

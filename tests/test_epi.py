@@ -1,6 +1,6 @@
 import pytest
 
-from tnfr_lfs.core.epi import DeltaCalculator, EPIExtractor
+from tnfr_lfs.core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord, delta_nfr_by_node
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -30,6 +30,45 @@ def test_delta_calculation_against_baseline(synthetic_records):
         rel=1e-6,
     )
     assert bundle.integrated_epi == pytest.approx(bundle.epi)
+
+
+def test_delta_nfr_by_node_emphasises_braking_signals():
+    baseline = TelemetryRecord(
+        timestamp=0.0,
+        vertical_load=5000.0,
+        slip_ratio=0.02,
+        lateral_accel=0.5,
+        longitudinal_accel=0.1,
+        yaw=0.0,
+        pitch=0.0,
+        roll=0.0,
+        brake_pressure=0.1,
+        locking=0.0,
+        nfr=500.0,
+        si=0.85,
+    )
+    sample = TelemetryRecord(
+        timestamp=0.1,
+        vertical_load=5250.0,
+        slip_ratio=0.06,
+        lateral_accel=0.6,
+        longitudinal_accel=-0.6,
+        yaw=0.12,
+        pitch=0.03,
+        roll=0.02,
+        brake_pressure=0.85,
+        locking=1.0,
+        nfr=508.0,
+        si=0.78,
+        reference=baseline,
+    )
+
+    distribution = delta_nfr_by_node(sample)
+
+    assert pytest.approx(sum(distribution.values()), rel=1e-6) == sample.nfr - baseline.nfr
+    assert distribution["brakes"] > distribution["driver"]
+    assert distribution["brakes"] >= distribution["transmission"]
+    assert distribution["tyres"] > 0
 
 
 def test_epi_extractor_creates_structured_nodes(synthetic_bundles):

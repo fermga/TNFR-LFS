@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import List
 
@@ -38,6 +39,11 @@ class TelemetryFusion:
             slip_ratio=self._compute_slip_ratio(outsim, outgauge),
             lateral_accel=outsim.accel_y,
             longitudinal_accel=outsim.accel_x,
+            yaw=self._normalise_heading(outsim.heading),
+            pitch=outsim.pitch,
+            roll=outsim.roll,
+            brake_pressure=_clamp(outgauge.brake, 0.0, 1.0),
+            locking=self._compute_locking(outgauge),
             nfr=self._compute_nfr(outgauge),
             si=self._compute_sense_index(outgauge),
         )
@@ -63,8 +69,22 @@ class TelemetryFusion:
         slip = (outsim.vel_x - outgauge.speed) / speed
         return _clamp(slip, -1.0, 1.0)
 
+    def _normalise_heading(self, heading: float) -> float:
+        if not math.isfinite(heading):
+            return 0.0
+        wrapped = (heading + math.pi) % (2.0 * math.pi)
+        return wrapped - math.pi
+
     def _compute_nfr(self, outgauge: OutGaugePacket) -> float:
         return outgauge.rpm / 10.0
 
     def _compute_sense_index(self, outgauge: OutGaugePacket) -> float:
         return _clamp(outgauge.throttle, 0.0, 1.0)
+
+    def _compute_locking(self, outgauge: OutGaugePacket) -> float:
+        # The ABS dash light signals wheel locking mitigation.  We use it as
+        # a binary proxy for locking activity which is smoothed downstream by
+        # :func:`delta_nfr_by_node`.
+        abs_active = bool(outgauge.dash_lights & 0x20)
+        tc_active = bool(outgauge.dash_lights & 0x10)
+        return 1.0 if abs_active or tc_active else 0.0

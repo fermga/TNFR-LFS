@@ -20,10 +20,11 @@ records = client.ingest("stint.csv")
 ### `tnfr_lfs.core.epi.EPIExtractor`
 
 Computes :class:`tnfr_lfs.core.epi_models.EPIBundle` objects including EPI,
-ΔNFR, entropy-penalised sense index values, and per-node breakdowns.
-Use :func:`tnfr_lfs.core.coherence.sense_index` together with
-:func:`tnfr_lfs.core.coherence.compute_node_delta_nfr` to build custom
-analytics pipelines.
+ΔNFR, entropy-penalised sense index values, y el reparto nodal calculado por
+:func:`tnfr_lfs.core.epi.delta_nfr_by_node`.  Para desgloses adicionales por
+subcaracterística utilice :func:`tnfr_lfs.core.coherence.compute_node_delta_nfr`
+combinado con :func:`tnfr_lfs.core.coherence.sense_index` dentro de pipelines
+personalizados.
 
 Each :class:`EPIBundle` records the per-node natural frequency ``nu_f`` (Hz),
 allowing downstream tooling to weigh ΔNFR contributions using documented

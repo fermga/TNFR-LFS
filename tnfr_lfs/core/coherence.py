@@ -20,18 +20,50 @@ def _entropy(weights: Iterable[float]) -> float:
     return min(1.0, entropy / max_entropy)
 
 
-def compute_node_delta_nfr(delta_nfr: float, feature_map: Mapping[str, float]) -> NodeDeltaMap:
-    """Distribute ΔNFR across the different nodes."""
+def compute_node_delta_nfr(
+    node: str,
+    delta_nfr: float,
+    feature_map: Mapping[str, float],
+    *,
+    prefix: bool = True,
+) -> NodeDeltaMap:
+    """Distribute a node-level ΔNFR among its internal sub-features.
+
+    Parameters
+    ----------
+    node:
+        Name of the node whose signals are being analysed.  The node name is
+        used to optionally prefix the resulting keys so that flattened maps do
+        not collide when multiple subsystems expose the same signal name.
+    delta_nfr:
+        ΔNFR magnitude attributed to the node.  The sign of ``delta_nfr`` is
+        preserved in the output while the magnitude is scaled according to the
+        relative weights in ``feature_map``.
+    feature_map:
+        Mapping of sub-feature identifiers to their measured intensity.  The
+        function uses absolute values for weighting, meaning the caller is
+        responsible for carrying the directional information in
+        ``delta_nfr``.
+    prefix:
+        When ``True`` (the default) each key is prefixed with ``"node."`` to
+        avoid collisions across subsystems.
+    """
+
+    if not feature_map:
+        return {}
 
     total = sum(abs(value) for value in feature_map.values())
     if total == 0:
-        # fall back to a uniform distribution when no feature dominates
-        weight = 1.0 / len(feature_map) if feature_map else 0.0
-        return {name: delta_nfr * weight for name in feature_map}
+        weight = delta_nfr / len(feature_map)
+        return {
+            (f"{node}.{name}" if prefix else name): weight
+            for name in feature_map
+        }
+
     sign = 1.0 if delta_nfr >= 0 else -1.0
     magnitude = abs(delta_nfr)
     return {
-        name: sign * magnitude * (abs(value) / total)
+        (f"{node}.{name}" if prefix else name): sign * magnitude * (abs(value) / total)
         for name, value in feature_map.items()
     }
 

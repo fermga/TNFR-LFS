@@ -41,6 +41,38 @@
 - Esquemas de instrumentación simbiótica y plantillas para registro de resonancias.
 - Referencias cruzadas a simulaciones y entornos interactivos asociados al QR del manual.
 
+## Anexo técnico: señales EPI y cálculo de ΔNFR
+
+La implementación software incorpora un registro de telemetría extendido para
+cada muestra ``TelemetryRecord`` con orientación (``yaw``, ``pitch``,
+``roll``), presión de freno normalizada y un indicador de bloqueo del ABS/TC.
+Estos campos se combinan con las magnitudes clásicas (carga vertical,
+aceleraciones lateral/longitudinal, slip ratio, ΔNFR y Sense Index) para
+estimar la contribución de cada nodo del vehículo.
+
+El algoritmo :func:`tnfr_lfs.core.epi.delta_nfr_by_node` compara una muestra
+contra su baseline y genera una distribución de ΔNFR por subsistema.  Por
+ejemplo, frente a un baseline con ``nfr = 500`` y sin freno aplicado, una
+muestra con ``nfr = 508``, ``brake_pressure = 0.85`` y ``locking = 1``
+producirá una distribución en la que el nodo de frenos absorbe la mayor parte
+del ΔNFR mientras que suspensión y neumáticos comparten la respuesta
+restante.  El cálculo se apoya en las diferencias absolutas de cada señal y en
+ponderaciones empíricas:
+
+| Nodo          | Señales principales                                      |
+| ------------- | -------------------------------------------------------- |
+| ``tyres``     | Δslip ratio, bloqueo ABS/TC, variación de carga vertical |
+| ``suspension``| Δcarga vertical, Δpitch, Δroll                            |
+| ``chassis``   | Δaceleración lateral, Δroll, Δyaw                         |
+| ``brakes``    | Δpresión de freno, indicador de bloqueo, deceleración     |
+| ``transmission`` | Δaceleración longitudinal, Δslip, Δyaw               |
+| ``track``     | Δ(carga × aceleración lateral), Δyaw                      |
+| ``driver``    | ΔSense Index, Δyaw, Δpitch/Δroll                          |
+
+La suma de los ΔNFR individuales coincide siempre con el ΔNFR global del
+registro, garantizando la coherencia con el Sense Index penalizado por entropía
+que se calcula en :func:`tnfr_lfs.core.coherence.sense_index`.
+
 ## Artefactos generados
 - `TNFR.pdf` se mantiene como artefacto compilado. Cualquier actualización sustantiva debe reflejarse primero en este `DESIGN.md`; el PDF puede regenerarse a partir del contenido actualizado y debe tratarse como derivado.
 

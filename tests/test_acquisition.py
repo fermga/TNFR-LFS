@@ -76,8 +76,8 @@ def outgauge_payload():
 def test_ingest_validates_header():
     client = OutSimClient()
     data = StringIO(
-        "timestamp,vertical_load,slip_ratio,lateral_accel,longitudinal_accel,nfr,si\n"
-        "0.0,6000,0.05,1.2,0.4,520,0.82\n"
+        "timestamp,vertical_load,slip_ratio,lateral_accel,longitudinal_accel,yaw,pitch,roll,brake_pressure,locking,nfr,si\n"
+        "0.0,6000,0.05,1.2,0.4,0.1,0.01,0.02,0.5,1,520,0.82\n"
     )
     records = client.ingest(data)
     assert len(records) == 1
