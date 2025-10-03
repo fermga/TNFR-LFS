@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Mapping, Sequence
 
+import pytest
+
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -196,3 +198,100 @@ def test_setup_planner_converges_and_respects_bounds():
     baseline_score = objective_score(baseline, [microsector])
     assert plan.objective_value > baseline_score
     assert plan.recommendations  # ensure explainable rules are still available
+    assert plan.sensitivities  # gradients are reported
+
+
+def test_setup_planner_reports_consistent_sensitivities():
+    baseline = [
+        _build_bundle(0.0, delta_nfr=10.0, si=0.55),
+        _build_bundle(0.1, delta_nfr=8.0, si=0.56),
+        _build_bundle(0.2, delta_nfr=6.0, si=0.58),
+        _build_bundle(0.3, delta_nfr=5.5, si=0.59),
+        _build_bundle(0.4, delta_nfr=5.0, si=0.60),
+        _build_bundle(0.5, delta_nfr=4.5, si=0.61),
+    ]
+    microsector = _microsector()
+
+    def simulator(vector: Mapping[str, float], _: Sequence[EPIBundle]) -> Sequence[EPIBundle]:
+        rear = vector["rear_ride_height"]
+        front = vector["front_ride_height"]
+        wing = vector["rear_wing_angle"]
+        scale = 1.0 - 0.05 * abs(rear - front)
+        si_gain = 0.015 * (rear + wing)
+        adjusted: list[EPIBundle] = []
+        for bundle in baseline:
+            delta = bundle.delta_nfr - 1.2 * rear - 0.5 * wing
+            sense = min(1.0, bundle.sense_index + si_gain)
+            adjusted.append(
+                EPIBundle(
+                    timestamp=bundle.timestamp,
+                    epi=bundle.epi,
+                    delta_nfr=delta * scale,
+                    sense_index=sense,
+                    tyres=bundle.tyres,
+                    suspension=bundle.suspension,
+                    chassis=bundle.chassis,
+                    brakes=bundle.brakes,
+                    transmission=bundle.transmission,
+                    track=bundle.track,
+                    driver=bundle.driver,
+                )
+            )
+        return adjusted
+
+    planner = SetupPlanner()
+    plan = planner.plan(baseline, [microsector], car_model="generic_gt", simulator=simulator)
+
+    mean_si = sum(bundle.sense_index for bundle in plan.telemetry) / len(plan.telemetry)
+    score = objective_score(plan.telemetry, [microsector])
+
+    space = DEFAULT_DECISION_LIBRARY["generic_gt"]
+    for variable in space.variables:
+        base_value = plan.decision_vector[variable.name]
+        raw_step = max(variable.step * 0.25, 1e-3)
+        forward_room = variable.upper - base_value
+        backward_room = base_value - variable.lower
+        central_step = min(raw_step, forward_room, backward_room)
+
+        if central_step > 1e-9:
+            plus_value = base_value + central_step
+            minus_value = base_value - central_step
+            plus_vector = dict(plan.decision_vector)
+            minus_vector = dict(plan.decision_vector)
+            plus_vector[variable.name] = plus_value
+            minus_vector[variable.name] = minus_value
+            plus_results = simulator(space.clamp(plus_vector), baseline)
+            minus_results = simulator(space.clamp(minus_vector), baseline)
+            si_plus = sum(bundle.sense_index for bundle in plus_results) / len(plus_results)
+            si_minus = sum(bundle.sense_index for bundle in minus_results) / len(minus_results)
+            objective_plus = objective_score(plus_results, [microsector])
+            objective_minus = objective_score(minus_results, [microsector])
+            denom = 2.0 * central_step
+            expected_si = (si_plus - si_minus) / denom
+            expected_objective = (objective_plus - objective_minus) / denom
+        elif forward_room > 1e-9:
+            step = min(raw_step, forward_room)
+            plus_vector = dict(plan.decision_vector)
+            plus_vector[variable.name] = base_value + step
+            plus_results = simulator(space.clamp(plus_vector), baseline)
+            si_plus = sum(bundle.sense_index for bundle in plus_results) / len(plus_results)
+            objective_plus = objective_score(plus_results, [microsector])
+            expected_si = (si_plus - mean_si) / step
+            expected_objective = (objective_plus - score) / step
+        elif backward_room > 1e-9:
+            step = min(raw_step, backward_room)
+            minus_vector = dict(plan.decision_vector)
+            minus_vector[variable.name] = base_value - step
+            minus_results = simulator(space.clamp(minus_vector), baseline)
+            si_minus = sum(bundle.sense_index for bundle in minus_results) / len(minus_results)
+            objective_minus = objective_score(minus_results, [microsector])
+            expected_si = (mean_si - si_minus) / step
+            expected_objective = (score - objective_minus) / step
+        else:
+            expected_si = 0.0
+            expected_objective = 0.0
+
+        reported_si = plan.sensitivities["sense_index"][variable.name]
+        reported_objective = plan.sensitivities["objective_score"][variable.name]
+        assert reported_si == pytest.approx(expected_si, rel=1e-2, abs=1e-4)
+        assert reported_objective == pytest.approx(expected_objective, rel=1e-2, abs=1e-4)

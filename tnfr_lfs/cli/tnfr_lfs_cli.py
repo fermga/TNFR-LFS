@@ -1168,6 +1168,7 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         changes=tuple(changes),
         rationales=tuple(aggregated_rationales),
         expected_effects=tuple(aggregated_effects),
+        sensitivities=plan.sensitivities,
     )
 
     payload = {
@@ -1175,6 +1176,7 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         "objective_value": plan.objective_value,
         "recommendations": plan.recommendations,
         "series": plan.telemetry,
+        "sensitivities": plan.sensitivities,
         "set_output": namespace.set_output,
     }
     return _render_payload(payload, namespace.export)

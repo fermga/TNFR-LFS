@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,7 @@ class SetupPlan:
     changes: Sequence[SetupChange] = field(default_factory=tuple)
     rationales: Sequence[str] = field(default_factory=tuple)
     expected_effects: Sequence[str] = field(default_factory=tuple)
+    sensitivities: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
 
 
 def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
@@ -56,12 +57,18 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
         list(plan.expected_effects) + [change.expected_effect for change in plan.changes]
     )
 
+    sensitivities_payload = {
+        metric: {parameter: float(value) for parameter, value in derivatives.items()}
+        for metric, derivatives in plan.sensitivities.items()
+    }
+
     return {
         "car_model": plan.car_model,
         "session": plan.session,
         "changes": changes_payload,
         "rationales": rationales,
         "expected_effects": expected_effects,
+        "sensitivities": sensitivities_payload,
     }
 
 
