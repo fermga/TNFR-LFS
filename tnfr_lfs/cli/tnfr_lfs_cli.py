@@ -378,12 +378,26 @@ def _generate_out_reports(
         "yaw_roll_spectrum": {"path": str(spectrum_path), "data": spectrum},
     }
 
-_TELEMETRY_DEFAULTS: Mapping[str, float] = {
+_TELEMETRY_DEFAULTS: Mapping[str, Any] = {
     "yaw": 0.0,
     "pitch": 0.0,
     "roll": 0.0,
     "brake_pressure": 0.0,
     "locking": 0.0,
+    "speed": 0.0,
+    "yaw_rate": 0.0,
+    "slip_angle": 0.0,
+    "steer": 0.0,
+    "throttle": 0.0,
+    "gear": 0,
+    "vertical_load_front": 0.0,
+    "vertical_load_rear": 0.0,
+    "mu_eff_front": 0.0,
+    "mu_eff_rear": 0.0,
+    "suspension_travel_front": 0.0,
+    "suspension_travel_rear": 0.0,
+    "suspension_velocity_front": 0.0,
+    "suspension_velocity_rear": 0.0,
 }
 
 

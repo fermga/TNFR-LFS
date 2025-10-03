@@ -57,6 +57,20 @@ def synthetic_records(synthetic_stint_path: Path) -> List[TelemetryRecord]:
                     locking=float(row["locking"]),
                     nfr=float(row["nfr"]),
                     si=float(row["si"]),
+                    speed=float(row["speed"]),
+                    yaw_rate=float(row["yaw_rate"]),
+                    slip_angle=float(row["slip_angle"]),
+                    steer=float(row["steer"]),
+                    throttle=float(row["throttle"]),
+                    gear=int(row["gear"]),
+                    vertical_load_front=float(row["vertical_load_front"]),
+                    vertical_load_rear=float(row["vertical_load_rear"]),
+                    mu_eff_front=float(row["mu_eff_front"]),
+                    mu_eff_rear=float(row["mu_eff_rear"]),
+                    suspension_travel_front=float(row["suspension_travel_front"]),
+                    suspension_travel_rear=float(row["suspension_travel_rear"]),
+                    suspension_velocity_front=float(row["suspension_velocity_front"]),
+                    suspension_velocity_rear=float(row["suspension_velocity_rear"]),
                 )
             )
     return records

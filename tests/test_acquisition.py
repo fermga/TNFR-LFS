@@ -1,3 +1,4 @@
+import math
 import socket
 import struct
 import threading
@@ -80,8 +81,10 @@ def outgauge_payload():
 def test_ingest_validates_header():
     client = OutSimClient()
     data = StringIO(
-        "timestamp,vertical_load,slip_ratio,lateral_accel,longitudinal_accel,yaw,pitch,roll,brake_pressure,locking,nfr,si\n"
-        "0.0,6000,0.05,1.2,0.4,0.1,0.01,0.02,0.5,1,520,0.82\n"
+        "timestamp,vertical_load,slip_ratio,lateral_accel,longitudinal_accel,yaw,pitch,roll,brake_pressure,locking,nfr,si,"
+        "speed,yaw_rate,slip_angle,steer,throttle,gear,vertical_load_front,vertical_load_rear,mu_eff_front,mu_eff_rear,"
+        "suspension_travel_front,suspension_travel_rear,suspension_velocity_front,suspension_velocity_rear\n"
+        "0.0,6000,0.05,1.2,0.4,0.1,0.01,0.02,0.5,1,520,0.82,21.0,0.15,0.05,0.2,0.7,3,3200,2800,1.1,1.0,0.52,0.48,0.0,0.0\n"
     )
     records = client.ingest(data)
     assert len(records) == 1
@@ -138,6 +141,12 @@ def test_fusion_generates_record_and_bundle(outsim_payload, outgauge_payload):
     record = fusion.fuse(outsim, outgauge)
     assert record.vertical_load == pytest.approx(6000.0)
     assert record.slip_ratio == pytest.approx(0.05)
+    assert record.speed == pytest.approx(math.hypot(outsim.vel_x, outsim.vel_y))
+    assert record.yaw_rate == pytest.approx(outsim.ang_vel_z, rel=1e-6)
+    assert record.vertical_load_front + record.vertical_load_rear == pytest.approx(record.vertical_load)
+    assert 0.25 <= record.suspension_travel_front <= 0.75
+    assert record.suspension_velocity_front == pytest.approx(0.0)
+    assert record.mu_eff_front >= 0.0
     bundle = fusion.fuse_to_bundle(outsim, outgauge)
     assert isinstance(bundle, EPIBundle)
 

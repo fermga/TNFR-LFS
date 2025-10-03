@@ -51,6 +51,20 @@ class TelemetryRecord:
     locking: float
     nfr: float
     si: float
+    speed: float
+    yaw_rate: float
+    slip_angle: float
+    steer: float
+    throttle: float
+    gear: int
+    vertical_load_front: float
+    vertical_load_rear: float
+    mu_eff_front: float
+    mu_eff_rear: float
+    suspension_travel_front: float
+    suspension_travel_rear: float
+    suspension_velocity_front: float
+    suspension_velocity_rear: float
     reference: Optional["TelemetryRecord"] = None
 
 
@@ -84,30 +98,77 @@ def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
         return abs(delta_value)
 
     slip_delta = _abs_delta(record.slip_ratio, baseline.slip_ratio)
-    load_delta = _abs_delta(record.vertical_load, baseline.vertical_load)
+    slip_angle_delta = abs(_angle_difference(record.slip_angle, baseline.slip_angle))
     lat_delta = _abs_delta(record.lateral_accel, baseline.lateral_accel)
     long_delta = _abs_delta(record.longitudinal_accel, baseline.longitudinal_accel)
     yaw_delta = abs(_angle_difference(record.yaw, baseline.yaw))
+    yaw_rate_delta = _abs_delta(record.yaw_rate, baseline.yaw_rate)
     pitch_delta = _abs_delta(record.pitch, baseline.pitch)
     roll_delta = _abs_delta(record.roll, baseline.roll)
     brake_delta = _abs_delta(record.brake_pressure, baseline.brake_pressure)
     locking_delta = _abs_delta(record.locking, baseline.locking)
     si_delta = _abs_delta(record.si, baseline.si)
+    throttle_delta = _abs_delta(record.throttle, baseline.throttle)
+    speed_delta = _abs_delta(record.speed, baseline.speed)
+    steer_delta = _abs_delta(record.steer, baseline.steer)
+    gear_delta = abs(record.gear - baseline.gear)
+    load_delta = _abs_delta(record.vertical_load, baseline.vertical_load)
+    load_front_delta = _abs_delta(record.vertical_load_front, baseline.vertical_load_front)
+    load_rear_delta = _abs_delta(record.vertical_load_rear, baseline.vertical_load_rear)
+    mu_front_delta = _abs_delta(record.mu_eff_front, baseline.mu_eff_front)
+    mu_rear_delta = _abs_delta(record.mu_eff_rear, baseline.mu_eff_rear)
+    travel_front_delta = _abs_delta(
+        record.suspension_travel_front, baseline.suspension_travel_front
+    )
+    travel_rear_delta = _abs_delta(
+        record.suspension_travel_rear, baseline.suspension_travel_rear
+    )
+    velocity_front_delta = _abs_delta(
+        record.suspension_velocity_front, baseline.suspension_velocity_front
+    )
+    velocity_rear_delta = _abs_delta(
+        record.suspension_velocity_rear, baseline.suspension_velocity_rear
+    )
 
-    track_load = record.vertical_load * record.lateral_accel
-    baseline_track_load = baseline.vertical_load * baseline.lateral_accel
-    track_delta = abs(track_load - baseline_track_load)
+    axle_balance = (record.vertical_load_front - record.vertical_load_rear) - (
+        baseline.vertical_load_front - baseline.vertical_load_rear
+    )
+    axle_velocity_balance = (
+        record.suspension_velocity_front - record.suspension_velocity_rear
+    ) - (
+        baseline.suspension_velocity_front - baseline.suspension_velocity_rear
+    )
+
+    brake_longitudinal_delta = max(0.0, baseline.longitudinal_accel - record.longitudinal_accel)
+    drive_longitudinal_delta = max(0.0, record.longitudinal_accel - baseline.longitudinal_accel)
 
     node_signals = {
-        "tyres": (slip_delta * 0.6) + (locking_delta * 0.25) + (load_delta * 0.15),
-        "suspension": (load_delta * 0.5) + (pitch_delta * 0.25) + (roll_delta * 0.25),
-        "chassis": (lat_delta * 0.6) + (roll_delta * 0.25) + (yaw_delta * 0.15),
-        "brakes": (brake_delta * 0.5)
-        + (locking_delta * 0.3)
-        + (abs(min(0.0, record.longitudinal_accel - baseline.longitudinal_accel)) * 0.2),
-        "transmission": (long_delta * 0.5) + (slip_delta * 0.3) + (yaw_delta * 0.2),
-        "track": (track_delta * 0.7) + (yaw_delta * 0.3),
-        "driver": (si_delta * 0.6) + (yaw_delta * 0.15) + (pitch_delta * 0.15) + (roll_delta * 0.1),
+        "tyres": (slip_delta * 0.35)
+        + (slip_angle_delta * 0.25)
+        + ((mu_front_delta + mu_rear_delta) * 0.2)
+        + (locking_delta * 0.2),
+        "suspension": ((travel_front_delta + travel_rear_delta) * 0.35)
+        + ((velocity_front_delta + velocity_rear_delta) * 0.4)
+        + ((load_front_delta + load_rear_delta) * 0.25),
+        "chassis": (yaw_rate_delta * 0.4) + (lat_delta * 0.35) + (roll_delta * 0.15) + (pitch_delta * 0.1),
+        "brakes": (brake_delta * 0.4)
+        + (locking_delta * 0.25)
+        + (brake_longitudinal_delta * 0.2)
+        + (load_front_delta * 0.15),
+        "transmission": (throttle_delta * 0.3)
+        + (drive_longitudinal_delta * 0.25)
+        + (slip_delta * 0.2)
+        + (gear_delta * 0.15)
+        + (speed_delta * 0.1),
+        "track": ((mu_front_delta + mu_rear_delta) * 0.3)
+        + (abs(axle_balance) * 0.25)
+        + (abs(axle_velocity_balance) * 0.2)
+        + (yaw_delta * 0.15)
+        + (load_delta * 0.1),
+        "driver": (si_delta * 0.35)
+        + (steer_delta * 0.25)
+        + (throttle_delta * 0.2)
+        + (yaw_rate_delta * 0.2),
     }
 
     total_signal = sum(node_signals.values())
@@ -212,6 +273,20 @@ class DeltaCalculator:
             locking=mean(record.locking for record in records),
             nfr=mean(record.nfr for record in records),
             si=mean(record.si for record in records),
+            speed=mean(record.speed for record in records),
+            yaw_rate=mean(record.yaw_rate for record in records),
+            slip_angle=mean(record.slip_angle for record in records),
+            steer=mean(record.steer for record in records),
+            throttle=mean(record.throttle for record in records),
+            gear=int(round(mean(record.gear for record in records))),
+            vertical_load_front=mean(record.vertical_load_front for record in records),
+            vertical_load_rear=mean(record.vertical_load_rear for record in records),
+            mu_eff_front=mean(record.mu_eff_front for record in records),
+            mu_eff_rear=mean(record.mu_eff_rear for record in records),
+            suspension_travel_front=mean(record.suspension_travel_front for record in records),
+            suspension_travel_rear=mean(record.suspension_travel_rear for record in records),
+            suspension_velocity_front=mean(record.suspension_velocity_front for record in records),
+            suspension_velocity_rear=mean(record.suspension_velocity_rear for record in records),
         )
 
     @staticmethod
