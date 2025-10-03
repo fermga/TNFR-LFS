@@ -25,6 +25,24 @@ Use :func:`tnfr_lfs.core.coherence.sense_index` together with
 :func:`tnfr_lfs.core.coherence.compute_node_delta_nfr` to build custom
 analytics pipelines.
 
+### Operator utilities
+
+```
+tnfr_lfs.core.operators.emission_operator(target_delta_nfr: float, target_sense_index: float) -> Dict[str, float]
+tnfr_lfs.core.operators.recepcion_operator(records: Sequence[TelemetryRecord], extractor: Optional[EPIExtractor] = None) -> List[EPIBundle]
+tnfr_lfs.core.operators.coherence_operator(series: Sequence[float], window: int = 3) -> List[float]
+tnfr_lfs.core.operators.dissonance_operator(series: Sequence[float], target: float) -> float
+tnfr_lfs.core.operators.acoplamiento_operator(series_a: Sequence[float], series_b: Sequence[float]) -> float
+tnfr_lfs.core.operators.resonance_operator(series: Sequence[float]) -> float
+tnfr_lfs.core.operators.recursividad_operator(series: Sequence[float], *, seed: float = 0.0, decay: float = 0.5) -> List[float]
+tnfr_lfs.core.operators.orchestrate_delta_metrics(telemetry_segments: Sequence[Sequence[TelemetryRecord]], target_delta_nfr: float, target_sense_index: float, *, coherence_window: int = 3, recursion_decay: float = 0.4) -> Mapping[str, object]
+```
+
+These functions compose an end-to-end ΔNFR/Sense Index pipeline covering
+objective setting (Emisión), telemetry reception, smoothing (Coherencia),
+contrast measurement (Disonancia), coupling analysis, resonance estimation,
+recursive filtering, and orchestration over segmented telemetry streams.
+
 ## Recommendation Engine
 
 ### `tnfr_lfs.recommender.rules.RecommendationEngine`
