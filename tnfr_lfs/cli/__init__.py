@@ -1,1 +1,1 @@
-"""Command line utilities for TNFR-LFS."""
+"""Command line utilities for TNFR × LFS."""

@@ -1,4 +1,4 @@
-"""Exporter registry for TNFR-LFS outputs."""
+"""Exporter registry for TNFR × LFS outputs."""
 
 from __future__ import annotations
 

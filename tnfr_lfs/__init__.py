@@ -1,4 +1,4 @@
-"""Top-level package for TNFR-LFS.
+"""Top-level package for TNFR × LFS.
 
 This package exposes utility functions to ingest telemetry, compute
 Event Performance Indicators (EPI), and derive recommendations for

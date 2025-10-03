@@ -1,4 +1,4 @@
-"""Core computation utilities for TNFR-LFS."""
+"""Core computation utilities for TNFR × LFS."""
 
 from .coherence import compute_node_delta_nfr, sense_index
 from .epi import DeltaCalculator, EPIExtractor, TelemetryRecord, delta_nfr_by_node

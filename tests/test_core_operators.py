@@ -1,4 +1,4 @@
-"""Unit tests for the high-level TNFR-LFS operators."""
+"""Unit tests for the high-level TNFR × LFS operators."""
 
 from __future__ import annotations
 

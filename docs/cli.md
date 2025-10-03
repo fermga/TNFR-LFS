@@ -12,7 +12,7 @@ selected export format to stdout.
 
 ## Subcommands
 
-The ``tnfr-lfs`` executable organises the workflow into five subcommands:
+The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into five subcommands:
 
 ### ``baseline``
 
@@ -23,7 +23,7 @@ the simulation to broadcast telemetry through:
 * **OutSim UDP** – default port ``4123``
 * **OutGauge UDP** – default port ``3000``
 * **InSim UDP** – optional control messages through port ``29999`` when a
-  simulator requires a handshake (no traffic is sent by TNFR-LFS but the
+  simulator requires a handshake (no traffic is sent by the TNFR × LFS toolkit but the
   port must remain available to avoid conflicts)
 
 All clients connect to ``127.0.0.1`` by default and can be redirected via
