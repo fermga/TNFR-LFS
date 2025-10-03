@@ -12,7 +12,7 @@ from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.recommender.rules import RecommendationEngine
 
 
-def test_recommendation_engine_detects_anomalies():
+def test_recommendation_engine_detects_anomalies(car_track_thresholds):
     def build_nodes(delta_nfr: float, sense_index: float):
         return dict(
             tyres=TyresNode(delta_nfr=delta_nfr / 7, sense_index=sense_index),
@@ -29,7 +29,7 @@ def test_recommendation_engine_detects_anomalies():
         EPIBundle(timestamp=0.1, epi=0.5, delta_nfr=-12.0, sense_index=0.50, **build_nodes(-12.0, 0.50)),
         EPIBundle(timestamp=0.2, epi=0.6, delta_nfr=2.0, sense_index=0.90, **build_nodes(2.0, 0.90)),
     ]
-    engine = RecommendationEngine()
+    engine = RecommendationEngine(threshold_library=car_track_thresholds)
     recommendations = engine.generate(results)
     categories = {recommendation.category for recommendation in recommendations}
     assert {"suspension", "aero", "driver"} <= categories
@@ -38,7 +38,7 @@ def test_recommendation_engine_detects_anomalies():
     assert any("sense index" in message.lower() for message in messages)
 
 
-def test_phase_specific_rules_triggered_with_microsectors():
+def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     def build_bundle(timestamp: float, delta_nfr: float, sense_index: float, tyre_delta: float) -> EPIBundle:
         tyre_node = TyresNode(delta_nfr=tyre_delta, sense_index=sense_index)
         return EPIBundle(
@@ -105,7 +105,11 @@ def test_phase_specific_rules_triggered_with_microsectors():
         build_bundle(0.5, -3.2, 0.95, tyre_delta=5.8),
     ]
 
-    engine = RecommendationEngine()
+    engine = RecommendationEngine(
+        car_model="generic_gt",
+        track_name="valencia",
+        threshold_library=car_track_thresholds,
+    )
     recommendations = engine.generate(results, [microsector])
 
     assert len(recommendations) >= 4

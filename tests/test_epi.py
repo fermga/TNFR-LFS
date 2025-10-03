@@ -1,28 +1,59 @@
-from tnfr_lfs.core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
+import pytest
+
+from tnfr_lfs.core.epi import DeltaCalculator, EPIExtractor
+from tnfr_lfs.core.epi_models import (
+    BrakesNode,
+    ChassisNode,
+    DriverNode,
+    EPIBundle,
+    SuspensionNode,
+    TrackNode,
+    TransmissionNode,
+    TyresNode,
+)
 
 
-def build_records():
-    return [
-        TelemetryRecord(0.0, 6000, 0.05, 1.2, 0.4, 520, 0.82),
-        TelemetryRecord(0.1, 6500, 0.03, 1.1, 0.5, 540, 0.81),
-        TelemetryRecord(0.2, 6800, 0.07, 1.0, 0.6, 560, 0.78),
-    ]
+def test_delta_calculation_against_baseline(synthetic_records):
+    baseline = DeltaCalculator.derive_baseline(synthetic_records)
+    sample = synthetic_records[0]
+    bundle = DeltaCalculator.compute_bundle(sample, baseline, epi_value=0.0)
 
-
-def test_delta_calculation_against_baseline():
-    records = build_records()
-    baseline = DeltaCalculator.derive_baseline(records)
-    bundle = DeltaCalculator.compute_bundle(records[0], baseline, epi_value=0.0)
-    assert round(bundle.delta_nfr, 3) == -20.0
+    assert isinstance(bundle, EPIBundle)
+    assert bundle.delta_nfr == pytest.approx(sample.nfr - baseline.nfr)
     assert 0.0 <= bundle.sense_index <= 1.0
+    assert bundle.track.delta_nfr + bundle.suspension.delta_nfr != 0.0
 
 
-def test_epi_and_coherence_are_computed():
-    records = build_records()
-    extractor = EPIExtractor()
-    results = extractor.extract(records)
-    assert len(results) == 3
-    assert results[0].epi < results[2].epi
-    assert all(0.0 <= bundle.sense_index <= 1.0 for bundle in results)
-    assert results[1].sense_index >= results[0].sense_index
-    assert results[1].sense_index >= results[2].sense_index
+def test_epi_extractor_creates_structured_nodes(synthetic_bundles):
+    assert len(synthetic_bundles) == 17
+    pivot = synthetic_bundles[5]
+
+    assert isinstance(pivot.tyres, TyresNode)
+    assert isinstance(pivot.suspension, SuspensionNode)
+    assert isinstance(pivot.chassis, ChassisNode)
+    assert isinstance(pivot.brakes, BrakesNode)
+    assert isinstance(pivot.transmission, TransmissionNode)
+    assert isinstance(pivot.track, TrackNode)
+    assert isinstance(pivot.driver, DriverNode)
+    assert 0.0 <= pivot.tyres.sense_index <= 1.0
+    assert 0.0 <= pivot.track.sense_index <= 1.0
+    assert sum(
+        node.delta_nfr for node in (
+            pivot.tyres,
+            pivot.suspension,
+            pivot.chassis,
+            pivot.brakes,
+            pivot.transmission,
+            pivot.track,
+            pivot.driver,
+        )
+    ) == pytest.approx(pivot.delta_nfr, rel=1e-6)
+
+
+def test_epi_weights_shift_balance_between_load_and_slip(synthetic_records):
+    default_results = EPIExtractor().extract(synthetic_records)
+    slip_focused = EPIExtractor(load_weight=0.2, slip_weight=0.8).extract(synthetic_records)
+
+    assert default_results[0].epi != pytest.approx(slip_focused[0].epi)
+    assert default_results[-1].epi != pytest.approx(slip_focused[-1].epi)
+    assert all(0.0 <= bundle.sense_index <= 1.0 for bundle in slip_focused)
