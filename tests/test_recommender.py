@@ -71,7 +71,9 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     exit_target = -0.2
     window = (-0.3, 0.3)
     yaw_window = (-0.6, 0.6)
-    nodes = ("tyres", "brakes")
+    entry_nodes = ("tyres", "brakes")
+    apex_nodes = ("suspension", "tyres")
+    exit_nodes = ("transmission", "tyres")
     phase_samples = {
         "entry": (0, 1),
         "apex": (2, 3),
@@ -111,7 +113,7 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
-                dominant_nodes=nodes,
+                dominant_nodes=entry_nodes,
             ),
             Goal(
                 phase="apex",
@@ -123,7 +125,7 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
-                dominant_nodes=nodes,
+                dominant_nodes=apex_nodes,
             ),
             Goal(
                 phase="exit",
@@ -135,7 +137,7 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
-                dominant_nodes=nodes,
+                dominant_nodes=exit_nodes,
             ),
         ),
         phase_boundaries={
@@ -146,9 +148,9 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         phase_samples=phase_samples,
         active_phase="entry",
         dominant_nodes={
-            "entry": nodes,
-            "apex": nodes,
-            "exit": nodes,
+            "entry": entry_nodes,
+            "apex": apex_nodes,
+            "exit": exit_nodes,
         },
         phase_weights=phase_weights,
         grip_rel=1.0,
@@ -174,15 +176,26 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     )
     recommendations = engine.generate(results, [microsector])
 
-    assert len(recommendations) >= 4
-    categories = [recommendation.category for recommendation in recommendations[:4]]
-    assert categories == ["entry", "apex", "pianos", "exit"]
+    assert len(recommendations) >= 6
+    categories = {recommendation.category for recommendation in recommendations}
+    assert {"entry", "apex", "pianos", "exit"} <= categories
 
-    entry_rationale = next(
+    entry_messages = [rec.message for rec in recommendations if rec.category == "entry"]
+    assert any("ΔNFR" in message for message in entry_messages)
+    assert any("toe" in message.lower() for message in entry_messages)
+    assert any("nodo objetivo" in message.lower() for message in entry_messages)
+
+    apex_messages = [rec.message for rec in recommendations if rec.category == "apex"]
+    assert any("barra" in message.lower() for message in apex_messages)
+
+    exit_messages = [rec.message for rec in recommendations if rec.category == "exit"]
+    assert any("diferencial" in message.lower() for message in exit_messages)
+
+    entry_rationales = [
         recommendation.rationale for recommendation in recommendations if recommendation.category == "entry"
-    )
-    assert "ΔNFR" in entry_rationale
-    assert f"{entry_target:.2f}" in entry_rationale
+    ]
+    assert any("ν_f" in rationale for rationale in entry_rationales)
+    assert any(f"{entry_target:.2f}" in rationale for rationale in entry_rationales)
 
     piano_message = next(
         recommendation.message for recommendation in recommendations if recommendation.category == "pianos"
@@ -332,8 +345,147 @@ def test_track_specific_profile_tightens_entry_threshold():
     valencia_engine = RecommendationEngine(car_model="generic_gt", track_name="valencia")
     valencia_recs = valencia_engine.generate(results, [microsector])
 
-    generic_entry = [rec for rec in generic_recs if rec.category == "entry"]
-    valencia_entry = [rec for rec in valencia_recs if rec.category == "entry"]
+    generic_entry_global = [
+        rec for rec in generic_recs if rec.category == "entry" and "ΔNFR global" in rec.message
+    ]
+    valencia_entry_global = [
+        rec for rec in valencia_recs if rec.category == "entry" and "ΔNFR global" in rec.message
+    ]
 
-    assert not generic_entry
-    assert valencia_entry
+    assert not generic_entry_global
+    assert valencia_entry_global
+
+
+def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
+    def build_bundle(timestamp: float, transmission_nu_f: float) -> EPIBundle:
+        return EPIBundle(
+            timestamp=timestamp,
+            epi=0.5,
+            delta_nfr=0.3,
+            sense_index=0.92,
+            tyres=TyresNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["tyres"]),
+            suspension=SuspensionNode(
+                delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["suspension"]
+            ),
+            chassis=ChassisNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["chassis"]),
+            brakes=BrakesNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["brakes"]),
+            transmission=TransmissionNode(
+                delta_nfr=0.15, sense_index=0.92, nu_f=transmission_nu_f
+            ),
+            track=TrackNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["track"]),
+            driver=DriverNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["driver"]),
+        )
+
+    window = (-0.05, 0.05)
+    yaw_window = (-0.3, 0.3)
+    exit_nodes = ("transmission",)
+    microsector = Microsector(
+        index=7,
+        start_time=0.0,
+        end_time=0.6,
+        curvature=1.2,
+        brake_event=False,
+        support_event=False,
+        delta_nfr_signature=0.0,
+        goals=(
+            Goal(
+                phase="entry",
+                archetype="transición",
+                description="",
+                target_delta_nfr=0.0,
+                target_sense_index=0.9,
+                nu_f_target=0.1,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=("tyres",),
+            ),
+            Goal(
+                phase="apex",
+                archetype="transición",
+                description="",
+                target_delta_nfr=0.1,
+                target_sense_index=0.9,
+                nu_f_target=0.15,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=("suspension",),
+            ),
+            Goal(
+                phase="exit",
+                archetype="tracción",
+                description="",
+                target_delta_nfr=-0.05,
+                target_sense_index=0.9,
+                nu_f_target=0.2,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=exit_nodes,
+            ),
+        ),
+        phase_boundaries={
+            "entry": (0, 2),
+            "apex": (2, 4),
+            "exit": (4, 6),
+        },
+        phase_samples={
+            "entry": (0, 1),
+            "apex": (2, 3),
+            "exit": (4, 5),
+        },
+        active_phase="exit",
+        dominant_nodes={
+            "entry": ("tyres",),
+            "apex": ("suspension",),
+            "exit": exit_nodes,
+        },
+        phase_weights={
+            "entry": {"__default__": 1.0},
+            "apex": {"__default__": 1.0},
+            "exit": {"__default__": 1.0},
+        },
+        grip_rel=1.0,
+        filtered_measures={
+            "thermal_load": 5000.0,
+            "style_index": 0.9,
+            "grip_rel": 1.0,
+        },
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={
+            "entry": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+            "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+            "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        },
+    )
+
+    results = [
+        build_bundle(0.0, BASE_NU_F["transmission"]),
+        build_bundle(0.1, BASE_NU_F["transmission"]),
+        build_bundle(0.2, BASE_NU_F["transmission"]),
+        build_bundle(0.3, BASE_NU_F["transmission"]),
+        build_bundle(0.4, 0.35),
+        build_bundle(0.5, 0.34),
+    ]
+
+    engine = RecommendationEngine(
+        car_model="generic_gt",
+        track_name="valencia",
+        threshold_library=car_track_thresholds,
+    )
+    recommendations = engine.generate(results, [microsector])
+
+    exit_messages = [
+        rec
+        for rec in recommendations
+        if rec.category == "exit" and "diferencial" in rec.message.lower()
+    ]
+    assert exit_messages
+    assert any("abrir" in rec.message.lower() for rec in exit_messages)
+
+    rationale = exit_messages[0].rationale
+    assert "transmisión" in rationale
+    assert "ν_f medio" in rationale
+    assert "generic_gt/valencia" in rationale
