@@ -411,6 +411,27 @@ def _sense_index_map(
             float(mean(aggregate)) if aggregate else 0.0,
             4,
         )
+        filtered_payload = {
+            key: round(float(value), 4)
+            for key, value in microsector.filtered_measures.items()
+        }
+        if "grip_rel" not in filtered_payload:
+            filtered_payload["grip_rel"] = round(float(microsector.grip_rel), 4)
+        entry["filtered_measures"] = filtered_payload
+        entry["grip_rel"] = filtered_payload.get("grip_rel", 0.0)
+        entry["filtered_style_index"] = filtered_payload.get("style_index")
+        mutation = microsector.last_mutation
+        if mutation:
+            entry["mutation"] = {
+                "archetype": str(mutation.get("archetype", "")),
+                "mutated": bool(mutation.get("mutated", False)),
+                "entropy": round(float(mutation.get("entropy", 0.0)), 4),
+                "entropy_delta": round(float(mutation.get("entropy_delta", 0.0)), 4),
+                "style_delta": round(float(mutation.get("style_delta", 0.0)), 4),
+                "phase": mutation.get("phase"),
+            }
+        else:
+            entry["mutation"] = None
         results.append(entry)
     return results
 

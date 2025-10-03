@@ -144,6 +144,11 @@ def _build_microsector(
     }
     dominant_nodes = {phase: ("tyres",) for phase in ("entry", "apex", "exit")}
     phase_weights = {phase: {} for phase in ("entry", "apex", "exit")}
+    filtered_measures = {
+        "thermal_load": 5000.0,
+        "style_index": 0.9,
+        "grip_rel": 1.0,
+    }
     return Microsector(
         index=index,
         start_time=float(entry_idx),
@@ -158,6 +163,10 @@ def _build_microsector(
         active_phase="apex",
         dominant_nodes=dominant_nodes,
         phase_weights=phase_weights,
+        grip_rel=1.0,
+        filtered_measures=filtered_measures,
+        recursivity_trace=(),
+        last_mutation=None,
     )
 
 

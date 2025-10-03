@@ -77,6 +77,10 @@ class Microsector:
     active_phase: PhaseLiteral
     dominant_nodes: Mapping[PhaseLiteral, Tuple[str, ...]]
     phase_weights: Mapping[PhaseLiteral, Mapping[str, float] | float]
+    grip_rel: float
+    filtered_measures: Mapping[str, float]
+    recursivity_trace: Tuple[Mapping[str, float | str | None], ...]
+    last_mutation: Mapping[str, object] | None
 
     def phase_indices(self, phase: PhaseLiteral) -> range:
         """Return the range of sample indices assigned to ``phase``."""
@@ -139,6 +143,11 @@ def segment_microsectors(
         curvature = mean(abs(records[i].lateral_accel) for i in range(start, end + 1))
         brake_event = any(records[i].longitudinal_accel <= BRAKE_THRESHOLD for i in range(start, end + 1))
         support_event = _detect_support_event(records[start : end + 1])
+        avg_vertical_load = mean(record.vertical_load for record in records[start : end + 1])
+        baseline_vertical = getattr(baseline, "vertical_load", 0.0)
+        grip_rel = (
+            avg_vertical_load / baseline_vertical if baseline_vertical > 1e-9 else 0.0
+        )
         phase_weight_map = _initial_phase_weight_map(records, phase_samples)
         specs.append(
             {
@@ -148,6 +157,8 @@ def segment_microsectors(
                 "curvature": curvature,
                 "brake_event": brake_event,
                 "support_event": support_event,
+                "avg_vertical_load": avg_vertical_load,
+                "grip_rel": grip_rel,
                 "phase_boundaries": phase_boundaries,
                 "phase_samples": phase_samples,
                 "phase_weights": phase_weight_map,
@@ -226,6 +237,8 @@ def segment_microsectors(
         curvature = spec["curvature"]
         brake_event = spec["brake_event"]
         support_event = spec["support_event"]
+        avg_vertical_load = float(spec.get("avg_vertical_load", 0.0))
+        grip_rel = float(spec.get("grip_rel", 0.0))
         delta_signature = mean(b.delta_nfr for b in recomputed_bundles[start : end + 1])
         avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
         archetype = _classify_archetype(delta_signature, avg_si, brake_event, support_event)
@@ -239,13 +252,19 @@ def segment_microsectors(
             goals,
             key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
         )
+        filtered_measures: Dict[str, float] = {
+            "thermal_load": avg_vertical_load,
+            "style_index": avg_si,
+            "grip_rel": grip_rel,
+        }
+        rec_trace: Tuple[Mapping[str, float | str | None], ...] = ()
+        mutation_details: Mapping[str, object] | None = None
         if rec_state is not None:
             measures = {
-                "thermal_load": mean(
-                    record.vertical_load for record in records[start : end + 1]
-                ),
+                "thermal_load": avg_vertical_load,
                 "style_index": avg_si,
                 "phase": active_goal.phase,
+                "grip_rel": grip_rel,
             }
             rec_info = recursivity_operator(
                 rec_state,
@@ -291,10 +310,41 @@ def segment_microsectors(
                     {
                         "thermal_load": measures["thermal_load"],
                         "style_index": measures["style_index"],
+                        "grip_rel": measures["grip_rel"],
                         "phase": active_goal.phase,
                     },
                     decay=recursion_decay,
                 )
+            micro_state_entry = rec_state.get(str(index), {})
+            filtered_measures = {
+                key: float(value)
+                for key, value in micro_state_entry.get("filtered", {}).items()
+            }
+            if "thermal_load" not in filtered_measures:
+                filtered_measures["thermal_load"] = avg_vertical_load
+            if "style_index" not in filtered_measures:
+                filtered_measures["style_index"] = avg_si
+            if "grip_rel" not in filtered_measures:
+                filtered_measures["grip_rel"] = grip_rel
+            rec_trace = tuple(
+                {
+                    trace_key: (
+                        float(trace_value)
+                        if isinstance(trace_value, (int, float))
+                        else trace_value
+                    )
+                    for trace_key, trace_value in trace_entry.items()
+                }
+                for trace_entry in micro_state_entry.get("trace", [])
+            )
+            mutation_details = {
+                key: (
+                    float(value)
+                    if isinstance(value, (int, float))
+                    else value
+                )
+                for key, value in (mutation_info or {}).items()
+            }
         microsectors.append(
             Microsector(
                 index=spec["index"],
@@ -310,6 +360,10 @@ def segment_microsectors(
                 active_phase=active_goal.phase,
                 dominant_nodes=dict(dominant_nodes),
                 phase_weights=phase_weights,
+                grip_rel=float(filtered_measures.get("grip_rel", grip_rel)),
+                filtered_measures=dict(filtered_measures),
+                recursivity_trace=rec_trace,
+                last_mutation=dict(mutation_details) if mutation_details is not None else None,
             )
         )
 
