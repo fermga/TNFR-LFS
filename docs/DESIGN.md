@@ -71,7 +71,10 @@ ponderaciones empíricas:
 
 La suma de los ΔNFR individuales coincide siempre con el ΔNFR global del
 registro, garantizando la coherencia con el Sense Index penalizado por entropía
-que se calcula en :func:`tnfr_lfs.core.coherence.sense_index`.
+que se calcula en :func:`tnfr_lfs.core.coherence.sense_index`.  La métrica se
+evalúa ahora como ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H`` incorporando el
+ritmo natural de cada nodo y la fase del microsector; la interpretación se
+detalla en :doc:`api_reference`.
 
 ## Artefactos generados
 - `TNFR.pdf` se mantiene como artefacto compilado. Cualquier actualización sustantiva debe reflejarse primero en este `DESIGN.md`; el PDF puede regenerarse a partir del contenido actualizado y debe tratarse como derivado.
