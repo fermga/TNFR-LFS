@@ -1,0 +1,20 @@
+[telemetry]
+host = "127.0.0.1"
+outsim_port = 4123
+outgauge_port = 3000
+insim_port = 29999
+
+[analyze]
+export = "json"
+
+[suggest]
+car_model = "generic_gt"
+track = "valencia"
+
+[paths]
+output_dir = "out"
+
+[limits.delta_nfr]
+entry = 0.5
+apex = 0.4
+exit = 0.6

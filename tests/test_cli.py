@@ -344,6 +344,26 @@ exit = 0.2
     assert report_root.parent.name == "artifacts"
 
 
+def test_repository_template_configures_default_ports_and_profiles() -> None:
+    config_path = Path(__file__).resolve().parents[1] / "tnfr-lfs.toml"
+    data = tomllib.loads(config_path.read_text(encoding="utf8"))
+
+    telemetry = data["telemetry"]
+    assert telemetry["host"] == "127.0.0.1"
+    assert telemetry["outsim_port"] == 4123
+    assert telemetry["outgauge_port"] == 3000
+    assert telemetry["insim_port"] == 29999
+
+    suggestion_defaults = data["suggest"]
+    assert suggestion_defaults["car_model"] == "generic_gt"
+    assert suggestion_defaults["track"] == "valencia"
+
+    limits = data["limits"]["delta_nfr"]
+    assert limits["entry"] == pytest.approx(0.5, rel=1e-3)
+    assert limits["apex"] == pytest.approx(0.4, rel=1e-3)
+    assert limits["exit"] == pytest.approx(0.6, rel=1e-3)
+
+
 class _FakeSocket:
     def __init__(self) -> None:
         self.bound: list[tuple[str, int]] = []

@@ -11,6 +11,10 @@ La documentación completa se encuentra en el directorio `docs/` y se publica co
 - [`docs/api_reference.md`](docs/api_reference.md): referencia de la API.
 - [`docs/cli.md`](docs/cli.md): guía de la interfaz de línea de comandos.
 
+### Plantilla de configuración del CLI
+
+El archivo `tnfr-lfs.toml` ubicado en la raíz del repositorio proporciona una plantilla lista para usar con los valores por defecto documentados en [`docs/cli.md`](docs/cli.md). Copia este archivo en `~/.config/tnfr-lfs.toml` o en el directorio de trabajo de tus sesiones para personalizar los puertos OutSim/OutGauge/InSim, el coche/pista iniciales y los límites de ΔNFR por fase antes de invocar el CLI.
+
 ## Branding y relación con la teoría
 
 - **TNFR** se refiere únicamente a la teoría original: el marco conceptual que define los EPI, las métricas ΔNFR/ΔSi y los principios resonantes.
