@@ -7,6 +7,11 @@ import pytest
 
 from tnfr_lfs.cli.tnfr_lfs_cli import run_cli
 
+try:  # Python 3.11+
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreters
+    import tomli as tomllib  # type: ignore
+
 
 def test_baseline_simulation_jsonl(
     tmp_path: Path, capsys, synthetic_stint_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -27,6 +32,24 @@ def test_baseline_simulation_jsonl(
     assert len(lines) == 17
     assert "Baseline saved" in result
     assert str(baseline_path) in captured.out
+
+
+def test_template_command_emits_phase_presets() -> None:
+    output = run_cli([
+        "template",
+        "--car",
+        "generic_gt",
+        "--track",
+        "valencia",
+    ])
+    data = tomllib.loads(output)
+    assert data["limits"]["delta_nfr"]["entry"] == pytest.approx(0.8, rel=1e-3)
+    analyze_templates = data["analyze"]["phase_templates"]
+    entry_template = analyze_templates["entry"]
+    assert entry_template["target_delta_nfr"] == pytest.approx(1.2, rel=1e-3)
+    assert entry_template["slip_lat_window"][0] == pytest.approx(-0.045, rel=1e-3)
+    report_templates = data["report"]["phase_templates"]
+    assert report_templates["apex"]["yaw_rate_window"][1] == pytest.approx(0.24, rel=1e-3)
 
 
 def test_analyze_pipeline_json_export(

@@ -12,7 +12,26 @@ selected export format to stdout.
 
 ## Subcommands
 
-The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into six subcommands:
+The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into seven subcommands:
+
+### ``template``
+
+Generates ΔNFR objectives together with slip/yaw windows for a given
+car/track profile.  The command resolves the same threshold library used
+by the recommendation engine (backed by ``data/threshold_profiles.toml``)
+and emits a TOML snippet that can be dropped into ``tnfr-lfs.toml``.
+
+```bash
+tnfr-lfs template --car generic_gt --track valencia > presets/valencia.toml
+tnfr-lfs --config presets/valencia.toml analyze stint.jsonl
+```
+
+The generated file contains ``[analyze.phase_templates]`` and
+``[report.phase_templates]`` sections with ΔNFR targets and slip/yaw
+windows for each phase of the corner.  It also mirrors the
+``limits.delta_nfr`` tolerances used by ``phase_messages`` so that
+``analyze`` and ``report`` include the preset alongside the usual
+metrics.
 
 ### ``diagnose``
 

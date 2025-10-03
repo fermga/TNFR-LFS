@@ -35,6 +35,7 @@ from ..core.segmentation import Microsector, segment_microsectors
 from ..exporters import exporters_registry
 from ..exporters.setup_plan import SetupChange, SetupPlan
 from ..recommender import RecommendationEngine, SetupPlanner
+from ..recommender.rules import ThresholdProfile
 
 
 Records = List[TelemetryRecord]
@@ -223,6 +224,63 @@ def _phase_recommendation(phase: str, deviation: float) -> str:
     recommendations = _PHASE_RECOMMENDATIONS.get(phase, {})
     key = "positive" if deviation > 0 else "negative"
     return recommendations.get(key, "ajustar la puesta a punto para equilibrar ΔNFR")
+
+
+def _format_window(window: Tuple[float, float]) -> str:
+    return f"[{window[0]:.3f}, {window[1]:.3f}]"
+
+
+def _profile_phase_templates(profile: ThresholdProfile) -> Dict[str, Dict[str, object]]:
+    templates: Dict[str, Dict[str, object]] = {}
+    for phase, target in profile.phase_targets.items():
+        templates[phase] = {
+            "target_delta_nfr": round(float(target.target_delta_nfr), 3),
+            "slip_lat_window": [
+                round(float(target.slip_lat_window[0]), 3),
+                round(float(target.slip_lat_window[1]), 3),
+            ],
+            "slip_long_window": [
+                round(float(target.slip_long_window[0]), 3),
+                round(float(target.slip_long_window[1]), 3),
+            ],
+            "yaw_rate_window": [
+                round(float(target.yaw_rate_window[0]), 3),
+                round(float(target.yaw_rate_window[1]), 3),
+            ],
+        }
+    return templates
+
+
+def _phase_templates_from_config(
+    config: Mapping[str, Any], section: str
+) -> Dict[str, Dict[str, float | List[float]]]:
+    section_cfg = config.get(section)
+    if not isinstance(section_cfg, Mapping):
+        return {}
+    templates_cfg = section_cfg.get("phase_templates")
+    if not isinstance(templates_cfg, Mapping):
+        return {}
+    templates: Dict[str, Dict[str, float | List[float]]] = {}
+    for phase, payload in templates_cfg.items():
+        if not isinstance(payload, Mapping):
+            continue
+        entry: Dict[str, float | List[float]] = {}
+        target_delta = payload.get("target_delta_nfr")
+        if target_delta is not None:
+            try:
+                entry["target_delta_nfr"] = float(target_delta)
+            except (TypeError, ValueError):
+                pass
+        for key in ("slip_lat_window", "slip_long_window", "yaw_rate_window"):
+            window = payload.get(key)
+            if isinstance(window, Sequence) and len(window) == 2:
+                try:
+                    entry[key] = [float(window[0]), float(window[1])]
+                except (TypeError, ValueError):
+                    continue
+        if entry:
+            templates[str(phase)] = entry
+    return templates
 
 
 def _phase_deviation_messages(
@@ -419,6 +477,24 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    template_parser = subparsers.add_parser(
+        "template",
+        help="Generate ΔNFR, slip and yaw presets for analyze/report workflows.",
+    )
+    template_parser.add_argument(
+        "--car",
+        dest="car_model",
+        default=_default_car_model(config),
+        help="Car model used to resolve the preset (default: perfil actual).",
+    )
+    template_parser.add_argument(
+        "--track",
+        dest="track",
+        default=_default_track_name(config),
+        help="Identificador de pista usado para seleccionar el perfil (default: actual).",
+    )
+    template_parser.set_defaults(handler=_handle_template)
 
     telemetry_cfg = dict(config.get("telemetry", {}))
     diagnose_parser = subparsers.add_parser(
@@ -665,6 +741,50 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     return parser
 
 
+def _handle_template(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+    car_model = str(namespace.car_model or _default_car_model(config))
+    track_name = str(namespace.track or _default_track_name(config))
+    engine = RecommendationEngine(car_model=car_model, track_name=track_name)
+    context = engine._resolve_context(car_model, track_name)
+    profile = context.thresholds
+    templates = _profile_phase_templates(profile)
+    average_delta = (
+        mean(entry["target_delta_nfr"] for entry in templates.values())
+        if templates
+        else 0.0
+    )
+
+    lines = [
+        f"# Preset generado para {context.profile_label}",
+        "",
+        "[limits.delta_nfr]",
+        f"entry = {profile.entry_delta_tolerance:.3f}",
+        f"apex = {profile.apex_delta_tolerance:.3f}",
+        f"exit = {profile.exit_delta_tolerance:.3f}",
+        f"piano = {profile.piano_delta_tolerance:.3f}",
+        "",
+    ]
+
+    for section in ("analyze", "report"):
+        lines.append(f"[{section}]")
+        lines.append(f"target_delta = {average_delta:.3f}")
+        lines.append("")
+        for phase, payload in templates.items():
+            lines.append(f"[{section}.phase_templates.{phase}]")
+            lines.append(f"target_delta_nfr = {payload['target_delta_nfr']:.3f}")
+            lat = payload["slip_lat_window"]
+            lines.append(f"slip_lat_window = [{lat[0]:.3f}, {lat[1]:.3f}]")
+            lng = payload["slip_long_window"]
+            lines.append(f"slip_long_window = [{lng[0]:.3f}, {lng[1]:.3f}]")
+            yaw = payload["yaw_rate_window"]
+            lines.append(f"yaw_rate_window = [{yaw[0]:.3f}, {yaw[1]:.3f}]")
+            lines.append("")
+
+    result = "\n".join(lines).rstrip() + "\n"
+    print(result)
+    return result
+
+
 def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     cfg_path: Path = namespace.cfg.expanduser().resolve()
     if not cfg_path.exists():
@@ -820,6 +940,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         microsectors,
         _resolve_output_dir(config) / namespace.telemetry.stem,
     )
+    phase_templates = _phase_templates_from_config(config, "analyze")
     payload: Dict[str, Any] = {
         "series": bundles,
         "microsectors": microsectors,
@@ -829,6 +950,8 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         "phase_messages": phase_messages,
         "reports": reports,
     }
+    if phase_templates:
+        payload["phase_templates"] = phase_templates
     return _render_payload(payload, namespace.export)
 
 
@@ -891,6 +1014,9 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         "series": bundles if bundles else metrics.get("bundles", []),
         "reports": reports,
     }
+    phase_templates = _phase_templates_from_config(config, "report")
+    if phase_templates:
+        payload["phase_templates"] = phase_templates
     return _render_payload(payload, namespace.export)
 
 

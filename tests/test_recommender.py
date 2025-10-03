@@ -173,3 +173,137 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         recommendation.message for recommendation in recommendations if recommendation.category == "pianos"
     )
     assert "Operador de pianos" in piano_message
+
+
+def test_track_specific_profile_tightens_entry_threshold():
+    def build_bundle(index: int, delta_nfr: float, sense_index: float = 0.9) -> EPIBundle:
+        tyre_node = TyresNode(delta_nfr=delta_nfr / 2, sense_index=sense_index, nu_f=BASE_NU_F["tyres"])
+        return EPIBundle(
+            timestamp=index * 0.1,
+            epi=0.5,
+            delta_nfr=delta_nfr,
+            sense_index=sense_index,
+            tyres=tyre_node,
+            suspension=SuspensionNode(
+                delta_nfr=delta_nfr / 4,
+                sense_index=sense_index,
+                nu_f=BASE_NU_F["suspension"],
+            ),
+            chassis=ChassisNode(
+                delta_nfr=delta_nfr / 4,
+                sense_index=sense_index,
+                nu_f=BASE_NU_F["chassis"],
+            ),
+            brakes=BrakesNode(
+                delta_nfr=delta_nfr / 4,
+                sense_index=sense_index,
+                nu_f=BASE_NU_F["brakes"],
+            ),
+            transmission=TransmissionNode(
+                delta_nfr=delta_nfr / 4,
+                sense_index=sense_index,
+                nu_f=BASE_NU_F["transmission"],
+            ),
+            track=TrackNode(
+                delta_nfr=delta_nfr / 4,
+                sense_index=sense_index,
+                nu_f=BASE_NU_F["track"],
+            ),
+            driver=DriverNode(
+                delta_nfr=delta_nfr / 4,
+                sense_index=sense_index,
+                nu_f=BASE_NU_F["driver"],
+            ),
+        )
+
+    window = (-0.05, 0.05)
+    yaw_window = (-0.3, 0.3)
+    nodes = ("tyres", "brakes")
+    microsector = Microsector(
+        index=4,
+        start_time=0.0,
+        end_time=0.6,
+        curvature=1.5,
+        brake_event=True,
+        support_event=True,
+        delta_nfr_signature=0.0,
+        goals=(
+            Goal(
+                phase="entry",
+                archetype="apoyo",
+                description="",
+                target_delta_nfr=0.0,
+                target_sense_index=0.9,
+                nu_f_target=0.25,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=nodes,
+            ),
+            Goal(
+                phase="apex",
+                archetype="apoyo",
+                description="",
+                target_delta_nfr=0.2,
+                target_sense_index=0.9,
+                nu_f_target=0.25,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=nodes,
+            ),
+            Goal(
+                phase="exit",
+                archetype="apoyo",
+                description="",
+                target_delta_nfr=-0.1,
+                target_sense_index=0.9,
+                nu_f_target=0.25,
+                slip_lat_window=window,
+                slip_long_window=window,
+                yaw_rate_window=yaw_window,
+                dominant_nodes=nodes,
+            ),
+        ),
+        phase_boundaries={
+            "entry": (0, 2),
+            "apex": (2, 4),
+            "exit": (4, 6),
+        },
+        phase_samples={
+            "entry": (0, 1),
+            "apex": (2, 3),
+            "exit": (4, 5),
+        },
+        active_phase="entry",
+        dominant_nodes={
+            "entry": nodes,
+            "apex": nodes,
+            "exit": nodes,
+        },
+        phase_weights={
+            "entry": {"__default__": 1.0},
+            "apex": {"__default__": 1.0},
+            "exit": {"__default__": 1.0},
+        },
+    )
+
+    results = [
+        build_bundle(0, 1.0),
+        build_bundle(1, 1.1),
+        build_bundle(2, 0.2),
+        build_bundle(3, 0.2),
+        build_bundle(4, -0.05),
+        build_bundle(5, -0.05),
+    ]
+
+    generic_engine = RecommendationEngine(car_model="generic", track_name="generic")
+    generic_recs = generic_engine.generate(results, [microsector])
+    valencia_engine = RecommendationEngine(car_model="generic_gt", track_name="valencia")
+    valencia_recs = valencia_engine.generate(results, [microsector])
+
+    generic_entry = [rec for rec in generic_recs if rec.category == "entry"]
+    valencia_entry = [rec for rec in valencia_recs if rec.category == "entry"]
+
+    assert not generic_entry
+    assert valencia_entry
