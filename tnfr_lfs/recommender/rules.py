@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from importlib import resources
 from statistics import mean
-from typing import Iterable, List, Mapping, Protocol, Sequence
+from types import MappingProxyType
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Protocol, Sequence, Tuple
+
+try:  # Python 3.11+
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+    import tomli as tomllib  # type: ignore
 
 from ..core.epi_models import EPIBundle
 from ..core.segmentation import Goal, Microsector
@@ -32,6 +39,16 @@ class Recommendation:
 
 
 @dataclass(frozen=True)
+class PhaseTargetWindow:
+    """Slip and yaw windows associated to a ΔNFR target."""
+
+    target_delta_nfr: float
+    slip_lat_window: Tuple[float, float]
+    slip_long_window: Tuple[float, float]
+    yaw_rate_window: Tuple[float, float]
+
+
+@dataclass(frozen=True)
 class ThresholdProfile:
     """Thresholds tuned per car model and circuit."""
 
@@ -39,6 +56,7 @@ class ThresholdProfile:
     apex_delta_tolerance: float
     exit_delta_tolerance: float
     piano_delta_tolerance: float
+    phase_targets: Mapping[str, PhaseTargetWindow] = field(default_factory=dict)
 
     def tolerance_for_phase(self, phase: str) -> float:
         mapping = {
@@ -47,6 +65,9 @@ class ThresholdProfile:
             "exit": self.exit_delta_tolerance,
         }
         return mapping[phase]
+
+    def target_for_phase(self, phase: str) -> PhaseTargetWindow | None:
+        return self.phase_targets.get(phase)
 
 
 @dataclass(frozen=True)
@@ -72,6 +93,118 @@ class RecommendationRule(Protocol):
         context: RuleContext | None = None,
     ) -> Iterable[Recommendation]:
         ...
+
+
+def _freeze_phase_targets(targets: Mapping[str, PhaseTargetWindow]) -> Mapping[str, PhaseTargetWindow]:
+    return MappingProxyType(dict(targets))
+
+
+_BASELINE_PHASE_TARGETS = _freeze_phase_targets(
+    {
+        "entry": PhaseTargetWindow(
+            target_delta_nfr=0.4,
+            slip_lat_window=(-0.05, 0.05),
+            slip_long_window=(-0.04, 0.04),
+            yaw_rate_window=(-0.35, 0.35),
+        ),
+        "apex": PhaseTargetWindow(
+            target_delta_nfr=0.2,
+            slip_lat_window=(-0.04, 0.04),
+            slip_long_window=(-0.03, 0.03),
+            yaw_rate_window=(-0.25, 0.25),
+        ),
+        "exit": PhaseTargetWindow(
+            target_delta_nfr=-0.1,
+            slip_lat_window=(-0.06, 0.06),
+            slip_long_window=(-0.05, 0.05),
+            yaw_rate_window=(-0.30, 0.30),
+        ),
+    }
+)
+
+
+def _coerce_window(
+    values: Sequence[object] | None, default: Tuple[float, float]
+) -> Tuple[float, float]:
+    if isinstance(values, Sequence) and len(values) == 2:
+        try:
+            return float(values[0]), float(values[1])
+        except (TypeError, ValueError):
+            return default
+    return default
+
+
+def _build_phase_targets(
+    payload: Mapping[str, object] | None,
+    *,
+    defaults: Mapping[str, PhaseTargetWindow],
+) -> Mapping[str, PhaseTargetWindow]:
+    if not isinstance(payload, Mapping):
+        return defaults
+    targets: Dict[str, PhaseTargetWindow] = {}
+    for phase, values in payload.items():
+        if not isinstance(values, Mapping):
+            continue
+        default = defaults.get(phase, defaults["entry"])
+        targets[phase] = PhaseTargetWindow(
+            target_delta_nfr=float(values.get("target_delta_nfr", default.target_delta_nfr)),
+            slip_lat_window=_coerce_window(
+                values.get("slip_lat_window"), default.slip_lat_window
+            ),
+            slip_long_window=_coerce_window(
+                values.get("slip_long_window"), default.slip_long_window
+            ),
+            yaw_rate_window=_coerce_window(
+                values.get("yaw_rate_window"), default.yaw_rate_window
+            ),
+        )
+    if not targets:
+        return defaults
+    return _freeze_phase_targets(targets)
+
+
+def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
+    defaults = {
+        "entry_delta_tolerance": 1.5,
+        "apex_delta_tolerance": 1.0,
+        "exit_delta_tolerance": 2.0,
+        "piano_delta_tolerance": 2.5,
+    }
+    phase_targets = _build_phase_targets(
+        payload.get("targets"), defaults=_BASELINE_PHASE_TARGETS
+    )
+    return ThresholdProfile(
+        entry_delta_tolerance=float(payload.get("entry_delta_tolerance", defaults["entry_delta_tolerance"])),
+        apex_delta_tolerance=float(payload.get("apex_delta_tolerance", defaults["apex_delta_tolerance"])),
+        exit_delta_tolerance=float(payload.get("exit_delta_tolerance", defaults["exit_delta_tolerance"])),
+        piano_delta_tolerance=float(payload.get("piano_delta_tolerance", defaults["piano_delta_tolerance"])),
+        phase_targets=phase_targets,
+    )
+
+
+def _load_threshold_library_from_resource() -> Mapping[str, Mapping[str, ThresholdProfile]]:
+    library: Dict[str, Dict[str, ThresholdProfile]] = {}
+    try:
+        resource = resources.files("tnfr_lfs.data").joinpath("threshold_profiles.toml")
+    except FileNotFoundError:  # pragma: no cover - environment without package data
+        return library
+    if not resource.is_file():
+        return library
+    with resource.open("rb") as handle:
+        payload = tomllib.load(handle)
+    if not isinstance(payload, MutableMapping):
+        return library
+    for car_model, tracks in payload.items():
+        if not isinstance(tracks, Mapping):
+            continue
+        track_profiles: Dict[str, ThresholdProfile] = {}
+        for track_name, values in tracks.items():
+            if not isinstance(values, Mapping):
+                continue
+            track_profiles[str(track_name)] = _profile_from_payload(values)
+        if track_profiles:
+            library[str(car_model)] = track_profiles
+    return library
 
 
 class LoadBalanceRule:
@@ -169,12 +302,23 @@ DEFAULT_THRESHOLD_PROFILE = ThresholdProfile(
     apex_delta_tolerance=1.0,
     exit_delta_tolerance=2.0,
     piano_delta_tolerance=2.5,
+    phase_targets=_BASELINE_PHASE_TARGETS,
 )
 
 
-DEFAULT_THRESHOLD_LIBRARY: Mapping[str, Mapping[str, ThresholdProfile]] = {
-    "generic": {"generic": DEFAULT_THRESHOLD_PROFILE}
-}
+_RESOURCE_THRESHOLD_LIBRARY = _load_threshold_library_from_resource()
+
+DEFAULT_THRESHOLD_LIBRARY: Mapping[str, Mapping[str, ThresholdProfile]]
+
+if _RESOURCE_THRESHOLD_LIBRARY:
+    merged: Dict[str, Dict[str, ThresholdProfile]] = {
+        "generic": {"generic": DEFAULT_THRESHOLD_PROFILE}
+    }
+    for car_model, tracks in _RESOURCE_THRESHOLD_LIBRARY.items():
+        merged.setdefault(car_model, {}).update(tracks)
+    DEFAULT_THRESHOLD_LIBRARY = merged
+else:
+    DEFAULT_THRESHOLD_LIBRARY = {"generic": {"generic": DEFAULT_THRESHOLD_PROFILE}}
 
 
 def _goal_for_phase(microsector: Microsector, phase: str) -> Goal | None:
