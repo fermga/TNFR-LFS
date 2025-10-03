@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from typing import Any, Dict, Protocol
 
-from ..core.epi import EPIResult
+from ..core.epi_models import EPIBundle
 
 
 class Exporter(Protocol):
@@ -36,12 +36,12 @@ def csv_exporter(results: Dict[str, Any]) -> str:
     from io import StringIO
 
     buffer = StringIO()
-    buffer.write("timestamp,epi,delta_nfr,delta_si\n")
+    buffer.write("timestamp,epi,delta_nfr,sense_index\n")
     for result in results.get("series", []):
-        if not isinstance(result, EPIResult):
-            raise TypeError("CSV exporter expects EPIResult instances")
+        if not isinstance(result, EPIBundle):
+            raise TypeError("CSV exporter expects EPIBundle instances")
         buffer.write(
-            f"{result.timestamp:.3f},{result.epi:.4f},{result.delta_nfr:.3f},{result.delta_si:.3f}\n"
+            f"{result.timestamp:.3f},{result.epi:.4f},{result.delta_nfr:.3f},{result.sense_index:.3f}\n"
         )
     return buffer.getvalue()
 

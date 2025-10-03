@@ -1,4 +1,4 @@
-from tnfr_lfs.core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord, compute_coherence
+from tnfr_lfs.core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
 
 
 def build_records():
@@ -12,9 +12,9 @@ def build_records():
 def test_delta_calculation_against_baseline():
     records = build_records()
     baseline = DeltaCalculator.derive_baseline(records)
-    delta = DeltaCalculator.compute(records[0], baseline)
-    assert round(delta.delta_nfr, 3) == -20.0
-    assert round(delta.delta_si, 3) == 0.017
+    bundle = DeltaCalculator.compute_bundle(records[0], baseline, epi_value=0.0)
+    assert round(bundle.delta_nfr, 3) == -20.0
+    assert 0.0 <= bundle.sense_index <= 1.0
 
 
 def test_epi_and_coherence_are_computed():
@@ -22,6 +22,7 @@ def test_epi_and_coherence_are_computed():
     extractor = EPIExtractor()
     results = extractor.extract(records)
     assert len(results) == 3
-    coherence = compute_coherence(results)
-    assert 0 <= coherence <= 1
     assert results[0].epi < results[2].epi
+    assert all(0.0 <= bundle.sense_index <= 1.0 for bundle in results)
+    assert results[1].sense_index >= results[0].sense_index
+    assert results[1].sense_index >= results[2].sense_index
