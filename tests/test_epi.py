@@ -45,6 +45,38 @@ def test_delta_calculation_against_baseline(synthetic_records):
         assert node_model.dEPI_dt == pytest.approx(derivative)
         assert node_model.integrated_epi == pytest.approx(integral)
 
+    assert bundle.tyres.load == pytest.approx(sample.vertical_load)
+    assert bundle.tyres.slip_ratio == pytest.approx(sample.slip_ratio)
+    assert bundle.tyres.mu_eff_front == pytest.approx(sample.mu_eff_front)
+    assert bundle.tyres.mu_eff_rear == pytest.approx(sample.mu_eff_rear)
+    assert bundle.suspension.travel_front == pytest.approx(sample.suspension_travel_front)
+    assert bundle.suspension.travel_rear == pytest.approx(sample.suspension_travel_rear)
+    assert bundle.suspension.velocity_front == pytest.approx(sample.suspension_velocity_front)
+    assert bundle.suspension.velocity_rear == pytest.approx(sample.suspension_velocity_rear)
+    assert bundle.chassis.yaw == pytest.approx(sample.yaw)
+    assert bundle.chassis.pitch == pytest.approx(sample.pitch)
+    assert bundle.chassis.roll == pytest.approx(sample.roll)
+    assert bundle.chassis.yaw_rate == pytest.approx(sample.yaw_rate)
+    assert bundle.chassis.lateral_accel == pytest.approx(sample.lateral_accel)
+    assert bundle.chassis.longitudinal_accel == pytest.approx(sample.longitudinal_accel)
+    assert bundle.brakes.brake_pressure == pytest.approx(sample.brake_pressure)
+    assert bundle.brakes.locking == pytest.approx(sample.locking)
+    assert bundle.transmission.throttle == pytest.approx(sample.throttle)
+    assert bundle.transmission.gear == sample.gear
+    assert bundle.transmission.speed == pytest.approx(sample.speed)
+    assert bundle.transmission.longitudinal_accel == pytest.approx(sample.longitudinal_accel)
+    assert bundle.track.axle_load_balance == pytest.approx(
+        sample.vertical_load_front - sample.vertical_load_rear
+    )
+    assert bundle.track.axle_velocity_balance == pytest.approx(
+        sample.suspension_velocity_front - sample.suspension_velocity_rear
+    )
+    assert bundle.track.yaw == pytest.approx(sample.yaw)
+    assert bundle.track.lateral_accel == pytest.approx(sample.lateral_accel)
+    assert bundle.driver.steer == pytest.approx(sample.steer)
+    assert bundle.driver.throttle == pytest.approx(sample.throttle)
+    assert bundle.driver.style_index == pytest.approx(sample.si)
+
 
 def test_delta_nfr_by_node_emphasises_braking_signals():
     baseline = TelemetryRecord(
@@ -178,9 +210,10 @@ def test_delta_nfr_by_node_conserves_total_with_extended_fields():
     assert node_deltas["suspension"] != pytest.approx(0.0)
 
 
-def test_epi_extractor_creates_structured_nodes(synthetic_bundles):
+def test_epi_extractor_creates_structured_nodes(synthetic_bundles, synthetic_records):
     assert len(synthetic_bundles) == 17
     pivot = synthetic_bundles[5]
+    source_record = synthetic_records[5]
 
     assert isinstance(pivot.tyres, TyresNode)
     assert isinstance(pivot.suspension, SuspensionNode)
@@ -224,6 +257,15 @@ def test_epi_extractor_creates_structured_nodes(synthetic_bundles):
         model = getattr(pivot, node)
         assert integral == pytest.approx(model.integrated_epi, rel=1e-6, abs=1e-9)
         assert derivative == pytest.approx(model.dEPI_dt, rel=1e-6)
+    assert pivot.tyres.load == pytest.approx(source_record.vertical_load)
+    assert pivot.suspension.velocity_front == pytest.approx(source_record.suspension_velocity_front)
+    assert pivot.chassis.yaw_rate == pytest.approx(source_record.yaw_rate)
+    assert pivot.brakes.locking == pytest.approx(source_record.locking)
+    assert pivot.transmission.gear == source_record.gear
+    assert pivot.track.axle_load_balance == pytest.approx(
+        source_record.vertical_load_front - source_record.vertical_load_rear
+    )
+    assert pivot.driver.steer == pytest.approx(source_record.steer)
 
 
 def test_epi_weights_shift_balance_between_load_and_slip(synthetic_records):

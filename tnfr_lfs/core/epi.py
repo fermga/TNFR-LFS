@@ -361,7 +361,9 @@ class DeltaCalculator:
                 return prev_epi + (derivative * dt), derivative, nodal
 
         integrated_epi, derivative, nodal_evolution = evolve_epi(previous_state, node_deltas, dt, nu_f_map)
-        nodes = DeltaCalculator._build_nodes(node_deltas, delta_nfr, nu_f_map, nodal_evolution)
+        nodes = DeltaCalculator._build_nodes(
+            record, node_deltas, delta_nfr, nu_f_map, nodal_evolution
+        )
         return EPIBundle(
             timestamp=record.timestamp,
             epi=epi_value,
@@ -381,6 +383,7 @@ class DeltaCalculator:
 
     @staticmethod
     def _build_nodes(
+        record: TelemetryRecord,
         node_deltas: Mapping[str, float],
         delta_nfr: float,
         nu_f_by_node: Mapping[str, float],
@@ -404,6 +407,10 @@ class DeltaCalculator:
                 nu_f=nu_f_by_node.get("tyres", 0.0),
                 integrated_epi=node_state("tyres")[0],
                 dEPI_dt=node_state("tyres")[1],
+                load=record.vertical_load,
+                slip_ratio=record.slip_ratio,
+                mu_eff_front=record.mu_eff_front,
+                mu_eff_rear=record.mu_eff_rear,
             ),
             "suspension": SuspensionNode(
                 delta_nfr=node_deltas.get("suspension", 0.0),
@@ -411,6 +418,10 @@ class DeltaCalculator:
                 nu_f=nu_f_by_node.get("suspension", 0.0),
                 integrated_epi=node_state("suspension")[0],
                 dEPI_dt=node_state("suspension")[1],
+                travel_front=record.suspension_travel_front,
+                travel_rear=record.suspension_travel_rear,
+                velocity_front=record.suspension_velocity_front,
+                velocity_rear=record.suspension_velocity_rear,
             ),
             "chassis": ChassisNode(
                 delta_nfr=node_deltas.get("chassis", 0.0),
@@ -418,6 +429,12 @@ class DeltaCalculator:
                 nu_f=nu_f_by_node.get("chassis", 0.0),
                 integrated_epi=node_state("chassis")[0],
                 dEPI_dt=node_state("chassis")[1],
+                yaw=record.yaw,
+                pitch=record.pitch,
+                roll=record.roll,
+                yaw_rate=record.yaw_rate,
+                lateral_accel=record.lateral_accel,
+                longitudinal_accel=record.longitudinal_accel,
             ),
             "brakes": BrakesNode(
                 delta_nfr=node_deltas.get("brakes", 0.0),
@@ -425,6 +442,8 @@ class DeltaCalculator:
                 nu_f=nu_f_by_node.get("brakes", 0.0),
                 integrated_epi=node_state("brakes")[0],
                 dEPI_dt=node_state("brakes")[1],
+                brake_pressure=record.brake_pressure,
+                locking=record.locking,
             ),
             "transmission": TransmissionNode(
                 delta_nfr=node_deltas.get("transmission", 0.0),
@@ -432,6 +451,10 @@ class DeltaCalculator:
                 nu_f=nu_f_by_node.get("transmission", 0.0),
                 integrated_epi=node_state("transmission")[0],
                 dEPI_dt=node_state("transmission")[1],
+                throttle=record.throttle,
+                gear=record.gear,
+                speed=record.speed,
+                longitudinal_accel=record.longitudinal_accel,
             ),
             "track": TrackNode(
                 delta_nfr=node_deltas.get("track", 0.0),
@@ -439,6 +462,11 @@ class DeltaCalculator:
                 nu_f=nu_f_by_node.get("track", 0.0),
                 integrated_epi=node_state("track")[0],
                 dEPI_dt=node_state("track")[1],
+                axle_load_balance=record.vertical_load_front - record.vertical_load_rear,
+                axle_velocity_balance=
+                    record.suspension_velocity_front - record.suspension_velocity_rear,
+                yaw=record.yaw,
+                lateral_accel=record.lateral_accel,
             ),
             "driver": DriverNode(
                 delta_nfr=node_deltas.get("driver", 0.0),
@@ -446,5 +474,8 @@ class DeltaCalculator:
                 nu_f=nu_f_by_node.get("driver", 0.0),
                 integrated_epi=node_state("driver")[0],
                 dEPI_dt=node_state("driver")[1],
+                steer=record.steer,
+                throttle=record.throttle,
+                style_index=record.si,
             ),
         }
