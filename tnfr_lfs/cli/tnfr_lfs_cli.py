@@ -19,8 +19,11 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
 from ..acquisition import (
+    ButtonLayout,
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT,
+    InSimClient,
+    OverlayManager,
     OutGaugeUDPClient,
     OutSimClient,
     OutSimUDPClient,
@@ -462,6 +465,12 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         help="Port used by the OutGauge UDP stream.",
     )
     baseline_parser.add_argument(
+        "--insim-port",
+        type=int,
+        default=int(telemetry_cfg.get("insim_port", 29999)),
+        help="Port used by the InSim TCP control channel.",
+    )
+    baseline_parser.add_argument(
         "--timeout",
         type=float,
         default=float(telemetry_cfg.get("timeout", DEFAULT_TIMEOUT)),
@@ -472,6 +481,12 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         type=int,
         default=int(telemetry_cfg.get("retries", DEFAULT_RETRIES)),
         help="Number of retries performed by the UDP clients while polling.",
+    )
+    baseline_parser.add_argument(
+        "--insim-keepalive",
+        type=float,
+        default=float(telemetry_cfg.get("insim_keepalive", 5.0)),
+        help="Interval in seconds between InSim keepalive packets.",
     )
     baseline_parser.add_argument(
         "--simulate",
@@ -492,6 +507,11 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         "--force",
         action="store_true",
         help="Overwrite the destination file if it already exists.",
+    )
+    baseline_parser.add_argument(
+        "--overlay",
+        action="store_true",
+        help="Display a Live for Speed overlay while capturing baselines.",
     )
     baseline_parser.set_defaults(handler=_handle_baseline)
 
@@ -696,20 +716,50 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
             f"Baseline destination {namespace.output} already exists. Use --force to overwrite."
         )
 
-    if namespace.simulate is not None:
-        records = OutSimClient().ingest(namespace.simulate)
-        if namespace.limit is not None:
-            records = records[: namespace.limit]
-    else:
-        records = _capture_udp_samples(
-            duration=namespace.duration,
-            max_samples=namespace.max_samples,
-            host=namespace.host,
-            outsim_port=namespace.outsim_port,
-            outgauge_port=namespace.outgauge_port,
-            timeout=namespace.timeout,
-            retries=namespace.retries,
-        )
+    overlay: OverlayManager | None = None
+    records: Records = []
+    if namespace.overlay and namespace.simulate is not None:
+        raise ValueError("--overlay solo está disponible con captura en vivo (sin --simulate)")
+
+    try:
+        if namespace.overlay:
+            overlay_client = InSimClient(
+                host=namespace.host,
+                port=namespace.insim_port,
+                timeout=namespace.timeout,
+                keepalive_interval=namespace.insim_keepalive,
+                app_name="TNFR Baseline",
+            )
+            layout = ButtonLayout(left=10, top=10, width=180, height=30, click_id=7)
+            overlay = OverlayManager(overlay_client, layout=layout)
+            overlay.connect()
+            overlay.show(
+                [
+                    "Capturando baseline",
+                    f"Duración máx: {int(namespace.duration)} s",
+                    f"Muestras objetivo: {namespace.max_samples}",
+                ]
+            )
+
+        if namespace.simulate is not None:
+            records = OutSimClient().ingest(namespace.simulate)
+            if namespace.limit is not None:
+                records = records[: namespace.limit]
+        else:
+            heartbeat = overlay.tick if overlay is not None else None
+            records = _capture_udp_samples(
+                duration=namespace.duration,
+                max_samples=namespace.max_samples,
+                host=namespace.host,
+                outsim_port=namespace.outsim_port,
+                outgauge_port=namespace.outgauge_port,
+                timeout=namespace.timeout,
+                retries=namespace.retries,
+                heartbeat=heartbeat,
+            )
+    finally:
+        if overlay is not None:
+            overlay.close()
 
     if not records:
         message = "No telemetry samples captured."
@@ -889,6 +939,7 @@ def _capture_udp_samples(
     outgauge_port: int,
     timeout: float,
     retries: int,
+    heartbeat: Callable[[], None] | None = None,
 ) -> Records:
     fusion = TelemetryFusion()
     records: Records = []
@@ -900,9 +951,13 @@ def _capture_udp_samples(
         host=host, port=outgauge_port, timeout=timeout, retries=retries
     ) as outgauge:
         while len(records) < max_samples and monotonic() < deadline:
+            if heartbeat is not None:
+                heartbeat()
             outsim_packet = outsim.recv()
             outgauge_packet = outgauge.recv()
             if outsim_packet is None or outgauge_packet is None:
+                if heartbeat is not None:
+                    heartbeat()
                 sleep(timeout)
                 continue
             record = fusion.fuse(outsim_packet, outgauge_packet)

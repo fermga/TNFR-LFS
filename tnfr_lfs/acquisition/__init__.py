@@ -1,5 +1,6 @@
 """Telemetry acquisition backends."""
 
+from .insim import ButtonLayout, InSimClient, OverlayManager
 from .outsim_client import OutSimClient, TelemetryFormatError
 from .outsim_udp import OutSimPacket, OutSimUDPClient
 from .outgauge_udp import OutGaugePacket, OutGaugeUDPClient
@@ -11,6 +12,9 @@ DEFAULT_RETRIES = 5
 __all__ = [
     "DEFAULT_RETRIES",
     "DEFAULT_TIMEOUT",
+    "ButtonLayout",
+    "InSimClient",
+    "OverlayManager",
     "OutGaugePacket",
     "OutGaugeUDPClient",
     "OutSimClient",
