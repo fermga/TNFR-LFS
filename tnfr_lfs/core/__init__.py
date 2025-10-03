@@ -4,8 +4,10 @@ from .coherence import compute_node_delta_nfr, sense_index
 from .epi import DeltaCalculator, EPIExtractor, TelemetryRecord, delta_nfr_by_node
 from .epi_models import EPIBundle
 from .operators import (
+    DissonanceBreakdown,
     acoplamiento_operator,
     coherence_operator,
+    dissonance_breakdown_operator,
     dissonance_operator,
     evolve_epi,
     emission_operator,
@@ -31,6 +33,8 @@ __all__ = [
     "recepcion_operator",
     "coherence_operator",
     "dissonance_operator",
+    "dissonance_breakdown_operator",
+    "DissonanceBreakdown",
     "acoplamiento_operator",
     "resonance_operator",
     "recursivity_operator",

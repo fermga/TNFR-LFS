@@ -8,16 +8,28 @@ from statistics import mean, pstdev
 
 import pytest
 
-from tnfr_lfs.core import TelemetryRecord
+from tnfr_lfs.core import Goal, Microsector, TelemetryRecord
 from tnfr_lfs.core.coherence import sense_index
 from tnfr_lfs.core.epi import (
     DEFAULT_PHASE_WEIGHTS,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
+from tnfr_lfs.core.epi_models import (
+    BrakesNode,
+    ChassisNode,
+    DriverNode,
+    EPIBundle,
+    SuspensionNode,
+    TrackNode,
+    TransmissionNode,
+    TyresNode,
+)
 from tnfr_lfs.core.operators import (
+    DissonanceBreakdown,
     acoplamiento_operator,
     coherence_operator,
+    dissonance_breakdown_operator,
     dissonance_operator,
     evolve_epi,
     emission_operator,
@@ -87,6 +99,82 @@ def _build_record(
         suspension_travel_rear=suspension_travel_rear,
         suspension_velocity_front=suspension_velocity_front,
         suspension_velocity_rear=suspension_velocity_rear,
+    )
+
+
+def _build_goal(phase: str, target_delta: float, *, archetype: str = "equilibrio") -> Goal:
+    return Goal(
+        phase=phase,
+        archetype=archetype,
+        description=f"Meta sintética para {phase}",
+        target_delta_nfr=target_delta,
+        target_sense_index=0.9,
+        nu_f_target=0.0,
+        slip_lat_window=(-0.5, 0.5),
+        slip_long_window=(-0.5, 0.5),
+        yaw_rate_window=(-0.5, 0.5),
+        dominant_nodes=("tyres",),
+    )
+
+
+def _build_microsector(
+    index: int,
+    entry_idx: int,
+    apex_idx: int,
+    exit_idx: int,
+    *,
+    apex_target: float,
+    support_event: bool = True,
+    archetype: str = "apoyo",
+) -> Microsector:
+    goals = (
+        _build_goal("entry", 0.0, archetype=archetype),
+        _build_goal("apex", apex_target, archetype=archetype),
+        _build_goal("exit", 0.0, archetype=archetype),
+    )
+    phase_boundaries = {
+        "entry": (entry_idx, entry_idx + 1),
+        "apex": (apex_idx, apex_idx + 1),
+        "exit": (exit_idx, exit_idx + 1),
+    }
+    phase_samples = {
+        "entry": (entry_idx,),
+        "apex": (apex_idx,),
+        "exit": (exit_idx,),
+    }
+    dominant_nodes = {phase: ("tyres",) for phase in ("entry", "apex", "exit")}
+    phase_weights = {phase: {} for phase in ("entry", "apex", "exit")}
+    return Microsector(
+        index=index,
+        start_time=float(entry_idx),
+        end_time=float(exit_idx),
+        curvature=1.0,
+        brake_event=False,
+        support_event=support_event,
+        delta_nfr_signature=0.0,
+        goals=goals,
+        phase_boundaries=phase_boundaries,
+        phase_samples=phase_samples,
+        active_phase="apex",
+        dominant_nodes=dominant_nodes,
+        phase_weights=phase_weights,
+    )
+
+
+def _build_bundle(timestamp: float, tyre_delta: float, *, delta_nfr: float | None = None) -> EPIBundle:
+    delta_value = tyre_delta if delta_nfr is None else delta_nfr
+    return EPIBundle(
+        timestamp=timestamp,
+        epi=0.0,
+        delta_nfr=delta_value,
+        sense_index=0.9,
+        tyres=TyresNode(delta_nfr=tyre_delta, sense_index=0.9),
+        suspension=SuspensionNode(delta_nfr=delta_value, sense_index=0.9),
+        chassis=ChassisNode(delta_nfr=delta_value, sense_index=0.9),
+        brakes=BrakesNode(delta_nfr=0.0, sense_index=0.9),
+        transmission=TransmissionNode(delta_nfr=0.0, sense_index=0.9),
+        track=TrackNode(delta_nfr=0.0, sense_index=0.9),
+        driver=DriverNode(delta_nfr=0.0, sense_index=0.9),
     )
 
 
@@ -180,6 +268,8 @@ def test_orchestrator_pipeline_builds_consistent_metrics():
     assert len(results["delta_nfr_series"]) == 4
     assert len(results["sense_index_series"]) == 4
     assert results["dissonance"] >= 0.0
+    assert isinstance(results["dissonance_breakdown"], DissonanceBreakdown)
+    assert results["dissonance_breakdown"].value == pytest.approx(results["dissonance"])
     assert -1.0 <= results["coupling"] <= 1.0
     assert 0.0 <= results["resonance"] <= 1.0
     assert len(results["recursive_trace"]) == 4
@@ -204,6 +294,40 @@ def test_orchestrator_consumes_fixture_segments(synthetic_records):
     assert pytest.approx(report["sense_index"], rel=1e-6) == mean(report["sense_index_series"])
     assert len(report["recursive_trace"]) == len(synthetic_records)
     assert "pairwise_coupling" in report
+    assert isinstance(report["dissonance_breakdown"], DissonanceBreakdown)
+    assert report["dissonance_breakdown"].value == pytest.approx(report["dissonance"])
+
+
+def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
+    bundles = [
+        _build_bundle(0.0, 0.1),
+        _build_bundle(0.1, 0.6),
+        _build_bundle(0.2, 0.2),
+        _build_bundle(0.3, -0.4),
+        _build_bundle(0.4, -0.1),
+    ]
+    microsectors = [
+        _build_microsector(0, 0, 1, 2, apex_target=0.5),
+        _build_microsector(1, 2, 3, 4, apex_target=-0.1),
+    ]
+    series = [bundle.delta_nfr for bundle in bundles]
+
+    breakdown = dissonance_breakdown_operator(
+        series,
+        target=0.0,
+        microsectors=microsectors,
+        bundles=bundles,
+    )
+
+    assert isinstance(breakdown, DissonanceBreakdown)
+    assert breakdown.value == pytest.approx(dissonance_operator(series, target=0.0))
+    assert breakdown.total_events == 2
+    assert breakdown.useful_events == 1
+    assert breakdown.parasitic_events == 1
+    assert breakdown.useful_magnitude == pytest.approx(0.1)
+    assert breakdown.parasitic_magnitude == pytest.approx(0.3)
+    assert breakdown.useful_percentage == pytest.approx(25.0)
+    assert breakdown.parasitic_percentage == pytest.approx(75.0)
 
 
 def test_emission_operator_clamps_sense_index():

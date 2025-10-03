@@ -2,13 +2,32 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from math import sqrt
 from statistics import mean
-from typing import Dict, List, Mapping, MutableMapping, Sequence
+from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
 
 from .epi import EPIExtractor, TelemetryRecord
 from .epi_models import EPIBundle
+
+if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
+    from .segmentation import Microsector
+
+
+@dataclass(frozen=True)
+class DissonanceBreakdown:
+    """Breakdown of dissonance events by usefulness."""
+
+    value: float
+    useful_magnitude: float
+    parasitic_magnitude: float
+    useful_ratio: float
+    parasitic_ratio: float
+    useful_percentage: float
+    parasitic_percentage: float
+    total_events: int
+    useful_events: int
+    parasitic_events: int
 
 
 def evolve_epi(
@@ -87,6 +106,76 @@ def dissonance_operator(series: Sequence[float], target: float) -> float:
     if not series:
         return 0.0
     return mean(abs(value - target) for value in series)
+
+
+def dissonance_breakdown_operator(
+    series: Sequence[float],
+    target: float,
+    *,
+    microsectors: Sequence["Microsector"] | None = None,
+    bundles: Sequence[EPIBundle] | None = None,
+) -> DissonanceBreakdown:
+    """Classify support events into useful (positive) and parasitic dissonance."""
+
+    base_value = dissonance_operator(series, target)
+    useful_events = 0
+    parasitic_events = 0
+    useful_magnitude = 0.0
+    parasitic_magnitude = 0.0
+
+    if microsectors and bundles:
+        bundle_count = len(bundles)
+        for microsector in microsectors:
+            if not microsector.support_event:
+                continue
+            apex_goal = next(
+                (goal for goal in microsector.goals if goal.phase == "apex"),
+                None,
+            )
+            if apex_goal is None:
+                continue
+            indices = microsector.phase_samples.get("apex") or ()
+            apex_indices = [idx for idx in indices if 0 <= idx < bundle_count]
+            if not apex_indices:
+                continue
+            tyre_delta = [bundles[idx].tyres.delta_nfr for idx in apex_indices]
+            if not tyre_delta:
+                continue
+            deviation = mean(tyre_delta) - apex_goal.target_delta_nfr
+            contribution = abs(deviation)
+            if contribution <= 1e-12:
+                continue
+            if deviation >= 0.0:
+                useful_events += 1
+                useful_magnitude += contribution
+            else:
+                parasitic_events += 1
+                parasitic_magnitude += contribution
+
+    total_events = useful_events + parasitic_events
+    total_magnitude = useful_magnitude + parasitic_magnitude
+    if total_magnitude > 1e-12:
+        useful_ratio = useful_magnitude / total_magnitude
+        parasitic_ratio = parasitic_magnitude / total_magnitude
+    elif total_events > 0:
+        useful_ratio = useful_events / total_events
+        parasitic_ratio = parasitic_events / total_events
+    else:
+        useful_ratio = 0.0
+        parasitic_ratio = 0.0
+
+    return DissonanceBreakdown(
+        value=base_value,
+        useful_magnitude=useful_magnitude,
+        parasitic_magnitude=parasitic_magnitude,
+        useful_ratio=useful_ratio,
+        parasitic_ratio=parasitic_ratio,
+        useful_percentage=useful_ratio * 100.0,
+        parasitic_percentage=parasitic_ratio * 100.0,
+        total_events=total_events,
+        useful_events=useful_events,
+        parasitic_events=parasitic_events,
+    )
 
 
 def acoplamiento_operator(
@@ -396,6 +485,7 @@ def orchestrate_delta_metrics(
     *,
     coherence_window: int = 3,
     recursion_decay: float = 0.4,
+    microsectors: Sequence["Microsector"] | None = None,
 ) -> Mapping[str, object]:
     """Pipeline orchestration producing aggregated ΔNFR and Si metrics."""
 
@@ -415,6 +505,18 @@ def orchestrate_delta_metrics(
             "coupling": 0.0,
             "resonance": 0.0,
             "recursive_trace": [],
+            "dissonance_breakdown": DissonanceBreakdown(
+                value=0.0,
+                useful_magnitude=0.0,
+                parasitic_magnitude=0.0,
+                useful_ratio=0.0,
+                parasitic_ratio=0.0,
+                useful_percentage=0.0,
+                parasitic_percentage=0.0,
+                total_events=0,
+                useful_events=0,
+                parasitic_events=0,
+            ),
         }
 
     delta_series = [bundle.delta_nfr for bundle in bundles]
@@ -423,7 +525,13 @@ def orchestrate_delta_metrics(
     smoothed_si = coherence_operator(si_series, window=coherence_window)
     clamped_si = [max(0.0, min(1.0, value)) for value in smoothed_si]
     updated_bundles = _update_bundles(bundles, smoothed_delta, clamped_si)
-    dissonance = dissonance_operator(smoothed_delta, objectives["delta_nfr"])
+    breakdown = dissonance_breakdown_operator(
+        smoothed_delta,
+        objectives["delta_nfr"],
+        microsectors=microsectors,
+        bundles=updated_bundles,
+    )
+    dissonance = breakdown.value
     coupling = acoplamiento_operator(smoothed_delta, clamped_si)
     resonance = resonance_operator(clamped_si)
     recursive_trace = recursividad_operator(
@@ -456,6 +564,7 @@ def orchestrate_delta_metrics(
         "delta_nfr": mean(smoothed_delta),
         "sense_index": mean(clamped_si),
         "dissonance": dissonance,
+        "dissonance_breakdown": breakdown,
         "coupling": coupling,
         "resonance": resonance,
         "recursive_trace": recursive_trace,
@@ -471,6 +580,8 @@ __all__ = [
     "recepcion_operator",
     "coherence_operator",
     "dissonance_operator",
+    "dissonance_breakdown_operator",
+    "DissonanceBreakdown",
     "acoplamiento_operator",
     "pairwise_coupling_operator",
     "resonance_operator",
