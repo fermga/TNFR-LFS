@@ -181,6 +181,39 @@ def segment_microsectors(
             weight_lookup,
         )
 
+    goal_nu_f_lookup: Dict[int, float] = {}
+    for spec in specs:
+        start = spec["start"]
+        end = spec["end"]
+        delta_signature = mean(b.delta_nfr for b in recomputed_bundles[start : end + 1])
+        avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
+        archetype = _classify_archetype(
+            delta_signature,
+            avg_si,
+            spec["brake_event"],
+            spec["support_event"],
+        )
+        goals, _ = _build_goals(
+            archetype,
+            recomputed_bundles,
+            records,
+            spec["phase_boundaries"],
+        )
+        for goal in goals:
+            indices = spec["phase_samples"].get(goal.phase, ())
+            for sample_index in indices:
+                goal_nu_f_lookup[sample_index] = goal.nu_f_target
+
+    if goal_nu_f_lookup:
+        recomputed_bundles = _recompute_bundles(
+            records,
+            recomputed_bundles,
+            baseline,
+            phase_assignments,
+            weight_lookup,
+            goal_nu_f_lookup=goal_nu_f_lookup,
+        )
+
     for spec in specs:
         start = spec["start"]
         end = spec["end"]
@@ -292,6 +325,7 @@ def _recompute_bundles(
     baseline: TelemetryRecord,
     phase_assignments: Mapping[int, PhaseLiteral],
     weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]],
+    goal_nu_f_lookup: Mapping[int, Mapping[str, float] | float] | None = None,
 ) -> List[EPIBundle]:
     recomputed: List[EPIBundle] = []
     prev_integrated: float | None = None
@@ -300,6 +334,7 @@ def _recompute_bundles(
         dt = 0.0 if idx == 0 else max(0.0, record.timestamp - prev_timestamp)
         phase = phase_assignments.get(idx, "entry")
         phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
+        target_nu_f = goal_nu_f_lookup.get(idx) if goal_nu_f_lookup else None
         nu_f_map = resolve_nu_f_by_node(
             record,
             phase=phase,
@@ -315,6 +350,7 @@ def _recompute_bundles(
             nu_f_by_node=nu_f_map,
             phase=phase,
             phase_weights=phase_weights,
+            phase_target_nu_f=target_nu_f,
         )
         recomputed.append(recomputed_bundle)
         prev_integrated = recomputed_bundle.integrated_epi
