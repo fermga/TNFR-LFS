@@ -28,6 +28,63 @@ MANUAL_REFERENCES = {
 }
 
 
+NODE_LABELS = {
+    "tyres": "neumáticos",
+    "suspension": "suspensión",
+    "chassis": "chasis",
+    "brakes": "frenos",
+    "transmission": "transmisión",
+    "track": "pista",
+    "driver": "piloto",
+}
+
+
+_OPERATOR_NODE_ACTIONS: Mapping[str, Mapping[str, Mapping[str, str]]] = {
+    "entry": {
+        "tyres": {
+            "increase": "abrir toe delantero",
+            "decrease": "cerrar toe delantero",
+        },
+        "brakes": {
+            "increase": "desplazar el balance de frenos hacia delante",
+            "decrease": "desplazar el balance de frenos hacia atrás",
+        },
+        "suspension": {
+            "increase": "endurecer el rebote delantero",
+            "decrease": "ablandar el rebote delantero",
+        },
+    },
+    "apex": {
+        "suspension": {
+            "increase": "endurecer la barra estabilizadora",
+            "decrease": "ablandar la barra estabilizadora",
+        },
+        "chassis": {
+            "increase": "aumentar precarga delantera",
+            "decrease": "reducir precarga delantera",
+        },
+        "tyres": {
+            "increase": "subir presión en neumáticos exteriores",
+            "decrease": "bajar presión en neumáticos exteriores",
+        },
+    },
+    "exit": {
+        "transmission": {
+            "increase": "cerrar el diferencial de aceleración",
+            "decrease": "abrir el diferencial de aceleración",
+        },
+        "tyres": {
+            "increase": "incrementar caída trasera",
+            "decrease": "reducir caída trasera",
+        },
+        "suspension": {
+            "increase": "endurecer compresión trasera",
+            "decrease": "ablandar compresión trasera",
+        },
+    },
+}
+
+
 @dataclass
 class Recommendation:
     """Represents an actionable recommendation."""
@@ -332,6 +389,35 @@ def _phase_samples(results: Sequence[EPIBundle], indices: range) -> List[EPIBund
     return [results[i] for i in indices if 0 <= i < len(results)]
 
 
+def _node_label(node: str) -> str:
+    return NODE_LABELS.get(node, node)
+
+
+def _node_nu_f_values(
+    results: Sequence[EPIBundle], indices: Iterable[int], node: str
+) -> List[float]:
+    values: List[float] = []
+    for index in indices:
+        if 0 <= index < len(results):
+            bundle = results[index]
+            component = getattr(bundle, node, None)
+            if component is not None and hasattr(component, "nu_f"):
+                values.append(float(component.nu_f))
+    return values
+
+
+def _slider_action(phase: str, node: str, direction: str) -> str:
+    actions = _OPERATOR_NODE_ACTIONS.get(phase, {})
+    node_actions = actions.get(node, {})
+    action = node_actions.get(direction)
+    if action:
+        return action
+    node_label = _node_label(node)
+    if direction == "increase":
+        return f"incrementar la influencia de {node_label}"
+    return f"reducir la influencia de {node_label}"
+
+
 class PhaseDeltaDeviationRule:
     """Detects ΔNFR mismatches for a given phase of the corner."""
 
@@ -378,18 +464,100 @@ class PhaseDeltaDeviationRule:
                 Recommendation(
                     category=self.category,
                     message=(
-                        f"{self.operator_label}: {action} ΔNFR en microsector {microsector.index}"
-                        f" ({MANUAL_REFERENCES[self.reference_key]})"
+                        f"{self.operator_label} · objetivo ΔNFR global: {action} ΔNFR "
+                        f"en microsector {microsector.index} "
+                        f"({MANUAL_REFERENCES[self.reference_key]})"
                     ),
                     rationale=(
-                        f"El objetivo ΔNFR para la {self.phase_label} era {goal.target_delta_nfr:.2f}, "
-                        f"pero la media registrada fue {actual_delta:.2f} ({deviation:+.2f}). "
-                        f"La tolerancia definida para {context.profile_label} es ±{tolerance:.2f}. "
-                        f"Repasa {MANUAL_REFERENCES[self.reference_key]} para ajustar este tramo."
+                        f"{self.operator_label} aplicado sobre la fase de {self.phase_label} en "
+                        f"microsector {microsector.index}. El objetivo ΔNFR era "
+                        f"{goal.target_delta_nfr:.2f}, pero la media registrada fue "
+                        f"{actual_delta:.2f} ({deviation:+.2f}). La tolerancia definida para "
+                        f"{context.profile_label} es ±{tolerance:.2f}. Repasa "
+                        f"{MANUAL_REFERENCES[self.reference_key]} para ajustar este tramo."
                     ),
                     priority=self.priority,
                 )
             )
+        return recommendations
+
+
+class PhaseNodeOperatorRule:
+    """Reinforce operator actions using dominant nodes and ν_f objectives."""
+
+    def __init__(
+        self,
+        *,
+        phase: str,
+        operator_label: str,
+        category: str,
+        priority: int,
+        reference_key: str,
+    ) -> None:
+        self.phase = phase
+        self.operator_label = operator_label
+        self.category = category
+        self.priority = priority
+        self.reference_key = reference_key
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors or context is None:
+            return []
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            goal = _goal_for_phase(microsector, self.phase)
+            if goal is None:
+                continue
+            indices = list(microsector.phase_indices(self.phase))
+            if not indices:
+                continue
+            dominant_nodes = goal.dominant_nodes or microsector.dominant_nodes.get(
+                self.phase, ()
+            )
+            if not dominant_nodes:
+                continue
+            target_nu_f = float(goal.nu_f_target)
+            tolerance = max(0.05, abs(target_nu_f) * 0.2)
+            for node in dominant_nodes:
+                node_values = _node_nu_f_values(results, indices, node)
+                if not node_values:
+                    continue
+                actual_nu_f = mean(node_values)
+                deviation = actual_nu_f - target_nu_f
+                if abs(deviation) <= tolerance:
+                    continue
+                direction = "increase" if deviation < 0 else "decrease"
+                node_label = _node_label(node)
+                action_text = _slider_action(self.phase, node, direction)
+                message = (
+                    f"{self.operator_label} · nodo objetivo {node_label}: {action_text} "
+                    f"para acercar ν_f a {target_nu_f:.2f} "
+                    f"({MANUAL_REFERENCES[self.reference_key]})"
+                )
+                dominant_list = ", ".join(_node_label(name) for name in goal.dominant_nodes)
+                rationale = (
+                    f"{self.operator_label} aplicado al nodo {node_label} en microsector "
+                    f"{microsector.index}. La estrategia del objetivo destaca a "
+                    f"{dominant_list or 'los nodos dominantes'} y fija ν_f={target_nu_f:.2f}. "
+                    f"Se midió ν_f medio {actual_nu_f:.2f} ({deviation:+.2f}), superando la "
+                    f"tolerancia ±{tolerance:.2f} definida para {context.profile_label}. "
+                    f"Se propone {action_text.lower()} para alinear la contribución de {node_label}. "
+                    f"Consulta {MANUAL_REFERENCES[self.reference_key]} para los ajustes."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category=self.category,
+                        message=message,
+                        rationale=rationale,
+                        priority=self.priority,
+                    )
+                )
         return recommendations
 
 
@@ -473,12 +641,26 @@ class RecommendationEngine:
                     priority=10,
                     reference_key="braking",
                 ),
+                PhaseNodeOperatorRule(
+                    phase="entry",
+                    operator_label="Operador de frenado",
+                    category="entry",
+                    priority=12,
+                    reference_key="braking",
+                ),
                 PhaseDeltaDeviationRule(
                     phase="apex",
                     operator_label="Operador de vértice",
                     category="apex",
                     phase_label="vértice",
                     priority=20,
+                    reference_key="antiroll",
+                ),
+                PhaseNodeOperatorRule(
+                    phase="apex",
+                    operator_label="Operador de vértice",
+                    category="apex",
+                    priority=22,
                     reference_key="antiroll",
                 ),
                 CurbComplianceRule(priority=25),
@@ -488,6 +670,13 @@ class RecommendationEngine:
                     category="exit",
                     phase_label="salida",
                     priority=30,
+                    reference_key="differential",
+                ),
+                PhaseNodeOperatorRule(
+                    phase="exit",
+                    operator_label="Operador de tracción",
+                    category="exit",
+                    priority=32,
                     reference_key="differential",
                 ),
                 LoadBalanceRule(),
