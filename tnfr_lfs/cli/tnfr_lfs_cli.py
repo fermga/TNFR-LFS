@@ -1012,6 +1012,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         namespace.target_si,
         coherence_window=namespace.coherence_window,
         recursion_decay=namespace.recursion_decay,
+        microsectors=microsectors,
     )
     phase_messages = _phase_deviation_messages(
         bundles,
@@ -1082,6 +1083,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         namespace.target_si,
         coherence_window=namespace.coherence_window,
         recursion_decay=namespace.recursion_decay,
+        microsectors=microsectors,
     )
     reports = _generate_out_reports(
         records,
@@ -1098,6 +1100,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         "resonance": metrics.get("resonance", 0.0),
         "recursive_trace": metrics.get("recursive_trace", []),
         "pairwise_coupling": metrics.get("pairwise_coupling", {}),
+        "dissonance_breakdown": metrics.get("dissonance_breakdown"),
         "series": bundles if bundles else metrics.get("bundles", []),
         "reports": reports,
     }
