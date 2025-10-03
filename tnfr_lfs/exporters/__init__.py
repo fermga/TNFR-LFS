@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, Protocol
+from typing import Any, Dict, Mapping, Protocol, Sequence
 
 from ..core.epi_models import EPIBundle
 from .setup_plan import SetupPlan, serialise_setup_plan
@@ -103,7 +103,7 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     sensitivities = plan.get("sensitivities", {})
     if sensitivities:
         lines.append("")
-        lines.append("**Sensibilidades (dSi/dparam)**")
+        lines.append("**Sensibilidades agregadas**")
         lines.append("| Métrica | Parámetro | Derivada |")
         lines.append("| --- | --- | --- |")
         for metric in sorted(sensitivities):
@@ -115,6 +115,40 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
                 except (TypeError, ValueError):
                     formatted = str(value)
                 lines.append(f"| {metric} | {parameter} | {formatted} |")
+
+    dsi_dparam = plan.get("dsi_dparam", {})
+    if dsi_dparam:
+        lines.append("")
+        lines.append("**dSi/dparam**")
+        lines.append("| Parámetro | Sensibilidad |")
+        lines.append("| --- | --- |")
+        for parameter in sorted(dsi_dparam):
+            value = dsi_dparam[parameter]
+            try:
+                formatted = f"{float(value):+.6f}"
+            except (TypeError, ValueError):
+                formatted = str(value)
+            lines.append(f"| {parameter} | {formatted} |")
+
+    def _extend_mapping_section(title: str, mapping: Mapping[str, Sequence[str]] | None) -> None:
+        if not mapping:
+            return
+        items = []
+        for key in sorted(mapping):
+            for entry in mapping[key]:
+                if entry:
+                    items.append((key, entry))
+        if not items:
+            return
+        lines.append("")
+        lines.append(title)
+        for key, entry in items:
+            lines.append(f"- **{key}**: {entry}")
+
+    _extend_mapping_section("**Racionales TNFR por nodo**", plan.get("tnfr_rationale_by_node"))
+    _extend_mapping_section("**Racionales TNFR por fase**", plan.get("tnfr_rationale_by_phase"))
+    _extend_mapping_section("**Efectos esperados por nodo**", plan.get("expected_effects_by_node"))
+    _extend_mapping_section("**Efectos esperados por fase**", plan.get("expected_effects_by_phase"))
 
     return "\n".join(lines)
 

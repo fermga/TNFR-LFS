@@ -1,3 +1,5 @@
+import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -93,6 +95,24 @@ def build_setup_plan() -> SetupPlan:
         ),
         rationales=("Telemetry indicates oscillations during entry phases",),
         expected_effects=("Balanced aero load front to rear",),
+        sensitivities={
+            "sense_index": {"rear_ride_height": -0.0125, "rear_wing_angle": 0.0451},
+            "objective_score": {"rear_ride_height": 0.0312, "rear_wing_angle": -0.0148},
+        },
+        tnfr_rationale_by_node={
+            "tyres": ("Ajustar presiones para estabilizar la ventana de agarre",),
+            "suspension": ("Elevar soporte lateral en fases medias",),
+        },
+        tnfr_rationale_by_phase={
+            "entry": ("Reducir transferencia hacia el eje delantero",),
+            "exit": ("Aumentar tracción en salida prolongada",),
+        },
+        expected_effects_by_node={
+            "tyres": ("Mayor estabilidad térmica",),
+        },
+        expected_effects_by_phase={
+            "entry": ("Frenadas más consistentes",),
+        },
     )
 
 
@@ -103,6 +123,11 @@ def test_serialise_setup_plan_collects_unique_fields():
     assert len(payload["changes"]) == 2
     assert any("Telemetry indicates" in item for item in payload["rationales"])
     assert any("Improved rotation" in item for item in payload["expected_effects"])
+    assert pytest.approx(payload["dsi_dparam"]["rear_wing_angle"], rel=1e-6) == 0.0451
+    assert "tyres" in payload["tnfr_rationale_by_node"]
+    assert "entry" in payload["tnfr_rationale_by_phase"]
+    assert "tyres" in payload["expected_effects_by_node"]
+    assert "entry" in payload["expected_effects_by_phase"]
 
 
 def test_markdown_exporter_renders_table_and_lists():
@@ -111,6 +136,9 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "| Cambio | Ajuste | Racional |" in output
     assert "rear_ride_height" in output
     assert "Telemetry indicates oscillations" in output
+    assert "**dSi/dparam**" in output
+    assert "**Racionales TNFR por nodo**" in output
+    assert "**Efectos esperados por fase**" in output
 
 
 def test_lfs_set_exporter_writes_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,3 +159,33 @@ def test_lfs_set_exporter_validates_name(tmp_path: Path, monkeypatch: pytest.Mon
     plan = build_setup_plan()
     with pytest.raises(ValueError):
         lfs_set_exporter({"setup_plan": plan, "set_output": "invalid"})
+
+
+def test_quickstart_reports_include_new_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(root)
+    subprocess.run(["make", "quickstart"], check=True)
+    baseline_dir = root / "out" / "baseline"
+    occupancy_path = baseline_dir / "window_occupancy.json"
+    pairwise_path = baseline_dir / "pairwise_coupling.json"
+    memory_path = baseline_dir / "sense_memory.json"
+    summary_path = baseline_dir / "metrics_summary.md"
+    dissonance_path = baseline_dir / "dissonance_breakdown.json"
+
+    assert occupancy_path.exists()
+    occupancy = json.loads(occupancy_path.read_text(encoding="utf8"))
+    assert occupancy and "window_occupancy" in occupancy[0]
+
+    pairwise = json.loads(pairwise_path.read_text(encoding="utf8"))
+    assert "global" in pairwise and "pairwise" in pairwise
+    assert "delta_nfr_vs_sense_index" in pairwise["global"]
+
+    memory = json.loads(memory_path.read_text(encoding="utf8"))
+    assert "memory" in memory and isinstance(memory["memory"], list)
+
+    dissonance = json.loads(dissonance_path.read_text(encoding="utf8"))
+    assert "useful_magnitude" in dissonance
+
+    summary = summary_path.read_text(encoding="utf8")
+    assert "Disonancia útil" in summary
+    assert "Acoplamientos" in summary
