@@ -23,6 +23,7 @@ from tnfr_lfs.core.operators import (
     emission_operator,
     mutation_operator,
     orchestrate_delta_metrics,
+    pairwise_coupling_operator,
     recepcion_operator,
     recursivity_operator,
     recursividad_operator,
@@ -182,6 +183,11 @@ def test_orchestrator_pipeline_builds_consistent_metrics():
     assert -1.0 <= results["coupling"] <= 1.0
     assert 0.0 <= results["resonance"] <= 1.0
     assert len(results["recursive_trace"]) == 4
+    assert set(results["pairwise_coupling"]) == {"delta_nfr", "sense_index"}
+    for metrics in results["pairwise_coupling"].values():
+        assert {"tyres↔suspension", "tyres↔chassis", "suspension↔chassis"} <= set(metrics)
+        for value in metrics.values():
+            assert -1.0 <= value <= 1.0
 
 
 def test_orchestrator_consumes_fixture_segments(synthetic_records):
@@ -197,6 +203,7 @@ def test_orchestrator_consumes_fixture_segments(synthetic_records):
     assert len(report["bundles"]) == len(synthetic_records)
     assert pytest.approx(report["sense_index"], rel=1e-6) == mean(report["sense_index_series"])
     assert len(report["recursive_trace"]) == len(synthetic_records)
+    assert "pairwise_coupling" in report
 
 
 def test_emission_operator_clamps_sense_index():
@@ -326,4 +333,30 @@ def test_acoplamiento_and_resonance_behaviour():
     expected_resonance = sqrt(mean(value * value for value in series_b))
     assert resonance == pytest.approx(expected_resonance, rel=1e-9)
     assert dissonance == pytest.approx(mean(abs(value - 0.25) for value in series_a))
+
+
+def test_pairwise_coupling_operator_builds_expected_matrix():
+    series = {
+        "tyres": [1.0, 2.0, 3.0, 4.0],
+        "suspension": [2.0, 4.0, 6.0, 8.0],
+        "chassis": [4.0, 3.0, 2.0, 1.0],
+    }
+
+    pairwise = pairwise_coupling_operator(series)
+
+    assert pytest.approx(pairwise["tyres↔suspension"], rel=1e-9) == 1.0
+    assert pytest.approx(pairwise["tyres↔chassis"], rel=1e-9) == -1.0
+    assert pytest.approx(pairwise["suspension↔chassis"], rel=1e-9) == -1.0
+
+
+def test_pairwise_coupling_operator_allows_unbalanced_lengths():
+    series = {
+        "tyres": [1.0, 2.0, 3.0],
+        "suspension": [1.5, 2.5],
+    }
+
+    pairwise = pairwise_coupling_operator(series)
+
+    expected = acoplamiento_operator(series["tyres"], series["suspension"], strict_length=False)
+    assert pairwise["tyres↔suspension"] == pytest.approx(expected, rel=1e-9)
 

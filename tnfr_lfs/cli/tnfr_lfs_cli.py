@@ -1109,6 +1109,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         "coupling": metrics.get("coupling", 0.0),
         "resonance": metrics.get("resonance", 0.0),
         "recursive_trace": metrics.get("recursive_trace", []),
+        "pairwise_coupling": metrics.get("pairwise_coupling", {}),
         "series": bundles if bundles else metrics.get("bundles", []),
         "reports": reports,
     }
