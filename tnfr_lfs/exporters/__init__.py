@@ -100,6 +100,22 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         lines.append("**Efectos esperados**")
         lines.extend(f"- {item}" for item in expected_effects)
 
+    sensitivities = plan.get("sensitivities", {})
+    if sensitivities:
+        lines.append("")
+        lines.append("**Sensibilidades (dSi/dparam)**")
+        lines.append("| Métrica | Parámetro | Derivada |")
+        lines.append("| --- | --- | --- |")
+        for metric in sorted(sensitivities):
+            derivatives = sensitivities[metric]
+            for parameter in sorted(derivatives):
+                value = derivatives[parameter]
+                try:
+                    formatted = f"{float(value):+.6f}"
+                except (TypeError, ValueError):
+                    formatted = str(value)
+                lines.append(f"| {metric} | {parameter} | {formatted} |")
+
     return "\n".join(lines)
 
 

@@ -11,7 +11,7 @@ the optimised setup deltas.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from statistics import fmean
 from typing import Callable, Dict, Mapping, MutableMapping, Sequence
 
@@ -69,6 +69,7 @@ class Plan:
     objective_value: float
     telemetry: Sequence[EPIBundle]
     recommendations: Sequence[Recommendation]
+    sensitivities: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
 
 
 class CoordinateDescentOptimizer:
@@ -199,21 +200,112 @@ class SetupPlanner:
         space = self._space_for_car(car_model)
         cache: MutableMapping[tuple[tuple[str, float], ...], tuple[float, Sequence[EPIBundle]]] = {}
 
-        def evaluate(vector: Mapping[str, float]) -> float:
+        def _simulate_and_score(vector: Mapping[str, float]) -> tuple[float, Sequence[EPIBundle]]:
             clamped = space.clamp(vector)
             key = tuple(sorted(clamped.items()))
             if key not in cache:
                 simulated = simulator(clamped, baseline) if simulator else baseline
                 cache[key] = (objective_score(simulated, microsectors), simulated)
-            return cache[key][0]
+            return cache[key]
+
+        def evaluate(vector: Mapping[str, float]) -> float:
+            return _simulate_and_score(vector)[0]
 
         vector, score, iterations, evaluations = self.optimiser.optimise(evaluate, space)
-        telemetry = cache[tuple(sorted(vector.items()))][1]
+        telemetry = _simulate_and_score(vector)[1]
         recommendations = self.recommendation_engine.generate(telemetry, microsectors)
+        sensitivities = self._compute_sensitivities(
+            vector=vector,
+            telemetry=telemetry,
+            baseline=baseline,
+            microsectors=microsectors,
+            simulator=simulator,
+            space=space,
+            cache=cache,
+            score=score,
+        )
         return Plan(
             decision_vector=vector,
             objective_value=score,
             telemetry=telemetry,
             recommendations=tuple(recommendations),
+            sensitivities=sensitivities,
         )
+
+    def _compute_sensitivities(
+        self,
+        *,
+        vector: Mapping[str, float],
+        telemetry: Sequence[EPIBundle],
+        baseline: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None,
+        simulator: Callable[[Mapping[str, float], Sequence[EPIBundle]], Sequence[EPIBundle]] | None,
+        space: DecisionSpace,
+        cache: MutableMapping[tuple[tuple[str, float], ...], tuple[float, Sequence[EPIBundle]]],
+        score: float,
+    ) -> Mapping[str, Mapping[str, float]]:
+        if not telemetry:
+            return {}
+
+        base_mean_si = fmean(bundle.sense_index for bundle in telemetry)
+        sensitivities: Dict[str, Dict[str, float]] = {
+            "objective_score": {},
+            "sense_index": {},
+        }
+
+        def _simulate(clamped_vector: Mapping[str, float]) -> tuple[float, Sequence[EPIBundle]]:
+            key = tuple(sorted(clamped_vector.items()))
+            if key not in cache:
+                simulated = simulator(clamped_vector, baseline) if simulator else baseline
+                cache[key] = (objective_score(simulated, microsectors), simulated)
+            return cache[key]
+
+        for variable in space.variables:
+            base_value = vector[variable.name]
+            raw_step = max(variable.step * 0.25, 1e-3)
+            forward_room = variable.upper - base_value
+            backward_room = base_value - variable.lower
+            central_step = min(raw_step, forward_room, backward_room)
+
+            if central_step > 1e-9:
+                plus_value = base_value + central_step
+                minus_value = base_value - central_step
+                plus_vector = dict(vector)
+                minus_vector = dict(vector)
+                plus_vector[variable.name] = plus_value
+                minus_vector[variable.name] = minus_value
+                plus_clamped = space.clamp(plus_vector)
+                minus_clamped = space.clamp(minus_vector)
+                plus_score, plus_telemetry = _simulate(plus_clamped)
+                minus_score, minus_telemetry = _simulate(minus_clamped)
+                si_plus = fmean(bundle.sense_index for bundle in plus_telemetry)
+                si_minus = fmean(bundle.sense_index for bundle in minus_telemetry)
+                denom = 2.0 * central_step
+                sensitivities["objective_score"][variable.name] = (plus_score - minus_score) / denom
+                sensitivities["sense_index"][variable.name] = (si_plus - si_minus) / denom
+                continue
+
+            if forward_room > 1e-9:
+                step = min(raw_step, forward_room)
+                plus_vector = dict(vector)
+                plus_vector[variable.name] = base_value + step
+                plus_clamped = space.clamp(plus_vector)
+                plus_score, plus_telemetry = _simulate(plus_clamped)
+                si_plus = fmean(bundle.sense_index for bundle in plus_telemetry)
+                sensitivities["objective_score"][variable.name] = (plus_score - score) / step
+                sensitivities["sense_index"][variable.name] = (si_plus - base_mean_si) / step
+            elif backward_room > 1e-9:
+                step = min(raw_step, backward_room)
+                minus_vector = dict(vector)
+                minus_vector[variable.name] = base_value - step
+                minus_clamped = space.clamp(minus_vector)
+                minus_score, minus_telemetry = _simulate(minus_clamped)
+                si_minus = fmean(bundle.sense_index for bundle in minus_telemetry)
+                sensitivities["objective_score"][variable.name] = (score - minus_score) / step
+                sensitivities["sense_index"][variable.name] = (base_mean_si - si_minus) / step
+            else:
+                sensitivities["objective_score"][variable.name] = 0.0
+                sensitivities["sense_index"][variable.name] = 0.0
+
+        return sensitivities
 
