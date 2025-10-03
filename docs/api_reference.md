@@ -53,7 +53,10 @@ These functions compose an end-to-end ΔNFR/Sense Index pipeline covering
 objective setting (Emisión), telemetry reception, smoothing (Coherencia),
 contrast measurement (Disonancia) with a breakdown of useful vs. parasitic
 support events, coupling analysis, resonance estimation, recursive filtering,
-and orchestration over segmented telemetry streams.
+and orchestration over segmented telemetry streams. The orchestrator exposes
+``microsector_variability`` entries summarising ΔNFR↓ and Sense Index variance
+plus population-standard deviation for each microsector, alongside a
+``lap_sequence`` describing the lap labels detected in the incoming segments.
 
 ### `tnfr_lfs.core.segmentation`
 

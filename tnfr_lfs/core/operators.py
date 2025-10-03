@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import sqrt
-from statistics import mean
+from statistics import mean, pvariance
 from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
 
 from .epi import EPIExtractor, TelemetryRecord
@@ -478,6 +478,85 @@ def _update_bundles(
     return updated
 
 
+def _microsector_sample_indices(microsector: "Microsector") -> List[int]:
+    indices: set[int] = set()
+    for samples in getattr(microsector, "phase_samples", {}).values():
+        if samples is None:
+            continue
+        for idx in samples:
+            indices.add(int(idx))
+    if not indices:
+        spans = [tuple(bounds) for bounds in getattr(microsector, "phase_boundaries", {}).values()]
+        if spans:
+            start = min(span[0] for span in spans)
+            end = max(span[1] for span in spans)
+            indices.update(range(start, end))
+    return sorted(indices)
+
+
+def _variance_payload(values: Sequence[float]) -> Dict[str, float]:
+    if not values:
+        return {"variance": 0.0, "stdev": 0.0}
+    variance = float(pvariance(values))
+    if variance < 0.0 and abs(variance) < 1e-12:
+        variance = 0.0
+    stdev = sqrt(variance) if variance > 0.0 else 0.0
+    return {"variance": variance, "stdev": stdev}
+
+
+def _microsector_variability(
+    microsectors: Sequence["Microsector"] | None,
+    bundles: Sequence[EPIBundle],
+    lap_indices: Sequence[int],
+    lap_metadata: Sequence[Mapping[str, object]],
+) -> List[Dict[str, object]]:
+    if not microsectors:
+        return []
+    bundle_count = len(bundles)
+    include_laps = len(lap_metadata) > 1
+    variability: List[Dict[str, object]] = []
+    for microsector in microsectors:
+        sample_indices = [
+            idx for idx in _microsector_sample_indices(microsector) if 0 <= idx < bundle_count
+        ]
+        delta_values = [bundles[idx].delta_nfr for idx in sample_indices]
+        si_values = [bundles[idx].sense_index for idx in sample_indices]
+        entry: Dict[str, object] = {
+            "microsector": microsector.index,
+            "label": f"Curva {microsector.index + 1}",
+            "overall": {
+                "samples": len(sample_indices),
+                "delta_nfr": _variance_payload(delta_values),
+                "sense_index": _variance_payload(si_values),
+            },
+        }
+        if include_laps and lap_indices:
+            lap_payload: Dict[str, Dict[str, object]] = {}
+            for lap_entry in lap_metadata:
+                lap_index = int(lap_entry.get("index", 0))
+                lap_label = str(lap_entry.get("label", lap_index))
+                lap_specific_indices = [
+                    idx
+                    for idx in sample_indices
+                    if idx < len(lap_indices) and lap_indices[idx] == lap_index
+                ]
+                if not lap_specific_indices:
+                    continue
+                lap_payload[lap_label] = {
+                    "samples": len(lap_specific_indices),
+                    "delta_nfr": _variance_payload(
+                        [bundles[idx].delta_nfr for idx in lap_specific_indices]
+                    ),
+                    "sense_index": _variance_payload(
+                        [bundles[idx].sense_index for idx in lap_specific_indices]
+                    ),
+                }
+            if lap_payload:
+                entry["laps"] = lap_payload
+        variability.append(entry)
+    return variability
+
+
 def orchestrate_delta_metrics(
     telemetry_segments: Sequence[Sequence[TelemetryRecord]],
     target_delta_nfr: float,
@@ -491,8 +570,26 @@ def orchestrate_delta_metrics(
 
     objectives = emission_operator(target_delta_nfr, target_sense_index)
     bundles: List[EPIBundle] = []
-    for segment in telemetry_segments:
-        bundles.extend(recepcion_operator(segment))
+    lap_indices: List[int] = []
+    lap_metadata: List[Dict[str, object]] = []
+    for lap_index, segment in enumerate(telemetry_segments):
+        label_value = next(
+            (record.lap for record in segment if getattr(record, "lap", None) is not None),
+            None,
+        )
+        explicit = label_value is not None
+        label = str(label_value) if explicit else f"Vuelta {lap_index + 1}"
+        lap_metadata.append(
+            {
+                "index": lap_index,
+                "label": label,
+                "value": label_value,
+                "explicit": explicit,
+            }
+        )
+        segment_bundles = recepcion_operator(segment)
+        lap_indices.extend([lap_index] * len(segment_bundles))
+        bundles.extend(segment_bundles)
     if not bundles:
         return {
             "objectives": objectives,
@@ -505,6 +602,7 @@ def orchestrate_delta_metrics(
             "coupling": 0.0,
             "resonance": 0.0,
             "recursive_trace": [],
+            "lap_sequence": lap_metadata,
             "dissonance_breakdown": DissonanceBreakdown(
                 value=0.0,
                 useful_magnitude=0.0,
@@ -517,6 +615,7 @@ def orchestrate_delta_metrics(
                 useful_events=0,
                 parasitic_events=0,
             ),
+            "microsector_variability": [],
         }
 
     delta_series = [bundle.delta_nfr for bundle in bundles]
@@ -536,6 +635,12 @@ def orchestrate_delta_metrics(
     resonance = resonance_operator(clamped_si)
     recursive_trace = recursividad_operator(
         clamped_si, seed=clamped_si[0], decay=recursion_decay
+    )
+    variability = _microsector_variability(
+        microsectors,
+        updated_bundles,
+        lap_indices,
+        lap_metadata,
     )
 
     node_pairs = (
@@ -568,6 +673,8 @@ def orchestrate_delta_metrics(
         "coupling": coupling,
         "resonance": resonance,
         "recursive_trace": recursive_trace,
+        "lap_sequence": lap_metadata,
+        "microsector_variability": variability,
         "pairwise_coupling": {
             "delta_nfr": pairwise_delta,
             "sense_index": pairwise_si,

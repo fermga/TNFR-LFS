@@ -66,6 +66,7 @@ class TelemetryRecord:
     suspension_travel_rear: float
     suspension_velocity_front: float
     suspension_velocity_rear: float
+    lap: int | str | None = None
     reference: Optional["TelemetryRecord"] = None
 
 
