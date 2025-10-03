@@ -55,6 +55,20 @@ def test_segment_microsectors_returns_empty_when_no_curvature():
             locking=0.0,
             nfr=500,
             si=0.9,
+            speed=15.0,
+            yaw_rate=0.0,
+            slip_angle=0.0,
+            steer=0.0,
+            throttle=0.5,
+            gear=3,
+            vertical_load_front=2600.0,
+            vertical_load_rear=2600.0,
+            mu_eff_front=0.4,
+            mu_eff_rear=0.4,
+            suspension_travel_front=0.5,
+            suspension_travel_rear=0.5,
+            suspension_velocity_front=0.0,
+            suspension_velocity_rear=0.0,
         )
         for i in range(5)
     ]
