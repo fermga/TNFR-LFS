@@ -1,12 +1,16 @@
 import socket
 import struct
+import threading
 from io import StringIO
 
 import pytest
 
 from tnfr_lfs.acquisition import (
+    ButtonLayout,
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT,
+    InSimClient,
+    OverlayManager,
     OutGaugePacket,
     OutGaugeUDPClient,
     OutSimClient,
@@ -136,3 +140,125 @@ def test_fusion_generates_record_and_bundle(outsim_payload, outgauge_payload):
     assert record.slip_ratio == pytest.approx(0.05)
     bundle = fusion.fuse_to_bundle(outsim, outgauge)
     assert isinstance(bundle, EPIBundle)
+
+
+def _recv_exact(sock: socket.socket, size: int) -> bytes:
+    data = bytearray()
+    while len(data) < size:
+        chunk = sock.recv(size - len(data))
+        if not chunk:
+            raise ConnectionError("Socket closed while receiving data")
+        data.extend(chunk)
+    return bytes(data)
+
+
+def test_insim_client_handshake_and_keepalive():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    captured: dict[str, bytes] = {}
+
+    def _server() -> None:
+        conn, _ = server.accept()
+        with conn:
+            header = _recv_exact(conn, 1)
+            payload = _recv_exact(conn, header[0] - 1)
+            captured["handshake"] = header + payload
+            version_packet = InSimClient.VER_STRUCT.pack(
+                InSimClient.VER_STRUCT.size,
+                InSimClient.ISP_VER,
+                7,
+                0,
+                InSimClient.INSIM_VERSION,
+            )
+            conn.sendall(version_packet)
+            captured["keepalive"] = _recv_exact(conn, InSimClient.TINY_STRUCT.size)
+
+    thread = threading.Thread(target=_server, daemon=True)
+    thread.start()
+
+    client = InSimClient(host="127.0.0.1", port=port, keepalive_interval=1.0, request_id=7)
+    try:
+        client.connect()
+        client.send_keepalive()
+    finally:
+        client.close()
+
+    thread.join(timeout=1.0)
+    server.close()
+
+    handshake = InSimClient.ISI_STRUCT.unpack(captured["handshake"])
+    assert handshake[0] == InSimClient.ISI_STRUCT.size
+    assert handshake[1] == InSimClient.ISP_ISI
+    assert handshake[2] == 7
+    assert handshake[5] == InSimClient.INSIM_VERSION
+    assert handshake[9] == pytest.approx(1000)
+    keepalive = InSimClient.TINY_STRUCT.unpack(captured["keepalive"])
+    assert keepalive[1] == InSimClient.ISP_TINY
+    assert keepalive[2] == 7
+    assert keepalive[3] == InSimClient.TINY_ALIVE
+
+
+def test_insim_client_button_serialisation():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    captured: dict[str, bytes] = {}
+
+    def _server() -> None:
+        conn, _ = server.accept()
+        with conn:
+            header = _recv_exact(conn, 1)
+            payload = _recv_exact(conn, header[0] - 1)
+            captured["handshake"] = header + payload
+            version_packet = InSimClient.VER_STRUCT.pack(
+                InSimClient.VER_STRUCT.size,
+                InSimClient.ISP_VER,
+                3,
+                0,
+                InSimClient.INSIM_VERSION,
+            )
+            conn.sendall(version_packet)
+            captured["subscribe"] = _recv_exact(conn, InSimClient.TINY_STRUCT.size)
+            btn_header = _recv_exact(conn, 1)
+            btn_payload = _recv_exact(conn, btn_header[0] - 1)
+            captured["button"] = btn_header + btn_payload
+            clr_header = _recv_exact(conn, 1)
+            clr_payload = _recv_exact(conn, clr_header[0] - 1)
+            captured["clear"] = clr_header + clr_payload
+
+    thread = threading.Thread(target=_server, daemon=True)
+    thread.start()
+
+    layout = ButtonLayout(left=15, top=12, width=90, height=25, click_id=5)
+    with InSimClient(host="127.0.0.1", port=port, request_id=3) as client:
+        manager = OverlayManager(client, layout=layout)
+        manager.connect()
+        manager.show(["Linea 1", "Linea 2"])
+        client.clear_button(layout)
+
+    thread.join(timeout=1.0)
+    server.close()
+
+    subscribe = InSimClient.TINY_STRUCT.unpack(captured["subscribe"])
+    assert subscribe[3] == InSimClient.TINY_SUBT_BTC
+
+    button_header = InSimClient.BTN_HEADER_STRUCT.unpack(
+        captured["button"][: InSimClient.BTN_HEADER_STRUCT.size]
+    )
+    assert button_header[0] == len(captured["button"])
+    assert button_header[2] == 3
+    assert button_header[4] == 5
+    assert button_header[8] == 15
+    assert button_header[10] == 90
+    text_payload = captured["button"][InSimClient.BTN_HEADER_STRUCT.size : -1]
+    assert text_payload.decode("utf8") == "TNFR × LFS\nLinea 1\nLinea 2"
+    assert captured["button"][-1] == 0
+
+    clear_header = InSimClient.BTN_HEADER_STRUCT.unpack(
+        captured["clear"][: InSimClient.BTN_HEADER_STRUCT.size]
+    )
+    assert clear_header[6] == InSimClient.BTN_STYLE_CLEAR
+    assert captured["clear"][-1] == 0

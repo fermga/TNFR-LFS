@@ -36,9 +36,8 @@ the simulation to broadcast telemetry through:
 
 * **OutSim UDP** – default port ``4123``
 * **OutGauge UDP** – default port ``3000``
-* **InSim UDP** – optional control messages through port ``29999`` when a
-  simulator requires a handshake (no traffic is sent by the TNFR × LFS toolkit but the
-  port must remain available to avoid conflicts)
+* **InSim TCP** – optional control channel on port ``29999`` used when enabling the
+  ``--overlay`` flag to show contextual information inside Live for Speed
 
 All clients connect to ``127.0.0.1`` by default and can be redirected via
 ``--host`` and the corresponding ``--outsim-port``/``--outgauge-port``
@@ -48,6 +47,21 @@ firewall rules allow inbound UDP traffic on the configured ports.
 To ingest prerecorded telemetry, pass ``--simulate`` with the path to a
 CSV file containing OutSim-compatible columns.  The ``--format`` option
 persists the baseline as ``jsonl`` or ``parquet``.
+
+#### Overlay best practices
+
+The ``--overlay`` flag renders a compact ``IS_BTN`` panel while capturing live
+telemetry.  Follow these guidelines to avoid interfering with the driving
+session:
+
+* **Avoid permanent buttons** – the overlay automatically disappears when the
+  capture ends; do not reuse the button slot for unrelated information.
+* **Prefer the HUD margins** – Live for Speed keeps the area around ``L=10`` and
+  ``T=10`` mostly free of critical information.  The CLI uses a 180×30 panel in
+  that region by default; adjust the layout if another app already occupies it.
+* **Keep the copy short** – ``IS_BTN`` packets accept a maximum of 239 visible
+  characters.  Use concise status lines (e.g. duration, sample targets) to stay
+  within the protocol limits and avoid truncated messages.
 
 ### ``analyze``
 
