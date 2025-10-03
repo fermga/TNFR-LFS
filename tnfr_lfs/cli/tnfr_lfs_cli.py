@@ -8,6 +8,7 @@ from typing import Any, Dict
 
 from ..acquisition import OutSimClient
 from ..core.epi import EPIExtractor
+from ..core.segmentation import segment_microsectors
 from ..exporters import exporters_registry
 from ..recommender import RecommendationEngine
 
@@ -32,11 +33,26 @@ def run_cli(args: argparse.Namespace | None = None) -> str:
     records = client.ingest(namespace.telemetry)
     extractor = EPIExtractor()
     results = extractor.extract(records)
+    microsectors = segment_microsectors(records, results)
     engine = RecommendationEngine()
-    recommendations = engine.generate(results)
+    recommendations = engine.generate(results, microsectors)
 
     payload: Dict[str, Any] = {
         "series": results,
+        "microsectors": [
+            {
+                "index": microsector.index,
+                "start_time": microsector.start_time,
+                "end_time": microsector.end_time,
+                "curvature": microsector.curvature,
+                "brake_event": microsector.brake_event,
+                "support_event": microsector.support_event,
+                "delta_nfr_signature": microsector.delta_nfr_signature,
+                "goals": [goal.__dict__ for goal in microsector.goals],
+                "phase_boundaries": dict(microsector.phase_boundaries),
+            }
+            for microsector in microsectors
+        ],
         "recommendations": [recommendation.__dict__ for recommendation in recommendations],
     }
     exporter = exporters_registry[namespace.export]

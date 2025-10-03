@@ -8,6 +8,7 @@ improving tyre normal force ratio (ΔNFR) and stability index (ΔSi).
 from .core.coherence import compute_node_delta_nfr, sense_index
 from .core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
 from .core.epi_models import EPIBundle
+from .core.segmentation import Goal, Microsector, segment_microsectors
 from .acquisition.outsim_client import OutSimClient
 from .recommender.rules import Recommendation, RecommendationEngine
 from .exporters import exporters_registry
@@ -17,6 +18,9 @@ __all__ = [
     "EPIExtractor",
     "DeltaCalculator",
     "EPIBundle",
+    "Goal",
+    "Microsector",
+    "segment_microsectors",
     "compute_node_delta_nfr",
     "sense_index",
     "OutSimClient",
