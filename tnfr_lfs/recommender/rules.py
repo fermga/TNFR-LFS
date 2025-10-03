@@ -7,6 +7,7 @@ from statistics import mean
 from typing import Iterable, List, Protocol, Sequence
 
 from ..core.epi_models import EPIBundle
+from ..core.segmentation import Microsector
 
 
 @dataclass
@@ -21,7 +22,11 @@ class Recommendation:
 class RecommendationRule(Protocol):
     """Interface implemented by recommendation rules."""
 
-    def evaluate(self, results: Sequence[EPIBundle]) -> Iterable[Recommendation]:
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+    ) -> Iterable[Recommendation]:
         ...
 
 
@@ -30,7 +35,11 @@ class LoadBalanceRule:
 
     threshold: float = 10.0
 
-    def evaluate(self, results: Sequence[EPIBundle]) -> Iterable[Recommendation]:
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+    ) -> Iterable[Recommendation]:
         for result in results:
             if abs(result.delta_nfr) > self.threshold:
                 direction = "increase" if result.delta_nfr < 0 else "decrease"
@@ -49,7 +58,11 @@ class StabilityIndexRule:
 
     threshold: float = 0.6
 
-    def evaluate(self, results: Sequence[EPIBundle]) -> Iterable[Recommendation]:
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+    ) -> Iterable[Recommendation]:
         for result in results:
             if result.sense_index < self.threshold:
                 yield Recommendation(
@@ -68,7 +81,11 @@ class CoherenceRule:
 
     min_average_si: float = 0.75
 
-    def evaluate(self, results: Sequence[EPIBundle]) -> Iterable[Recommendation]:
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+    ) -> Iterable[Recommendation]:
         if not results:
             return []
         average_si = mean(result.sense_index for result in results)
@@ -96,10 +113,14 @@ class RecommendationEngine:
             CoherenceRule(),
         ]
 
-    def generate(self, results: Sequence[EPIBundle]) -> List[Recommendation]:
+    def generate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+    ) -> List[Recommendation]:
         recommendations: List[Recommendation] = []
         for rule in self.rules:
-            recommendations.extend(list(rule.evaluate(results)))
+            recommendations.extend(list(rule.evaluate(results, microsectors)))
         # Deduplicate identical recommendations while preserving order.
         unique: List[Recommendation] = []
         seen = set()

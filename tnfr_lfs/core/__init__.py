@@ -13,6 +13,7 @@ from .operators import (
     recursividad_operator,
     resonance_operator,
 )
+from .segmentation import Goal, Microsector, segment_microsectors
 
 __all__ = [
     "TelemetryRecord",
@@ -29,4 +30,7 @@ __all__ = [
     "resonance_operator",
     "recursividad_operator",
     "orchestrate_delta_metrics",
+    "Goal",
+    "Microsector",
+    "segment_microsectors",
 ]

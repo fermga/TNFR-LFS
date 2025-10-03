@@ -5,7 +5,7 @@ from __future__ import annotations
 from tempfile import NamedTemporaryFile
 
 from tnfr_lfs.acquisition import OutSimClient
-from tnfr_lfs.core import EPIExtractor
+from tnfr_lfs.core import EPIExtractor, segment_microsectors
 from tnfr_lfs.recommender import RecommendationEngine
 
 
@@ -31,8 +31,9 @@ def main() -> None:
     records = client.ingest(telemetry_path)
     extractor = EPIExtractor()
     results = extractor.extract(records)
+    microsectors = segment_microsectors(records, results)
     engine = RecommendationEngine()
-    for recommendation in engine.generate(results):
+    for recommendation in engine.generate(results, microsectors):
         print(f"[{recommendation.category}] {recommendation.message}\n  {recommendation.rationale}")
 
 
