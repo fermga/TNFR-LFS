@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence, Tuple
 
 from ..core.epi import TelemetryRecord
+
+RUNS_DIR = Path("runs")
 
 
 def write_run(
@@ -38,6 +42,44 @@ def write_run(
         for record in records:
             json.dump(asdict(record), handle, sort_keys=True)
             handle.write("\n")
+
+
+def prepare_run_destination(
+    *,
+    car_model: str,
+    track_name: str,
+    output_dir: str | Path | None = None,
+    suffix: str = ".jsonl",
+    force: bool = False,
+) -> Path:
+    """Return a timestamped run path ensuring the parent directory exists.
+
+    Parameters
+    ----------
+    car_model:
+        Name of the car model used for slug generation.
+    track_name:
+        Name of the track used for slug generation.
+    output_dir:
+        Optional base directory for the run.  Defaults to :data:`RUNS_DIR`.
+    suffix:
+        File suffix to append to the generated name.  ``.jsonl`` by default.
+    force:
+        When ``True`` existing files are reused; otherwise ``FileExistsError``
+        is raised on collisions.
+    """
+
+    directory = Path(output_dir).expanduser() if output_dir else RUNS_DIR
+    timestamp = datetime.now(timezone.utc)
+    car_slug = _slugify_token(car_model)
+    track_slug = _slugify_token(track_name)
+    destination = directory / f"{car_slug}_{track_slug}_{timestamp:%Y%m%d_%H%M%S_%f}{suffix}"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists() and not force:
+        raise FileExistsError(
+            f"Telemetry run {destination} already exists. Use --force to overwrite."
+        )
+    return destination
 
 
 def iter_run(path: str | Path) -> Iterator[TelemetryRecord]:
@@ -75,6 +117,13 @@ def _decode_record(payload: dict[str, Any]) -> TelemetryRecord:
     else:
         raise TypeError("Invalid reference payload for TelemetryRecord")
     return TelemetryRecord(**values)
+
+
+def _slugify_token(token: str) -> str:
+    normalised = token.strip().lower()
+    slug = re.sub(r"[^a-z0-9]+", "_", normalised, flags=re.ASCII)
+    slug = slug.strip("_")
+    return slug or "run"
 
 
 class DeterministicReplayer:
