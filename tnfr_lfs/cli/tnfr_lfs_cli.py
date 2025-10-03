@@ -34,6 +34,7 @@ from ..core.operators import orchestrate_delta_metrics
 from ..core.segmentation import Microsector, segment_microsectors
 from ..exporters import exporters_registry
 from ..exporters.setup_plan import SetupChange, SetupPlan
+from ..io import logs
 from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
 
@@ -1118,10 +1119,8 @@ def _capture_udp_samples(
 def _persist_records(records: Records, destination: Path, fmt: str) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if fmt == "jsonl":
-        with destination.open("w", encoding="utf8") as handle:
-            for record in records:
-                handle.write(json.dumps(asdict(record), sort_keys=True))
-                handle.write("\n")
+        compress = destination.suffix in {".gz", ".gzip"}
+        logs.write_run(records, destination, compress=compress)
         return
 
     if fmt == "parquet":
@@ -1144,17 +1143,11 @@ def _load_records(source: Path) -> Records:
     if not source.exists():
         raise FileNotFoundError(f"Telemetry source {source} does not exist")
     suffix = source.suffix.lower()
+    name = source.name.lower()
     if suffix == ".csv":
         return OutSimClient().ingest(source)
-    if suffix == ".jsonl":
-        records: Records = []
-        with source.open("r", encoding="utf8") as handle:
-            for line in handle:
-                if not line.strip():
-                    continue
-                payload = json.loads(line)
-                records.append(TelemetryRecord(**_coerce_payload(payload)))
-        return records
+    if name.endswith(".jsonl") or name.endswith(".jsonl.gz") or name.endswith(".jsonl.gzip"):
+        return list(logs.iter_run(source))
     if suffix == ".parquet":
         try:
             import pandas as pd  # type: ignore
