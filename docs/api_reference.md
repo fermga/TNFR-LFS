@@ -24,7 +24,9 @@ Computes :class:`tnfr_lfs.core.epi_models.EPIBundle` objects including EPI,
 :func:`tnfr_lfs.core.epi.delta_nfr_by_node`.  Para desgloses adicionales por
 subcaracterística utilice :func:`tnfr_lfs.core.coherence.compute_node_delta_nfr`
 combinado con :func:`tnfr_lfs.core.coherence.sense_index` dentro de pipelines
-personalizados.
+personalizados.  El nuevo Sense Index acepta el mapa de frecuencias naturales,
+la fase activa y los pesos ``w_phase`` para evaluar ``1 / (1 + Σ w · |ΔNFR| ·
+g(ν_f)) - λ·H`` con penalización entrópica configurable.
 
 Each :class:`EPIBundle` records the per-node natural frequency ``nu_f`` (Hz),
 allowing downstream tooling to weigh ΔNFR contributions using documented

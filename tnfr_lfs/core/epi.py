@@ -32,6 +32,8 @@ NU_F_NODE_DEFAULTS: Mapping[str, float] = {
     "driver": 0.05,
 }
 
+DEFAULT_PHASE_WEIGHTS: Mapping[str, float] = {"__default__": 1.0}
+
 
 @dataclass(frozen=True)
 class TelemetryRecord:
@@ -221,12 +223,22 @@ class DeltaCalculator:
         prev_integrated_epi: Optional[float] = None,
         dt: float = 0.0,
         nu_f_by_node: Optional[Mapping[str, float]] = None,
+        phase: str = "entry",
+        phase_weights: Optional[Mapping[str, Mapping[str, float] | float]] = None,
     ) -> EPIBundle:
         delta_nfr = record.nfr - baseline.nfr
         node_record = replace(record, reference=baseline)
         node_deltas = delta_nfr_by_node(node_record)
-        global_si = sense_index(delta_nfr, node_deltas, baseline.nfr)
         nu_f_map = dict(nu_f_by_node or resolve_nu_f_by_node(record))
+        phase_weight_map = phase_weights or DEFAULT_PHASE_WEIGHTS
+        global_si = sense_index(
+            delta_nfr,
+            node_deltas,
+            baseline.nfr,
+            nu_f_by_node=nu_f_map,
+            active_phase=phase,
+            w_phase=phase_weight_map,
+        )
         nodes = DeltaCalculator._build_nodes(node_deltas, delta_nfr, nu_f_map)
         previous_state = epi_value if prev_integrated_epi is None else prev_integrated_epi
         try:

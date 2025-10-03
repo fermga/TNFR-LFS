@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping as MappingABC
 from math import log
 from typing import Dict, Iterable, Mapping
 
@@ -68,16 +69,68 @@ def compute_node_delta_nfr(
     }
 
 
-def sense_index(delta_nfr: float, node_deltas: Mapping[str, float], baseline_nfr: float) -> float:
-    """Compute the entropy-penalised sense index for a ΔNFR distribution."""
+def _frequency_gain(nu_f: float) -> float:
+    """Return the monotonic gain applied to ΔNFR magnitudes.
 
-    nfr_scale = abs(baseline_nfr) or 1.0
-    base_index = 1.0 - min(1.0, abs(delta_nfr) / nfr_scale)
-    weights_total = sum(abs(value) for value in node_deltas.values())
+    The gain models how subsystems with higher natural frequencies modulate the
+    perceived coherence.  The relationship is intentionally simple—``g(ν_f) =
+    1 + max(0, ν_f)``—yet strictly increasing so that faster subsystems reduce
+    the sense index more aggressively than slower ones.
+    """
+
+    if not nu_f or not isinstance(nu_f, (int, float)):
+        return 1.0
+    return 1.0 + max(0.0, float(nu_f))
+
+
+def _phase_weight(weights: Mapping[str, float] | float, node: str) -> float:
+    if isinstance(weights, MappingABC):
+        if node in weights:
+            return float(weights[node])
+        if "__default__" in weights:
+            return float(weights["__default__"])
+        return 1.0
+    return float(weights)
+
+
+def sense_index(
+    delta_nfr: float,
+    deltas_by_node: Mapping[str, float],
+    baseline_nfr: float,
+    *,
+    nu_f_by_node: Mapping[str, float],
+    active_phase: str,
+    w_phase: Mapping[str, Mapping[str, float] | float] | Mapping[str, float],
+    entropy_lambda: float = 0.1,
+) -> float:
+    """Compute the entropy-penalised sense index for a ΔNFR distribution.
+
+    The metric follows the expression ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H``
+    combining phase-dependent weights ``w``, the magnitude of the ΔNFR
+    contributions for every subsystem, the natural frequency gain ``g`` and the
+    entropy term ``H`` derived from the distribution of the node deltas.
+    ``λ`` is exposed as ``entropy_lambda`` for fine tuning while remaining
+    backward compatible with previous heuristics.
+    """
+
+    phase_weights = 1.0
+    if isinstance(w_phase, MappingABC):
+        phase_weights = w_phase.get(active_phase, w_phase.get("__default__", 1.0))
+
+    weighted_sum = 0.0
+    for node, delta_value in deltas_by_node.items():
+        node_weight = _phase_weight(phase_weights, node)
+        nu_f = nu_f_by_node.get(node, 0.0)
+        weighted_sum += node_weight * abs(delta_value) * _frequency_gain(nu_f)
+
+    base_index = 1.0 / (1.0 + weighted_sum)
+
+    weights_total = sum(abs(value) for value in deltas_by_node.values())
     if weights_total == 0:
         return max(0.0, min(1.0, base_index))
-    weights = [abs(value) / weights_total for value in node_deltas.values()]
-    penalty = _entropy(weights)
-    adjusted = base_index * (1.0 - penalty)
+
+    weights = [abs(value) / weights_total for value in deltas_by_node.values()]
+    penalty = entropy_lambda * _entropy(weights)
+    adjusted = base_index - penalty
     return max(0.0, min(1.0, adjusted))
 
