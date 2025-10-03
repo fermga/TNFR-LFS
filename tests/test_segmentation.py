@@ -1,9 +1,18 @@
 import pytest
 
 import math
+from dataclasses import replace
 from statistics import mean
 
-from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
+from tnfr_lfs.core.coherence import sense_index
+from tnfr_lfs.core.epi import (
+    DEFAULT_PHASE_WEIGHTS,
+    DeltaCalculator,
+    EPIExtractor,
+    TelemetryRecord,
+    delta_nfr_by_node,
+    resolve_nu_f_by_node,
+)
 from tnfr_lfs.core.segmentation import Microsector, segment_microsectors
 
 
@@ -99,3 +108,54 @@ def test_goal_targets_match_phase_averages(
             yaw_rates = [_yaw_rate(synthetic_records, idx) for idx in indices]
             for value in yaw_rates:
                 assert yaw_low - 1e-6 <= value <= yaw_high + 1e-6
+
+
+def test_phase_weighting_penalises_sense_index(
+    synthetic_microsectors,
+    synthetic_records,
+    synthetic_bundles,
+):
+    baseline = DeltaCalculator.derive_baseline(synthetic_records)
+    for microsector in synthetic_microsectors:
+        weights = microsector.phase_weights
+        for phase, indices in microsector.phase_samples.items():
+            for idx in indices:
+                record = synthetic_records[idx]
+                node_record = replace(record, reference=baseline)
+                node_deltas = delta_nfr_by_node(node_record)
+                nu_phase = resolve_nu_f_by_node(record, phase=phase, phase_weights=weights)
+                nu_default = resolve_nu_f_by_node(record)
+                weighted_index = sense_index(
+                    record.nfr - baseline.nfr,
+                    node_deltas,
+                    baseline.nfr,
+                    nu_f_by_node=nu_phase,
+                    active_phase=phase,
+                    w_phase=weights,
+                )
+                neutral_index = sense_index(
+                    record.nfr - baseline.nfr,
+                    node_deltas,
+                    baseline.nfr,
+                    nu_f_by_node=nu_default,
+                    active_phase=phase,
+                    w_phase=DEFAULT_PHASE_WEIGHTS,
+                )
+                assert weighted_index <= neutral_index + 1e-6
+
+
+def test_integrator_matches_derivative_series(
+    synthetic_records,
+    synthetic_bundles,
+):
+    nodes = ("tyres", "suspension", "chassis", "brakes", "transmission", "track", "driver")
+    for index, bundle in enumerate(synthetic_bundles):
+        if index == 0:
+            continue
+        dt = synthetic_records[index].timestamp - synthetic_records[index - 1].timestamp
+        derivative_expected = sum(
+            getattr(bundle, node).nu_f * getattr(bundle, node).delta_nfr for node in nodes
+        )
+        assert bundle.dEPI_dt == pytest.approx(derivative_expected, rel=1e-6, abs=1e-6)
+        expected_integrated = synthetic_bundles[index - 1].integrated_epi + (bundle.dEPI_dt * dt)
+        assert bundle.integrated_epi == pytest.approx(expected_integrated, rel=1e-6, abs=1e-6)

@@ -23,7 +23,13 @@ from dataclasses import dataclass
 from statistics import mean, pstdev
 from typing import Dict, List, Mapping, MutableMapping, Sequence, Tuple
 
-from .epi import TelemetryRecord, delta_nfr_by_node
+from .epi import (
+    DEFAULT_PHASE_WEIGHTS,
+    DeltaCalculator,
+    TelemetryRecord,
+    delta_nfr_by_node,
+    resolve_nu_f_by_node,
+)
 from .epi_models import EPIBundle
 from .operators import mutation_operator, recursivity_operator
 
@@ -67,8 +73,10 @@ class Microsector:
     delta_nfr_signature: float
     goals: Tuple[Goal, Goal, Goal]
     phase_boundaries: Mapping[PhaseLiteral, Tuple[int, int]]
+    phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]]
     active_phase: PhaseLiteral
     dominant_nodes: Mapping[PhaseLiteral, Tuple[str, ...]]
+    phase_weights: Mapping[PhaseLiteral, Mapping[str, float] | float]
 
     def phase_indices(self, phase: PhaseLiteral) -> range:
         """Return the range of sample indices assigned to ``phase``."""
@@ -107,6 +115,11 @@ def segment_microsectors(
         raise ValueError("recursion_decay must be in the [0, 1) interval")
 
     segments = _identify_corner_segments(records)
+    if not segments:
+        return []
+
+    baseline = DeltaCalculator.derive_baseline(records)
+    bundle_list = list(bundles)
     microsectors: List[Microsector] = []
     rec_state: MutableMapping[str, Dict[str, object]] | None = None
     mutation_state: MutableMapping[str, Dict[str, object]] | None = None
@@ -114,17 +127,78 @@ def segment_microsectors(
         rec_state = operator_state.setdefault("recursivity", {})
         mutation_state = operator_state.setdefault("mutation", {})
     thresholds = mutation_thresholds or {}
+    phase_assignments: Dict[int, PhaseLiteral] = {}
+    weight_lookup: Dict[int, Mapping[str, Mapping[str, float] | float]] = {}
+    specs: List[Dict[str, object]] = []
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
+        phase_samples = {
+            phase: tuple(range(bounds[0], bounds[1]))
+            for phase, bounds in phase_boundaries.items()
+        }
         curvature = mean(abs(records[i].lateral_accel) for i in range(start, end + 1))
         brake_event = any(records[i].longitudinal_accel <= BRAKE_THRESHOLD for i in range(start, end + 1))
         support_event = _detect_support_event(records[start : end + 1])
-        delta_signature = mean(b.delta_nfr for b in bundles[start : end + 1])
-        avg_si = mean(b.sense_index for b in bundles[start : end + 1])
+        phase_weight_map = _initial_phase_weight_map(records, phase_samples)
+        specs.append(
+            {
+                "index": index,
+                "start": start,
+                "end": end,
+                "curvature": curvature,
+                "brake_event": brake_event,
+                "support_event": support_event,
+                "phase_boundaries": phase_boundaries,
+                "phase_samples": phase_samples,
+                "phase_weights": phase_weight_map,
+            }
+        )
+        for phase, indices in phase_samples.items():
+            for sample_index in indices:
+                phase_assignments[sample_index] = phase
+                weight_lookup[sample_index] = phase_weight_map
+
+    recomputed_bundles = _recompute_bundles(
+        records,
+        bundle_list,
+        baseline,
+        phase_assignments,
+        weight_lookup,
+    )
+
+    weights_adjusted = _adjust_phase_weights_with_dominance(
+        specs,
+        recomputed_bundles,
+        records,
+    )
+
+    if weights_adjusted:
+        recomputed_bundles = _recompute_bundles(
+            records,
+            recomputed_bundles,
+            baseline,
+            phase_assignments,
+            weight_lookup,
+        )
+
+    for spec in specs:
+        start = spec["start"]
+        end = spec["end"]
+        phase_boundaries = spec["phase_boundaries"]
+        phase_samples = spec["phase_samples"]
+        phase_weights = {
+            phase: dict(profile)
+            for phase, profile in spec["phase_weights"].items()
+        }
+        curvature = spec["curvature"]
+        brake_event = spec["brake_event"]
+        support_event = spec["support_event"]
+        delta_signature = mean(b.delta_nfr for b in recomputed_bundles[start : end + 1])
+        avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
         archetype = _classify_archetype(delta_signature, avg_si, brake_event, support_event)
         goals, dominant_nodes = _build_goals(
             archetype,
-            bundles,
+            recomputed_bundles,
             records,
             phase_boundaries,
         )
@@ -190,7 +264,7 @@ def segment_microsectors(
                 )
         microsectors.append(
             Microsector(
-                index=index,
+                index=spec["index"],
                 start_time=records[start].timestamp,
                 end_time=records[end].timestamp,
                 curvature=curvature,
@@ -199,11 +273,53 @@ def segment_microsectors(
                 delta_nfr_signature=delta_signature,
                 goals=goals,
                 phase_boundaries=phase_boundaries,
+                phase_samples=dict(phase_samples),
                 active_phase=active_goal.phase,
                 dominant_nodes=dict(dominant_nodes),
+                phase_weights=phase_weights,
             )
         )
+
+    if isinstance(bundles, list):
+        bundles[:] = recomputed_bundles
+
     return microsectors
+
+
+def _recompute_bundles(
+    records: Sequence[TelemetryRecord],
+    bundles: Sequence[EPIBundle],
+    baseline: TelemetryRecord,
+    phase_assignments: Mapping[int, PhaseLiteral],
+    weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]],
+) -> List[EPIBundle]:
+    recomputed: List[EPIBundle] = []
+    prev_integrated: float | None = None
+    prev_timestamp = records[0].timestamp if records else 0.0
+    for idx, record in enumerate(records):
+        dt = 0.0 if idx == 0 else max(0.0, record.timestamp - prev_timestamp)
+        phase = phase_assignments.get(idx, "entry")
+        phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
+        nu_f_map = resolve_nu_f_by_node(
+            record,
+            phase=phase,
+            phase_weights=phase_weights,
+        )
+        epi_value = bundles[idx].epi if idx < len(bundles) else 0.0
+        recomputed_bundle = DeltaCalculator.compute_bundle(
+            record,
+            baseline,
+            epi_value,
+            prev_integrated_epi=prev_integrated,
+            dt=dt,
+            nu_f_by_node=nu_f_map,
+            phase=phase,
+            phase_weights=phase_weights,
+        )
+        recomputed.append(recomputed_bundle)
+        prev_integrated = recomputed_bundle.integrated_epi
+        prev_timestamp = record.timestamp
+    return recomputed
 
 
 def _estimate_entropy(
@@ -421,6 +537,91 @@ def _build_goals(
             )
         )
     return (goals[0], goals[1], goals[2]), dominant_nodes
+
+
+def _initial_phase_weight_map(
+    records: Sequence[TelemetryRecord],
+    phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]],
+) -> Dict[PhaseLiteral, Dict[str, float]]:
+    weights: Dict[PhaseLiteral, Dict[str, float]] = {}
+
+    def _tightness(values: Sequence[float], reference: float, cap: float) -> float:
+        if not values:
+            return 1.0
+        span = max(values) - min(values)
+        return 1.0 + min(cap, reference / (span + 1e-6))
+
+    for phase, indices in phase_samples.items():
+        phase_records = [records[i] for i in indices]
+        slip_values = [record.slip_ratio for record in phase_records]
+        lat_values = [record.lateral_accel for record in phase_records]
+        long_values = [record.longitudinal_accel for record in phase_records]
+        yaw_rates = [_compute_yaw_rate(records, idx) for idx in indices]
+
+        slip_factor = _tightness(slip_values, 0.25, 1.6)
+        long_factor = _tightness(long_values, 0.8, 1.4)
+        lat_factor = _tightness(lat_values, 1.0, 1.4)
+        yaw_factor = _tightness(yaw_rates, 0.5, 1.5)
+
+        profile = {
+            "__default__": 1.0,
+            "tyres": slip_factor,
+            "transmission": (slip_factor + long_factor) / 2.0,
+            "brakes": long_factor,
+            "suspension": max(1.0, lat_factor),
+            "chassis": max(1.0, (lat_factor + yaw_factor) / 2.0),
+            "track": max(1.0, yaw_factor),
+            "driver": max(1.0, yaw_factor),
+        }
+
+        weights[phase] = profile
+
+    return weights
+
+
+def _adjust_phase_weights_with_dominance(
+    specs: Sequence[Dict[str, object]],
+    bundles: Sequence[EPIBundle],
+    records: Sequence[TelemetryRecord],
+) -> bool:
+    adjusted = False
+    for spec in specs:
+        phase_boundaries = spec["phase_boundaries"]
+        archetype = _classify_archetype(
+            mean(b.delta_nfr for b in bundles[spec["start"] : spec["end"] + 1]),
+            mean(b.sense_index for b in bundles[spec["start"] : spec["end"] + 1]),
+            spec["brake_event"],
+            spec["support_event"],
+        )
+        goals, dominant_nodes = _build_goals(
+            archetype,
+            bundles,
+            records,
+            phase_boundaries,
+        )
+        spec["goals"] = goals
+        spec["dominant_nodes"] = dominant_nodes
+        active_goal = max(
+            goals,
+            key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
+        )
+        spec["active_phase"] = active_goal.phase
+        profile = spec["phase_weights"]
+        for goal in goals:
+            phase_profile = dict(profile.get(goal.phase, {"__default__": 1.0}))
+            boost = 1.0 + min(0.6, max(0.0, goal.nu_f_target))
+            changed = False
+            for node in goal.dominant_nodes:
+                current = phase_profile.get(node, phase_profile.get("__default__", 1.0))
+                boosted = max(0.5, current * boost)
+                if abs(boosted - current) > 1e-9:
+                    phase_profile[node] = boosted
+                    changed = True
+            if changed:
+                profile[goal.phase] = phase_profile
+                adjusted = True
+        spec["phase_weights"] = profile
+    return adjusted
 
 
 def _goal_descriptions(archetype: str) -> Mapping[str, str]:

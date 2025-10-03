@@ -49,6 +49,16 @@ def _microsector() -> Microsector:
     window = (-0.2, 0.2)
     yaw_window = (-0.5, 0.5)
     nodes = ("tyres", "suspension")
+    phase_samples = {
+        "entry": (0, 1),
+        "apex": (2, 3),
+        "exit": (4, 5),
+    }
+    phase_weights = {
+        "entry": {"__default__": 1.0},
+        "apex": {"__default__": 1.0},
+        "exit": {"__default__": 1.0},
+    }
     return Microsector(
         index=0,
         start_time=0.0,
@@ -96,12 +106,14 @@ def _microsector() -> Microsector:
             ),
         ),
         phase_boundaries={"entry": (0, 2), "apex": (2, 4), "exit": (4, 6)},
+        phase_samples=phase_samples,
         active_phase="entry",
         dominant_nodes={
             "entry": nodes,
             "apex": nodes,
             "exit": nodes,
         },
+        phase_weights=phase_weights,
     )
 
 

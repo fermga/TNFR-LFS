@@ -72,6 +72,16 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     window = (-0.3, 0.3)
     yaw_window = (-0.6, 0.6)
     nodes = ("tyres", "brakes")
+    phase_samples = {
+        "entry": (0, 1),
+        "apex": (2, 3),
+        "exit": (4, 5),
+    }
+    phase_weights = {
+        "entry": {"__default__": 1.0},
+        "apex": {"__default__": 1.0},
+        "exit": {"__default__": 1.0},
+    }
     microsector = Microsector(
         index=3,
         start_time=0.0,
@@ -123,12 +133,14 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
             "apex": (2, 4),
             "exit": (4, 6),
         },
+        phase_samples=phase_samples,
         active_phase="entry",
         dominant_nodes={
             "entry": nodes,
             "apex": nodes,
             "exit": nodes,
         },
+        phase_weights=phase_weights,
     )
 
     results = [

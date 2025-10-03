@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from math import sqrt
 from statistics import mean, pstdev
 
 import pytest
 
 from tnfr_lfs.core import TelemetryRecord
+from tnfr_lfs.core.coherence import sense_index
+from tnfr_lfs.core.epi import (
+    DEFAULT_PHASE_WEIGHTS,
+    delta_nfr_by_node,
+    resolve_nu_f_by_node,
+)
 from tnfr_lfs.core.operators import (
     acoplamiento_operator,
     coherence_operator,
@@ -71,6 +78,51 @@ def test_evolve_epi_runs_euler_step():
     expected_derivative = 0.18 * 1.2 + 0.14 * -0.6 + 0.05 * 0.4
     assert derivative == pytest.approx(expected_derivative, rel=1e-9)
     assert new_epi == pytest.approx(prev + expected_derivative * 0.1, rel=1e-9)
+
+
+def test_sense_index_penalises_active_phase_weights():
+    baseline = _build_record(0.0, 5000.0, 0.02, 0.9, 0.3, 0.8, 0.92)
+    sample = _build_record(0.1, 5450.0, 0.18, 1.4, -0.6, 0.86, 0.78)
+    node_deltas = delta_nfr_by_node(replace(sample, reference=baseline))
+    weights = {
+        "entry": {"__default__": 1.0},
+        "apex": {"__default__": 1.0, "tyres": 2.0, "chassis": 1.6},
+        "exit": {"__default__": 1.0},
+    }
+    nu_entry = resolve_nu_f_by_node(sample, phase="entry", phase_weights=weights)
+    nu_apex = resolve_nu_f_by_node(sample, phase="apex", phase_weights=weights)
+
+    assert nu_apex["tyres"] > nu_entry["tyres"]
+    assert nu_apex["chassis"] > nu_entry["chassis"]
+
+    entry_index = sense_index(
+        sample.nfr - baseline.nfr,
+        node_deltas,
+        baseline.nfr,
+        nu_f_by_node=nu_entry,
+        active_phase="entry",
+        w_phase=weights,
+    )
+    apex_index = sense_index(
+        sample.nfr - baseline.nfr,
+        node_deltas,
+        baseline.nfr,
+        nu_f_by_node=nu_apex,
+        active_phase="apex",
+        w_phase=weights,
+    )
+
+    neutral_index = sense_index(
+        sample.nfr - baseline.nfr,
+        node_deltas,
+        baseline.nfr,
+        nu_f_by_node=resolve_nu_f_by_node(sample),
+        active_phase="apex",
+        w_phase=DEFAULT_PHASE_WEIGHTS,
+    )
+
+    assert apex_index < entry_index
+    assert apex_index <= neutral_index
 
 
 def test_orchestrator_pipeline_builds_consistent_metrics():
