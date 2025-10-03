@@ -74,6 +74,21 @@ def test_orchestrator_pipeline_builds_consistent_metrics():
     assert len(results["recursive_trace"]) == 4
 
 
+def test_orchestrator_consumes_fixture_segments(synthetic_records):
+    segments = [synthetic_records[:9], synthetic_records[9:]]
+
+    report = orchestrate_delta_metrics(
+        segments,
+        target_delta_nfr=0.5,
+        target_sense_index=0.82,
+    )
+
+    assert report["objectives"]["delta_nfr"] == pytest.approx(0.5)
+    assert len(report["bundles"]) == len(synthetic_records)
+    assert pytest.approx(report["sense_index"], rel=1e-6) == mean(report["sense_index_series"])
+    assert len(report["recursive_trace"]) == len(synthetic_records)
+
+
 def test_emission_operator_clamps_sense_index():
     objectives = emission_operator(target_delta_nfr=0.5, target_sense_index=1.5)
 
