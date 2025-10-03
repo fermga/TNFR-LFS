@@ -369,6 +369,10 @@ class DeltaCalculator:
         nu_f_by_node: Optional[Mapping[str, float]] = None,
         phase: str = "entry",
         phase_weights: Optional[Mapping[str, Mapping[str, float] | float]] = None,
+        phase_target_nu_f: Mapping[str, Mapping[str, float] | float]
+        | Mapping[str, float]
+        | float
+        | None = None,
     ) -> EPIBundle:
         delta_nfr = record.nfr - baseline.nfr
         feature_contributions = _node_feature_contributions(record, baseline)
@@ -385,6 +389,7 @@ class DeltaCalculator:
             nu_f_by_node=nu_f_map,
             active_phase=phase,
             w_phase=phase_weight_map,
+            nu_f_targets=phase_target_nu_f,
         )
         previous_state = epi_value if prev_integrated_epi is None else prev_integrated_epi
         try:

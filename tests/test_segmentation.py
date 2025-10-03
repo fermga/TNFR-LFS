@@ -132,6 +132,7 @@ def test_phase_weighting_penalises_sense_index(
     baseline = DeltaCalculator.derive_baseline(synthetic_records)
     for microsector in synthetic_microsectors:
         weights = microsector.phase_weights
+        goal_targets = {goal.phase: goal.nu_f_target for goal in microsector.goals}
         for phase, indices in microsector.phase_samples.items():
             for idx in indices:
                 record = synthetic_records[idx]
@@ -146,6 +147,7 @@ def test_phase_weighting_penalises_sense_index(
                     nu_f_by_node=nu_phase,
                     active_phase=phase,
                     w_phase=weights,
+                    nu_f_targets=goal_targets,
                 )
                 neutral_index = sense_index(
                     record.nfr - baseline.nfr,
@@ -154,6 +156,7 @@ def test_phase_weighting_penalises_sense_index(
                     nu_f_by_node=nu_default,
                     active_phase=phase,
                     w_phase=DEFAULT_PHASE_WEIGHTS,
+                    nu_f_targets=goal_targets,
                 )
                 assert weighted_index <= neutral_index + 1e-6
 

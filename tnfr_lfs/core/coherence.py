@@ -93,6 +93,19 @@ def _phase_weight(weights: Mapping[str, float] | float, node: str) -> float:
     return float(weights)
 
 
+def _goal_frequency_factor(
+    goal_spec: Mapping[str, float] | float | None,
+    node: str,
+) -> float:
+    if goal_spec is None:
+        return 1.0
+    if isinstance(goal_spec, MappingABC):
+        target_value = _phase_weight(goal_spec, node)
+    else:
+        target_value = float(goal_spec)
+    return _frequency_gain(target_value)
+
+
 def sense_index(
     delta_nfr: float,
     deltas_by_node: Mapping[str, float],
@@ -101,14 +114,20 @@ def sense_index(
     nu_f_by_node: Mapping[str, float],
     active_phase: str,
     w_phase: Mapping[str, Mapping[str, float] | float] | Mapping[str, float],
+    nu_f_targets: Mapping[str, Mapping[str, float] | float]
+    | Mapping[str, float]
+    | float
+    | None = None,
     entropy_lambda: float = 0.1,
 ) -> float:
     """Compute the entropy-penalised sense index for a ΔNFR distribution.
 
-    The metric follows the expression ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H``
-    combining phase-dependent weights ``w``, the magnitude of the ΔNFR
-    contributions for every subsystem, the natural frequency gain ``g`` and the
-    entropy term ``H`` derived from the distribution of the node deltas.
+    The metric follows the expression ``1 / (1 + Σ w · |ΔNFR| · g(ν_f) · g*(ν_f^*))
+    - λ·H`` combining phase-dependent weights ``w``, the magnitude of the ΔNFR
+    contributions for every subsystem, the natural frequency gain ``g`` derived
+    from the measured natural frequency ``ν_f`` and an optional goal gain
+    ``g*`` driven by the target natural frequency ``ν_f^*``.  The entropy term
+    ``H`` is derived from the distribution of the node deltas.
     ``λ`` is exposed as ``entropy_lambda`` for fine tuning while remaining
     backward compatible with previous heuristics.
     """
@@ -117,11 +136,18 @@ def sense_index(
     if isinstance(w_phase, MappingABC):
         phase_weights = w_phase.get(active_phase, w_phase.get("__default__", 1.0))
 
+    phase_targets: Mapping[str, float] | float | None
+    if isinstance(nu_f_targets, MappingABC):
+        phase_targets = nu_f_targets.get(active_phase, nu_f_targets.get("__default__"))
+    else:
+        phase_targets = nu_f_targets
+
     weighted_sum = 0.0
     for node, delta_value in deltas_by_node.items():
         node_weight = _phase_weight(phase_weights, node)
         nu_f = nu_f_by_node.get(node, 0.0)
-        weighted_sum += node_weight * abs(delta_value) * _frequency_gain(nu_f)
+        goal_factor = _goal_frequency_factor(phase_targets, node)
+        weighted_sum += node_weight * goal_factor * abs(delta_value) * _frequency_gain(nu_f)
 
     base_index = 1.0 / (1.0 + weighted_sum)
 

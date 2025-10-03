@@ -158,3 +158,33 @@ def test_sense_index_penalises_fast_natural_frequencies():
     )
 
     assert slow_index > fast_index
+
+
+def test_sense_index_penalises_goal_frequency_targets():
+    node_deltas = {"tyres": 4.0, "suspension": 2.0}
+    baseline = 500.0
+
+    nu_f_map = {"tyres": 0.18, "suspension": 0.12}
+    neutral_targets = {"entry": {"__default__": 0.0}}
+    aggressive_targets = {"entry": {"tyres": 0.6, "__default__": 0.4}}
+
+    neutral_index = sense_index(
+        6.0,
+        node_deltas,
+        baseline,
+        nu_f_by_node=nu_f_map,
+        active_phase="entry",
+        w_phase={"entry": 1.0},
+        nu_f_targets=neutral_targets,
+    )
+    aggressive_index = sense_index(
+        6.0,
+        node_deltas,
+        baseline,
+        nu_f_by_node=nu_f_map,
+        active_phase="entry",
+        w_phase={"entry": 1.0},
+        nu_f_targets=aggressive_targets,
+    )
+
+    assert aggressive_index < neutral_index
