@@ -111,6 +111,52 @@ def _default_track_name(config: Mapping[str, Any]) -> str:
     return "generic"
 
 
+def _resolve_baseline_destination(
+    namespace: argparse.Namespace, config: Mapping[str, Any]
+) -> Path:
+    fmt = namespace.format
+    suffix = ".jsonl" if fmt == "jsonl" else ".parquet"
+    output_dir_arg: Path | None = getattr(namespace, "output_dir", None)
+    if output_dir_arg is not None:
+        output_dir_arg = output_dir_arg.expanduser()
+    auto_kwargs = {
+        "car_model": _default_car_model(config),
+        "track_name": _default_track_name(config),
+        "output_dir": output_dir_arg,
+        "suffix": suffix,
+        "force": namespace.force,
+    }
+
+    output_arg: Path | None = namespace.output
+    if output_arg is None:
+        return logs.prepare_run_destination(**auto_kwargs)
+
+    output_path = output_arg.expanduser()
+    if output_path.exists() and output_path.is_dir():
+        auto_kwargs["output_dir"] = output_path
+        return logs.prepare_run_destination(**auto_kwargs)
+
+    if output_path.suffix == "":
+        auto_kwargs["output_dir"] = output_path
+        return logs.prepare_run_destination(**auto_kwargs)
+
+    if output_dir_arg is not None and not output_path.is_absolute():
+        destination = output_dir_arg.expanduser() / output_path
+    else:
+        destination = output_path
+
+    if destination.exists() and destination.is_dir():
+        auto_kwargs["output_dir"] = destination
+        return logs.prepare_run_destination(**auto_kwargs)
+
+    if destination.exists() and not namespace.force:
+        raise FileExistsError(
+            f"Baseline destination {destination} already exists. Use --force to overwrite."
+        )
+
+    return destination
+
+
 def _parse_lfs_cfg(cfg_path: Path) -> Dict[str, Dict[str, str]]:
     sections: Dict[str, Dict[str, str]] = {"OutSim": {}, "OutGauge": {}, "InSim": {}}
     with cfg_path.open("r", encoding="utf8") as handle:
@@ -519,7 +565,24 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         "baseline",
         help="Capture telemetry from UDP clients or simulation data and persist it.",
     )
-    baseline_parser.add_argument("output", type=Path, help="Destination file for the baseline")
+    baseline_parser.add_argument(
+        "output",
+        type=Path,
+        nargs="?",
+        default=None,
+        help=(
+            "Destination file for the baseline. When omitted or pointing to a directory "
+            "a timestamped run is created under runs/."
+        ),
+    )
+    baseline_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory used when auto-generating baseline runs (default: runs/)."
+        ),
+    )
     baseline_parser.add_argument(
         "--format",
         choices=("jsonl", "parquet"),
@@ -854,10 +917,7 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
 
 def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    if namespace.output.exists() and not namespace.force:
-        raise FileExistsError(
-            f"Baseline destination {namespace.output} already exists. Use --force to overwrite."
-        )
+    destination = _resolve_baseline_destination(namespace, config)
 
     overlay: OverlayManager | None = None
     records: Records = []
@@ -909,9 +969,9 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
         print(message)
         return message
 
-    _persist_records(records, namespace.output, namespace.format)
+    _persist_records(records, destination, namespace.format)
     message = (
-        f"Baseline saved {len(records)} samples to {namespace.output} "
+        f"Baseline saved {len(records)} samples to {destination} "
         f"({namespace.format})."
     )
     print(message)

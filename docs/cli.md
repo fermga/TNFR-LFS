@@ -67,6 +67,20 @@ To ingest prerecorded telemetry, pass ``--simulate`` with the path to a
 CSV file containing OutSim-compatible columns.  The ``--format`` option
 persists the baseline as ``jsonl`` or ``parquet``.
 
+When ``output`` is omitted the command stores the capture under
+``runs/<car>_<track>_<YYYYMMDD_HHMMSS_mmmmmm>.jsonl`` using the car/track
+names resolved from the configuration.  ``--output-dir`` overrides the
+destination directory and an existing folder can be passed as the
+positional argument to trigger the same behaviour.  Explicit file paths
+continue to be honoured, while ``--force`` skips collision checks when a
+file already exists.
+
+```bash
+tnfr-lfs baseline --simulate stint.csv
+tnfr-lfs baseline runs/session-a --simulate stint.csv
+tnfr-lfs baseline custom.parquet --simulate stint.csv --format parquet
+```
+
 #### Overlay best practices
 
 The ``--overlay`` flag renders a compact ``IS_BTN`` panel while capturing live

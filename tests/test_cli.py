@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,28 @@ def test_baseline_simulation_jsonl(
     assert len(lines) == 17
     assert "Baseline saved" in result
     assert str(baseline_path) in captured.out
+
+
+def test_baseline_generates_timestamped_run(
+    tmp_path: Path, capsys, synthetic_stint_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = run_cli([
+        "baseline",
+        "--simulate",
+        str(synthetic_stint_path),
+    ])
+
+    captured = capsys.readouterr()
+    runs_dir = tmp_path / "runs"
+    assert runs_dir.is_dir()
+    runs = list(runs_dir.glob("*.jsonl"))
+    assert len(runs) == 1
+    run_path = runs[0]
+    assert re.match(r"generic_generic_\d{8}_\d{6}_\d{6}\.jsonl$", run_path.name)
+    assert "Baseline saved" in result
+    assert str(run_path.relative_to(tmp_path)) in captured.out
 
 
 def test_template_command_emits_phase_presets() -> None:
