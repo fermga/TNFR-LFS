@@ -89,21 +89,56 @@ def dissonance_operator(series: Sequence[float], target: float) -> float:
     return mean(abs(value - target) for value in series)
 
 
-def acoplamiento_operator(series_a: Sequence[float], series_b: Sequence[float]) -> float:
+def acoplamiento_operator(
+    series_a: Sequence[float], series_b: Sequence[float], *, strict_length: bool = True
+) -> float:
     """Return the normalised coupling (correlation) between two series."""
 
-    if len(series_a) != len(series_b):
+    values_a = list(series_a)
+    values_b = list(series_b)
+    if strict_length and len(values_a) != len(values_b):
         raise ValueError("series must have the same length")
-    if not series_a:
+
+    length = min(len(values_a), len(values_b))
+    if length == 0:
         return 0.0
-    mean_a = mean(series_a)
-    mean_b = mean(series_b)
-    covariance = sum((a - mean_a) * (b - mean_b) for a, b in zip(series_a, series_b))
-    variance_a = sum((a - mean_a) ** 2 for a in series_a)
-    variance_b = sum((b - mean_b) ** 2 for b in series_b)
+
+    if len(values_a) != length:
+        values_a = values_a[:length]
+    if len(values_b) != length:
+        values_b = values_b[:length]
+
+    mean_a = mean(values_a)
+    mean_b = mean(values_b)
+    covariance = sum((a - mean_a) * (b - mean_b) for a, b in zip(values_a, values_b))
+    variance_a = sum((a - mean_a) ** 2 for a in values_a)
+    variance_b = sum((b - mean_b) ** 2 for b in values_b)
     if variance_a == 0 or variance_b == 0:
         return 0.0
     return covariance / sqrt(variance_a * variance_b)
+
+
+def pairwise_coupling_operator(
+    series_by_node: Mapping[str, Sequence[float]],
+    *,
+    pairs: Sequence[tuple[str, str]] | None = None,
+) -> Dict[str, float]:
+    """Compute coupling metrics for each node pair using ``acoplamiento``."""
+
+    if pairs is None:
+        ordered_nodes = list(series_by_node.keys())
+        pairs = [(a, b) for idx, a in enumerate(ordered_nodes) for b in ordered_nodes[idx + 1 :]]
+
+    coupling: Dict[str, float] = {}
+    for first, second in pairs:
+        series_a = series_by_node.get(first, ())
+        series_b = series_by_node.get(second, ())
+        label = f"{first}↔{second}"
+        if not series_a or not series_b:
+            coupling[label] = 0.0
+            continue
+        coupling[label] = acoplamiento_operator(series_a, series_b, strict_length=False)
+    return coupling
 
 
 def resonance_operator(series: Sequence[float]) -> float:
@@ -395,6 +430,24 @@ def orchestrate_delta_metrics(
         clamped_si, seed=clamped_si[0], decay=recursion_decay
     )
 
+    node_pairs = (
+        ("tyres", "suspension"),
+        ("tyres", "chassis"),
+        ("suspension", "chassis"),
+    )
+    delta_by_node = {
+        "tyres": [bundle.tyres.delta_nfr for bundle in updated_bundles],
+        "suspension": [bundle.suspension.delta_nfr for bundle in updated_bundles],
+        "chassis": [bundle.chassis.delta_nfr for bundle in updated_bundles],
+    }
+    si_by_node = {
+        "tyres": [bundle.tyres.sense_index for bundle in updated_bundles],
+        "suspension": [bundle.suspension.sense_index for bundle in updated_bundles],
+        "chassis": [bundle.chassis.sense_index for bundle in updated_bundles],
+    }
+    pairwise_delta = pairwise_coupling_operator(delta_by_node, pairs=node_pairs)
+    pairwise_si = pairwise_coupling_operator(si_by_node, pairs=node_pairs)
+
     return {
         "objectives": objectives,
         "bundles": updated_bundles,
@@ -406,6 +459,10 @@ def orchestrate_delta_metrics(
         "coupling": coupling,
         "resonance": resonance,
         "recursive_trace": recursive_trace,
+        "pairwise_coupling": {
+            "delta_nfr": pairwise_delta,
+            "sense_index": pairwise_si,
+        },
     }
 
 
@@ -415,6 +472,7 @@ __all__ = [
     "coherence_operator",
     "dissonance_operator",
     "acoplamiento_operator",
+    "pairwise_coupling_operator",
     "resonance_operator",
     "recursivity_operator",
     "mutation_operator",
