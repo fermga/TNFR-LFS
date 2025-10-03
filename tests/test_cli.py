@@ -255,3 +255,110 @@ exit = 0.2
     assert payload["track"] == "config_track"
     report_root = Path(payload["reports"]["sense_index_map"]["path"]).parent
     assert report_root.parent.name == "artifacts"
+
+
+class _FakeSocket:
+    def __init__(self) -> None:
+        self.bound: list[tuple[str, int]] = []
+        self.connected: list[tuple[str, int]] = []
+
+    def __enter__(self) -> "_FakeSocket":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:  # type: ignore[override]
+        return False
+
+    def setsockopt(self, *args, **kwargs) -> None:
+        return None
+
+    def settimeout(self, timeout: float) -> None:
+        return None
+
+    def bind(self, address: tuple[str, int]) -> None:
+        self.bound.append(address)
+
+    def connect(self, address: tuple[str, int]) -> None:
+        self.connected.append(address)
+
+
+def test_diagnose_reports_success(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg_path = tmp_path / "cfg.txt"
+    cfg_path.write_text(
+        """
+OutSim Mode 1
+OutSim IP 127.0.0.1
+OutSim Port 4123
+OutGauge Mode 1
+OutGauge IP 127.0.0.1
+OutGauge Port 3000
+InSim IP 127.0.0.1
+InSim Port 29999
+""",
+        encoding="utf8",
+    )
+
+    def fake_socket(*args, **kwargs):
+        return _FakeSocket()
+
+    monkeypatch.setattr("tnfr_lfs.cli.tnfr_lfs_cli.socket.socket", fake_socket)
+
+    result = run_cli(["diagnose", str(cfg_path), "--timeout", "0.05"])
+    captured = capsys.readouterr()
+    assert "Estado: correcto" in captured.out
+    assert "OutSim listo" in result
+    assert "OutGauge listo" in result
+    assert "InSim alcanzable" in result
+
+
+def test_diagnose_detects_disabled_modes(tmp_path: Path, capsys) -> None:
+    cfg_path = tmp_path / "cfg.txt"
+    cfg_path.write_text(
+        """
+OutSim Mode 0
+OutSim Port 4123
+OutGauge Mode 0
+OutGauge Port 3000
+""",
+        encoding="utf8",
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        run_cli(["diagnose", str(cfg_path)])
+
+    captured = capsys.readouterr()
+    assert "OutSim Mode" in captured.out
+    assert "OutGauge Mode" in str(excinfo.value)
+
+
+class _BusySocket(_FakeSocket):
+    def bind(self, address: tuple[str, int]) -> None:
+        raise OSError("address already in use")
+
+    def connect(self, address: tuple[str, int]) -> None:
+        raise OSError("address already in use")
+
+
+def test_diagnose_detects_socket_errors(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg_path = tmp_path / "cfg.txt"
+    cfg_path.write_text(
+        """
+OutSim Mode 1
+OutSim IP 127.0.0.1
+OutSim Port 4123
+OutGauge Mode 1
+OutGauge IP 127.0.0.1
+OutGauge Port 3000
+""",
+        encoding="utf8",
+    )
+
+    monkeypatch.setattr("tnfr_lfs.cli.tnfr_lfs_cli.socket.socket", lambda *a, **k: _BusySocket())
+
+    with pytest.raises(ValueError) as excinfo:
+        run_cli(["diagnose", str(cfg_path)])
+
+    captured = capsys.readouterr()
+    assert "OutSim falló" in captured.out
+    assert "OutGauge falló" in str(excinfo.value)

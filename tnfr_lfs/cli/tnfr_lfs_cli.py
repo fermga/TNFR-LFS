@@ -6,11 +6,12 @@ import argparse
 import json
 import math
 import os
+import socket
 from dataclasses import asdict
 from pathlib import Path
 from statistics import mean
 from time import monotonic, sleep
-from typing import Any, Callable, Dict, List, Mapping, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -103,6 +104,58 @@ def _default_track_name(config: Mapping[str, Any]) -> str:
             if isinstance(candidate, str) and candidate.strip():
                 return candidate
     return "generic"
+
+
+def _parse_lfs_cfg(cfg_path: Path) -> Dict[str, Dict[str, str]]:
+    sections: Dict[str, Dict[str, str]] = {"OutSim": {}, "OutGauge": {}, "InSim": {}}
+    with cfg_path.open("r", encoding="utf8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("//"):
+                continue
+            normalized = line.replace("=", " ")
+            parts = [token for token in normalized.split(" ") if token]
+            if len(parts) < 3:
+                continue
+            prefix, key, value = parts[0], parts[1], " ".join(parts[2:])
+            if prefix not in sections:
+                continue
+            sections[prefix][key] = value
+    return sections
+
+
+def _coerce_int(value: Any) -> int | None:
+    try:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _probe_udp_socket(host: str, port: int, timeout: float) -> Tuple[bool, str]:
+    description = f"{host}:{port}"
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.settimeout(timeout)
+            try:
+                sock.bind((host, port))
+            except OSError:
+                try:
+                    sock.bind(("0.0.0.0", 0))
+                except OSError:
+                    pass
+                try:
+                    sock.connect((host, port))
+                except OSError as connect_error:
+                    return False, f"No se pudo abrir UDP en {description}: {connect_error}"
+                return True, f"Socket UDP conectado a {description}"
+            return True, f"Socket UDP disponible en {description}"
+    except OSError as exc:
+        return False, f"No se pudo crear socket UDP para {description}: {exc}"
 
 
 def _phase_tolerances(
@@ -351,6 +404,23 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     telemetry_cfg = dict(config.get("telemetry", {}))
+    diagnose_parser = subparsers.add_parser(
+        "diagnose",
+        help="Validate cfg.txt telemetry configuration and UDP availability.",
+    )
+    diagnose_parser.add_argument(
+        "cfg",
+        type=Path,
+        help="Ruta al fichero cfg.txt de Live for Speed.",
+    )
+    diagnose_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=0.25,
+        help="Tiempo máximo (s) para probar cada socket UDP.",
+    )
+    diagnose_parser.set_defaults(handler=_handle_diagnose)
+
     baseline_parser = subparsers.add_parser(
         "baseline",
         help="Capture telemetry from UDP clients or simulation data and persist it.",
@@ -551,6 +621,73 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     write_set_parser.set_defaults(handler=_handle_write_set)
 
     return parser
+
+
+def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+    cfg_path: Path = namespace.cfg.expanduser().resolve()
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"No se encontró el fichero cfg.txt en {cfg_path}")
+
+    sections = _parse_lfs_cfg(cfg_path)
+    timeout = float(namespace.timeout)
+    errors: List[str] = []
+    successes: List[str] = []
+
+    outsim_mode = _coerce_int(sections["OutSim"].get("Mode") or sections["OutSim"].get("Enable"))
+    if outsim_mode != 1:
+        errors.append("OutSim Mode debe ser 1 para habilitar la telemetría")
+    outsim_port = _coerce_int(sections["OutSim"].get("Port"))
+    outsim_host = sections["OutSim"].get("IP", "127.0.0.1")
+    if outsim_port is None:
+        errors.append("OutSim Port no está definido en cfg.txt")
+    elif outsim_mode == 1:
+        ok, message = _probe_udp_socket(outsim_host, outsim_port, timeout)
+        if ok:
+            successes.append(f"OutSim listo: {message}")
+        else:
+            errors.append(f"OutSim falló: {message}")
+
+    outgauge_mode = _coerce_int(
+        sections["OutGauge"].get("Mode") or sections["OutGauge"].get("Enable")
+    )
+    if outgauge_mode != 1:
+        errors.append("OutGauge Mode debe ser 1 para habilitar la transmisión")
+    outgauge_port = _coerce_int(sections["OutGauge"].get("Port"))
+    outgauge_host = sections["OutGauge"].get("IP", outsim_host)
+    if outgauge_port is None:
+        errors.append("OutGauge Port no está definido en cfg.txt")
+    elif outgauge_mode == 1:
+        ok, message = _probe_udp_socket(outgauge_host, outgauge_port, timeout)
+        if ok:
+            successes.append(f"OutGauge listo: {message}")
+        else:
+            errors.append(f"OutGauge falló: {message}")
+
+    insim_port = _coerce_int(sections["InSim"].get("Port"))
+    insim_host = sections["InSim"].get("IP", outsim_host)
+    if insim_port is not None:
+        ok, message = _probe_udp_socket(insim_host, insim_port, timeout)
+        if ok:
+            successes.append(f"InSim alcanzable: {message}")
+        else:
+            errors.append(f"InSim falló: {message}")
+
+    header = f"Diagnóstico de cfg.txt en {cfg_path}"
+    if errors:
+        summary = [header, "Estado: errores detectados"]
+        summary.extend(f"- {error}" for error in errors)
+        if successes:
+            summary.append("Detalles adicionales:")
+            summary.extend(f"  * {success}" for success in successes)
+        message = "\n".join(summary)
+        print(message)
+        raise ValueError(message)
+
+    summary = [header, "Estado: correcto"]
+    summary.extend(f"- {success}" for success in successes)
+    message = "\n".join(summary)
+    print(message)
+    return message
 
 
 def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:

@@ -12,7 +12,21 @@ selected export format to stdout.
 
 ## Subcommands
 
-The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into five subcommands:
+The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into six subcommands:
+
+### ``diagnose``
+
+Verifies that the Live for Speed ``cfg.txt`` file exposes OutSim/OutGauge data streams and that the UDP
+ports are reachable.  Run ``tnfr-lfs diagnose /ruta/a/LFS/cfg.txt`` before a session to receive:
+
+* Advertencias si ``OutSim Mode`` u ``OutGauge Mode`` no están establecidos en ``1``.
+* Detalles sobre el puerto ``InSim`` configurado (p. ej. ``29999``) para que puedas lanzar ``/insim 29999``
+  desde el chat del simulador cuando toque inicializar la telemetría.
+* Una comprobación rápida de sockets que informa si los puertos ``4123`` (OutSim) y ``3000`` (OutGauge)
+  pueden reservarse en ``127.0.0.1`` o si otro proceso los está ocupando.
+
+La salida termina en ``Estado: correcto`` cuando todo está disponible; en caso contrario imprime un
+resumen de los fallos detectados y devuelve un código de error.
 
 ### ``baseline``
 
@@ -123,6 +137,23 @@ This configuration adjusts the default UDP ports used by ``baseline``,
 selects the exporter for analytics/reporting, sets the default
 car/track for ``suggest`` and overrides the tolerance used when
 highlighting ΔNFR↓ deviations in ``phase_messages``.
+
+### Preparing ``cfg.txt``
+
+Before running the CLI against Live for Speed you must enable the telemetry broadcasters inside
+``cfg.txt`` (located in the simulator root directory):
+
+1. Edit the ``OutSim`` block to contain ``Mode 1``, ``Port 4123`` and ``IP 127.0.0.1``.  These values
+   match the default options of ``tnfr-lfs baseline`` and can be activated on the fly with the command
+   ``/outsim 1 127.0.0.1 4123`` desde el chat del simulador.
+2. Update the ``OutGauge`` block with ``Mode 1``, ``Port 3000`` and ``IP 127.0.0.1``; Live for Speed acepta
+   ``/outgauge 1 127.0.0.1 3000`` como atajo para la misma configuración.
+3. Reserva un puerto ``InSim`` estableciendo ``InSim Port 29999`` (o el valor preferido) y la IP del equipo
+   donde se ejecuta TNFR × LFS.  Lanza ``/insim 29999`` al iniciar una sesión para realizar el handshake que
+   requieren algunos mods de Live for Speed.
+
+Guarda los cambios y ejecuta ``tnfr-lfs diagnose /ruta/a/cfg.txt`` para confirmar que los valores son
+coherentes y que ningún servicio está bloqueando los puertos UDP.
 
 Use ``--config`` to point to an alternative file on a per-invocation
 basis:
