@@ -5,23 +5,20 @@ Event Performance Indicators (EPI), and derive recommendations for
 improving tyre normal force ratio (ΔNFR) and stability index (ΔSi).
 """
 
-from .core.epi import (
-    TelemetryRecord,
-    EPIResult,
-    EPIExtractor,
-    DeltaCalculator,
-    compute_coherence,
-)
+from .core.coherence import compute_node_delta_nfr, sense_index
+from .core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
+from .core.epi_models import EPIBundle
 from .acquisition.outsim_client import OutSimClient
 from .recommender.rules import Recommendation, RecommendationEngine
 from .exporters import exporters_registry
 
 __all__ = [
     "TelemetryRecord",
-    "EPIResult",
     "EPIExtractor",
     "DeltaCalculator",
-    "compute_coherence",
+    "EPIBundle",
+    "compute_node_delta_nfr",
+    "sense_index",
     "OutSimClient",
     "Recommendation",
     "RecommendationEngine",

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from statistics import mean
 from typing import Iterable, List, Protocol, Sequence
 
-from ..core.epi import EPIResult, compute_coherence
+from ..core.epi_models import EPIBundle
 
 
 @dataclass
@@ -20,7 +21,7 @@ class Recommendation:
 class RecommendationRule(Protocol):
     """Interface implemented by recommendation rules."""
 
-    def evaluate(self, results: Sequence[EPIResult]) -> Iterable[Recommendation]:
+    def evaluate(self, results: Sequence[EPIBundle]) -> Iterable[Recommendation]:
         ...
 
 
@@ -29,7 +30,7 @@ class LoadBalanceRule:
 
     threshold: float = 10.0
 
-    def evaluate(self, results: Sequence[EPIResult]) -> Iterable[Recommendation]:
+    def evaluate(self, results: Sequence[EPIBundle]) -> Iterable[Recommendation]:
         for result in results:
             if abs(result.delta_nfr) > self.threshold:
                 direction = "increase" if result.delta_nfr < 0 else "decrease"
@@ -44,40 +45,45 @@ class LoadBalanceRule:
 
 
 class StabilityIndexRule:
-    """Issue recommendations when stability index is unstable."""
+    """Issue recommendations when the sense index degrades."""
 
-    threshold: float = 0.08
+    threshold: float = 0.6
 
-    def evaluate(self, results: Sequence[EPIResult]) -> Iterable[Recommendation]:
+    def evaluate(self, results: Sequence[EPIBundle]) -> Iterable[Recommendation]:
         for result in results:
-            if abs(result.delta_si) > self.threshold:
-                direction = "increase" if result.delta_si < 0 else "reduce"
+            if result.sense_index < self.threshold:
                 yield Recommendation(
                     category="aero",
-                    message=f"{direction.title()} Front Wing angle to stabilise turn-in",
+                    message="Stabilise aero balance to recover sense index",
                     rationale=(
-                        "Stability index deviated by "
-                        f"{result.delta_si:.3f} relative to baseline at t={result.timestamp:.2f}."
+                        "Sense index dropped to "
+                        f"{result.sense_index:.2f} at t={result.timestamp:.2f}, below the threshold of "
+                        f"{self.threshold:.2f}."
                     ),
                 )
 
 
 class CoherenceRule:
-    """High-level rule that considers the coherence score across a stint."""
+    """High-level rule that considers the average sense index across a stint."""
 
-    min_coherence: float = 0.85
+    min_average_si: float = 0.75
 
-    def evaluate(self, results: Sequence[EPIResult]) -> Iterable[Recommendation]:
-        coherence = compute_coherence(results)
-        if coherence < self.min_coherence:
-            yield Recommendation(
-                category="driver",
-                message="Review driving inputs for consistency",
-                rationale=(
-                    "Coherence score across the analysed stint is "
-                    f"{coherence:.2f}, below the expected threshold of {self.min_coherence:.2f}."
-                ),
-            )
+    def evaluate(self, results: Sequence[EPIBundle]) -> Iterable[Recommendation]:
+        if not results:
+            return []
+        average_si = mean(result.sense_index for result in results)
+        if average_si < self.min_average_si:
+            return [
+                Recommendation(
+                    category="driver",
+                    message="Review driving inputs for consistency",
+                    rationale=(
+                        "Average sense index across the analysed stint is "
+                        f"{average_si:.2f}, below the expected threshold of {self.min_average_si:.2f}."
+                    ),
+                )
+            ]
+        return []
 
 
 class RecommendationEngine:
@@ -90,10 +96,10 @@ class RecommendationEngine:
             CoherenceRule(),
         ]
 
-    def generate(self, results: Sequence[EPIResult]) -> List[Recommendation]:
+    def generate(self, results: Sequence[EPIBundle]) -> List[Recommendation]:
         recommendations: List[Recommendation] = []
         for rule in self.rules:
-            recommendations.extend(rule.evaluate(results))
+            recommendations.extend(list(rule.evaluate(results)))
         # Deduplicate identical recommendations while preserving order.
         unique: List[Recommendation] = []
         seen = set()

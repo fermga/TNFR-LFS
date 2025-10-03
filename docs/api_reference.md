@@ -19,9 +19,11 @@ records = client.ingest("stint.csv")
 
 ### `tnfr_lfs.core.epi.EPIExtractor`
 
-Computes :class:`tnfr_lfs.core.epi.EPIResult` objects including EPI,
-ΔNFR, and ΔSi values.  Use :func:`tnfr_lfs.core.epi.compute_coherence`
-to summarise the consistency of the EPI series.
+Computes :class:`tnfr_lfs.core.epi_models.EPIBundle` objects including EPI,
+ΔNFR, entropy-penalised sense index values, and per-node breakdowns.
+Use :func:`tnfr_lfs.core.coherence.sense_index` together with
+:func:`tnfr_lfs.core.coherence.compute_node_delta_nfr` to build custom
+analytics pipelines.
 
 ## Recommendation Engine
 

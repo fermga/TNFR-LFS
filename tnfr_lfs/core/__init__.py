@@ -1,17 +1,14 @@
 """Core computation utilities for TNFR-LFS."""
 
-from .epi import (
-    TelemetryRecord,
-    EPIResult,
-    EPIExtractor,
-    DeltaCalculator,
-    compute_coherence,
-)
+from .coherence import compute_node_delta_nfr, sense_index
+from .epi import DeltaCalculator, EPIExtractor, TelemetryRecord
+from .epi_models import EPIBundle
 
 __all__ = [
     "TelemetryRecord",
-    "EPIResult",
     "EPIExtractor",
     "DeltaCalculator",
-    "compute_coherence",
+    "EPIBundle",
+    "compute_node_delta_nfr",
+    "sense_index",
 ]

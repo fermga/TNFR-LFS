@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from statistics import mean
-from typing import Iterable, List, Sequence
+from typing import Dict, List, Mapping, Sequence
+
+from .coherence import compute_node_delta_nfr, sense_index
+from .epi_models import (
+    BrakesNode,
+    ChassisNode,
+    DriverNode,
+    EPIBundle,
+    SuspensionNode,
+    TrackNode,
+    TransmissionNode,
+    TyresNode,
+)
 
 
 @dataclass(frozen=True)
@@ -19,26 +31,8 @@ class TelemetryRecord:
     nfr: float
     si: float
 
-
-@dataclass(frozen=True)
-class EPIResult:
-    """Computed Event Performance Indicator for a single record."""
-
-    timestamp: float
-    epi: float
-    delta_nfr: float
-    delta_si: float
-
-
 class EPIExtractor:
-    """Compute EPI values for a stream of telemetry records.
-
-    The algorithm implemented here is deliberately simple: the EPI is
-    the weighted sum of load transfer and slip ratio, normalised to a
-    0..1 scale assuming realistic race telemetry ranges.  This provides
-    a deterministic implementation that can be unit-tested and used in
-    examples.
-    """
+    """Compute EPI bundles for a stream of telemetry records."""
 
     def __init__(self, load_weight: float = 0.6, slip_weight: float = 0.4) -> None:
         if not 0 <= load_weight <= 1:
@@ -48,22 +42,14 @@ class EPIExtractor:
         self.load_weight = load_weight
         self.slip_weight = slip_weight
 
-    def extract(self, records: Sequence[TelemetryRecord]) -> List[EPIResult]:
+    def extract(self, records: Sequence[TelemetryRecord]) -> List[EPIBundle]:
         if not records:
             return []
         baseline = DeltaCalculator.derive_baseline(records)
-        results: List[EPIResult] = []
+        results: List[EPIBundle] = []
         for record in records:
             epi_value = self._compute_epi(record)
-            delta = DeltaCalculator.compute(record, baseline)
-            results.append(
-                EPIResult(
-                    timestamp=record.timestamp,
-                    epi=epi_value,
-                    delta_nfr=delta.delta_nfr,
-                    delta_si=delta.delta_si,
-                )
-            )
+            results.append(DeltaCalculator.compute_bundle(record, baseline, epi_value))
         return results
 
     def _compute_epi(self, record: TelemetryRecord) -> float:
@@ -72,14 +58,6 @@ class EPIExtractor:
         load_component = min(max(record.vertical_load / 10000.0, 0.0), 1.0)
         slip_component = min(max((record.slip_ratio + 1.0) / 2.0, 0.0), 1.0)
         return (load_component * self.load_weight) + (slip_component * self.slip_weight)
-
-
-@dataclass(frozen=True)
-class DeltaMetrics:
-    """ΔNFR and ΔSi values relative to a baseline."""
-
-    delta_nfr: float
-    delta_si: float
 
 
 class DeltaCalculator:
@@ -100,28 +78,83 @@ class DeltaCalculator:
         )
 
     @staticmethod
-    def compute(record: TelemetryRecord, baseline: TelemetryRecord) -> DeltaMetrics:
-        return DeltaMetrics(
-            delta_nfr=record.nfr - baseline.nfr,
-            delta_si=record.si - baseline.si,
+    def compute_bundle(
+        record: TelemetryRecord, baseline: TelemetryRecord, epi_value: float
+    ) -> EPIBundle:
+        delta_nfr = record.nfr - baseline.nfr
+        feature_map = DeltaCalculator._feature_map(record, baseline)
+        node_deltas = compute_node_delta_nfr(delta_nfr, feature_map)
+        global_si = sense_index(delta_nfr, node_deltas, baseline.nfr)
+        nodes = DeltaCalculator._build_nodes(node_deltas, delta_nfr)
+        return EPIBundle(
+            timestamp=record.timestamp,
+            epi=epi_value,
+            delta_nfr=delta_nfr,
+            sense_index=global_si,
+            tyres=nodes["tyres"],
+            suspension=nodes["suspension"],
+            chassis=nodes["chassis"],
+            brakes=nodes["brakes"],
+            transmission=nodes["transmission"],
+            track=nodes["track"],
+            driver=nodes["driver"],
         )
 
+    @staticmethod
+    def _feature_map(
+        record: TelemetryRecord, baseline: TelemetryRecord
+    ) -> Mapping[str, float]:
+        return {
+            "tyres": abs(record.slip_ratio - baseline.slip_ratio),
+            "suspension": abs(record.vertical_load - baseline.vertical_load),
+            "chassis": abs(record.lateral_accel - baseline.lateral_accel),
+            "brakes": abs(record.longitudinal_accel - baseline.longitudinal_accel),
+            "transmission": abs(
+                (record.longitudinal_accel + record.slip_ratio)
+                - (baseline.longitudinal_accel + baseline.slip_ratio)
+            ),
+            "track": abs(
+                (record.vertical_load * record.lateral_accel)
+                - (baseline.vertical_load * baseline.lateral_accel)
+            ),
+            "driver": abs(record.si - baseline.si),
+        }
 
-def compute_coherence(results: Iterable[EPIResult]) -> float:
-    """Compute a coherence score for a sequence of EPI results.
+    @staticmethod
+    def _build_nodes(node_deltas: Mapping[str, float], delta_nfr: float) -> Dict[str, object]:
+        def node_si(node_delta: float) -> float:
+            if abs(delta_nfr) < 1e-9:
+                return 1.0
+            ratio = min(1.0, abs(node_delta) / (abs(delta_nfr) + 1e-9))
+            return max(0.0, min(1.0, 1.0 - ratio))
 
-    The coherence is defined as the inverse of the coefficient of
-    variation (standard deviation divided by the mean) of the EPI
-    values.  A high coherence indicates consistent performance across
-    the analysed telemetry segment.
-    """
-
-    epi_values = [result.epi for result in results]
-    if len(epi_values) < 2:
-        return 1.0
-    avg = mean(epi_values)
-    if avg == 0:
-        return 0.0
-    variance = mean((value - avg) ** 2 for value in epi_values)
-    stddev = variance ** 0.5
-    return max(0.0, min(1.0, 1.0 - (stddev / avg)))
+        return {
+            "tyres": TyresNode(
+                delta_nfr=node_deltas.get("tyres", 0.0),
+                sense_index=node_si(node_deltas.get("tyres", 0.0)),
+            ),
+            "suspension": SuspensionNode(
+                delta_nfr=node_deltas.get("suspension", 0.0),
+                sense_index=node_si(node_deltas.get("suspension", 0.0)),
+            ),
+            "chassis": ChassisNode(
+                delta_nfr=node_deltas.get("chassis", 0.0),
+                sense_index=node_si(node_deltas.get("chassis", 0.0)),
+            ),
+            "brakes": BrakesNode(
+                delta_nfr=node_deltas.get("brakes", 0.0),
+                sense_index=node_si(node_deltas.get("brakes", 0.0)),
+            ),
+            "transmission": TransmissionNode(
+                delta_nfr=node_deltas.get("transmission", 0.0),
+                sense_index=node_si(node_deltas.get("transmission", 0.0)),
+            ),
+            "track": TrackNode(
+                delta_nfr=node_deltas.get("track", 0.0),
+                sense_index=node_si(node_deltas.get("track", 0.0)),
+            ),
+            "driver": DriverNode(
+                delta_nfr=node_deltas.get("driver", 0.0),
+                sense_index=node_si(node_deltas.get("driver", 0.0)),
+            ),
+        }
