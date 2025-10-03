@@ -21,10 +21,11 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 from statistics import mean, pstdev
-from typing import Dict, List, Mapping, Sequence, Tuple
+from typing import Dict, List, Mapping, MutableMapping, Sequence, Tuple
 
 from .epi import TelemetryRecord, delta_nfr_by_node
 from .epi_models import EPIBundle
+from .operators import mutation_operator, recursivity_operator
 
 # Thresholds derived from typical race car dynamics.  They can be tuned in
 # the future without affecting the public API of the segmentation module.
@@ -77,7 +78,12 @@ class Microsector:
 
 
 def segment_microsectors(
-    records: Sequence[TelemetryRecord], bundles: Sequence[EPIBundle]
+    records: Sequence[TelemetryRecord],
+    bundles: Sequence[EPIBundle],
+    *,
+    operator_state: MutableMapping[str, Dict[str, Dict[str, object]]] | None = None,
+    recursion_decay: float = 0.4,
+    mutation_thresholds: Mapping[str, float] | None = None,
 ) -> List[Microsector]:
     """Derive microsectors from telemetry and ΔNFR signatures.
 
@@ -97,9 +103,17 @@ def segment_microsectors(
 
     if len(records) != len(bundles):
         raise ValueError("records and bundles must have the same length")
+    if recursion_decay < 0.0 or recursion_decay >= 1.0:
+        raise ValueError("recursion_decay must be in the [0, 1) interval")
 
     segments = _identify_corner_segments(records)
     microsectors: List[Microsector] = []
+    rec_state: MutableMapping[str, Dict[str, object]] | None = None
+    mutation_state: MutableMapping[str, Dict[str, object]] | None = None
+    if operator_state is not None:
+        rec_state = operator_state.setdefault("recursivity", {})
+        mutation_state = operator_state.setdefault("mutation", {})
+    thresholds = mutation_thresholds or {}
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
         curvature = mean(abs(records[i].lateral_accel) for i in range(start, end + 1))
@@ -118,6 +132,62 @@ def segment_microsectors(
             goals,
             key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
         )
+        if rec_state is not None:
+            measures = {
+                "thermal_load": mean(
+                    record.vertical_load for record in records[start : end + 1]
+                ),
+                "style_index": avg_si,
+                "phase": active_goal.phase,
+            }
+            rec_info = recursivity_operator(
+                rec_state,
+                str(index),
+                measures,
+                decay=recursion_decay,
+            )
+            entropy_value = _estimate_entropy(records, start, end)
+            triggers = {
+                "microsector_id": str(index),
+                "current_archetype": archetype,
+                "candidate_archetype": archetype,
+                "fallback_archetype": "recuperacion",
+                "entropy": entropy_value,
+                "style_index": rec_info["filtered"].get("style_index", avg_si),
+                "style_reference": avg_si,
+                "phase": rec_info.get("phase", active_goal.phase),
+                "dynamic_conditions": brake_event or support_event,
+            }
+            mutation_info = mutation_operator(
+                mutation_state if mutation_state is not None else {},
+                triggers,
+                entropy_threshold=thresholds.get("entropy_threshold", 0.65),
+                entropy_increase=thresholds.get("entropy_increase", 0.08),
+                style_threshold=thresholds.get("style_threshold", 0.12),
+            )
+            final_archetype = mutation_info["archetype"]
+            if final_archetype != archetype:
+                archetype = final_archetype
+                goals, dominant_nodes = _build_goals(
+                    archetype,
+                    bundles,
+                    records,
+                    phase_boundaries,
+                )
+                active_goal = max(
+                    goals,
+                    key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
+                )
+                recursivity_operator(
+                    rec_state,
+                    str(index),
+                    {
+                        "thermal_load": measures["thermal_load"],
+                        "style_index": measures["style_index"],
+                        "phase": active_goal.phase,
+                    },
+                    decay=recursion_decay,
+                )
         microsectors.append(
             Microsector(
                 index=index,
@@ -134,6 +204,29 @@ def segment_microsectors(
             )
         )
     return microsectors
+
+
+def _estimate_entropy(
+    records: Sequence[TelemetryRecord], start: int, end: int
+) -> float:
+    node_weights: Dict[str, float] = defaultdict(float)
+    for index in range(start, end + 1):
+        distribution = delta_nfr_by_node(records[index])
+        for node, delta in distribution.items():
+            weight = abs(delta)
+            if weight > 0.0:
+                node_weights[node] += weight
+    total = sum(node_weights.values())
+    if total <= 0.0:
+        return 0.0
+    probabilities = [value / total for value in node_weights.values() if value > 0.0]
+    if len(probabilities) <= 1:
+        return 0.0
+    entropy = -sum(prob * math.log(prob) for prob in probabilities)
+    max_entropy = math.log(len(probabilities)) if len(probabilities) > 1 else 0.0
+    if max_entropy <= 0.0:
+        return 0.0
+    return min(1.0, entropy / max_entropy)
 
 
 def _identify_corner_segments(records: Sequence[TelemetryRecord]) -> List[Tuple[int, int]]:

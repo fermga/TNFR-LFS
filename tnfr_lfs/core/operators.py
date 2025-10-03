@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from math import sqrt
 from statistics import mean
-from typing import Dict, List, Mapping, Sequence
+from typing import Dict, List, Mapping, MutableMapping, Sequence
 
 from .epi import EPIExtractor, TelemetryRecord
 from .epi_models import EPIBundle
@@ -98,6 +98,212 @@ def resonance_operator(series: Sequence[float]) -> float:
     if not series:
         return 0.0
     return sqrt(mean(value * value for value in series))
+
+
+def recursivity_operator(
+    state: MutableMapping[str, Dict[str, object]],
+    microsector_id: str,
+    measures: Mapping[str, float | str],
+    *,
+    decay: float = 0.4,
+    history: int = 20,
+) -> Dict[str, object]:
+    """Maintain a recursive state per microsector for thermal/style metrics.
+
+    Parameters
+    ----------
+    state:
+        Mutable mapping that stores the per-microsector internal state.  The
+        mapping is updated in-place.
+    microsector_id:
+        Identifier of the microsector being updated.  Typically the ordinal
+        position in the segmentation output.
+    measures:
+        Mapping with the instantaneous measurements for the microsector.  The
+        canonical keys are ``"thermal_load"`` and ``"style_index"`` together
+        with an optional ``"phase"`` literal describing the active phase
+        (entry/apex/exit).  Additional numeric keys are filtered using the same
+        exponential decay.
+    decay:
+        Exponential decay factor in the ``[0, 1)`` interval.  Values closer to
+        one keep a longer memory while values near zero prioritise the most
+        recent measure.
+    history:
+        Maximum number of filtered samples to retain in the per-microsector
+        history trace.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the filtered metrics, the phase and whether a
+        phase change was detected.
+    """
+
+    if not 0.0 <= decay < 1.0:
+        raise ValueError("decay must be in the [0, 1) interval")
+    if not microsector_id:
+        raise ValueError("microsector_id must be a non-empty string")
+    if history <= 0:
+        raise ValueError("history must be a positive integer")
+
+    micro_state = state.setdefault(
+        microsector_id,
+        {
+            "filtered": {},
+            "phase": None,
+            "samples": 0,
+            "trace": [],
+        },
+    )
+
+    phase = measures.get("phase") if isinstance(measures.get("phase"), str) else None
+    previous_phase = micro_state.get("phase")
+    phase_changed = phase is not None and previous_phase is not None and phase != previous_phase
+    if phase is not None:
+        micro_state["phase"] = phase
+
+    filtered_values: Dict[str, float] = {}
+    numeric_keys = [
+        key
+        for key, value in measures.items()
+        if key != "phase" and isinstance(value, (int, float))
+    ]
+    for key in numeric_keys:
+        value = float(measures[key])
+        previous = micro_state["filtered"].get(key)
+        if previous is None or phase_changed:
+            filtered = value
+        else:
+            filtered = (decay * float(previous)) + ((1.0 - decay) * value)
+        micro_state["filtered"][key] = filtered
+        filtered_values[key] = filtered
+
+    micro_state["samples"] = int(micro_state.get("samples", 0)) + 1
+    trace_entry = {"phase": micro_state.get("phase"), **filtered_values}
+    micro_state.setdefault("trace", []).append(trace_entry)
+    if len(micro_state["trace"]) > history:
+        overflow = len(micro_state["trace"]) - history
+        del micro_state["trace"][:overflow]
+
+    micro_state["last_measures"] = dict(measures)
+
+    return {
+        "microsector_id": microsector_id,
+        "phase": micro_state.get("phase"),
+        "filtered": filtered_values,
+        "samples": micro_state["samples"],
+        "phase_changed": phase_changed,
+    }
+
+
+def mutation_operator(
+    state: MutableMapping[str, Dict[str, object]],
+    triggers: Mapping[str, object],
+    *,
+    entropy_threshold: float = 0.65,
+    entropy_increase: float = 0.08,
+    style_threshold: float = 0.12,
+) -> Dict[str, object]:
+    """Update the target archetype when entropy or style shifts are detected.
+
+    The operator keeps per-microsector memory of the previous entropy, style
+    index and active phase to detect meaningful regime changes.  When the
+    entropy rises sharply or the driving style drifts outside the configured
+    window the archetype mutates to the provided candidate or fallback.
+
+    Parameters
+    ----------
+    state:
+        Mutable mapping storing the mutation state per microsector.
+    triggers:
+        Mapping providing the measurements required to evaluate the mutation
+        rules.  Expected keys include ``"microsector_id"``,
+        ``"current_archetype"``, ``"candidate_archetype"``,
+        ``"fallback_archetype"``, ``"entropy"``, ``"style_index"``,
+        ``"style_reference"`` and ``"phase"``.
+    entropy_threshold:
+        Absolute entropy level that must be reached to trigger a fallback
+        archetype.
+    entropy_increase:
+        Minimum entropy delta compared to the stored baseline to trigger the
+        fallback archetype.
+    style_threshold:
+        Allowed absolute deviation between the filtered style index and the
+        reference target before mutating towards the candidate archetype.
+
+    Returns
+    -------
+    dict
+        A dictionary with the selected archetype, whether a mutation happened
+        and diagnostic information.
+    """
+
+    microsector_id = triggers.get("microsector_id")
+    if not isinstance(microsector_id, str) or not microsector_id:
+        raise ValueError("microsector_id trigger must be a non-empty string")
+
+    current_archetype = str(triggers.get("current_archetype", "equilibrio"))
+    candidate_archetype = str(triggers.get("candidate_archetype", current_archetype))
+    fallback_archetype = str(triggers.get("fallback_archetype", "recuperacion"))
+
+    entropy = float(triggers.get("entropy", 0.0))
+    style_index = float(triggers.get("style_index", 1.0))
+    style_reference = float(triggers.get("style_reference", style_index))
+    phase = triggers.get("phase") if isinstance(triggers.get("phase"), str) else None
+    dynamic_flag = bool(triggers.get("dynamic_conditions", False))
+
+    micro_state = state.setdefault(
+        microsector_id,
+        {
+            "archetype": current_archetype,
+            "entropy": entropy,
+            "style_index": style_index,
+            "phase": phase,
+        },
+    )
+
+    previous_entropy = float(micro_state.get("entropy", entropy))
+    previous_style = float(micro_state.get("style_index", style_index))
+    previous_phase = micro_state.get("phase") if isinstance(micro_state.get("phase"), str) else None
+
+    entropy_delta = entropy - previous_entropy
+    style_delta = abs(style_index - style_reference)
+
+    mutated = False
+    selected_archetype = current_archetype
+
+    if entropy >= entropy_threshold and entropy_delta >= entropy_increase:
+        selected_archetype = fallback_archetype
+        mutated = selected_archetype != current_archetype
+    elif style_delta >= style_threshold or (dynamic_flag and style_delta >= style_threshold * 0.5):
+        selected_archetype = candidate_archetype
+        mutated = selected_archetype != current_archetype
+    elif phase is not None and previous_phase is not None and phase != previous_phase:
+        # When the phase changes we allow the system to adopt the candidate
+        # archetype if the style trend keeps diverging from the stored value.
+        secondary_delta = abs(style_index - previous_style)
+        if secondary_delta >= style_threshold * 0.5:
+            selected_archetype = candidate_archetype
+            mutated = selected_archetype != current_archetype
+
+    micro_state.update(
+        {
+            "archetype": selected_archetype,
+            "entropy": entropy,
+            "style_index": style_index,
+            "phase": phase if phase is not None else previous_phase,
+        }
+    )
+
+    return {
+        "microsector_id": microsector_id,
+        "archetype": selected_archetype,
+        "mutated": mutated,
+        "entropy": entropy,
+        "entropy_delta": entropy_delta,
+        "style_delta": style_delta,
+        "phase": micro_state["phase"],
+    }
 
 
 def recursividad_operator(
@@ -196,6 +402,8 @@ __all__ = [
     "dissonance_operator",
     "acoplamiento_operator",
     "resonance_operator",
+    "recursivity_operator",
+    "mutation_operator",
     "recursividad_operator",
     "orchestrate_delta_metrics",
     "evolve_epi",
