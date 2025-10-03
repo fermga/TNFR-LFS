@@ -22,3 +22,5 @@ jobs:
         run: mypy --strict
       - name: Pytest
         run: pytest
+      - name: Quickstart (simulated pipeline)
+        run: make quickstart
