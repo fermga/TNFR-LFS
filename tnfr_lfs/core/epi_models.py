@@ -91,6 +91,8 @@ class TransmissionNode:
     gear: int = 0
     speed: float = 0.0
     longitudinal_accel: float = 0.0
+    rpm: float = 0.0
+    line_deviation: float = 0.0
 
 
 @dataclass(frozen=True)

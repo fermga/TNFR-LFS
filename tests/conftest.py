@@ -403,6 +403,7 @@ def acceptance_microsectors() -> List[Microsector]:
             "phase": "apex",
         },
         window_occupancy=window_occupancy,
+        operator_events={},
     )
     return [microsector]
 

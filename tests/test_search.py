@@ -199,6 +199,7 @@ def _microsector() -> Microsector:
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy=window_occupancy,
+        operator_events={},
     )
 
 

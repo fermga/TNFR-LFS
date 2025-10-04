@@ -132,6 +132,8 @@ LEGACY_DEFAULTS = {
     "tyre_pressure_fr": 0.0,
     "tyre_pressure_rl": 0.0,
     "tyre_pressure_rr": 0.0,
+    "rpm": 0.0,
+    "line_deviation": 0.0,
 }
 
 
@@ -268,6 +270,8 @@ class OutSimClient:
                         tyre_pressure_fr=LEGACY_DEFAULTS["tyre_pressure_fr"],
                         tyre_pressure_rl=LEGACY_DEFAULTS["tyre_pressure_rl"],
                         tyre_pressure_rr=LEGACY_DEFAULTS["tyre_pressure_rr"],
+                        rpm=LEGACY_DEFAULTS["rpm"],
+                        line_deviation=LEGACY_DEFAULTS["line_deviation"],
                         lap=None,
                     )
                 else:
@@ -321,6 +325,8 @@ class OutSimClient:
                         tyre_pressure_fr=float(value_map.get("tyre_pressure_fr", 0.0)),
                         tyre_pressure_rl=float(value_map.get("tyre_pressure_rl", 0.0)),
                         tyre_pressure_rr=float(value_map.get("tyre_pressure_rr", 0.0)),
+                        rpm=float(value_map.get("rpm", 0.0)),
+                        line_deviation=float(value_map.get("line_deviation", 0.0)),
                         lap=lap_value,
                     )
             except ValueError as exc:  # pragma: no cover - defensive branch

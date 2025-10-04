@@ -42,6 +42,7 @@ from .contextual_delta import (
     resolve_series_context,
 )
 from .metrics import compute_window_metrics
+from .operator_detection import detect_al, detect_il, detect_oz
 from .operators import mutation_operator, recursivity_operator
 from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias, phase_family
 from .archetypes import (
@@ -131,6 +132,9 @@ class Microsector:
     )
     context_factors: Mapping[str, float] = field(default_factory=dict)
     sample_context_factors: Mapping[int, Mapping[str, float]] = field(
+        default_factory=dict
+    )
+    operator_events: Mapping[str, Tuple[Mapping[str, object], ...]] = field(
         default_factory=dict
     )
 
@@ -566,6 +570,14 @@ def segment_microsectors(
                 phase_alignment_map[legacy] = float(
                     mean(value for value in align_values if value is not None)
                 )
+        operator_events: Dict[str, Tuple[Mapping[str, object], ...]] = {}
+        for name, detector in (("AL", detect_al), ("OZ", detect_oz), ("IL", detect_il)):
+            events = [
+                {**event, "microsector": spec["index"]}
+                for event in detector(record_window)
+            ]
+            if events:
+                operator_events[name] = tuple(events)
         microsectors.append(
             Microsector(
                 index=spec["index"],
@@ -603,6 +615,7 @@ def segment_microsectors(
                     )
                     for idx, factors in spec.get("sample_context", {}).items()
                 },
+                operator_events=operator_events,
             )
         )
 

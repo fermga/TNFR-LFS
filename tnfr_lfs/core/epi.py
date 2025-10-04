@@ -335,6 +335,8 @@ class TelemetryRecord:
     tyre_pressure_fr: float = 0.0
     tyre_pressure_rl: float = 0.0
     tyre_pressure_rr: float = 0.0
+    rpm: float = 0.0
+    line_deviation: float = 0.0
     lap: int | str | None = None
     reference: Optional["TelemetryRecord"] = None
 
@@ -947,6 +949,8 @@ class DeltaCalculator:
                 gear=record.gear,
                 speed=record.speed,
                 longitudinal_accel=record.longitudinal_accel,
+                rpm=record.rpm,
+                line_deviation=record.line_deviation,
             ),
             "track": TrackNode(
                 delta_nfr=node_deltas.get("track", 0.0),

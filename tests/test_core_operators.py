@@ -280,6 +280,7 @@ def _build_microsector(
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy=window_occupancy,
+        operator_events={},
     )
 
 
@@ -498,6 +499,7 @@ def test_orchestrator_respects_phase_weight_overrides():
             "apex": {"slip_lat": 0.0, "slip_long": 0.0, "yaw_rate": 0.0},
             "exit": {"slip_lat": 0.0, "slip_long": 0.0, "yaw_rate": 0.0},
         },
+        operator_events={},
     )
     boosted_microsector = replace(base_microsector, phase_weights=boosted_weights)
 

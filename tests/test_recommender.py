@@ -164,6 +164,7 @@ def _udr_microsector(goal: Goal, *, udr: float, sample_count: int) -> Microsecto
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy={goal.phase: {}},
+        operator_events={},
     )
 
 
@@ -220,6 +221,7 @@ def test_tyre_balance_rule_generates_guidance():
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy={"apex": {}},
+        operator_events={},
     )
     thresholds = ThresholdProfile(
         entry_delta_tolerance=0.6,
@@ -470,6 +472,7 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy=window_occupancy,
+        operator_events={},
     )
 
     results = [
@@ -766,6 +769,7 @@ def test_track_specific_profile_tightens_entry_threshold():
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy=window_occupancy,
+        operator_events={},
     )
 
     results = [
@@ -918,6 +922,7 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
             "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
             "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
         },
+        operator_events={},
     )
 
     results = [
@@ -1020,6 +1025,7 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy={"apex": {"slip_lat": 75.0, "slip_long": 70.0, "yaw_rate": 68.0}},
+        operator_events={},
     )
 
     recommendations = list(rule.evaluate(results, [microsector], context=context))
@@ -1081,6 +1087,7 @@ def test_detune_ratio_rule_emits_modal_guidance() -> None:
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy={"apex": {"slip_lat": 80.0, "slip_long": 78.0, "yaw_rate": 72.0}},
+        operator_events={},
     )
 
     engine = RecommendationEngine(rules=[DetuneRatioRule(priority=42)])
@@ -1201,6 +1208,7 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy={"entry1": {}},
+        operator_events={},
     )
     results = [
         _axis_bundle(0.6, 0.5, 0.1),
@@ -1268,6 +1276,7 @@ def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy={"apex3a": {}},
+        operator_events={},
     )
     results = [
         _axis_bundle(1.0, 0.12, 0.88),
