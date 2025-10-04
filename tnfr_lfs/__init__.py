@@ -27,6 +27,14 @@ from .config_loader import (
     load_profiles,
     resolve_targets,
 )
+from .track_loader import (
+    Track,
+    TrackConfig,
+    assemble_session_weights,
+    load_modifiers,
+    load_track,
+    load_track_profiles,
+)
 
 __all__ = [
     "TelemetryRecord",
@@ -51,4 +59,10 @@ __all__ = [
     "load_profiles",
     "resolve_targets",
     "example_pipeline",
+    "Track",
+    "TrackConfig",
+    "load_track",
+    "load_track_profiles",
+    "load_modifiers",
+    "assemble_session_weights",
 ]
