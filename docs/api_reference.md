@@ -32,7 +32,10 @@ Each :class:`EPIBundle` records the per-node natural frequency ``nu_f`` (Hz),
 allowing downstream tooling to weigh ΔNFR contributions using documented
 subsystem dynamics.  Bundles now expose the derivative ``dEPI_dt`` and the
 cumulatively integrated ``integrated_epi`` value obtained through explicit
-Euler integration.
+Euler integration.  The ΔNFR signal is also decomposed into longitudinal and
+lateral components via the ``delta_nfr_longitudinal``/``delta_nfr_lateral``
+fields which are derived from the underlying feature contributions and
+provide immediate visibility of brake/traction versus balance imbalances.
 
 ### Operator utilities
 
@@ -76,7 +79,12 @@ signatures.  Each :class:`Microsector` exposes phase boundaries for entry,
 apex, and exit together with an ``active_phase`` selector and the
 ``dominant_nodes`` mapping that lists the subsystems driving each phase.
 The per-phase :class:`Goal` instances define not only the target ΔNFR and
-Sense Index averages but also:
+Sense Index averages but also longitudinal/lateral ΔNFR objectives and the
+relative weighting between them.  These values are propagated to
+:class:`Microsector` objects (``phase_axis_targets``/``phase_axis_weights``)
+so downstream recommenders and exporters can highlight whether the
+microsector demands longitudinal support (bias de frenos, bloqueo del
+diferencial) or lateral balance (barras, toe, alineaciones).
 
 * ``nu_f_target`` – the weighted natural frequency of the fastest nodes in the
   phase.

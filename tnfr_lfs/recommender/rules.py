@@ -48,6 +48,35 @@ _ALIGNMENT_ALIGNMENT_GAP = 0.15
 _ALIGNMENT_LAG_GAP = 0.3
 
 
+_AXIS_FOCUS_MAP: Mapping[tuple[str, str], tuple[str, str, Tuple[str, ...]]] = {
+    ("entry", "longitudinal"): (
+        "Prioriza el bias de frenos (ΔNFR∥)",
+        "braking",
+        ("brake_bias_pct",),
+    ),
+    ("exit", "longitudinal"): (
+        "Refuerza el bloqueo de retención (ΔNFR∥)",
+        "differential",
+        ("diff_coast_lock",),
+    ),
+    ("apex", "lateral"): (
+        "Ajusta las barras estabilizadoras (ΔNFR⊥)",
+        "antiroll",
+        ("front_arb_steps", "rear_arb_steps"),
+    ),
+    ("entry", "lateral"): (
+        "Afina el toe delantero (ΔNFR⊥)",
+        "tyre_balance",
+        ("front_toe_deg",),
+    ),
+    ("exit", "lateral"): (
+        "Afina el toe trasero (ΔNFR⊥)",
+        "tyre_balance",
+        ("rear_toe_deg",),
+    ),
+}
+
+
 NODE_LABELS = {
     "tyres": "neumáticos",
     "suspension": "suspensión",
@@ -796,6 +825,15 @@ def _should_flip_alignment(
     return False
 
 
+def _axis_focus_descriptor(phase: str, axis: str) -> tuple[str, str, Tuple[str, ...]] | None:
+    family = phase_family(phase)
+    key = (family, axis)
+    if key in _AXIS_FOCUS_MAP:
+        return _AXIS_FOCUS_MAP[key]
+    direct = (phase, axis)
+    return _AXIS_FOCUS_MAP.get(direct)
+
+
 class PhaseDeltaDeviationRule:
     """Detects ΔNFR mismatches for a given phase of the corner."""
 
@@ -836,6 +874,27 @@ class PhaseDeltaDeviationRule:
                 continue
             actual_delta = mean(bundle.delta_nfr for bundle in samples)
             deviation = actual_delta - goal.target_delta_nfr
+            avg_long = mean(bundle.delta_nfr_longitudinal for bundle in samples)
+            avg_lat = mean(bundle.delta_nfr_lateral for bundle in samples)
+            target_long = getattr(goal, "target_delta_nfr_long", 0.0)
+            target_lat = getattr(goal, "target_delta_nfr_lat", 0.0)
+            long_dev = avg_long - target_long
+            lat_dev = avg_lat - target_lat
+            abs_long = abs(long_dev)
+            abs_lat = abs(lat_dev)
+            axis_bias: str | None = None
+            dominance_threshold = 1.2
+            axis_delta_threshold = max(0.02, tolerance * 0.25)
+            if abs_long > abs_lat * dominance_threshold and abs_long > axis_delta_threshold:
+                axis_bias = "longitudinal"
+            elif abs_lat > abs_long * dominance_threshold and abs_lat > axis_delta_threshold:
+                axis_bias = "lateral"
+            lag_value = microsector.phase_lag.get(goal.phase, goal.measured_phase_lag)
+            target_lag = getattr(goal, "target_phase_lag", 0.0)
+            lag_gap = abs(lag_value - target_lag)
+            axis_weights = getattr(goal, "delta_axis_weights", {})
+            weight_long = float(axis_weights.get("longitudinal", 0.5))
+            weight_lat = float(axis_weights.get("lateral", 0.5))
             if abs(deviation) <= tolerance:
                 continue
             base_rationale = (
@@ -874,6 +933,30 @@ class PhaseDeltaDeviationRule:
                     priority=self.priority + 40,
                 )
             )
+
+            if axis_bias and (lag_gap > 0.05 or (axis_bias == "longitudinal" and abs_long > axis_delta_threshold) or (axis_bias == "lateral" and abs_lat > axis_delta_threshold)):
+                descriptor = _axis_focus_descriptor(goal.phase, axis_bias)
+                if descriptor is not None:
+                    focus_message, focus_reference, parameters = descriptor
+                    axis_label = "∥" if axis_bias == "longitudinal" else "⊥"
+                    axis_delta = long_dev if axis_bias == "longitudinal" else lat_dev
+                    target_value = target_long if axis_bias == "longitudinal" else target_lat
+                    focus_rationale = (
+                        f"{base_rationale} ΔNFR{axis_label} domina ({axis_delta:+.2f} frente al objetivo "
+                        f"{target_value:+.2f}). θ medido {lag_value:+.2f}rad (objetivo {target_lag:+.2f}). "
+                        f"Reparto objetivo ∥ {weight_long:.2f} · ⊥ {weight_lat:.2f}."
+                    )
+                    recommendations.append(
+                        Recommendation(
+                            category=self.category,
+                            message=focus_message,
+                            rationale=f"{focus_rationale} Consulta {MANUAL_REFERENCES[focus_reference]}.",
+                            priority=self.priority - 2,
+                        )
+                    )
+                    for rec in recommendations:
+                        if rec.parameter and rec.parameter in parameters:
+                            rec.priority = min(rec.priority, self.priority - 1)
 
             target_si = getattr(goal, "target_sense_index", None)
             if target_si is not None:

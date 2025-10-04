@@ -21,6 +21,7 @@ from tnfr_lfs.io.profiles import ProfileManager
 from tnfr_lfs.recommender.rules import (
     DetuneRatioRule,
     MANUAL_REFERENCES,
+    PhaseDeltaDeviationRule,
     PhaseNodeOperatorRule,
     Recommendation,
     RecommendationEngine,
@@ -72,11 +73,47 @@ def _udr_bundle_series(values: Sequence[float], *, si: float = 0.8) -> Sequence[
                 timestamp=index * 0.1,
                 epi=0.0,
                 delta_nfr=value,
+                delta_nfr_longitudinal=value,
+                delta_nfr_lateral=0.0,
                 sense_index=si,
                 **nodes,
             )
         )
     return bundles
+
+
+def _axis_bundle(delta_nfr: float, long_component: float, lat_component: float, *, si: float = 0.8) -> EPIBundle:
+    share = delta_nfr / 7.0
+    nodes = dict(
+        tyres=TyresNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["tyres"]),
+        suspension=SuspensionNode(
+            delta_nfr=share,
+            sense_index=si,
+            nu_f=BASE_NU_F["suspension"],
+        ),
+        chassis=ChassisNode(
+            delta_nfr=share,
+            sense_index=si,
+            nu_f=BASE_NU_F["chassis"],
+        ),
+        brakes=BrakesNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["brakes"]),
+        transmission=TransmissionNode(
+            delta_nfr=share,
+            sense_index=si,
+            nu_f=BASE_NU_F["transmission"],
+        ),
+        track=TrackNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["track"]),
+        driver=DriverNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["driver"]),
+    )
+    return EPIBundle(
+        timestamp=0.0,
+        epi=0.0,
+        delta_nfr=delta_nfr,
+        delta_nfr_longitudinal=long_component,
+        delta_nfr_lateral=lat_component,
+        sense_index=si,
+        **nodes,
+    )
 
 
 def _udr_goal(phase: str = "apex", target_delta: float = 0.2) -> Goal:
@@ -1039,3 +1076,141 @@ def test_useful_dissonance_rule_softens_axle_when_udr_low(car_track_thresholds):
     assert oversteer_recs, "expected UDR rear softening recommendation"
     oversteer_messages = [rec.message.lower() for rec in oversteer_recs]
     assert any("traser" in message for message in oversteer_messages)
+
+def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="entry",
+        operator_label="Operador de frenado",
+        category="entry",
+        phase_label="entrada",
+        priority=10,
+        reference_key="braking",
+    )
+    goal = Goal(
+        phase="entry1",
+        archetype="frenada",
+        description="",
+        target_delta_nfr=0.1,
+        target_sense_index=0.9,
+        nu_f_target=0.25,
+        nu_exc_target=0.2,
+        rho_target=1.0,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.9,
+        measured_phase_lag=0.25,
+        measured_phase_alignment=0.85,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.4, 0.4),
+        yaw_rate_window=(-0.5, 0.5),
+        dominant_nodes=("brakes",),
+        target_delta_nfr_long=0.08,
+        target_delta_nfr_lat=0.02,
+        delta_axis_weights={"longitudinal": 0.75, "lateral": 0.25},
+    )
+    microsector = Microsector(
+        index=1,
+        start_time=0.0,
+        end_time=0.3,
+        curvature=1.1,
+        brake_event=True,
+        support_event=False,
+        delta_nfr_signature=0.4,
+        goals=(goal,),
+        phase_boundaries={"entry1": (0, 3)},
+        phase_samples={"entry1": (0, 1, 2)},
+        active_phase="entry1",
+        dominant_nodes={"entry1": ("brakes",)},
+        phase_weights={"entry1": {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={"entry1": 0.25},
+        phase_alignment={"entry1": 0.82},
+        filtered_measures={},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"entry1": {}},
+    )
+    results = [
+        _axis_bundle(0.6, 0.5, 0.1),
+        _axis_bundle(0.58, 0.46, 0.12),
+        _axis_bundle(0.62, 0.52, 0.1),
+    ]
+    thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate(results, [microsector], context))
+    messages = [rec.message for rec in recommendations]
+    assert any("bias de frenos" in message for message in messages)
+    targeted = [rec for rec in recommendations if rec.parameter == "brake_bias_pct"]
+    assert targeted
+    assert all(rec.priority <= rule.priority - 1 for rec in targeted)
+
+
+def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="apex",
+        operator_label="Operador de vértice",
+        category="apex",
+        phase_label="vértice",
+        priority=20,
+        reference_key="antiroll",
+    )
+    goal = Goal(
+        phase="apex3a",
+        archetype="apoyo",
+        description="",
+        target_delta_nfr=0.05,
+        target_sense_index=0.88,
+        nu_f_target=0.3,
+        nu_exc_target=0.25,
+        rho_target=0.9,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.92,
+        measured_phase_lag=-0.22,
+        measured_phase_alignment=0.75,
+        slip_lat_window=(-0.25, 0.25),
+        slip_long_window=(-0.25, 0.25),
+        yaw_rate_window=(-0.4, 0.4),
+        dominant_nodes=("suspension", "chassis"),
+        target_delta_nfr_long=0.01,
+        target_delta_nfr_lat=0.06,
+        delta_axis_weights={"longitudinal": 0.2, "lateral": 0.8},
+    )
+    microsector = Microsector(
+        index=2,
+        start_time=0.0,
+        end_time=0.3,
+        curvature=1.6,
+        brake_event=False,
+        support_event=True,
+        delta_nfr_signature=0.3,
+        goals=(goal,),
+        phase_boundaries={"apex3a": (0, 4)},
+        phase_samples={"apex3a": (0, 1, 2, 3)},
+        active_phase="apex3a",
+        dominant_nodes={"apex3a": ("suspension", "chassis")},
+        phase_weights={"apex3a": {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={"apex3a": -0.22},
+        phase_alignment={"apex3a": 0.74},
+        filtered_measures={},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"apex3a": {}},
+    )
+    results = [
+        _axis_bundle(1.0, 0.12, 0.88),
+        _axis_bundle(0.95, 0.1, 0.85),
+        _axis_bundle(1.05, 0.14, 0.92),
+        _axis_bundle(1.0, 0.11, 0.87),
+    ]
+    thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate(results, [microsector], context))
+    messages = [rec.message for rec in recommendations]
+    assert any("barras estabilizadoras" in message for message in messages)
+    sway_recs = [
+        rec
+        for rec in recommendations
+        if rec.parameter in {"front_arb_steps", "rear_arb_steps"}
+    ]
+    assert sway_recs
+    assert all(rec.priority <= rule.priority - 1 for rec in sway_recs)

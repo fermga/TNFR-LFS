@@ -13,6 +13,7 @@ from tnfr_lfs.core import Goal, Microsector, TelemetryRecord
 from tnfr_lfs.core.coherence import sense_index
 from tnfr_lfs.core.epi import (
     DEFAULT_PHASE_WEIGHTS,
+    DeltaCalculator,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
@@ -113,6 +114,75 @@ def _build_record(
         suspension_velocity_front=suspension_velocity_front,
         suspension_velocity_rear=suspension_velocity_rear,
     )
+
+
+def test_delta_calculator_decomposes_longitudinal_component():
+    baseline = _build_record(
+        timestamp=0.0,
+        vertical_load=4000.0,
+        slip_ratio=0.0,
+        lateral_accel=1.0,
+        longitudinal_accel=0.2,
+        nfr=5.0,
+        si=0.8,
+        brake_pressure=20.0,
+        speed=40.0,
+    )
+    sample = replace(
+        baseline,
+        timestamp=0.1,
+        vertical_load=4200.0,
+        slip_ratio=0.05,
+        lateral_accel=1.1,
+        longitudinal_accel=1.2,
+        nfr=6.5,
+        si=0.78,
+        brake_pressure=60.0,
+        speed=42.0,
+        reference=baseline,
+    )
+    bundle = DeltaCalculator.compute_bundle(sample, baseline, epi_value=0.0)
+    assert bundle.delta_nfr == pytest.approx(1.5, rel=1e-3)
+    assert bundle.delta_nfr_longitudinal + bundle.delta_nfr_lateral == pytest.approx(
+        bundle.delta_nfr,
+        rel=1e-6,
+    )
+    assert abs(bundle.delta_nfr_longitudinal) > abs(bundle.delta_nfr_lateral)
+
+
+def test_delta_calculator_decomposes_lateral_component():
+    baseline = _build_record(
+        timestamp=0.0,
+        vertical_load=4100.0,
+        slip_ratio=0.02,
+        lateral_accel=0.8,
+        longitudinal_accel=0.3,
+        nfr=4.0,
+        si=0.82,
+        steer=0.02,
+        yaw_rate=0.1,
+    )
+    sample = replace(
+        baseline,
+        timestamp=0.1,
+        vertical_load=4100.0,
+        slip_ratio=0.02,
+        lateral_accel=1.8,
+        longitudinal_accel=0.3,
+        nfr=5.2,
+        si=0.81,
+        steer=0.4,
+        yaw_rate=0.4,
+        slip_angle=0.3,
+        reference=baseline,
+    )
+    bundle = DeltaCalculator.compute_bundle(sample, baseline, epi_value=0.0)
+    assert bundle.delta_nfr == pytest.approx(1.2, rel=1e-3)
+    assert bundle.delta_nfr_longitudinal + bundle.delta_nfr_lateral == pytest.approx(
+        bundle.delta_nfr,
+        rel=1e-6,
+    )
+    assert abs(bundle.delta_nfr_lateral) > abs(bundle.delta_nfr_longitudinal)
 
 
 def _build_goal(phase: str, target_delta: float, *, archetype: str = "equilibrio") -> Goal:

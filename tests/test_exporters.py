@@ -92,7 +92,10 @@ def test_csv_exporter_renders_rows():
     payload = build_payload()
     output = csv_exporter(payload)
     lines = output.strip().splitlines()
-    assert lines[0] == "timestamp,epi,delta_nfr,sense_index"
+    assert (
+        lines[0]
+        == "timestamp,epi,delta_nfr,delta_nfr_longitudinal,delta_nfr_lateral,sense_index"
+    )
     assert len(lines) == 3
 
 
@@ -143,6 +146,14 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
         expected_effects_by_phase={
             "entry": ("Frenadas más consistentes",),
         },
+        phase_axis_targets={
+            "entry": {"longitudinal": 0.4, "lateral": 0.1},
+            "apex": {"longitudinal": 0.05, "lateral": 0.3},
+        },
+        phase_axis_weights={
+            "entry": {"longitudinal": 0.7, "lateral": 0.3},
+            "apex": {"longitudinal": 0.2, "lateral": 0.8},
+        },
     )
 
 
@@ -165,6 +176,8 @@ def test_serialise_setup_plan_collects_unique_fields():
     assert "tyres" in payload["expected_effects_by_node"]
     assert "entry" in payload["expected_effects_by_phase"]
     assert "front_arb_steps" in payload["clamped_parameters"]
+    assert payload["phase_axis_targets"]["entry"]["longitudinal"] == pytest.approx(0.4)
+    assert payload["phase_axis_weights"]["apex"]["lateral"] == pytest.approx(0.8)
 
 
 def test_markdown_exporter_renders_table_and_lists():
@@ -178,6 +191,7 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "**Gradientes de ∫|ΔNFR| por fase**" in output
     assert "**Racionales TNFR por nodo**" in output
     assert "**Efectos esperados por fase**" in output
+    assert "**Objetivos ΔNFR∥/ΔNFR⊥ por fase**" in output
 
 
 def test_lfs_notes_exporter_renders_key_instructions():

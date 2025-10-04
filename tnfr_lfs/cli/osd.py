@@ -287,6 +287,7 @@ class TelemetryHUD:
                     raw_plan,
                     self.car_model,
                     decision_space,
+                    microsectors=self._microsectors,
                 )
             except Exception:
                 self._cached_plan = None
@@ -354,9 +355,23 @@ def _render_page_a(
     goal_delta = active.goal.target_delta_nfr if active.goal else 0.0
     spark_delta = _phase_sparkline(active.microsector, bundles, "delta_nfr")
     spark_si = _phase_sparkline(active.microsector, bundles, "sense_index")
+    long_component = getattr(bundle, "delta_nfr_longitudinal", 0.0)
+    lat_component = getattr(bundle, "delta_nfr_lateral", 0.0)
+    if active.goal:
+        goal_long = getattr(active.goal, "target_delta_nfr_long", 0.0)
+        goal_lat = getattr(active.goal, "target_delta_nfr_lat", 0.0)
+        axis_weights = getattr(active.goal, "delta_axis_weights", {})
+    else:
+        goal_long = 0.0
+        goal_lat = 0.0
+        axis_weights = {}
+    weight_long = float(axis_weights.get("longitudinal", 0.5))
+    weight_lat = float(axis_weights.get("lateral", 0.5))
     lines = [
         f"{curve_label} · {phase_label}",
         f"ΔNFR {current_delta:+.2f} obj {goal_delta:+.2f} ±{tolerance:.2f}",
+        f"Δ∥ {long_component:+.2f} obj {goal_long:+.2f} · Δ⊥ {lat_component:+.2f} obj {goal_lat:+.2f}",
+        f"w∥ {weight_long:.2f} · w⊥ {weight_lat:.2f}",
         _gradient_line(window_metrics),
     ]
     if spark_delta and spark_si:
@@ -809,7 +824,12 @@ class OSDController:
             self._menu_open = False
 
 
-def _build_setup_plan(plan, car_model: str, decision_space=None) -> SetupPlan:
+def _build_setup_plan(
+    plan,
+    car_model: str,
+    decision_space=None,
+    microsectors: Sequence[Microsector] | None = None,
+) -> SetupPlan:
     action_recommendations = [
         rec
         for rec in plan.recommendations
@@ -876,6 +896,45 @@ def _build_setup_plan(plan, car_model: str, decision_space=None) -> SetupPlan:
             ):
                 clamped.append(str(name))
 
+    axis_target_map: Dict[str, Dict[str, float]] = {}
+    axis_weight_map: Dict[str, Dict[str, float]] = {}
+    axis_counts: Dict[str, int] = {}
+
+    if microsectors:
+        for microsector in microsectors:
+            for goal in microsector.goals:
+                family = phase_family(goal.phase)
+                if family is None:
+                    continue
+                target_entry = axis_target_map.setdefault(
+                    family,
+                    {"longitudinal": 0.0, "lateral": 0.0},
+                )
+                target_entry["longitudinal"] += float(getattr(goal, "target_delta_nfr_long", 0.0))
+                target_entry["lateral"] += float(getattr(goal, "target_delta_nfr_lat", 0.0))
+                weight_entry = axis_weight_map.setdefault(
+                    family,
+                    {"longitudinal": 0.0, "lateral": 0.0},
+                )
+                weights = getattr(goal, "delta_axis_weights", {})
+                weight_entry["longitudinal"] += float(weights.get("longitudinal", 0.0))
+                weight_entry["lateral"] += float(weights.get("lateral", 0.0))
+                axis_counts[family] = axis_counts.get(family, 0) + 1
+
+    for phase, count in list(axis_counts.items()):
+        if count <= 0:
+            continue
+        target_entry = axis_target_map[phase]
+        weight_entry = axis_weight_map[phase]
+        axis_target_map[phase] = {
+            "longitudinal": target_entry["longitudinal"] / count,
+            "lateral": target_entry["lateral"] / count,
+        }
+        axis_weight_map[phase] = {
+            "longitudinal": weight_entry["longitudinal"] / count,
+            "lateral": weight_entry["lateral"] / count,
+        }
+
     return SetupPlan(
         car_model=car_model,
         session=None,
@@ -885,6 +944,8 @@ def _build_setup_plan(plan, car_model: str, decision_space=None) -> SetupPlan:
         sensitivities=plan.sensitivities,
         phase_sensitivities=plan.phase_sensitivities,
         clamped_parameters=tuple(clamped),
+        phase_axis_targets=axis_target_map,
+        phase_axis_weights=axis_weight_map,
     )
 
 
