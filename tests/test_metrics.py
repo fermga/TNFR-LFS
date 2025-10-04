@@ -62,9 +62,9 @@ def test_compute_window_metrics_trending_series() -> None:
 
     assert isinstance(metrics, WindowMetrics)
     assert metrics.si == pytest.approx(sum(record.si for record in records) / len(records))
-    assert metrics.d_nfr_couple == pytest.approx(2.0)
-    assert metrics.d_nfr_res == pytest.approx(2.0)
-    assert metrics.d_nfr_flat == pytest.approx(2.0)
+    assert metrics.d_nfr_couple == pytest.approx(1.84)
+    assert metrics.d_nfr_res == pytest.approx(1.84)
+    assert metrics.d_nfr_flat == pytest.approx(1.84)
     assert metrics.nu_f == pytest.approx(0.0)
     assert metrics.nu_exc == pytest.approx(0.0)
     assert metrics.rho == pytest.approx(0.0)

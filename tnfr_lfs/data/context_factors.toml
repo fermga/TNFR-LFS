@@ -1,0 +1,54 @@
+[defaults]
+min_multiplier = 0.6
+max_multiplier = 1.35
+
+[defaults.curve]
+[[defaults.curve.bands]]
+label = "soft"
+max = 0.9
+factor = 0.92
+
+[[defaults.curve.bands]]
+label = "balanced"
+max = 1.6
+factor = 1.0
+
+[[defaults.curve.bands]]
+label = "intense"
+factor = 1.08
+
+[defaults.surface]
+reference_load = 5200.0
+
+[[defaults.surface.bands]]
+label = "low_grip"
+max = 0.9
+factor = 0.94
+
+[[defaults.surface.bands]]
+label = "neutral"
+max = 1.08
+factor = 1.0
+
+[[defaults.surface.bands]]
+label = "high_grip"
+factor = 1.05
+
+[defaults.traffic]
+speed_drop_reference = 12.5
+direction_change_reference = 3.0
+longitudinal_reference = 0.45
+
+[[defaults.traffic.bands]]
+label = "clear"
+max = 0.65
+factor = 1.0
+
+[[defaults.traffic.bands]]
+label = "busy"
+max = 1.3
+factor = 0.95
+
+[[defaults.traffic.bands]]
+label = "heavy"
+factor = 0.9

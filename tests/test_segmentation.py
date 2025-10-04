@@ -6,6 +6,7 @@ from statistics import mean
 from typing import Tuple
 
 from tnfr_lfs.core.archetypes import archetype_phase_targets
+from tnfr_lfs.core.contextual_delta import apply_contextual_delta, load_context_matrix
 from tnfr_lfs.core.coherence import sense_index
 from tnfr_lfs.core.epi import (
     DEFAULT_PHASE_WEIGHTS,
@@ -66,6 +67,22 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         assert microsector.phase_alignment
         assert set(microsector.phase_lag) >= set(PHASE_SEQUENCE)
         assert set(microsector.phase_alignment) >= set(PHASE_SEQUENCE)
+
+
+def test_segment_microsectors_returns_contextual_factors(
+    synthetic_records, synthetic_bundles
+):
+    microsectors = segment_microsectors(synthetic_records, synthetic_bundles)
+    assert microsectors
+    matrix = load_context_matrix()
+    for microsector in microsectors:
+        assert set(microsector.context_factors) == {"curve", "surface", "traffic"}
+        assert microsector.sample_context_factors
+        multipliers = [
+            apply_contextual_delta(1.0, factors, context_matrix=matrix)
+            for factors in microsector.sample_context_factors.values()
+        ]
+        assert any(not math.isclose(value, 1.0) for value in multipliers)
 
 
 def test_segment_microsectors_returns_empty_when_no_curvature():
@@ -217,14 +234,27 @@ def test_goal_targets_match_phase_averages(
     synthetic_records,
     synthetic_bundles,
 ):
+    matrix = load_context_matrix()
     for microsector in synthetic_microsectors:
         for goal in microsector.goals:
             indices = list(microsector.phase_indices(goal.phase))
             phase_bundles = [synthetic_bundles[i] for i in indices]
             phase_records = [synthetic_records[i] for i in indices]
             if phase_bundles:
+                adjusted_values = []
+                for idx, bundle in zip(indices, phase_bundles):
+                    factors = microsector.sample_context_factors.get(idx)
+                    if not factors:
+                        factors = microsector.context_factors
+                    adjusted_values.append(
+                        apply_contextual_delta(
+                            bundle.delta_nfr,
+                            factors,
+                            context_matrix=matrix,
+                        )
+                    )
                 assert goal.target_delta_nfr == pytest.approx(
-                    mean(bundle.delta_nfr for bundle in phase_bundles)
+                    mean(adjusted_values)
                 )
                 assert goal.target_sense_index == pytest.approx(
                     mean(bundle.sense_index for bundle in phase_bundles)

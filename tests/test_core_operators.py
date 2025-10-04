@@ -11,6 +11,11 @@ import pytest
 
 from tnfr_lfs.core import Goal, Microsector, TelemetryRecord
 from tnfr_lfs.core.coherence import sense_index
+from tnfr_lfs.core.contextual_delta import (
+    apply_contextual_delta,
+    load_context_matrix,
+    resolve_series_context,
+)
 from tnfr_lfs.core.epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
@@ -590,17 +595,46 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
     assert len(variability) == 2
     first = variability[0]
     assert first["overall"]["samples"] == 3
+    coherence_stage = results["stages"]["coherence"]
+    coherence_bundles = coherence_stage["bundles"]
+    sample_indices = sorted(
+        {
+            idx
+            for samples in microsectors[0].phase_samples.values()
+            for idx in samples
+        }
+    )
+    expected_delta_variance = pvariance(
+        [coherence_bundles[idx].delta_nfr for idx in sample_indices]
+    )
     assert first["overall"]["delta_nfr"]["variance"] == pytest.approx(
-        pvariance([0.1, 0.3, 0.2])
+        expected_delta_variance
     )
     assert first["overall"]["sense_index"]["variance"] == pytest.approx(
         pvariance([0.8, 0.82, 0.78])
     )
     assert set(first["laps"]) == {"Vuelta 1", "Vuelta 2"}
     assert first["laps"]["Vuelta 1"]["samples"] == 2
-    assert first["laps"]["Vuelta 1"]["delta_nfr"]["variance"] == pytest.approx(0.01)
+    reception_stage = results["stages"]["recepcion"]
+    lap_indices = reception_stage.get("lap_indices", [])
+    lap_sequence = results["lap_sequence"]
+    for lap_entry in lap_sequence:
+        lap_label = str(lap_entry.get("label", lap_entry.get("index")))
+        lap_index = int(lap_entry.get("index", 0))
+        if lap_label not in first["laps"]:
+            continue
+        lap_specific_indices = [
+            idx
+            for idx in sample_indices
+            if idx < len(lap_indices) and lap_indices[idx] == lap_index
+        ]
+        expected_variance = pvariance(
+            [coherence_bundles[idx].delta_nfr for idx in lap_specific_indices]
+        )
+        assert first["laps"][lap_label]["delta_nfr"]["variance"] == pytest.approx(
+            expected_variance
+        )
     assert first["laps"]["Vuelta 2"]["samples"] == 1
-    assert first["laps"]["Vuelta 2"]["delta_nfr"]["variance"] == pytest.approx(0.0)
 
 def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
     bundles = [
@@ -614,22 +648,74 @@ def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
         _build_microsector(0, 0, 1, 2, apex_target=0.5),
         _build_microsector(1, 2, 3, 4, apex_target=-0.1),
     ]
-    series = [bundle.delta_nfr for bundle in bundles]
+    matrix = load_context_matrix()
+    contexts = resolve_series_context(bundles, matrix=matrix)
+    adjusted_series = [
+        apply_contextual_delta(
+            bundle.delta_nfr,
+            contexts[idx],
+            context_matrix=matrix,
+        )
+        for idx, bundle in enumerate(bundles)
+    ]
 
     breakdown = dissonance_breakdown_operator(
-        series,
+        adjusted_series,
         target=0.0,
         microsectors=microsectors,
         bundles=bundles,
     )
 
     assert isinstance(breakdown, DissonanceBreakdown)
-    assert breakdown.value == pytest.approx(dissonance_operator(series, target=0.0))
+    assert breakdown.value == pytest.approx(
+        dissonance_operator(adjusted_series, target=0.0)
+    )
     assert breakdown.total_events == 2
     assert breakdown.useful_events == 1
     assert breakdown.parasitic_events == 1
-    assert breakdown.useful_magnitude == pytest.approx(0.4)
-    assert breakdown.parasitic_magnitude == pytest.approx(0.25)
+    multipliers = [
+        max(
+            matrix.min_multiplier,
+            min(matrix.max_multiplier, contexts[idx].multiplier),
+        )
+        for idx in range(len(bundles))
+    ]
+    expected_useful = 0.0
+    expected_parasitic = 0.0
+    for microsector in microsectors:
+        apex_goal = None
+        for alias in expand_phase_alias("apex"):
+            apex_goal = next(
+                (goal for goal in microsector.goals if goal.phase == alias),
+                None,
+            )
+            if apex_goal is not None:
+                break
+        if apex_goal is None:
+            continue
+        apex_indices: list[int] = []
+        for alias in expand_phase_alias("apex"):
+            apex_indices.extend(
+                idx
+                for idx in microsector.phase_samples.get(alias, ())
+                if idx < len(bundles)
+            )
+        if not apex_indices:
+            continue
+        tyre_values = [
+            bundles[idx].tyres.delta_nfr * multipliers[idx]
+            for idx in apex_indices
+        ]
+        deviation = mean(tyre_values) - apex_goal.target_delta_nfr
+        contribution = abs(deviation)
+        if contribution <= 1e-12:
+            continue
+        if deviation >= 0.0:
+            expected_useful += contribution
+        else:
+            expected_parasitic += contribution
+    assert breakdown.useful_magnitude == pytest.approx(expected_useful)
+    assert breakdown.parasitic_magnitude == pytest.approx(expected_parasitic)
     assert breakdown.useful_percentage == pytest.approx(61.53846153846154)
     assert breakdown.parasitic_percentage == pytest.approx(38.46153846153846)
     assert breakdown.high_yaw_acc_samples == 3
