@@ -1041,19 +1041,50 @@ def _microsector_variability(
 
 def _aggregate_operator_events(
     microsectors: Sequence["Microsector"] | None,
-) -> Dict[str, List[Mapping[str, object]]]:
+) -> Dict[str, object]:
     aggregated: Dict[str, List[Mapping[str, object]]] = {}
+    latent_states: Dict[str, Dict[int, Dict[str, float]]] = {}
     if not microsectors:
-        return aggregated
+        return {"events": aggregated, "latent_states": latent_states}
     for microsector in microsectors:
         events = getattr(microsector, "operator_events", {}) or {}
+        micro_duration = max(
+            0.0,
+            float(getattr(microsector, "end_time", 0.0))
+            - float(getattr(microsector, "start_time", 0.0)),
+        )
+        silent_duration = 0.0
+        silent_density = 0.0
+        silent_events = 0
         for name, payload in events.items():
             bucket = aggregated.setdefault(name, [])
             for entry in payload:
                 event_payload = dict(entry)
                 event_payload.setdefault("microsector", microsector.index)
                 bucket.append(event_payload)
-    return aggregated
+                if name == "SILENCIO":
+                    silent_events += 1
+                    duration = float(event_payload.get("duration", 0.0) or 0.0)
+                    silent_duration += max(0.0, duration)
+                    density_value = float(
+                        event_payload.get("structural_density_mean", 0.0) or 0.0
+                    )
+                    silent_density += max(0.0, density_value)
+        if silent_events:
+            coverage = 0.0
+            if micro_duration > 1e-9:
+                coverage = min(1.0, silent_duration / micro_duration)
+            state_entry = latent_states.setdefault("SILENCIO", {})
+            state_entry[microsector.index] = {
+                "coverage": float(coverage),
+                "duration": float(silent_duration),
+                "count": float(silent_events),
+            }
+            if silent_events > 0:
+                state_entry[microsector.index]["mean_density"] = float(
+                    silent_density / silent_events
+                )
+    return {"events": aggregated, "latent_states": latent_states}
 
 
 def orchestrate_delta_metrics(

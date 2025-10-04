@@ -1235,6 +1235,18 @@ def _brake_event_summary(
     microsector: Microsector,
 ) -> tuple[str | None, str | None, float]:
     operator_events = getattr(microsector, "operator_events", {}) or {}
+    silence_payloads = operator_events.get("SILENCIO", ())
+    micro_duration = _safe_float(getattr(microsector, "end_time", 0.0)) - _safe_float(
+        getattr(microsector, "start_time", 0.0)
+    )
+    if silence_payloads and micro_duration > 1e-9:
+        quiet_duration = sum(
+            max(0.0, _safe_float(payload.get("duration")))
+            for payload in silence_payloads
+            if isinstance(payload, Mapping)
+        )
+        if quiet_duration / micro_duration >= 0.65:
+            return None, None, 0.0
     relevant: List[Dict[str, object]] = []
     for event_type in ("OZ", "IL"):
         payloads = operator_events.get(event_type, ())

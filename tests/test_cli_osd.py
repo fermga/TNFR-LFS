@@ -417,3 +417,45 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
     assert "ΔNFR frenada" in page
     assert "low_grip" in page
     assert "OZ" in page
+
+
+def test_silence_event_meter_renders_when_present() -> None:
+    operator_events = {
+        "SILENCIO": (
+            {
+                "duration": 1.8,
+                "structural_density_mean": 0.03,
+                "load_span": 120.0,
+                "slack": 0.4,
+            },
+        )
+    }
+    microsector = SimpleNamespace(
+        index=1,
+        operator_events=operator_events,
+        start_time=0.0,
+        end_time=2.4,
+    )
+    line = osd_module._silence_event_meter(microsector)
+    assert line is not None
+    assert "Silencio" in line
+
+
+def test_brake_meter_skips_when_silence_dominates() -> None:
+    operator_events = {
+        "SILENCIO": ({"duration": 2.0},),
+        "OZ": (
+            {
+                "delta_nfr_threshold": 0.28,
+                "delta_nfr_peak": 0.45,
+                "delta_nfr_ratio": 1.2,
+                "surface_label": "test_surface",
+            },
+        ),
+    }
+    microsector = SimpleNamespace(
+        operator_events=operator_events,
+        start_time=0.0,
+        end_time=2.0,
+    )
+    assert osd_module._brake_event_meter(microsector) is None

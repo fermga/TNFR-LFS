@@ -76,7 +76,10 @@ The HUD cycles through three pages (press the button to advance):
   sus umbrales ΔNFR contextualizados se añade un medidor «ΔNFR frenada» con la
   superficie dominante (``low_grip``/``neutral``/``high_grip``) y el pico observado
   frente al umbral calculado para el microsector, facilitando el ajuste
-  inmediato del ``brake_bias_pct`` desde el propio HUD.
+  inmediato del ``brake_bias_pct`` desde el propio HUD.  En los microsectores
+  donde la densidad estructural y las cargas permanecen por debajo de los
+  umbrales configurados aparece además la línea «Silencio …» indicando el
+  porcentaje de cobertura y la densidad media observada para ese estado latente.
 * **Página B** – encabezado con la etiqueta de banda ``ν_f`` y su clasificación,
   junto a la barra de coherencia ``C(t)`` y la onda ``ν_f~`` agregada para la
   última vuelta.  Debajo se listan las top‑3 contribuciones nodales a
@@ -224,8 +227,9 @@ The additional artefacts provide:
 
 * ``coherence_map`` – mean/peak coherence per microsector with the
   reconstructed distance along the lap.
-* ``operator_trajectories`` – structural timelines for ``AL``/``OZ``/``IL``
-  detections extracted from ``Microsector.operator_events``.
+* ``operator_trajectories`` – structural timelines for ``AL``/``OZ``/``IL``/
+  ``SILENCIO`` detections extraídos de ``Microsector.operator_events`` junto
+  con la cobertura del nuevo estado latente de silencio.
 * ``delta_bifurcations`` – ΔNFR sign changes and derivative summaries on
   the structural axis to highlight bifurcation hotspots.
 

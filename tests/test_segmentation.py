@@ -185,6 +185,52 @@ def test_archetype_detection_uses_dynamic_thresholds() -> None:
     assert fast == "fast"
 
 
+def test_segment_microsectors_emits_structural_silence_events() -> None:
+    records = [
+        TelemetryRecord(
+            timestamp=index * 0.1,
+            vertical_load=4800.0,
+            slip_ratio=0.01,
+            lateral_accel=1.25,
+            longitudinal_accel=0.05,
+            yaw=0.0,
+            pitch=0.0,
+            roll=0.0,
+            brake_pressure=0.04,
+            locking=0.0,
+            nfr=102.0,
+            si=0.9,
+            speed=32.0,
+            yaw_rate=0.02,
+            slip_angle=0.02,
+            steer=0.03,
+            throttle=0.18,
+            gear=3,
+            vertical_load_front=2400.0,
+            vertical_load_rear=2400.0,
+            mu_eff_front=0.5,
+            mu_eff_rear=0.5,
+            mu_eff_front_lateral=0.5,
+            mu_eff_front_longitudinal=0.4,
+            mu_eff_rear_lateral=0.5,
+            mu_eff_rear_longitudinal=0.4,
+            suspension_travel_front=0.01,
+            suspension_travel_rear=0.01,
+            suspension_velocity_front=0.0,
+            suspension_velocity_rear=0.0,
+        )
+        for index in range(14)
+    ]
+    bundles = EPIExtractor().extract(records)
+    microsectors = segment_microsectors(records, bundles)
+    assert microsectors
+    silence_events = microsectors[0].operator_events.get("SILENCIO")
+    assert silence_events
+    event = silence_events[0]
+    assert event["duration"] > 0.5
+    assert event["load_span"] < 200.0
+
+
 def _yaw_rate(records: list[TelemetryRecord], index: int) -> float:
     if index <= 0:
         return 0.0

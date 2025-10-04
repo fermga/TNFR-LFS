@@ -14,8 +14,15 @@ from statistics import mean
 from typing import List, Mapping, Sequence
 
 from .epi import TelemetryRecord
+from .structural_time import compute_structural_timestamps
 
-__all__ = ["OperatorEvent", "detect_al", "detect_oz", "detect_il"]
+__all__ = [
+    "OperatorEvent",
+    "detect_al",
+    "detect_oz",
+    "detect_il",
+    "detect_silencio",
+]
 
 
 @dataclass(frozen=True)
@@ -220,3 +227,145 @@ def detect_il(
         )
 
     return [event.as_mapping() for event in events]
+
+
+def detect_silencio(
+    records: Sequence[TelemetryRecord],
+    *,
+    window: int = 15,
+    load_threshold: float = 400.0,
+    accel_threshold: float = 0.8,
+    delta_nfr_threshold: float = 45.0,
+    structural_window: int = 11,
+    structural_density_threshold: float = 0.2,
+    min_duration: float = 0.8,
+) -> List[Mapping[str, float | str | int]]:
+    """Detect structural silence intervals with low dynamic activation."""
+
+    if not records:
+        return []
+
+    window = max(2, int(window))
+    structural_window = max(3, int(structural_window))
+    structural_axis = compute_structural_timestamps(
+        records,
+        window_size=structural_window,
+        base_timestamp=records[0].timestamp,
+    )
+
+    densities: List[float] = [0.0]
+    for index in range(1, len(records)):
+        current = float(records[index].timestamp)
+        previous = float(records[index - 1].timestamp)
+        chronological_dt = max(0.0, current - previous)
+        if chronological_dt <= 1e-9:
+            densities.append(0.0)
+            continue
+        structural_dt = max(0.0, structural_axis[index] - structural_axis[index - 1])
+        density = max(0.0, (structural_dt / (chronological_dt + 1e-9)) - 1.0)
+        densities.append(density)
+
+    def _slack(value: float, threshold: float) -> float:
+        if threshold <= 1e-9:
+            return 0.0
+        return max(0.0, (threshold - value) / threshold)
+
+    def _event_metrics(start_index: int, end_index: int) -> tuple[dict[str, float], float]:
+        samples = records[start_index : end_index + 1]
+        load_values = [float(sample.vertical_load) for sample in samples]
+        load_span = max(load_values) - min(load_values) if load_values else 0.0
+        lat_mean = mean(abs(sample.lateral_accel) for sample in samples)
+        long_mean = mean(abs(sample.longitudinal_accel) for sample in samples)
+        accel_mean = 0.5 * (lat_mean + long_mean)
+        nfr_values = [float(getattr(sample, "nfr", 0.0)) for sample in samples]
+        delta_nfr_span = max(nfr_values) - min(nfr_values) if nfr_values else 0.0
+        density_slice = densities[start_index : end_index + 1]
+        structural_density_mean = mean(density_slice) if density_slice else 0.0
+        slack_components = (
+            _slack(load_span, load_threshold),
+            _slack(accel_mean, accel_threshold),
+            _slack(delta_nfr_span, delta_nfr_threshold),
+            _slack(structural_density_mean, structural_density_threshold),
+        )
+        slack = min(slack_components)
+        return (
+            {
+                "load_span": float(load_span),
+                "accel_mean": float(accel_mean),
+                "delta_nfr_span": float(delta_nfr_span),
+                "structural_density_mean": float(structural_density_mean),
+            },
+            float(slack),
+        )
+
+    def _append_event(start_index: int, end_index: int) -> None:
+        nonlocal events
+        start_index = max(0, start_index)
+        end_index = max(start_index, end_index)
+        metrics, slack = _event_metrics(start_index, end_index)
+        if slack <= 0.0:
+            return
+        event = _finalise_event(
+            "SILENCIO",
+            records,
+            start_index,
+            end_index,
+            slack,
+            1.0,
+        )
+        if event.duration < float(min_duration):
+            return
+        payload = event.as_mapping()
+        payload.update(metrics)
+        structural_start = float(structural_axis[start_index])
+        structural_end = float(structural_axis[end_index])
+        payload.update(
+            {
+                "structural_start": structural_start,
+                "structural_end": structural_end,
+                "structural_duration": max(0.0, structural_end - structural_start),
+                "load_threshold": float(load_threshold),
+                "accel_threshold": float(accel_threshold),
+                "delta_nfr_threshold": float(delta_nfr_threshold),
+                "structural_density_threshold": float(structural_density_threshold),
+                "structural_window": int(structural_window),
+                "slack": float(slack),
+            }
+        )
+        events.append(payload)
+
+    events: List[dict[str, float | str | int]] = []
+    active_start: int | None = None
+
+    for index in range(len(records)):
+        window_records = _window(records, index, window)
+        if len(window_records) < window:
+            continue
+        load_values = [float(sample.vertical_load) for sample in window_records]
+        load_span = max(load_values) - min(load_values) if load_values else 0.0
+        lat_mean = mean(abs(sample.lateral_accel) for sample in window_records)
+        long_mean = mean(abs(sample.longitudinal_accel) for sample in window_records)
+        accel_mean = 0.5 * (lat_mean + long_mean)
+        nfr_values = [float(getattr(sample, "nfr", 0.0)) for sample in window_records]
+        delta_nfr_span = max(nfr_values) - min(nfr_values) if nfr_values else 0.0
+        density_window = densities[max(0, index - window + 1) : index + 1]
+        structural_density_mean = mean(density_window) if density_window else 0.0
+
+        meets_thresholds = (
+            load_span <= load_threshold
+            and accel_mean <= accel_threshold
+            and delta_nfr_span <= delta_nfr_threshold
+            and structural_density_mean <= structural_density_threshold
+        )
+
+        if meets_thresholds:
+            if active_start is None:
+                active_start = index - window + 1
+        elif active_start is not None:
+            _append_event(active_start, index - 1)
+            active_start = None
+
+    if active_start is not None:
+        _append_event(active_start, len(records) - 1)
+
+    return events
