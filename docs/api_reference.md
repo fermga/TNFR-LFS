@@ -1,5 +1,55 @@
 # API Reference
 
+## Configuration utilities
+
+### `tnfr_lfs.config_loader`
+
+The configuration loader resolves car manifests and profile bundles shipped
+with the project.  Use :func:`tnfr_lfs.config_loader.load_cars` and
+:func:`tnfr_lfs.config_loader.load_profiles` to populate immutable mappings of
+cars and tuning profiles, then :func:`tnfr_lfs.config_loader.resolve_targets`
+to expose the ``targets``/``policy``/``recommender`` sections for the selected
+vehicle. 【F:tnfr_lfs/config_loader.py†L38-L148】
+
+### `tnfr_lfs.track_loader`
+
+The track loader complements the car/profile helpers by exposing the bundled
+track manifests, phase-weight profiles, and per-combination modifiers.  The
+module exposes:
+
+```python
+from tnfr_lfs.track_loader import (
+    load_track,
+    load_track_profiles,
+    load_modifiers,
+    assemble_session_weights,
+)
+
+track = load_track("SO")  # -> tnfr_lfs.track_loader.Track
+profiles = load_track_profiles()
+modifiers = load_modifiers()
+session = assemble_session_weights(
+    "gtr_mid",  # car profile or group
+    track.configs["SO1"].track_profile,
+    track_profiles=profiles,
+    modifiers=modifiers,
+)
+```
+
+* :func:`load_track` parses the ``[config.*]`` sections of the requested TOML
+  manifest, normalising optional lengths and surface labels into
+  :class:`tnfr_lfs.track_loader.TrackConfig` instances accessible from the
+  returned :class:`tnfr_lfs.track_loader.Track`. 【F:tnfr_lfs/track_loader.py†L89-L147】
+* :func:`load_track_profiles` discovers ``data/track_profiles/*.toml`` and
+  returns a mapping keyed by ``meta.id`` (or filename) with normalised phase
+  weights and hints ready for consumption. 【F:tnfr_lfs/track_loader.py†L149-L175】
+* :func:`load_modifiers` scans ``modifiers/combos/*.toml`` and maps each
+  ``(car_profile, track_profile)`` pair to its scale factors and optional
+  hints. 【F:tnfr_lfs/track_loader.py†L178-L210】
+* :func:`assemble_session_weights` merges a car profile with a track profile,
+  applying any matching modifier scales to produce a ``{"weights", "hints"}``
+  payload suitable for the CLI and HUD pipelines. 【F:tnfr_lfs/track_loader.py†L213-L247】
+
 ## Acquisition
 
 ### `tnfr_lfs.acquisition.outsim_client.OutSimClient`
