@@ -146,4 +146,9 @@ class EPIBundle:
     node_evolution: Mapping[str, tuple[float, float]] = field(default_factory=dict)
     delta_nfr_longitudinal: float = 0.0
     delta_nfr_lateral: float = 0.0
+    nu_f_classification: str = ""
+    nu_f_category: str = ""
+    nu_f_label: str = ""
+    nu_f_dominant: float = 0.0
+    coherence_index: float = 0.0
 

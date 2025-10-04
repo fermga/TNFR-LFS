@@ -67,11 +67,13 @@ The HUD cycles through three pages (press the button to advance):
 * **Página A** – curva y fase actuales, ΔNFR↓ frente al objetivo y su
   tolerancia, arquetipo activo (``hairpin``, ``medium``, ``fast`` o ``chicane``)
   con sus referencias ΔNFR∥/⊥ y pesos de detune, acoplamiento global, fase θ/Siφ
-  del microsector activo, porcentaje de disonancia útil/parásita y el nuevo
-  indicador ``Δaero`` que refleja el desequilibrio ΔNFR entre ejes a alta
-  velocidad.
-* **Página B** – top‑3 contribuciones nodales a |ΔNFR↓| con barras ASCII de
-  anchura fija y el modo resonante dominante (frecuencia y clasificación).
+  del microsector activo, el índice estructural ``C(t)`` normalizado con el
+  objetivo de Si del perfil actual y la insignia ``ν_f`` (muy baja/óptima/…)
+  correspondiente a la categoría del coche.  Debajo se mantiene el indicador
+  ``Δaero`` que refleja el desequilibrio ΔNFR entre ejes a alta velocidad.
+* **Página B** – encabezado con la clasificación ``ν_f`` y ``C(t)`` actuales, las
+  top‑3 contribuciones nodales a |ΔNFR↓| con barras ASCII de anchura fija y el
+  modo resonante dominante (frecuencia y clasificación).
 * **Página C** – pista rápida para el operador activo, las 2–3 acciones
   de setup priorizadas por ``SetupPlanner`` junto a su efecto esperado y una
   guía aero (“Aero …”) que resume si conviene reforzar el alerón delantero o
@@ -98,9 +100,16 @@ measured phase alignment when the archetype drifts away from its target and
 highlights the longitudinal/lateral focus defined by the detune weights. The
 gradient line reports the dominant frequency extracted from the
 steer-versus-yaw/lateral cross-spectrum together with the measured phase
-offset ``θ`` y su coseno ``Siφ``.  Justo debajo se imprime ``Δaero`` para que el
-ingeniero visualice cuánto difiere la carga delantera respecto a la trasera a
-alta y baja velocidad.
+offset ``θ`` y su coseno ``Siφ``, the structural coherence index ``C(t)`` and the
+frequency badge derived from the vehicle category (e.g. GT ``1.9–2.2 Hz``).
+Justo debajo se imprime ``Δaero`` para que el ingeniero visualice cuánto difiere
+la carga delantera respecto a la trasera a alta y baja velocidad.
+
+Natural frequency bands can be customised through
+``NaturalFrequencySettings.frequency_bands`` and per-car categories handled by
+``ProfileManager``.  The resulting badge (muy baja/óptima/…) and the structural
+index ``C(t)`` are scaled with the profile objectives, so GT stints and fórmula
+setups share a consistent vocabulary when reviewing telemetry.
 
 ### ``diagnose``
 

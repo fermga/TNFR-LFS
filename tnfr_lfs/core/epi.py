@@ -7,7 +7,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from statistics import mean
 from collections.abc import Mapping as MappingABC
-from typing import Deque, Dict, List, Mapping, Optional, Sequence, TYPE_CHECKING
+from typing import Deque, Dict, List, Mapping, Optional, Sequence, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
     from .coherence_calibration import CoherenceCalibrationStore
@@ -57,6 +57,13 @@ class NaturalFrequencySettings:
     vehicle_frequency: Mapping[str, float] = field(
         default_factory=lambda: {"__default__": _AVERAGE_NU_F}
     )
+    default_category: str = "generic"
+    frequency_bands: Mapping[str, Tuple[float, float]] = field(
+        default_factory=lambda: {"generic": (1.6, 2.4)}
+    )
+    car_categories: Mapping[str, str] = field(default_factory=dict)
+    structural_density_window: int = 6
+    structural_density_normaliser: float = 5.0
 
     def resolve_vehicle_frequency(self, car_model: str | None) -> float:
         if car_model and car_model in self.vehicle_frequency:
@@ -64,6 +71,45 @@ class NaturalFrequencySettings:
         if "__default__" in self.vehicle_frequency:
             return max(1e-6, float(self.vehicle_frequency["__default__"]))
         return max(1e-6, _AVERAGE_NU_F)
+
+    def resolve_category(self, car_model: str | None) -> str:
+        if car_model and car_model in self.car_categories:
+            return str(self.car_categories[car_model])
+        return str(self.default_category)
+
+    def resolve_frequency_band(self, car_model: str | None) -> Tuple[float, float]:
+        category = self.resolve_category(car_model)
+        if category in self.frequency_bands:
+            low, high = self.frequency_bands[category]
+        elif "__default__" in self.frequency_bands:
+            low, high = self.frequency_bands["__default__"]
+        else:
+            low, high = (1.6, 2.4)
+        low = max(0.0, float(low))
+        high = max(low, float(high))
+        return (low, high)
+
+
+@dataclass(frozen=True)
+class NaturalFrequencySnapshot:
+    """Result of a natural frequency analysis step."""
+
+    by_node: Mapping[str, float]
+    dominant_frequency: float
+    classification: str
+    category: str
+    target_band: Tuple[float, float]
+    coherence_index: float
+
+    @property
+    def frequency_label(self) -> str:
+        if self.dominant_frequency <= 0.0:
+            return "ν_f sin datos"
+        low, high = self.target_band
+        return (
+            f"ν_f {self.classification} {self.dominant_frequency:.2f}Hz "
+            f"(obj {low:.2f}-{high:.2f}Hz)"
+        )
 
 
 class NaturalFrequencyAnalyzer:
@@ -74,11 +120,13 @@ class NaturalFrequencyAnalyzer:
         self._history: Deque[TelemetryRecord] = deque()
         self._smoothed: Dict[str, float] = {}
         self._last_car: str | None = None
+        self._last_snapshot: NaturalFrequencySnapshot | None = None
 
     def reset(self) -> None:
         self._history.clear()
         self._smoothed.clear()
         self._last_car = None
+        self._last_snapshot = None
 
     def update(
         self,
@@ -86,9 +134,10 @@ class NaturalFrequencyAnalyzer:
         base_map: Mapping[str, float],
         *,
         car_model: str | None = None,
-    ) -> Dict[str, float]:
+    ) -> NaturalFrequencySnapshot:
         self._append_record(record)
-        return self._resolve(base_map, car_model)
+        mapping, dominant_frequency = self._resolve(base_map, car_model)
+        return self._build_snapshot(mapping, dominant_frequency, car_model)
 
     def compute_from_history(
         self,
@@ -97,13 +146,14 @@ class NaturalFrequencyAnalyzer:
         *,
         record: TelemetryRecord | None = None,
         car_model: str | None = None,
-    ) -> Dict[str, float]:
+    ) -> NaturalFrequencySnapshot:
         self._history.clear()
         for sample in history:
             self._append_record(sample)
         if record is not None and (not self._history or self._history[-1] is not record):
             self._append_record(record)
-        return self._resolve(base_map, car_model)
+        mapping, dominant_frequency = self._resolve(base_map, car_model)
+        return self._build_snapshot(mapping, dominant_frequency, car_model)
 
     def _append_record(self, record: TelemetryRecord) -> None:
         self._history.append(record)
@@ -116,40 +166,44 @@ class NaturalFrequencyAnalyzer:
 
     def _resolve(
         self, base_map: Mapping[str, float], car_model: str | None
-    ) -> Dict[str, float]:
+    ) -> Tuple[Dict[str, float], float]:
         if car_model != self._last_car:
             self._smoothed.clear()
             self._last_car = car_model
 
-        dynamic = self._dynamic_multipliers(car_model)
+        dynamic, dominant_frequency = self._dynamic_multipliers(car_model)
         if not dynamic:
             # No dynamic adjustment available, fall back to smoothing defaults.
-            return self._apply_smoothing(dict(base_map))
+            mapping = self._apply_smoothing(dict(base_map))
+            return mapping, dominant_frequency
 
         adjusted = {}
         for node, value in base_map.items():
             multiplier = dynamic.get(node, 1.0)
             adjusted[node] = value * multiplier
-        return self._apply_smoothing(adjusted)
+        mapping = self._apply_smoothing(adjusted)
+        return mapping, dominant_frequency
 
-    def _dynamic_multipliers(self, car_model: str | None) -> Dict[str, float]:
+    def _dynamic_multipliers(
+        self, car_model: str | None
+    ) -> Tuple[Dict[str, float], float]:
         history = list(self._history)
         if len(history) < 2:
-            return {}
+            return {}, 0.0
 
         duration = history[-1].timestamp - history[0].timestamp
         if duration < max(0.0, self.settings.min_window_seconds - 1e-6):
-            return {}
+            return {}, 0.0
 
         from .spectrum import cross_spectrum, power_spectrum, estimate_sample_rate
 
         sample_rate = estimate_sample_rate(history)
         if sample_rate <= 0.0:
-            return {}
+            return {}, 0.0
 
         min_samples = max(4, int(self.settings.min_window_seconds * sample_rate))
         if len(history) < min_samples:
-            return {}
+            return {}, 0.0
 
         steer_series = [float(record.steer) for record in history]
         throttle_series = [float(record.throttle) for record in history]
@@ -201,26 +255,36 @@ class NaturalFrequencyAnalyzer:
             ratio = max(self.settings.min_multiplier, min(self.settings.max_multiplier, ratio))
             return ratio
 
+        dominant_frequency = 0.0
         multipliers: Dict[str, float] = {}
         if steer_freq > 0.0:
             multipliers["driver"] = _normalise(steer_freq)
+            dominant_frequency = steer_freq
         if throttle_freq > 0.0:
             multipliers["transmission"] = _normalise(throttle_freq)
+            if throttle_freq > dominant_frequency:
+                dominant_frequency = throttle_freq
         if brake_freq > 0.0:
             multipliers["brakes"] = _normalise(brake_freq)
+            if brake_freq > dominant_frequency:
+                dominant_frequency = brake_freq
         if suspension_freq > 0.0:
             value = _normalise(suspension_freq)
             multipliers["suspension"] = value
             multipliers.setdefault("chassis", value)
+            if suspension_freq > dominant_frequency:
+                dominant_frequency = suspension_freq
         if tyre_freq > 0.0:
             value = _normalise(tyre_freq)
             multipliers["tyres"] = value
             multipliers["chassis"] = value
+            if tyre_freq > dominant_frequency:
+                dominant_frequency = tyre_freq
         elif suspension_freq > 0.0 and steer_freq > 0.0:
             blended = (multipliers["suspension"] + multipliers["driver"]) * 0.5
             multipliers["tyres"] = blended
 
-        return multipliers
+        return multipliers, dominant_frequency
 
     def _apply_smoothing(self, mapping: Dict[str, float]) -> Dict[str, float]:
         alpha = self.settings.smoothing_alpha
@@ -239,6 +303,67 @@ class NaturalFrequencyAnalyzer:
             self._smoothed[node] = smoothed
             mapping[node] = smoothed
         return mapping
+
+    def _coherence_index(self) -> float:
+        history = list(self._history)
+        if len(history) < 2:
+            return 0.0
+        densities: List[float] = []
+        for previous, current in zip(history[:-1], history[1:]):
+            chrono_dt = float(current.timestamp) - float(previous.timestamp)
+            if chrono_dt <= 1e-9:
+                continue
+            structural_curr = getattr(current, "structural_timestamp", None)
+            structural_prev = getattr(previous, "structural_timestamp", None)
+            if structural_curr is None or structural_prev is None:
+                continue
+            structural_dt = float(structural_curr) - float(structural_prev)
+            if structural_dt <= 0.0:
+                continue
+            ratio = structural_dt / chrono_dt
+            densities.append(max(0.0, ratio - 1.0))
+        if not densities:
+            return 0.0
+        window = max(1, int(self.settings.structural_density_window))
+        tail = densities[-window:]
+        average_density = sum(tail) / len(tail)
+        normaliser = max(1e-6, float(self.settings.structural_density_normaliser))
+        return max(0.0, min(1.0, average_density / normaliser))
+
+    def _build_snapshot(
+        self,
+        mapping: Mapping[str, float],
+        dominant_frequency: float,
+        car_model: str | None,
+    ) -> NaturalFrequencySnapshot:
+        category = self.settings.resolve_category(car_model)
+        band = self.settings.resolve_frequency_band(car_model)
+        classification = self._classify_frequency(dominant_frequency, band)
+        snapshot = NaturalFrequencySnapshot(
+            by_node=dict(mapping),
+            dominant_frequency=dominant_frequency,
+            classification=classification,
+            category=category,
+            target_band=band,
+            coherence_index=self._coherence_index(),
+        )
+        self._last_snapshot = snapshot
+        return snapshot
+
+    @staticmethod
+    def _classify_frequency(frequency: float, band: Tuple[float, float]) -> str:
+        low, high = band
+        if frequency <= 0.0:
+            return "sin datos"
+        if frequency < low * 0.9:
+            return "muy baja"
+        if frequency < low:
+            return "baja"
+        if frequency <= high:
+            return "óptima"
+        if frequency <= high * 1.1:
+            return "alta"
+        return "muy alta"
 
 AXIS_FEATURE_MAP: Mapping[str, Mapping[str, str]] = {
     "tyres": {
@@ -595,8 +720,8 @@ def resolve_nu_f_by_node(
     car_model: str | None = None,
     analyzer: NaturalFrequencyAnalyzer | None = None,
     settings: NaturalFrequencySettings | None = None,
-) -> Dict[str, float]:
-    """Return the natural frequency per node for a telemetry sample.
+) -> NaturalFrequencySnapshot:
+    """Return the natural frequency snapshot for a telemetry sample.
 
     When the optional ``analyzer`` or ``history`` arguments are provided the
     result incorporates sliding-window spectral analysis to align the
@@ -607,12 +732,7 @@ def resolve_nu_f_by_node(
     base_map = _base_nu_f_map(record, phase=phase, phase_weights=phase_weights)
 
     if analyzer is None:
-        if settings is not None:
-            analyzer = NaturalFrequencyAnalyzer(settings)
-        elif history is not None:
-            analyzer = NaturalFrequencyAnalyzer()
-        else:
-            return dict(base_map)
+        analyzer = NaturalFrequencyAnalyzer(settings)
 
     if history is not None:
         return analyzer.compute_from_history(
@@ -681,7 +801,7 @@ class EPIExtractor:
                     dt = max(0.0, structural_ts - prev_structural)
                 else:
                     dt = max(0.0, record.timestamp - prev_timestamp)
-            nu_f_map = resolve_nu_f_by_node(
+            nu_snapshot = resolve_nu_f_by_node(
                 record,
                 analyzer=self._nu_f_analyzer,
                 car_model=car_model,
@@ -692,7 +812,8 @@ class EPIExtractor:
                 epi_value,
                 prev_integrated_epi=prev_integrated_epi,
                 dt=dt,
-                nu_f_by_node=nu_f_map,
+                nu_f_by_node=nu_snapshot.by_node,
+                nu_f_snapshot=nu_snapshot,
             )
             results.append(bundle)
             prev_integrated_epi = bundle.integrated_epi
@@ -784,6 +905,7 @@ class DeltaCalculator:
         prev_integrated_epi: Optional[float] = None,
         dt: float = 0.0,
         nu_f_by_node: Optional[Mapping[str, float]] = None,
+        nu_f_snapshot: NaturalFrequencySnapshot | None = None,
         phase: str = "entry",
         phase_weights: Optional[Mapping[str, Mapping[str, float] | float]] = None,
         phase_target_nu_f: Mapping[str, Mapping[str, float] | float]
@@ -799,7 +921,9 @@ class DeltaCalculator:
         }
         axis_signals = _axis_signal_components(record, baseline, feature_contributions)
         node_deltas = _distribute_node_delta(delta_nfr, node_signals)
-        nu_f_map = dict(nu_f_by_node or resolve_nu_f_by_node(record))
+        if nu_f_snapshot is None:
+            nu_f_snapshot = resolve_nu_f_by_node(record)
+        nu_f_map = dict(nu_f_by_node or nu_f_snapshot.by_node)
         phase_weight_map = phase_weights or DEFAULT_PHASE_WEIGHTS
         global_si = sense_index(
             delta_nfr,
@@ -861,6 +985,11 @@ class DeltaCalculator:
             transmission=nodes["transmission"],
             track=nodes["track"],
             driver=nodes["driver"],
+            nu_f_classification=nu_f_snapshot.classification,
+            nu_f_category=nu_f_snapshot.category,
+            nu_f_label=nu_f_snapshot.frequency_label,
+            nu_f_dominant=nu_f_snapshot.dominant_frequency,
+            coherence_index=nu_f_snapshot.coherence_index,
         )
 
     @staticmethod

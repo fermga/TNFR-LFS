@@ -657,7 +657,7 @@ def _recompute_bundles(
         phase = phase_assignments.get(idx, PHASE_SEQUENCE[0])
         phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
         target_nu_f = goal_nu_f_lookup.get(idx) if goal_nu_f_lookup else None
-        nu_f_map = resolve_nu_f_by_node(
+        nu_snapshot = resolve_nu_f_by_node(
             record,
             phase=phase,
             phase_weights=phase_weights,
@@ -670,7 +670,8 @@ def _recompute_bundles(
             epi_value,
             prev_integrated_epi=prev_integrated,
             dt=dt,
-            nu_f_by_node=nu_f_map,
+            nu_f_by_node=nu_snapshot.by_node,
+            nu_f_snapshot=nu_snapshot,
             phase=phase,
             phase_weights=phase_weights,
             phase_target_nu_f=target_nu_f,

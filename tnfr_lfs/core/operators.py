@@ -736,6 +736,11 @@ def _stage_coherence(
             "dissonance_breakdown": empty_breakdown,
             "coupling": 0.0,
             "resonance": 0.0,
+            "coherence_index_series": [],
+            "coherence_index": 0.0,
+            "raw_coherence_index": 0.0,
+            "frequency_label": "",
+            "frequency_classification": "sin datos",
         }
 
     context_matrix = load_context_matrix()
@@ -764,6 +769,17 @@ def _stage_coherence(
     dissonance = breakdown.value
     coupling = acoplamiento_operator(smoothed_delta, clamped_si)
     resonance = resonance_operator(clamped_si)
+    ct_series = [bundle.coherence_index for bundle in updated_bundles]
+    average_ct = mean(ct_series) if ct_series else 0.0
+    mean_si = mean(clamped_si) if clamped_si else 0.0
+    target_si = max(1e-6, min(1.0, float(objectives.get("sense_index", 0.75))))
+    normalised_ct = max(0.0, min(1.0, average_ct * (mean_si / target_si)))
+    frequency_label = ""
+    frequency_classification = "sin datos"
+    if updated_bundles:
+        last_bundle = updated_bundles[-1]
+        frequency_label = getattr(last_bundle, "nu_f_label", "")
+        frequency_classification = getattr(last_bundle, "nu_f_classification", "sin datos")
 
     return {
         "raw_delta": delta_series,
@@ -775,6 +791,11 @@ def _stage_coherence(
         "dissonance_breakdown": breakdown,
         "coupling": coupling,
         "resonance": resonance,
+        "coherence_index_series": ct_series,
+        "coherence_index": normalised_ct,
+        "raw_coherence_index": average_ct,
+        "frequency_label": frequency_label,
+        "frequency_classification": frequency_classification,
     }
 
 
@@ -845,14 +866,16 @@ def _stage_epi_evolution(
             weights = phase_weight_lookup[index]
         elif global_phase_weights:
             weights = global_phase_weights
-        nu_map = resolve_nu_f_by_node(
+        nu_snapshot = resolve_nu_f_by_node(
             record,
             phase=phase,
             phase_weights=weights,
             analyzer=analyzer,
         )
         dt = 0.0 if index == 0 else max(0.0, record.timestamp - prev_timestamp)
-        new_epi, derivative, nodal = evolve_epi(prev_epi, delta_map, dt, nu_map)
+        new_epi, derivative, nodal = evolve_epi(
+            prev_epi, delta_map, dt, nu_snapshot.by_node
+        )
         integrated_series.append(new_epi)
         derivative_series.append(derivative)
         nodes = set(per_node_integrated) | set(nodal)
@@ -1167,6 +1190,11 @@ def orchestrate_delta_metrics(
         "dissonance_breakdown": coherence_stage["dissonance_breakdown"],
         "coupling": coherence_stage["coupling"],
         "resonance": coherence_stage["resonance"],
+        "coherence_index": coherence_stage["coherence_index"],
+        "coherence_index_series": coherence_stage["coherence_index_series"],
+        "raw_coherence_index": coherence_stage["raw_coherence_index"],
+        "frequency_label": coherence_stage["frequency_label"],
+        "frequency_classification": coherence_stage["frequency_classification"],
         "recursive_trace": sense_stage["memory"],
         "lap_sequence": reception_stage["lap_sequence"],
         "microsector_variability": variability,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from importlib import resources
+import math
 from statistics import mean
 from types import MappingProxyType
 from typing import (
@@ -383,6 +384,14 @@ class ThresholdProfile:
 
 
 @dataclass(frozen=True)
+class RuleProfileObjectives:
+    """Minimal snapshot of profile objectives for rule evaluation."""
+
+    target_delta_nfr: float = 0.0
+    target_sense_index: float = 0.75
+
+
+@dataclass(frozen=True)
 class RuleContext:
     """Context shared with the rules to build rationales."""
 
@@ -391,6 +400,7 @@ class RuleContext:
     thresholds: ThresholdProfile
     tyre_offsets: Mapping[str, float] = field(default_factory=dict)
     aero_profiles: Mapping[str, "AeroProfile"] = field(default_factory=dict)
+    objectives: RuleProfileObjectives = field(default_factory=RuleProfileObjectives)
 
     @property
     def profile_label(self) -> str:
@@ -429,6 +439,16 @@ def _freeze_phase_weights(
         elif isinstance(profile, (int, float)):
             frozen[str(phase)] = float(profile)
     return MappingProxyType(frozen)
+
+
+def _coerce_float(value: object, default: float) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(numeric):
+        return default
+    return numeric
 
 
 def _freeze_archetype_targets(
@@ -1131,7 +1151,9 @@ class PhaseNodeOperatorRule:
             if not dominant_nodes:
                 continue
             target_nu_f = float(goal.nu_f_target)
-            tolerance = max(0.05, abs(target_nu_f) * 0.2)
+            target_si = context.objectives.target_sense_index
+            tolerance_scale = max(0.5, min(1.5, 1.0 + (0.75 - target_si)))
+            tolerance = max(0.05, abs(target_nu_f) * 0.2 * tolerance_scale)
             measured_lag, measured_alignment, target_lag, target_alignment = _alignment_snapshot(
                 goal, microsector
             )
@@ -1153,12 +1175,32 @@ class PhaseNodeOperatorRule:
                     f"θ {measured_lag:+.2f}rad / Siφ {measured_alignment:+.2f} "
                     f"(objetivo θ {target_lag:+.2f}rad / Siφ {target_alignment:+.2f})."
                 )
+                frequency_label = ""
+                classification = ""
+                coherence_index = 0.0
+                if indices:
+                    last_bundle = results[indices[-1]]
+                    frequency_label = getattr(last_bundle, "nu_f_label", "")
+                    classification = getattr(last_bundle, "nu_f_classification", "")
+                    coherence_index = float(getattr(last_bundle, "coherence_index", 0.0))
+                classification_summary = ""
+                if frequency_label:
+                    display_label = frequency_label[3:] if frequency_label.startswith("ν_f ") else frequency_label
+                    classification_summary = f" Estado ν_f: {display_label}."
+                elif classification:
+                    classification_summary = f" Clasificación ν_f {classification}."
+                if coherence_index > 0.0:
+                    classification_summary += f" C(t) {coherence_index:.2f}."
+                sense_summary = (
+                    f" Objetivo Si perfil {target_si:.2f} para {context.profile_label}."
+                )
                 base_rationale = (
                     f"{self.operator_label} aplicado al nodo {node_label} en microsector "
                     f"{microsector.index}. La estrategia del objetivo destaca a "
                     f"{dominant_list or 'los nodos dominantes'} y fija ν_f={target_nu_f:.2f}. "
                     f"Se midió ν_f medio {actual_nu_f:.2f} ({deviation:+.2f}), superando la "
-                    f"tolerancia ±{tolerance:.2f} definida para {context.profile_label}. {alignment_summary}"
+                    f"tolerancia ajustada ±{tolerance:.2f} definida para {context.profile_label}. "
+                    f"{alignment_summary}{classification_summary}{sense_summary}"
                 )
                 if flip_alignment:
                     base_rationale += " Se invierte el sentido del ajuste para recuperar la alineación de fase."
@@ -1619,11 +1661,22 @@ class RecommendationEngine:
         resolved_car = car_model or self.car_model
         resolved_track = track_name or self.track_name
         base_profile = self._lookup_profile(resolved_car, resolved_track)
+        objectives = RuleProfileObjectives()
         if self.profile_manager is not None:
             snapshot = self.profile_manager.resolve(resolved_car, resolved_track, base_profile)
             profile = snapshot.thresholds
             offsets = snapshot.tyre_offsets
             aero_profiles = snapshot.aero_profiles
+            profile_objectives = getattr(snapshot, "objectives", None)
+            if profile_objectives is not None:
+                objectives = RuleProfileObjectives(
+                    target_delta_nfr=_coerce_float(
+                        getattr(profile_objectives, "target_delta_nfr", 0.0), 0.0
+                    ),
+                    target_sense_index=_coerce_float(
+                        getattr(profile_objectives, "target_sense_index", 0.75), 0.75
+                    ),
+                )
         else:
             profile = base_profile
             offsets = {}
@@ -1634,6 +1687,7 @@ class RecommendationEngine:
             thresholds=profile,
             tyre_offsets=offsets,
             aero_profiles=MappingProxyType(dict(aero_profiles)),
+            objectives=objectives,
         )
 
     def register_plan(

@@ -419,16 +419,17 @@ def test_natural_frequency_analysis_converges_to_dominant_signal():
         noise_level=0.05,
     )
 
-    base_reference = resolve_nu_f_by_node(records[-1])
+    base_reference = resolve_nu_f_by_node(records[-1]).by_node
     driver_history: list[float] = []
     last_map: dict[str, float] = {}
     warmup_samples = int(settings.min_window_seconds * sample_rate)
     for index, record in enumerate(records):
-        last_map = resolve_nu_f_by_node(
+        last_snapshot = resolve_nu_f_by_node(
             record,
             analyzer=analyzer,
             car_model=car_model,
         )
+        last_map = last_snapshot.by_node
         if index >= warmup_samples:
             driver_history.append(last_map["driver"])
 
@@ -437,7 +438,10 @@ def test_natural_frequency_analysis_converges_to_dominant_signal():
     expected_ratio = frequency / vehicle_frequency
     expected_ratio = max(settings.min_multiplier, min(settings.max_multiplier, expected_ratio))
 
-    base_final = resolve_nu_f_by_node(records[-1])
+    base_final = resolve_nu_f_by_node(records[-1]).by_node
+    assert last_snapshot.classification in {"óptima", "alta"}
+    assert "ν_f" in last_snapshot.frequency_label
+    assert last_snapshot.coherence_index == pytest.approx(0.0)
     for node in ("driver", "suspension", "transmission", "brakes", "tyres"):
         measured_ratio = last_map[node] / base_final[node]
         assert measured_ratio == pytest.approx(expected_ratio, rel=0.25)

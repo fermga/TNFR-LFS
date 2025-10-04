@@ -76,6 +76,14 @@ evalúa ahora como ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H`` incorporando
 ritmo natural de cada nodo y la fase del microsector; la interpretación se
 detalla en :doc:`api_reference`.
 
+El estimador de frecuencias naturales persiste bandas objetivo por categoría
+de vehículo (GT, fórmulas, prototipos, …) a través de
+``NaturalFrequencySettings.frequency_bands``.  Cada muestra expone una
+clasificación ``ν_f`` (muy baja, óptima, muy alta, …) y un índice estructural
+``C(t)`` derivado de la densidad de eventos en el eje estructural.  Ambos
+parámetros se normalizan con los objetivos de ``ProfileManager`` para que la
+misma escala sea válida al comparar stints con diferentes metas de Sense Index.
+
 ### Operadores de memoria y mutación
 
 Para mantener continuidad entre muestras y microsectores, el pipeline utiliza
