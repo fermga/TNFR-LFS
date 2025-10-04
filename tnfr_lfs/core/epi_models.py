@@ -108,6 +108,7 @@ class TrackNode:
     axle_velocity_balance: float = 0.0
     yaw: float = 0.0
     lateral_accel: float = 0.0
+    gradient: float = 0.0
 
 
 @dataclass(frozen=True)

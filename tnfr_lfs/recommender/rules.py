@@ -189,6 +189,9 @@ class PhaseActionTemplate:
     step: float
     nodes: Tuple[str, ...] | None = None
     priority_offset: int = 0
+    gradient_offset_scale: Tuple[float, float] | None = None
+    gradient_offset_limit: float = 0.0
+    gradient_deadband: float = 0.0
 
 
 _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
@@ -201,6 +204,9 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             max_value=4.0,
             message_pattern="{delta:+.1f}% bias delante",
             step=0.5,
+            gradient_offset_scale=(60.0, 80.0),
+            gradient_offset_limit=1.5,
+            gradient_deadband=0.001,
         ),
         PhaseActionTemplate(
             metric="delta_nfr_lateral",
@@ -1157,8 +1163,28 @@ def _phase_action_templates(phase: str, metric: str, node: str | None = None) ->
     return selected
 
 
-def _apply_action_template(template: PhaseActionTemplate, raw_value: float) -> float | None:
+def _apply_action_template(
+    template: PhaseActionTemplate, raw_value: float, *, gradient: float | None = None
+) -> float | None:
     value = raw_value * template.scale
+    if gradient is not None and template.gradient_offset_scale:
+        try:
+            gradient_value = float(gradient)
+        except (TypeError, ValueError):
+            gradient_value = 0.0
+        else:
+            if math.isfinite(gradient_value):
+                deadband = template.gradient_deadband
+                if abs(gradient_value) > deadband:
+                    down_scale, up_scale = template.gradient_offset_scale
+                    if gradient_value < 0.0:
+                        offset = -abs(gradient_value) * down_scale
+                    else:
+                        offset = abs(gradient_value) * up_scale
+                    limit = template.gradient_offset_limit
+                    if limit > 0.0:
+                        offset = max(-limit, min(limit, offset))
+                    value += offset
     value = max(template.min_value, min(template.max_value, value))
     if template.step > 0:
         value = round(value / template.step) * template.step
@@ -1179,10 +1205,11 @@ def _phase_action_recommendations(
     priority: int,
     reference_key: str,
     node: str | None = None,
+    gradient: float | None = None,
 ) -> List[Recommendation]:
     recommendations: List[Recommendation] = []
     for template in _phase_action_templates(phase, metric, node):
-        value = _apply_action_template(template, raw_value)
+        value = _apply_action_template(template, raw_value, gradient=gradient)
         if value is None:
             continue
         message = template.message_pattern.format(delta=value)
@@ -1712,6 +1739,7 @@ class PhaseDeltaDeviationRule:
                     base_rationale=base_rationale,
                     priority=self.priority,
                     reference_key=self.reference_key,
+                    gradient=getattr(goal, "track_gradient", None),
                 )
             if adjustments and phase_key == "entry":
                 for recommendation in adjustments:

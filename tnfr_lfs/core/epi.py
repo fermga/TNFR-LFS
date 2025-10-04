@@ -497,6 +497,33 @@ def _abs_delta(value: float, base: float) -> float:
     return abs(delta_value)
 
 
+def _resolve_track_gradient(record: TelemetryRecord) -> float:
+    """Return the track gradient associated with ``record``."""
+
+    for attribute in ("track_gradient", "gradient", "slope", "track_slope"):
+        try:
+            candidate = getattr(record, attribute)
+        except AttributeError:
+            continue
+        if candidate is None:
+            continue
+        try:
+            gradient = float(candidate)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(gradient):
+            return gradient
+
+    pitch_value = getattr(record, "pitch", 0.0)
+    try:
+        pitch = float(pitch_value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(pitch):
+        return 0.0
+    return math.tan(pitch)
+
+
 def _ackermann_parallel_delta(record: TelemetryRecord, baseline: TelemetryRecord) -> float:
     radius = getattr(record, "instantaneous_radius", 0.0)
     if not math.isfinite(radius) or abs(radius) <= 1e-6:
@@ -1153,6 +1180,7 @@ class DeltaCalculator:
                     record.suspension_velocity_front - record.suspension_velocity_rear,
                 yaw=record.yaw,
                 lateral_accel=record.lateral_accel,
+                gradient=_resolve_track_gradient(record),
             ),
             "driver": DriverNode(
                 delta_nfr=node_deltas.get("driver", 0.0),

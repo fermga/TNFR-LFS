@@ -89,7 +89,14 @@ def _udr_bundle_series(values: Sequence[float], *, si: float = 0.8) -> Sequence[
     return bundles
 
 
-def _axis_bundle(delta_nfr: float, long_component: float, lat_component: float, *, si: float = 0.8) -> EPIBundle:
+def _axis_bundle(
+    delta_nfr: float,
+    long_component: float,
+    lat_component: float,
+    *,
+    si: float = 0.8,
+    gradient: float = 0.0,
+) -> EPIBundle:
     share = delta_nfr / 7.0
     nodes = dict(
         tyres=TyresNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["tyres"]),
@@ -109,7 +116,12 @@ def _axis_bundle(delta_nfr: float, long_component: float, lat_component: float, 
             sense_index=si,
             nu_f=BASE_NU_F["transmission"],
         ),
-        track=TrackNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["track"]),
+        track=TrackNode(
+            delta_nfr=share,
+            sense_index=si,
+            nu_f=BASE_NU_F["track"],
+            gradient=gradient,
+        ),
         driver=DriverNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["driver"]),
     )
     return EPIBundle(
@@ -1331,6 +1343,113 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
     targeted = [rec for rec in recommendations if rec.parameter == "brake_bias_pct"]
     assert targeted
     assert all(rec.priority <= rule.priority - 1 for rec in targeted)
+
+
+def _entry_goal_with_gradient(gradient: float) -> Goal:
+    return Goal(
+        phase="entry1",
+        archetype="frenada",
+        description="",
+        target_delta_nfr=0.2,
+        target_sense_index=0.9,
+        nu_f_target=0.25,
+        nu_exc_target=0.2,
+        rho_target=1.0,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.9,
+        measured_phase_lag=0.25,
+        measured_phase_alignment=0.86,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.4, 0.4),
+        yaw_rate_window=(-0.5, 0.5),
+        dominant_nodes=("brakes",),
+        target_delta_nfr_long=0.5,
+        target_delta_nfr_lat=0.1,
+        delta_axis_weights={"longitudinal": 0.75, "lateral": 0.25},
+        track_gradient=gradient,
+    )
+
+
+def _entry_microsector_with_gradient(goal: Goal, gradient: float) -> Microsector:
+    return Microsector(
+        index=3,
+        start_time=0.0,
+        end_time=0.45,
+        curvature=1.2,
+        brake_event=True,
+        support_event=False,
+        delta_nfr_signature=0.6,
+        goals=(goal,),
+        phase_boundaries={goal.phase: (0, 3)},
+        phase_samples={goal.phase: (0, 1, 2)},
+        active_phase=goal.phase,
+        dominant_nodes={goal.phase: goal.dominant_nodes},
+        phase_weights={goal.phase: {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={goal.phase: goal.measured_phase_lag},
+        phase_alignment={goal.phase: goal.measured_phase_alignment},
+        filtered_measures={"gradient": gradient},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={goal.phase: {}},
+        operator_events={},
+    )
+
+
+def _entry_results_with_gradient(gradient: float) -> Sequence[EPIBundle]:
+    return [
+        _axis_bundle(0.62, 0.5, 0.1, gradient=gradient),
+        _axis_bundle(0.6, 0.5, 0.1, gradient=gradient),
+        _axis_bundle(0.58, 0.5, 0.1, gradient=gradient),
+    ]
+
+
+def test_phase_delta_rule_offsets_brake_bias_with_downhill_gradient() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="entry",
+        operator_label="Operador de frenado",
+        category="entry",
+        phase_label="entrada",
+        priority=10,
+        reference_key="braking",
+    )
+    gradient = -0.015
+    goal = _entry_goal_with_gradient(gradient)
+    microsector = _entry_microsector_with_gradient(goal, gradient)
+    results = list(_entry_results_with_gradient(gradient))
+    thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate(results, [microsector], context))
+    brake_targets = [rec for rec in recommendations if rec.parameter == "brake_bias_pct"]
+    assert brake_targets
+    downhill_delta = brake_targets[0].delta
+    assert downhill_delta is not None
+    assert downhill_delta < 0
+    assert downhill_delta <= -1.0
+
+
+def test_phase_delta_rule_offsets_brake_bias_with_uphill_gradient() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="entry",
+        operator_label="Operador de frenado",
+        category="entry",
+        phase_label="entrada",
+        priority=10,
+        reference_key="braking",
+    )
+    gradient = 0.015
+    goal = _entry_goal_with_gradient(gradient)
+    microsector = _entry_microsector_with_gradient(goal, gradient)
+    results = list(_entry_results_with_gradient(gradient))
+    thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate(results, [microsector], context))
+    brake_targets = [rec for rec in recommendations if rec.parameter == "brake_bias_pct"]
+    assert brake_targets
+    uphill_delta = brake_targets[0].delta
+    assert uphill_delta is not None
+    assert uphill_delta > 0
+    assert uphill_delta >= 0.5
 
 
 def test_bottoming_priority_rule_switches_focus(bottoming_microsectors) -> None:
