@@ -18,7 +18,8 @@ from ..acquisition import (
     TelemetryFusion,
 )
 from ..core.epi import EPIExtractor, TelemetryRecord
-from ..core.operators import DissonanceBreakdown, orchestrate_delta_metrics
+from ..core.metrics import WindowMetrics, compute_window_metrics
+from ..core.operators import orchestrate_delta_metrics
 from ..core.phases import PHASE_SEQUENCE, phase_family
 from ..core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
 from ..core.segmentation import Goal, Microsector, segment_microsectors
@@ -179,13 +180,14 @@ class TelemetryHUD:
         bundle = bundles[-1]
         goal_delta = active.goal.target_delta_nfr if active and active.goal else 0.0
         goal_si = active.goal.target_sense_index if active and active.goal else 0.75
-        metrics = orchestrate_delta_metrics(
+        orchestrate_delta_metrics(
             [records],
             goal_delta,
             goal_si,
             microsectors=self._microsectors,
             phase_weights=self._thresholds.phase_weights,
         )
+        window_metrics = compute_window_metrics(records)
         resonance = analyse_modal_resonance(records)
         recommendations = self.recommendation_engine.generate(
             bundles,
@@ -219,7 +221,12 @@ class TelemetryHUD:
             tolerance = self._thresholds.tolerance_for_phase(active.phase)
 
         self._pages = (
-            _render_page_a(active, bundle, tolerance, metrics["dissonance_breakdown"], metrics["coupling"]),
+            _render_page_a(
+                active,
+                bundle,
+                tolerance,
+                window_metrics,
+            ),
             _render_page_b(bundle, resonance),
             _render_page_c(
                 phase_hint,
@@ -250,26 +257,32 @@ def _render_page_a(
     active: ActivePhase | None,
     bundle,
     tolerance: float,
-    breakdown: DissonanceBreakdown,
-    coupling: float,
+    window_metrics: WindowMetrics,
 ) -> str:
     if not active:
         return _ensure_limit(
-            "Sin microsector activo\nΔNFR -- obj -- ±0.00\nAcop -- · Útil 0% · Paras 0%"
+            "Sin microsector activo\nΔNFR -- obj -- ±0.00\n"
+            + _gradient_line(window_metrics)
         )
 
     curve_label = f"Curva {active.microsector.index + 1}"
     phase_label = HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize())
     current_delta = getattr(bundle, "delta_nfr", 0.0)
     goal_delta = active.goal.target_delta_nfr if active.goal else 0.0
-    useful = breakdown.useful_percentage
-    parasitic = breakdown.parasitic_percentage
     lines = [
         f"{curve_label} · {phase_label}",
         f"ΔNFR {current_delta:+.2f} obj {goal_delta:+.2f} ±{tolerance:.2f}",
-        f"Acop {coupling:.2f} · Útil {useful:.0f}% · Paras {parasitic:.0f}%",
+        _gradient_line(window_metrics),
     ]
     return _ensure_limit("\n".join(lines))
+
+
+def _gradient_line(window_metrics: WindowMetrics) -> str:
+    return (
+        f"Si {window_metrics.si:.2f} · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
+        f" · ∇Res {window_metrics.d_nfr_res:+.2f} · ∇Flat {window_metrics.d_nfr_flat:+.2f}"
+        f" · ν_f {window_metrics.nu_f:.2f}Hz"
+    )
 
 
 def _render_page_b(bundle, resonance: Mapping[str, ModalAnalysis]) -> str:
