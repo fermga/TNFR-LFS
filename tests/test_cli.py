@@ -133,6 +133,15 @@ def test_analyze_pipeline_json_export(
     tyres_summary = breakdown_data["per_node"]["tyres"]
     tyres_total = sum(tyres_summary["breakdown"].values())
     assert tyres_total == pytest.approx(tyres_summary["delta_nfr_total"], rel=1e-6, abs=1e-9)
+    coherence_entry = payload["reports"]["coherence_map"]
+    assert Path(coherence_entry["path"]).exists()
+    assert coherence_entry["data"]["microsectors"]
+    operator_entry = payload["reports"]["operator_trajectories"]
+    assert Path(operator_entry["path"]).exists()
+    assert operator_entry["data"]["events"]
+    bifurcation_entry = payload["reports"]["delta_bifurcations"]
+    assert Path(bifurcation_entry["path"]).exists()
+    assert bifurcation_entry["data"]["series"]
 
 
 def test_suggest_pipeline(
@@ -191,6 +200,8 @@ def test_report_generation(
         str(baseline_path),
         "--export",
         "json",
+        "--report-format",
+        "visual",
     ])
 
     payload = json.loads(output)
@@ -201,6 +212,15 @@ def test_report_generation(
     assert "intermediate_metrics" in payload
     assert "epi_evolution" in payload["intermediate_metrics"]
     assert payload["intermediate_metrics"]["sense_memory"]["memory"] == payload["recursive_trace"]
+    coherence_report = payload["reports"]["coherence_map"]
+    assert coherence_report["path"].endswith(".viz")
+    assert "rendered" in coherence_report
+    operator_report = payload["reports"]["operator_trajectories"]
+    assert operator_report["path"].endswith(".viz")
+    assert "rendered" in operator_report
+    bifurcation_report = payload["reports"]["delta_bifurcations"]
+    assert bifurcation_report["path"].endswith(".viz")
+    assert "rendered" in bifurcation_report
 
 
 def test_write_set_markdown_export(

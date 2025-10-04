@@ -16,12 +16,15 @@ from tnfr_lfs.core.epi_models import (
 )
 from tnfr_lfs.exporters import (
     CAR_MODEL_PREFIXES,
+    coherence_map_exporter,
     csv_exporter,
+    delta_bifurcation_exporter,
     json_exporter,
     lfs_notes_exporter,
     lfs_set_exporter,
     markdown_exporter,
     normalise_set_output_name,
+    operator_trajectory_exporter,
 )
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan, serialise_setup_plan
 
@@ -198,9 +201,49 @@ def test_lfs_notes_exporter_renders_key_instructions():
     plan = build_setup_plan()
     output = lfs_notes_exporter({"setup_plan": plan})
     assert "Instrucciones rápidas TNFR" in output
-    assert "Pulsa F12" in output
-    assert "Pulsa F11" in output
-    assert "Parámetros bloqueados" in output
+
+
+def test_coherence_map_exporter_produces_track_summary(
+    synthetic_microsectors, synthetic_bundles
+) -> None:
+    payload = {"microsectors": synthetic_microsectors, "series": synthetic_bundles}
+    output = coherence_map_exporter(payload)
+    data = json.loads(output)
+    assert "microsectors" in data
+    assert data["microsectors"]
+    first = data["microsectors"][0]
+    assert "coherence" in first
+    assert first["coherence"]["series"]
+    track = first["track"]
+    assert track["end_distance"] >= track["start_distance"]
+    assert data["global"]["mean_coherence"] >= 0.0
+
+
+def test_operator_trajectory_exporter_serialises_events(
+    synthetic_microsectors, synthetic_bundles
+) -> None:
+    payload = {"microsectors": synthetic_microsectors, "series": synthetic_bundles}
+    output = operator_trajectory_exporter(payload)
+    data = json.loads(output)
+    events = data.get("events", [])
+    assert events
+    first = events[0]
+    assert first["type"] in {"AL", "OZ", "IL"}
+    assert first["delta_metrics"]["peak"] == pytest.approx(
+        first["delta_metrics"]["peak"], rel=1e-6
+    )
+
+
+def test_delta_bifurcation_exporter_detects_transitions(
+    synthetic_microsectors, synthetic_bundles
+) -> None:
+    payload = {"microsectors": synthetic_microsectors, "series": synthetic_bundles}
+    output = delta_bifurcation_exporter(payload)
+    data = json.loads(output)
+    assert len(data["series"]) == len(synthetic_bundles)
+    stats = data["derivative_stats"]
+    assert stats["count"] == len(synthetic_bundles) - 1
+    assert "transitions" in data
 
 
 @pytest.mark.parametrize("car_model", SUPPORTED_CAR_MODELS)

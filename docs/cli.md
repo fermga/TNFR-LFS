@@ -214,8 +214,20 @@ produce explainable ΔNFR/Sense Index reports.  ``--target-delta`` and
 ``--target-si`` define the desired objectives.  The emitted report now
 exposes the same telemetry artefacts as ``analyze``/``suggest`` under the
 ``reports`` key so downstream automations (dashboards or notebooks) can
-ingest the Sense Index map and modal resonance breakdown while keeping
-the command line output concise.
+ingest the Sense Index map, modal resonance breakdown and the new
+coherence/operator/bifurcation summaries while keeping the command line
+output concise.  Use ``--report-format`` to decide whether those artefacts
+are persisted as JSON payloads, Markdown tables or lightweight ASCII
+visualisations.
+
+The additional artefacts provide:
+
+* ``coherence_map`` – mean/peak coherence per microsector with the
+  reconstructed distance along the lap.
+* ``operator_trajectories`` – structural timelines for ``AL``/``OZ``/``IL``
+  detections extracted from ``Microsector.operator_events``.
+* ``delta_bifurcations`` – ΔNFR sign changes and derivative summaries on
+  the structural axis to highlight bifurcation hotspots.
 
 ### ``write-set``
 

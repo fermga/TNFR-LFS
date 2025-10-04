@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import math
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Protocol, Sequence
+from statistics import mean
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Protocol, Sequence
 
 from ..core.epi_models import EPIBundle
 from .setup_plan import SetupPlan, serialise_setup_plan
@@ -56,8 +59,6 @@ def _normalise(value: Any) -> Any:
 
 
 def json_exporter(results: Dict[str, Any]) -> str:
-    import json
-
     payload = _normalise(results)
     return json.dumps(payload, indent=2, sort_keys=True)
 
@@ -375,17 +376,657 @@ def lfs_set_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     return f"Setup guardado en {destination.resolve()}"
 
 
+REPORT_ARTIFACT_FORMATS = ("json", "markdown", "visual")
+
+
+def _to_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _series_from_results(results: Mapping[str, Any]) -> Sequence[EPIBundle]:
+    series = results.get("series")
+    if isinstance(series, Sequence):
+        return series
+    raise TypeError(
+        "Exporters require a 'series' sequence containing EPIBundle entries."
+    )
+
+
+def _microsectors_from_results(results: Mapping[str, Any]) -> Sequence[Any]:
+    microsectors = results.get("microsectors")
+    if isinstance(microsectors, Sequence):
+        return microsectors
+    raise TypeError(
+        "Exporters require a 'microsectors' sequence derived from segmentation."
+    )
+
+
+def _structural_lookup(series: Sequence[EPIBundle]) -> Sequence[Mapping[str, float]]:
+    lookup: list[Mapping[str, float]] = []
+    for index, bundle in enumerate(series):
+        timestamp = _to_float(getattr(bundle, "timestamp", index), default=float(index))
+        structural = getattr(bundle, "structural_timestamp", None)
+        if structural is None or not math.isfinite(structural):
+            structural = timestamp if math.isfinite(timestamp) else float(index)
+        lookup.append(
+            {
+                "index": float(index),
+                "timestamp": float(timestamp),
+                "structural": float(structural),
+            }
+        )
+    return lookup
+
+
+def _track_progress(series: Sequence[EPIBundle]) -> Sequence[Mapping[str, float]]:
+    progress: list[Mapping[str, float]] = []
+    distance = 0.0
+    prev_timestamp: float | None = None
+    for index, bundle in enumerate(series):
+        timestamp = _to_float(getattr(bundle, "timestamp", index), default=float(index))
+        structural = getattr(bundle, "structural_timestamp", None)
+        if structural is None or not math.isfinite(structural):
+            structural = timestamp if math.isfinite(timestamp) else float(index)
+        if prev_timestamp is None:
+            dt = 0.0
+        else:
+            dt = max(0.0, timestamp - prev_timestamp)
+        speed = 0.0
+        transmission = getattr(bundle, "transmission", None)
+        if transmission is not None:
+            speed = _to_float(getattr(transmission, "speed", 0.0))
+        distance += speed * dt
+        progress.append(
+            {
+                "index": float(index),
+                "timestamp": float(timestamp),
+                "structural": float(structural),
+                "distance": float(distance),
+            }
+        )
+        prev_timestamp = timestamp
+    return progress
+
+
+def _microsector_indices(microsector: Any) -> Sequence[int]:
+    indices: set[int] = set()
+    samples = getattr(microsector, "phase_samples", {}) or {}
+    for payload in samples.values():
+        try:
+            indices.update(int(value) for value in payload)
+        except TypeError:
+            continue
+    if not indices:
+        boundaries = getattr(microsector, "phase_boundaries", {}) or {}
+        for start, end in boundaries.values():
+            start_idx = int(start)
+            end_idx = int(end)
+            indices.update(range(start_idx, max(start_idx, end_idx)))
+    return tuple(sorted(indices))
+
+
+def _sparkline(series: Sequence[float]) -> str:
+    if not series:
+        return ""
+    minimum = min(series)
+    maximum = max(series)
+    if math.isclose(maximum, minimum, abs_tol=1e-9):
+        return "▁" * len(series)
+    span = maximum - minimum
+    chars = "▁▂▃▄▅▆▇█"
+    buckets = len(chars) - 1
+    output = []
+    for value in series:
+        normalised = max(0.0, min(1.0, (value - minimum) / span))
+        index = int(round(normalised * buckets))
+        output.append(chars[index])
+    return "".join(output)
+
+
+def build_coherence_map_payload(results: Mapping[str, Any]) -> Dict[str, Any]:
+    series = list(_series_from_results(results))
+    microsectors = _microsectors_from_results(results)
+    progress = list(_track_progress(series))
+    index_lookup = {int(entry["index"]): entry for entry in progress}
+    entries: list[Dict[str, Any]] = []
+    mean_values: list[float] = []
+    coherence_extrema: list[float] = []
+    distances: list[float] = []
+
+    for microsector in microsectors:
+        indices = [index for index in _microsector_indices(microsector) if index < len(series)]
+        if not indices:
+            continue
+        coherence_values: list[float] = []
+        delta_values: list[float] = []
+        samples: list[Dict[str, float]] = []
+        for index in indices:
+            bundle = series[index]
+            coherence = _to_float(getattr(bundle, "coherence_index", 0.0))
+            delta = _to_float(getattr(bundle, "delta_nfr", 0.0))
+            coherence_values.append(coherence)
+            delta_values.append(delta)
+            progress_entry = index_lookup.get(index)
+            sample_payload: Dict[str, float] = {
+                "index": float(index),
+                "coherence": coherence,
+                "delta_nfr": delta,
+            }
+            if progress_entry:
+                sample_payload.update(
+                    {
+                        "timestamp": progress_entry["timestamp"],
+                        "structural": progress_entry["structural"],
+                        "distance": progress_entry["distance"],
+                    }
+                )
+            samples.append(sample_payload)
+        if samples:
+            distances.extend(entry.get("distance", 0.0) for entry in samples)
+        coherence_mean = mean(coherence_values) if coherence_values else 0.0
+        coherence_peak = max(coherence_values) if coherence_values else 0.0
+        coherence_floor = min(coherence_values) if coherence_values else 0.0
+        coherence_span = coherence_peak - coherence_floor
+        delta_peak = max(delta_values) if delta_values else 0.0
+        delta_floor = min(delta_values) if delta_values else 0.0
+        delta_span = delta_peak - delta_floor
+        mean_values.append(coherence_mean)
+        coherence_extrema.extend([coherence_peak, coherence_floor])
+        context_factors = {}
+        raw_context = getattr(microsector, "context_factors", {}) or {}
+        for key, value in raw_context.items():
+            context_factors[str(key)] = _to_float(value)
+        entry = {
+            "microsector": int(getattr(microsector, "index", len(entries))),
+            "start_time": _to_float(getattr(microsector, "start_time", 0.0)),
+            "end_time": _to_float(getattr(microsector, "end_time", 0.0)),
+            "phase": str(getattr(microsector, "active_phase", "")),
+            "coherence": {
+                "mean": coherence_mean,
+                "max": coherence_peak,
+                "min": coherence_floor,
+                "span": coherence_span,
+                "series": coherence_values,
+            },
+            "delta_nfr": {
+                "max": delta_peak,
+                "min": delta_floor,
+                "span": delta_span,
+                "series": delta_values,
+            },
+            "track": {
+                "samples": samples,
+                "start_distance": samples[0].get("distance", 0.0) if samples else 0.0,
+                "end_distance": samples[-1].get("distance", 0.0) if samples else 0.0,
+            },
+            "context": context_factors,
+            "dominant_nodes": {
+                str(phase): tuple(nodes)
+                for phase, nodes in (getattr(microsector, "dominant_nodes", {}) or {}).items()
+            },
+        }
+        entries.append(entry)
+
+    global_summary: Dict[str, Any] = {
+        "mean_coherence": mean(mean_values) if mean_values else 0.0,
+        "max_coherence": max(coherence_extrema) if coherence_extrema else 0.0,
+        "min_coherence": min(coherence_extrema) if coherence_extrema else 0.0,
+    }
+    if distances:
+        global_summary["distance_span"] = {
+            "start": float(min(distances)),
+            "end": float(max(distances)),
+        }
+    else:
+        global_summary["distance_span"] = {"start": 0.0, "end": 0.0}
+
+    return {
+        "microsectors": entries,
+        "global": global_summary,
+        "track_progress": progress,
+    }
+
+
+def _structural_for_time(
+    lookup: Sequence[Mapping[str, float]],
+    timestamp: float,
+    *,
+    index: int | None = None,
+) -> float:
+    if index is not None and 0 <= index < len(lookup):
+        return float(lookup[index]["structural"])
+    if not lookup:
+        return float(timestamp)
+    closest = min(
+        lookup,
+        key=lambda entry: abs(entry["timestamp"] - float(timestamp)),
+    )
+    return float(closest["structural"])
+
+
+def _segment_delta_metrics(
+    series: Sequence[EPIBundle], start_index: int | None, end_index: int | None
+) -> Mapping[str, float]:
+    if not series:
+        return {"mean": 0.0, "peak": 0.0, "span": 0.0}
+    if start_index is None:
+        start_index = end_index if end_index is not None else 0
+    if end_index is None:
+        end_index = start_index
+    start = max(0, int(start_index))
+    stop = min(len(series) - 1, max(start, int(end_index)))
+    values = [
+        _to_float(getattr(series[index], "delta_nfr", 0.0))
+        for index in range(start, stop + 1)
+    ]
+    if not values:
+        return {"mean": 0.0, "peak": 0.0, "span": 0.0}
+    peak_index = max(range(len(values)), key=lambda idx: abs(values[idx]))
+    peak_value = float(values[peak_index])
+    return {
+        "mean": float(mean(values)),
+        "peak": peak_value,
+        "span": float(max(values) - min(values)),
+        "start_index": float(start),
+        "end_index": float(stop),
+    }
+
+
+def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str, Any]:
+    series = list(_series_from_results(results))
+    microsectors = _microsectors_from_results(results)
+    lookup = list(_structural_lookup(series))
+    events: list[Dict[str, Any]] = []
+    summary: MutableMapping[str, Dict[str, float]] = {}
+    structural_values: list[float] = []
+
+    for microsector in microsectors:
+        raw_events = getattr(microsector, "operator_events", {}) or {}
+        base_index = 0
+        boundaries = getattr(microsector, "phase_boundaries", {}) or {}
+        if boundaries:
+            base_index = min(int(start) for start, _ in boundaries.values())
+        for name, payloads in raw_events.items():
+            for payload in payloads:
+                start_idx = payload.get("global_start_index")
+                if start_idx is None:
+                    start_idx = base_index + int(payload.get("start_index", 0))
+                end_idx = payload.get("global_end_index")
+                if end_idx is None:
+                    end_idx = base_index + int(payload.get("end_index", start_idx))
+                start_idx = int(start_idx)
+                end_idx = int(end_idx)
+                start_time = _to_float(payload.get("start_time"))
+                end_time = _to_float(payload.get("end_time"), default=start_time)
+                structural_start = _structural_for_time(lookup, start_time, index=start_idx)
+                structural_end = _structural_for_time(lookup, end_time, index=end_idx)
+                duration = max(0.0, end_time - start_time)
+                delta_metrics = dict(
+                    _segment_delta_metrics(series, start_idx, end_idx)
+                )
+                structural_values.extend([structural_start, structural_end])
+                event_entry: Dict[str, Any] = {
+                    "type": str(name),
+                    "microsector": int(getattr(microsector, "index", 0)),
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "duration": duration,
+                    "structural_start": structural_start,
+                    "structural_end": structural_end,
+                    "delta_metrics": delta_metrics,
+                    "details": {
+                        key: payload[key]
+                        for key in sorted(payload)
+                        if key not in {"start_index", "end_index"}
+                    },
+                }
+                events.append(event_entry)
+                stats = summary.setdefault(
+                    str(name), {"count": 0.0, "duration": 0.0, "peak": 0.0}
+                )
+                stats["count"] += 1.0
+                stats["duration"] += duration
+                stats["peak"] += abs(delta_metrics.get("peak", 0.0))
+
+    events.sort(key=lambda entry: (entry["structural_start"], entry["start_time"]))
+    for name, stats in summary.items():
+        count = stats.get("count", 0.0) or 1.0
+        stats["mean_duration"] = stats.get("duration", 0.0) / count
+        stats["mean_peak"] = stats.get("peak", 0.0) / count
+        stats["count"] = int(round(count))
+        stats.pop("duration", None)
+        stats.pop("peak", None)
+
+    if structural_values:
+        structural_span = {
+            "start": float(min(structural_values)),
+            "end": float(max(structural_values)),
+        }
+    else:
+        structural_span = {"start": 0.0, "end": 0.0}
+
+    return {
+        "events": events,
+        "summary": summary,
+        "structural_span": structural_span,
+    }
+
+
+def _sign(value: float) -> int:
+    if value > 0:
+        return 1
+    if value < 0:
+        return -1
+    return 0
+
+
+def build_delta_bifurcation_payload(results: Mapping[str, Any]) -> Dict[str, Any]:
+    series = list(_series_from_results(results))
+    lookup = list(_structural_lookup(series))
+    microsectors = results.get("microsectors")
+    if not isinstance(microsectors, Sequence):
+        microsectors = []
+    delta_series: list[Dict[str, float]] = []
+    transitions: list[Dict[str, float]] = []
+    extrema: list[Dict[str, float]] = []
+    derivatives: list[float] = []
+
+    for index, bundle in enumerate(series):
+        delta_value = _to_float(getattr(bundle, "delta_nfr", 0.0))
+        structural = lookup[index]["structural"]
+        entry = {
+            "index": float(index),
+            "structural": float(structural),
+            "timestamp": lookup[index]["timestamp"],
+            "delta_nfr": delta_value,
+        }
+        delta_series.append(entry)
+        if index == 0:
+            continue
+        prev = delta_series[-2]
+        dt = max(1e-6, structural - prev["structural"])
+        slope = (delta_value - prev["delta_nfr"]) / dt
+        derivatives.append(slope)
+        if _sign(prev["delta_nfr"]) != _sign(delta_value):
+            transitions.append(
+                {
+                    "index": float(index),
+                    "structural": float(structural),
+                    "timestamp": entry["timestamp"],
+                    "from": prev["delta_nfr"],
+                    "to": delta_value,
+                    "slope": slope,
+                }
+            )
+
+    for index in range(1, len(delta_series) - 1):
+        previous = delta_series[index - 1]["delta_nfr"]
+        current = delta_series[index]["delta_nfr"]
+        nxt = delta_series[index + 1]["delta_nfr"]
+        if (current > previous and current > nxt) or (
+            current < previous and current < nxt
+        ):
+            extrema.append(
+                {
+                    "index": delta_series[index]["index"],
+                    "structural": delta_series[index]["structural"],
+                    "timestamp": delta_series[index]["timestamp"],
+                    "delta_nfr": current,
+                    "classification": "maximum"
+                    if current > previous
+                    else "minimum",
+                }
+            )
+
+    derivative_stats = {
+        "max": max(derivatives) if derivatives else 0.0,
+        "min": min(derivatives) if derivatives else 0.0,
+        "mean": mean(derivatives) if derivatives else 0.0,
+        "count": len(derivatives),
+    }
+
+    microsector_summary: Dict[str, Dict[str, float]] = {}
+    if microsectors and transitions:
+        transition_indices = [int(entry["index"]) for entry in transitions]
+        for microsector in microsectors:
+            indices = set(_microsector_indices(microsector))
+            if not indices:
+                continue
+            matched = [idx for idx in transition_indices if idx in indices]
+            if not matched:
+                continue
+            values = [delta_series[idx]["delta_nfr"] for idx in matched if idx < len(delta_series)]
+            label = f"microsector_{int(getattr(microsector, 'index', 0))}"
+            microsector_summary[label] = {
+                "count": float(len(matched)),
+                "mean_delta": mean(values) if values else 0.0,
+            }
+
+    return {
+        "series": delta_series,
+        "transitions": transitions,
+        "extrema": extrema,
+        "derivative_stats": derivative_stats,
+        "microsector_bifurcations": microsector_summary,
+    }
+
+
+def render_coherence_map(payload: Mapping[str, Any], fmt: str = "json") -> str:
+    fmt = fmt.lower()
+    if fmt == "json":
+        return json.dumps(payload, indent=2, sort_keys=True)
+    if fmt == "markdown":
+        lines = ["# Mapa de coherencia ΔNFR", ""]
+        lines.append("| Microsector | Fase | C̄ | Cmax | Cmin | Distancia |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
+        for entry in payload.get("microsectors", []):
+            track = entry.get("track", {})
+            start_distance = _to_float(track.get("start_distance"))
+            end_distance = _to_float(track.get("end_distance"), default=start_distance)
+            lines.append(
+                "| {microsector} | {phase} | {mean:.3f} | {max_value:.3f} | {min_value:.3f} | {start:.1f}→{end:.1f} |".format(
+                    microsector=entry.get("microsector"),
+                    phase=entry.get("phase", "-"),
+                    mean=_to_float(entry.get("coherence", {}).get("mean")),
+                    max_value=_to_float(entry.get("coherence", {}).get("max")),
+                    min_value=_to_float(entry.get("coherence", {}).get("min")),
+                    start=start_distance,
+                    end=end_distance,
+                )
+            )
+        lines.append("")
+        global_summary = payload.get("global", {})
+        lines.append("## Resumen global")
+        lines.append(
+            f"- C̄ = {_to_float(global_summary.get('mean_coherence')):.3f}"
+        )
+        lines.append(
+            f"- Cmax = {_to_float(global_summary.get('max_coherence')):.3f}"
+        )
+        lines.append(
+            f"- Cmin = {_to_float(global_summary.get('min_coherence')):.3f}"
+        )
+        span = global_summary.get("distance_span", {})
+        lines.append(
+            f"- Cobertura pista = {_to_float(span.get('start')):.1f}→{_to_float(span.get('end')):.1f}"
+        )
+        return "\n".join(lines)
+    if fmt == "visual":
+        lines = ["# Coherencia por microsector", ""]
+        for entry in payload.get("microsectors", []):
+            series = entry.get("coherence", {}).get("series", []) or []
+            sparkline = _sparkline([_to_float(value) for value in series])
+            lines.append(
+                f"MS{entry.get('microsector'):02d} {entry.get('phase', '-')}: "
+                f"{sparkline} (C̄ {_to_float(entry.get('coherence', {}).get('mean')):.3f})"
+            )
+        return "\n".join(lines)
+    raise ValueError(f"Formato desconocido para el mapa de coherencia: {fmt}")
+
+
+def render_operator_trajectories(payload: Mapping[str, Any], fmt: str = "json") -> str:
+    fmt = fmt.lower()
+    if fmt == "json":
+        return json.dumps(payload, indent=2, sort_keys=True)
+    if fmt == "markdown":
+        lines = ["# Trayectorias de operadores", ""]
+        lines.append("| Operador | Microsector | t₀ | t₁ | Δt | ΔNFR pico |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
+        for entry in payload.get("events", []):
+            lines.append(
+                "| {type} | {microsector} | {start:.2f} | {end:.2f} | {duration:.2f} | {peak:+.3f} |".format(
+                    type=entry.get("type"),
+                    microsector=entry.get("microsector"),
+                    start=_to_float(entry.get("start_time")),
+                    end=_to_float(entry.get("end_time")),
+                    duration=_to_float(entry.get("duration")),
+                    peak=_to_float(entry.get("delta_metrics", {}).get("peak")),
+                )
+            )
+        lines.append("")
+        lines.append("## Estadísticas por operador")
+        lines.append("| Operador | Eventos | Δt medio | Pico medio |")
+        lines.append("| --- | --- | --- | --- |")
+        for name, stats in sorted(payload.get("summary", {}).items()):
+            lines.append(
+                "| {name} | {count} | {duration:.2f} | {peak:.3f} |".format(
+                    name=name,
+                    count=int(stats.get("count", 0)),
+                    duration=_to_float(stats.get("mean_duration")),
+                    peak=_to_float(stats.get("mean_peak")),
+                )
+            )
+        return "\n".join(lines)
+    if fmt == "visual":
+        span = payload.get("structural_span", {})
+        start = _to_float(span.get("start"))
+        end = _to_float(span.get("end"), default=start + 1.0)
+        if math.isclose(end, start):
+            end = start + 1.0
+        width = 42
+        lines = ["# Línea temporal de operadores", ""]
+        for entry in payload.get("events", []):
+            start_pos = int((entry["structural_start"] - start) / (end - start) * width)
+            end_pos = int((entry["structural_end"] - start) / (end - start) * width)
+            start_pos = max(0, min(width - 1, start_pos))
+            end_pos = max(start_pos, min(width - 1, end_pos))
+            bar = " " * start_pos + "▇" * (end_pos - start_pos + 1)
+            lines.append(
+                f"{entry['type']:<2} MS{entry['microsector']:02d} |{bar.ljust(width)}|"
+            )
+        return "\n".join(lines)
+    raise ValueError(
+        f"Formato desconocido para las trayectorias de operadores: {fmt}"
+    )
+
+
+def render_delta_bifurcation(payload: Mapping[str, Any], fmt: str = "json") -> str:
+    fmt = fmt.lower()
+    if fmt == "json":
+        return json.dumps(payload, indent=2, sort_keys=True)
+    if fmt == "markdown":
+        lines = ["# Análisis de bifurcaciones ΔNFR", ""]
+        stats = payload.get("derivative_stats", {})
+        lines.append("## Estadísticas globales")
+        lines.append(
+            f"- Transiciones: {len(payload.get('transitions', []))}" \
+            f" · Extremos: {len(payload.get('extrema', []))}"
+        )
+        lines.append(
+            f"- Crecimiento max: {_to_float(stats.get('max')):+.3f}"
+        )
+        lines.append(
+            f"- Crecimiento min: {_to_float(stats.get('min')):+.3f}"
+        )
+        lines.append(
+            f"- Crecimiento medio: {_to_float(stats.get('mean')):+.3f}"
+        )
+        lines.append("")
+        if payload.get("transitions"):
+            lines.append("## Cruces de signo")
+            lines.append("| Índice | tₛ | ΔNFR₀ | ΔNFR₁ | Pendiente |")
+            lines.append("| --- | --- | --- | --- | --- |")
+            for entry in payload["transitions"]:
+                lines.append(
+                    "| {index:.0f} | {structural:.2f} | {from_val:+.3f} | {to:+.3f} | {slope:+.3f} |".format(
+                        index=_to_float(entry.get("index")),
+                        structural=_to_float(entry.get("structural")),
+                        from_val=_to_float(entry.get("from")),
+                        to=_to_float(entry.get("to")),
+                        slope=_to_float(entry.get("slope")),
+                    )
+                )
+        if payload.get("microsector_bifurcations"):
+            lines.append("")
+            lines.append("## Bifurcaciones por microsector")
+            lines.append("| Microsector | Eventos | ΔNFR medio |")
+            lines.append("| --- | --- | --- |")
+            for key, entry in sorted(payload["microsector_bifurcations"].items()):
+                lines.append(
+                    f"| {key} | {int(entry.get('count', 0.0))} | {_to_float(entry.get('mean_delta')):+.3f} |"
+                )
+        return "\n".join(lines)
+    if fmt == "visual":
+        lines = ["# ΔNFR (eje estructural)", ""]
+        series = [_to_float(entry.get("delta_nfr")) for entry in payload.get("series", [])]
+        sparkline = _sparkline(series)
+        if sparkline:
+            lines.append(f"Serie: {sparkline}")
+        if payload.get("transitions"):
+            lines.append("")
+            lines.append("Cruces:")
+            for entry in payload["transitions"]:
+                lines.append(
+                    f"· tₛ {entry['structural']:.2f}: {entry['from']:+.3f} → {entry['to']:+.3f}"
+                )
+        return "\n".join(lines)
+    raise ValueError(
+        f"Formato desconocido para el análisis de bifurcaciones: {fmt}"
+    )
+
+
+def coherence_map_exporter(results: Mapping[str, Any]) -> str:
+    payload = build_coherence_map_payload(results)
+    return render_coherence_map(payload, fmt="json")
+
+
+def operator_trajectory_exporter(results: Mapping[str, Any]) -> str:
+    payload = build_operator_trajectories_payload(results)
+    return render_operator_trajectories(payload, fmt="json")
+
+
+def delta_bifurcation_exporter(results: Mapping[str, Any]) -> str:
+    payload = build_delta_bifurcation_payload(results)
+    return render_delta_bifurcation(payload, fmt="json")
+
+
 exporters_registry = {
     "json": json_exporter,
     "csv": csv_exporter,
     "markdown": markdown_exporter,
     "set": lfs_set_exporter,
     "lfs-notes": lfs_notes_exporter,
+    "coherence-map": coherence_map_exporter,
+    "operator-trajectory": operator_trajectory_exporter,
+    "delta-bifurcation": delta_bifurcation_exporter,
 }
 
 __all__ = [
     "CAR_MODEL_PREFIXES",
     "Exporter",
+    "REPORT_ARTIFACT_FORMATS",
+    "build_coherence_map_payload",
+    "build_operator_trajectories_payload",
+    "build_delta_bifurcation_payload",
+    "render_coherence_map",
+    "render_operator_trajectories",
+    "render_delta_bifurcation",
+    "coherence_map_exporter",
+    "operator_trajectory_exporter",
+    "delta_bifurcation_exporter",
     "json_exporter",
     "csv_exporter",
     "markdown_exporter",
