@@ -33,3 +33,17 @@ def test_profile_manager_persists_jacobian_history(tmp_path: Path) -> None:
     assert overall["sense_index"]["rear_wing_angle"] == pytest.approx(1.4)
     assert overall["delta_nfr_integral"]["rear_wing_angle"] == pytest.approx(-0.6)
     assert phases["entry"]["delta_nfr_integral"]["rear_wing_angle"] == pytest.approx(-0.4)
+
+
+def test_profile_manager_updates_tyre_offsets(tmp_path: Path) -> None:
+    profiles_path = tmp_path / "profiles.toml"
+    manager = ProfileManager(profiles_path)
+    car_model = "generic_gt"
+    track = "generic"
+    manager.resolve(car_model, track)
+    manager.update_tyre_offsets(car_model, track, {"pressure_front": -0.04, "camber_rear": 0.08})
+
+    reloaded = ProfileManager(profiles_path)
+    snapshot = reloaded.resolve(car_model, track)
+    assert snapshot.tyre_offsets["pressure_front"] == pytest.approx(-0.04)
+    assert snapshot.tyre_offsets["camber_rear"] == pytest.approx(0.08)

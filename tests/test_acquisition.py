@@ -2,6 +2,7 @@ import math
 import socket
 import struct
 import threading
+from dataclasses import replace
 from io import StringIO
 
 import pytest
@@ -84,8 +85,9 @@ def test_ingest_validates_header():
         "timestamp,vertical_load,slip_ratio,lateral_accel,longitudinal_accel,yaw,pitch,roll,brake_pressure,locking,nfr,si,"
         "speed,yaw_rate,slip_angle,steer,throttle,gear,vertical_load_front,vertical_load_rear,mu_eff_front,mu_eff_rear,"
         "mu_eff_front_lateral,mu_eff_front_longitudinal,mu_eff_rear_lateral,mu_eff_rear_longitudinal,"
-        "suspension_travel_front,suspension_travel_rear,suspension_velocity_front,suspension_velocity_rear\n"
-        "0.0,6000,0.05,1.2,0.4,0.1,0.01,0.02,0.5,1,520,0.82,21.0,0.15,0.05,0.2,0.7,3,3200,2800,1.1,1.0,1.05,0.95,0.98,1.02,0.52,0.48,0.0,0.0\n"
+        "suspension_travel_front,suspension_travel_rear,suspension_velocity_front,suspension_velocity_rear,"
+        "tyre_temp_fl,tyre_temp_fr,tyre_temp_rl,tyre_temp_rr,tyre_pressure_fl,tyre_pressure_fr,tyre_pressure_rl,tyre_pressure_rr\n"
+        "0.0,6000,0.05,1.2,0.4,0.1,0.01,0.02,0.5,1,520,0.82,21.0,0.15,0.05,0.2,0.7,3,3200,2800,1.1,1.0,1.05,0.95,0.98,1.02,0.52,0.48,0.0,0.0,82.0,83.0,78.5,79.0,24.2,24.4,23.8,23.9\n"
     )
     records = client.ingest(data)
     assert len(records) == 1
@@ -137,10 +139,14 @@ def test_outgauge_udp_client_reads_payload(outgauge_payload):
 
 def test_fusion_generates_record_and_bundle(outsim_payload, outgauge_payload):
     outsim = OutSimPacket.from_bytes(outsim_payload)
-    outgauge = OutGaugePacket.from_bytes(outgauge_payload)
+    enriched_outgauge = replace(
+        OutGaugePacket.from_bytes(outgauge_payload),
+        tyre_temps=(81.0, 82.0, 78.0, 77.5),
+        tyre_pressures=(24.8, 24.6, 24.1, 24.0),
+    )
     fusion = TelemetryFusion()
-    record = fusion.fuse(outsim, outgauge)
-    calibration = fusion._select_calibration(outgauge)
+    record = fusion.fuse(outsim, enriched_outgauge)
+    calibration = fusion._select_calibration(enriched_outgauge)
     expected_load = max(0.0, (outsim.accel_z + 9.81) * calibration.load_scale + calibration.load_bias)
     assert record.vertical_load == pytest.approx(expected_load)
     assert record.slip_ratio == pytest.approx(0.05)
@@ -151,7 +157,9 @@ def test_fusion_generates_record_and_bundle(outsim_payload, outgauge_payload):
     assert record.suspension_velocity_front == pytest.approx(0.0)
     assert record.mu_eff_front >= 0.0
     assert record.mu_eff_front_lateral >= record.mu_eff_front
-    bundle = fusion.fuse_to_bundle(outsim, outgauge)
+    assert record.tyre_temp_fl == pytest.approx(81.0)
+    assert record.tyre_pressure_rr == pytest.approx(24.0)
+    bundle = fusion.fuse_to_bundle(outsim, enriched_outgauge)
     assert isinstance(bundle, EPIBundle)
 
 

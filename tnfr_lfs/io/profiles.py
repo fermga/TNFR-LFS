@@ -65,6 +65,7 @@ class ProfileRecord:
     phase_jacobian: Dict[str, Dict[str, Dict[str, float]]] = field(default_factory=dict)
     pending_jacobian: Dict[str, Dict[str, float]] | None = None
     pending_phase_jacobian: Dict[str, Dict[str, Dict[str, float]]] | None = None
+    tyre_offsets: Dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def from_base(
@@ -180,6 +181,7 @@ class ProfileSnapshot:
     phase_weights: Mapping[str, Mapping[str, float] | float]
     jacobian: Mapping[str, Mapping[str, float]]
     phase_jacobian: Mapping[str, Mapping[str, Mapping[str, float]]]
+    tyre_offsets: Mapping[str, float]
 
 
 class ProfileManager:
@@ -228,6 +230,9 @@ class ProfileManager:
             )
             for phase, metrics in record.phase_jacobian.items()
         }
+        offsets_snapshot = MappingProxyType(
+            {str(key): float(value) for key, value in record.tyre_offsets.items()}
+        )
         return ProfileSnapshot(
             thresholds=thresholds,
             objectives=record.objectives,
@@ -236,6 +241,7 @@ class ProfileManager:
             phase_weights=thresholds.phase_weights,
             jacobian=MappingProxyType(jacobian_snapshot),
             phase_jacobian=MappingProxyType(phase_jacobian_snapshot),
+            tyre_offsets=offsets_snapshot,
         )
 
     def register_plan(
@@ -290,6 +296,23 @@ class ProfileManager:
             record.pending_jacobian = None
             record.pending_phase_jacobian = None
         record.last_result = metrics
+        self.save()
+
+    def update_tyre_offsets(
+        self,
+        car_model: str,
+        track_name: str,
+        offsets: Mapping[str, float],
+    ) -> None:
+        if not offsets:
+            return
+        key = (car_model, track_name)
+        record = self._ensure_record(key)
+        record.tyre_offsets = {
+            str(axis): float(value)
+            for axis, value in offsets.items()
+            if isinstance(value, (int, float))
+        }
         self.save()
 
     def gradient_history(
@@ -496,6 +519,13 @@ def _record_from_mapping(
                 sense_index=float(sense_value),
                 delta_nfr=abs(float(delta_value)),
             )
+    offsets = spec.get("tyre_offsets")
+    if isinstance(offsets, Mapping):
+        record.tyre_offsets = {
+            str(axis): float(value)
+            for axis, value in offsets.items()
+            if isinstance(value, (int, float))
+        }
     return record
 
 
@@ -614,6 +644,11 @@ def _serialise_record(car_model: str, track_name: str, record: ProfileRecord) ->
         lines.append(_table_header(base_prefix + ["weights", phase]))
         for node, value in sorted(profile.items()):
             lines.append(f"{_format_key(node)} = {_format_float(value)}")
+    if record.tyre_offsets:
+        lines.append("")
+        lines.append(_table_header(base_prefix + ["tyre_offsets"]))
+        for axis, value in sorted(record.tyre_offsets.items()):
+            lines.append(f"{_format_key(axis)} = {_format_float(value)}")
     if record.jacobian:
         for metric, derivatives in sorted(record.jacobian.items()):
             lines.append("")

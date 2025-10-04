@@ -168,6 +168,7 @@ def segment_microsectors(
             phase: tuple(range(bounds[0], bounds[1]))
             for phase, bounds in phase_boundaries.items()
         }
+        record_window = records[start : end + 1]
         curvature = mean(abs(records[i].lateral_accel) for i in range(start, end + 1))
         brake_event = any(records[i].longitudinal_accel <= BRAKE_THRESHOLD for i in range(start, end + 1))
         support_event = _detect_support_event(records[start : end + 1])
@@ -176,6 +177,18 @@ def segment_microsectors(
         grip_rel = (
             avg_vertical_load / baseline_vertical if baseline_vertical > 1e-9 else 0.0
         )
+        wheel_temperatures = {
+            "tyre_temp_fl": mean(record.tyre_temp_fl for record in record_window),
+            "tyre_temp_fr": mean(record.tyre_temp_fr for record in record_window),
+            "tyre_temp_rl": mean(record.tyre_temp_rl for record in record_window),
+            "tyre_temp_rr": mean(record.tyre_temp_rr for record in record_window),
+        }
+        wheel_pressures = {
+            "tyre_pressure_fl": mean(record.tyre_pressure_fl for record in record_window),
+            "tyre_pressure_fr": mean(record.tyre_pressure_fr for record in record_window),
+            "tyre_pressure_rl": mean(record.tyre_pressure_rl for record in record_window),
+            "tyre_pressure_rr": mean(record.tyre_pressure_rr for record in record_window),
+        }
         phase_weight_map = _initial_phase_weight_map(records, phase_samples)
         if phase_weight_overrides:
             phase_weight_map = _blend_phase_weight_map(
@@ -194,6 +207,9 @@ def segment_microsectors(
                 "phase_boundaries": phase_boundaries,
                 "phase_samples": phase_samples,
                 "phase_weights": phase_weight_map,
+                "wheel_temperatures": wheel_temperatures,
+                "wheel_pressures": wheel_pressures,
+                "end_timestamp": float(records[end].timestamp),
             }
         )
         for phase, indices in phase_samples.items():
@@ -289,6 +305,16 @@ def segment_microsectors(
             "style_index": avg_si,
             "grip_rel": grip_rel,
         }
+        wheel_temperatures = {
+            key: float(value)
+            for key, value in spec.get("wheel_temperatures", {}).items()
+        }
+        wheel_pressures = {
+            key: float(value)
+            for key, value in spec.get("wheel_pressures", {}).items()
+        }
+        filtered_measures.update(wheel_temperatures)
+        filtered_measures.update(wheel_pressures)
         window_metrics = compute_window_metrics(
             records[start : end + 1],
             bundles=recomputed_bundles[start : end + 1],
@@ -312,7 +338,11 @@ def segment_microsectors(
                 "style_index": avg_si,
                 "phase": active_goal.phase,
                 "grip_rel": grip_rel,
+                "d_nfr_flat": window_metrics.d_nfr_flat,
+                "timestamp": float(spec.get("end_timestamp", records[spec["end"]].timestamp)),
             }
+            measures.update(wheel_temperatures)
+            measures.update(wheel_pressures)
             rec_info = recursivity_operator(
                 rec_state,
                 str(index),
@@ -379,6 +409,8 @@ def segment_microsectors(
                 "rho": window_metrics.rho,
                 "udr": window_metrics.useful_dissonance_ratio,
             }
+            defaults.update(wheel_temperatures)
+            defaults.update(wheel_pressures)
             for key, value in defaults.items():
                 filtered_measures.setdefault(key, value)
             rec_trace = tuple(
