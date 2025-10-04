@@ -58,6 +58,7 @@ class InSimClient:
     MAX_BUTTON_TEXT = 240
 
     INSIM_VERSION = 9
+    ISF_LOCAL = 0x80
 
     ISI_STRUCT = struct.Struct("<BBBB16sBBHHH")
     VER_STRUCT = struct.Struct("<BBBBH")
@@ -209,7 +210,7 @@ class InSimClient:
             self.INSIM_VERSION,
             prefix[0],
             0,
-            0,
+            self.ISF_LOCAL,
             keepalive_ms,
         )
         sock.sendall(packet)
