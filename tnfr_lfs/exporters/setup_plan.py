@@ -34,6 +34,8 @@ class SetupPlan:
     tnfr_rationale_by_phase: Mapping[str, Sequence[str]] = field(default_factory=dict)
     expected_effects_by_node: Mapping[str, Sequence[str]] = field(default_factory=dict)
     expected_effects_by_phase: Mapping[str, Sequence[str]] = field(default_factory=dict)
+    phase_axis_targets: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    phase_axis_weights: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
 
 
 def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
@@ -87,6 +89,16 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
             return {}
         return {str(key): _merge_unique(list(values)) for key, values in mapping.items()}
 
+    def _normalise_axis_mapping(
+        mapping: Mapping[str, Mapping[str, float]] | None,
+    ) -> Dict[str, Dict[str, float]]:
+        if not mapping:
+            return {}
+        return {
+            str(phase): {str(axis): float(value) for axis, value in values.items()}
+            for phase, values in mapping.items()
+        }
+
     dsi_payload = {
         parameter: float(value)
         for parameter, value in plan.sensitivities.get("sense_index", {}).items()
@@ -110,6 +122,8 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
     tnfr_phase = _normalise_mapping(plan.tnfr_rationale_by_phase)
     effects_node = _normalise_mapping(plan.expected_effects_by_node)
     effects_phase = _normalise_mapping(plan.expected_effects_by_phase)
+    axis_targets = _normalise_axis_mapping(plan.phase_axis_targets)
+    axis_weights = _normalise_axis_mapping(plan.phase_axis_weights)
 
     return {
         "car_model": plan.car_model,
@@ -127,6 +141,8 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
         "tnfr_rationale_by_phase": tnfr_phase,
         "expected_effects_by_node": effects_node,
         "expected_effects_by_phase": effects_phase,
+        "phase_axis_targets": axis_targets,
+        "phase_axis_weights": axis_weights,
     }
 
 

@@ -66,12 +66,12 @@ def csv_exporter(results: Dict[str, Any]) -> str:
     from io import StringIO
 
     buffer = StringIO()
-    buffer.write("timestamp,epi,delta_nfr,sense_index\n")
+    buffer.write("timestamp,epi,delta_nfr,delta_nfr_longitudinal,delta_nfr_lateral,sense_index\n")
     for result in results.get("series", []):
         if not isinstance(result, EPIBundle):
             raise TypeError("CSV exporter expects EPIBundle instances")
         buffer.write(
-            f"{result.timestamp:.3f},{result.epi:.4f},{result.delta_nfr:.3f},{result.sense_index:.3f}\n"
+            f"{result.timestamp:.3f},{result.epi:.4f},{result.delta_nfr:.3f},{result.delta_nfr_longitudinal:.3f},{result.delta_nfr_lateral:.3f},{result.sense_index:.3f}\n"
         )
     return buffer.getvalue()
 
@@ -180,6 +180,24 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
                 except (TypeError, ValueError):
                     formatted = str(value)
                 lines.append(f"| {phase} | {parameter} | {formatted} |")
+
+    axis_targets = plan.get("phase_axis_targets", {}) or {}
+    axis_weights = plan.get("phase_axis_weights", {}) or {}
+    if axis_targets or axis_weights:
+        lines.append("")
+        lines.append("**Objetivos ΔNFR∥/ΔNFR⊥ por fase**")
+        lines.append("| Fase | ΔNFR∥ obj | ΔNFR⊥ obj | Peso ∥ | Peso ⊥ |")
+        lines.append("| --- | --- | --- | --- | --- |")
+        for phase in sorted(set(axis_targets) | set(axis_weights)):
+            target = axis_targets.get(phase, {})
+            weight = axis_weights.get(phase, {})
+            target_long = float(target.get("longitudinal", 0.0))
+            target_lat = float(target.get("lateral", 0.0))
+            weight_long = float(weight.get("longitudinal", 0.0))
+            weight_lat = float(weight.get("lateral", 0.0))
+            lines.append(
+                f"| {phase} | {target_long:+.3f} | {target_lat:+.3f} | {weight_long:.2f} | {weight_lat:.2f} |"
+            )
 
     def _extend_mapping_section(title: str, mapping: Mapping[str, Sequence[str]] | None) -> None:
         if not mapping:

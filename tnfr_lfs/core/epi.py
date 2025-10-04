@@ -36,6 +36,57 @@ NU_F_NODE_DEFAULTS: Mapping[str, float] = {
 
 DEFAULT_PHASE_WEIGHTS: Mapping[str, float] = {"__default__": 1.0}
 
+AXIS_FEATURE_MAP: Mapping[str, Mapping[str, str]] = {
+    "tyres": {
+        "slip_ratio": "longitudinal",
+        "locking": "longitudinal",
+        "slip_angle": "lateral",
+        "mu_eff_front": "both",
+        "mu_eff_rear": "both",
+    },
+    "suspension": {
+        "travel_front": "both",
+        "travel_rear": "both",
+        "velocity_front": "longitudinal",
+        "velocity_rear": "longitudinal",
+        "load_front": "longitudinal",
+        "load_rear": "longitudinal",
+    },
+    "chassis": {
+        "yaw_rate": "lateral",
+        "lateral_accel": "lateral",
+        "roll": "lateral",
+        "pitch": "longitudinal",
+    },
+    "brakes": {
+        "pressure": "longitudinal",
+        "locking": "longitudinal",
+        "longitudinal_decel": "longitudinal",
+        "load_front": "longitudinal",
+    },
+    "transmission": {
+        "throttle": "longitudinal",
+        "longitudinal_accel": "longitudinal",
+        "slip_ratio": "longitudinal",
+        "gear": "longitudinal",
+        "speed": "longitudinal",
+    },
+    "track": {
+        "mu_eff_front": "lateral",
+        "mu_eff_rear": "lateral",
+        "axle_load_balance": "lateral",
+        "axle_velocity_balance": "lateral",
+        "yaw": "lateral",
+        "vertical_load": "longitudinal",
+    },
+    "driver": {
+        "style_index": "lateral",
+        "steer": "lateral",
+        "throttle": "longitudinal",
+        "yaw_rate": "lateral",
+    },
+}
+
 
 @dataclass(frozen=True)
 class TelemetryRecord:
@@ -198,6 +249,42 @@ def _node_feature_contributions(
             "yaw_rate": yaw_rate_delta * 0.2,
         },
     }
+
+
+def _axis_signal_components(
+    record: TelemetryRecord,
+    baseline: TelemetryRecord,
+    feature_contributions: Mapping[str, Mapping[str, float]],
+) -> Dict[str, float]:
+    """Partition feature signals into longitudinal and lateral components."""
+
+    axis_signals = {"longitudinal": 0.0, "lateral": 0.0}
+    for node, contributions in feature_contributions.items():
+        feature_map = AXIS_FEATURE_MAP.get(node, {})
+        for feature, value in contributions.items():
+            signal = abs(value)
+            axis = feature_map.get(feature)
+            if axis == "longitudinal":
+                axis_signals["longitudinal"] += signal
+            elif axis == "lateral":
+                axis_signals["lateral"] += signal
+            elif axis == "both":
+                axis_signals["longitudinal"] += signal * 0.5
+                axis_signals["lateral"] += signal * 0.5
+    if axis_signals["longitudinal"] <= 1e-9 and axis_signals["lateral"] <= 1e-9:
+        long_proxy = (
+            _abs_delta(record.longitudinal_accel, baseline.longitudinal_accel)
+            + _abs_delta(record.brake_pressure, baseline.brake_pressure)
+            + _abs_delta(record.throttle, baseline.throttle)
+        )
+        lat_proxy = (
+            _abs_delta(record.lateral_accel, baseline.lateral_accel)
+            + _abs_delta(record.steer, baseline.steer)
+            + _abs_delta(record.yaw_rate, baseline.yaw_rate)
+        )
+        axis_signals["longitudinal"] = long_proxy
+        axis_signals["lateral"] = lat_proxy
+    return axis_signals
 
 
 def _distribute_node_delta(
@@ -409,6 +496,7 @@ class DeltaCalculator:
         node_signals = {
             node: sum(values.values()) for node, values in feature_contributions.items()
         }
+        axis_signals = _axis_signal_components(record, baseline, feature_contributions)
         node_deltas = _distribute_node_delta(delta_nfr, node_signals)
         nu_f_map = dict(nu_f_by_node or resolve_nu_f_by_node(record))
         phase_weight_map = phase_weights or DEFAULT_PHASE_WEIGHTS
@@ -439,6 +527,13 @@ class DeltaCalculator:
             node: compute_node_delta_nfr(node, node_deltas.get(node, 0.0), features, prefix=False)
             for node, features in feature_contributions.items()
         }
+        axis_total = axis_signals["longitudinal"] + axis_signals["lateral"]
+        if axis_total > 1e-9 and math.isfinite(axis_total):
+            longitudinal_delta = delta_nfr * (axis_signals["longitudinal"] / axis_total)
+            lateral_delta = delta_nfr * (axis_signals["lateral"] / axis_total)
+        else:
+            longitudinal_delta = 0.0
+            lateral_delta = 0.0
         nodes = DeltaCalculator._build_nodes(
             record, node_deltas, delta_nfr, nu_f_map, nodal_evolution
         )
@@ -446,6 +541,8 @@ class DeltaCalculator:
             timestamp=record.timestamp,
             epi=epi_value,
             delta_nfr=delta_nfr,
+            delta_nfr_longitudinal=longitudinal_delta,
+            delta_nfr_lateral=lateral_delta,
             sense_index=global_si,
             delta_breakdown=delta_breakdown,
             dEPI_dt=derivative,

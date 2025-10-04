@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from statistics import mean, pstdev
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple
 
@@ -68,6 +68,11 @@ class Goal:
     slip_long_window: Tuple[float, float]
     yaw_rate_window: Tuple[float, float]
     dominant_nodes: Tuple[str, ...]
+    target_delta_nfr_long: float = 0.0
+    target_delta_nfr_lat: float = 0.0
+    delta_axis_weights: Mapping[str, float] = field(
+        default_factory=lambda: {"longitudinal": 0.5, "lateral": 0.5}
+    )
 
 
 @dataclass(frozen=True)
@@ -94,6 +99,12 @@ class Microsector:
     recursivity_trace: Tuple[Mapping[str, float | str | None], ...]
     last_mutation: Mapping[str, object] | None
     window_occupancy: Mapping[PhaseLiteral, Mapping[str, float]]
+    phase_axis_targets: Mapping[PhaseLiteral, Mapping[str, float]] = field(
+        default_factory=dict
+    )
+    phase_axis_weights: Mapping[PhaseLiteral, Mapping[str, float]] = field(
+        default_factory=dict
+    )
 
     def phase_indices(self, phase: PhaseLiteral) -> range:
         """Return the range of sample indices assigned to ``phase``."""
@@ -252,7 +263,7 @@ def segment_microsectors(
             spec["brake_event"],
             spec["support_event"],
         )
-        goals, _ = _build_goals(
+        goals, _, _, _ = _build_goals(
             archetype,
             recomputed_bundles,
             records,
@@ -290,7 +301,7 @@ def segment_microsectors(
         delta_signature = mean(b.delta_nfr for b in recomputed_bundles[start : end + 1])
         avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
         archetype = _classify_archetype(delta_signature, avg_si, brake_event, support_event)
-        goals, dominant_nodes = _build_goals(
+        goals, dominant_nodes, axis_targets, axis_weights = _build_goals(
             archetype,
             recomputed_bundles,
             records,
@@ -371,7 +382,7 @@ def segment_microsectors(
             final_archetype = mutation_info["archetype"]
             if final_archetype != archetype:
                 archetype = final_archetype
-                goals, dominant_nodes = _build_goals(
+                goals, dominant_nodes, axis_targets, axis_weights = _build_goals(
                     archetype,
                     bundles,
                     records,
@@ -474,6 +485,8 @@ def segment_microsectors(
                 recursivity_trace=rec_trace,
                 last_mutation=dict(mutation_details) if mutation_details is not None else None,
                 window_occupancy=occupancy,
+                phase_axis_targets=dict(axis_targets),
+                phase_axis_weights=dict(axis_weights),
             )
         )
 
@@ -678,11 +691,18 @@ def _build_goals(
     bundles: Sequence[EPIBundle],
     records: Sequence[TelemetryRecord],
     boundaries: Mapping[PhaseLiteral, Tuple[int, int]],
-) -> Tuple[Tuple[Goal, ...], Mapping[PhaseLiteral, Tuple[str, ...]]]:
+) -> Tuple[
+    Tuple[Goal, ...],
+    Mapping[PhaseLiteral, Tuple[str, ...]],
+    Mapping[PhaseLiteral, Mapping[str, float]],
+    Mapping[PhaseLiteral, Mapping[str, float]],
+]:
     descriptions = _goal_descriptions(archetype)
     alignment_targets = _phase_alignment_targets(archetype)
     goals: List[Goal] = []
     dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = {}
+    axis_targets: Dict[PhaseLiteral, Dict[str, float]] = {}
+    axis_weights: Dict[PhaseLiteral, Dict[str, float]] = {}
     for phase in PHASE_SEQUENCE:
         start, stop = boundaries[phase]
         indices = [idx for idx in range(start, min(stop, len(bundles)))]
@@ -691,9 +711,17 @@ def _build_goals(
         if segment:
             avg_delta = mean(bundle.delta_nfr for bundle in segment)
             avg_si = mean(bundle.sense_index for bundle in segment)
+            avg_long = mean(bundle.delta_nfr_longitudinal for bundle in segment)
+            avg_lat = mean(bundle.delta_nfr_lateral for bundle in segment)
+            abs_long = mean(abs(bundle.delta_nfr_longitudinal) for bundle in segment)
+            abs_lat = mean(abs(bundle.delta_nfr_lateral) for bundle in segment)
         else:
             avg_delta = 0.0
             avg_si = 1.0
+            avg_long = 0.0
+            avg_lat = 0.0
+            abs_long = 0.0
+            abs_lat = 0.0
 
         _, measured_lag, measured_alignment = phase_alignment(phase_records)
         target_lag, target_alignment = alignment_targets.get(
@@ -749,6 +777,23 @@ def _build_goals(
         slip_long_window = _window(slip_values, long_scale)
         yaw_rate_window = _window(yaw_rates, yaw_scale, minimum=0.005)
 
+        total_axis = abs_long + abs_lat
+        if total_axis > 1e-9:
+            weight_map = {
+                "longitudinal": abs_long / total_axis,
+                "lateral": abs_lat / total_axis,
+            }
+        else:
+            weight_map = {"longitudinal": 0.5, "lateral": 0.5}
+        axis_targets[phase] = {
+            "longitudinal": float(avg_long),
+            "lateral": float(avg_lat),
+        }
+        axis_weights[phase] = {
+            "longitudinal": float(weight_map["longitudinal"]),
+            "lateral": float(weight_map["lateral"]),
+        }
+
         goals.append(
             Goal(
                 phase=phase,
@@ -767,6 +812,9 @@ def _build_goals(
                 slip_long_window=slip_long_window,
                 yaw_rate_window=yaw_rate_window,
                 dominant_nodes=phase_nodes,
+                target_delta_nfr_long=avg_long,
+                target_delta_nfr_lat=avg_lat,
+                delta_axis_weights=weight_map,
             )
         )
     for legacy, phases in LEGACY_PHASE_MAP.items():
@@ -778,7 +826,27 @@ def _build_goals(
         else:
             if phases:
                 dominant_nodes[legacy] = dominant_nodes.get(phases[-1], ())
-    return tuple(goals), dominant_nodes
+        weight_values = [axis_weights.get(candidate) for candidate in phases if candidate in axis_weights]
+        if weight_values:
+            axis_weights[legacy] = {
+                "longitudinal": float(
+                    mean(entry["longitudinal"] for entry in weight_values if entry is not None)
+                ),
+                "lateral": float(
+                    mean(entry["lateral"] for entry in weight_values if entry is not None)
+                ),
+            }
+        target_values = [axis_targets.get(candidate) for candidate in phases if candidate in axis_targets]
+        if target_values:
+            axis_targets[legacy] = {
+                "longitudinal": float(
+                    mean(entry["longitudinal"] for entry in target_values if entry is not None)
+                ),
+                "lateral": float(
+                    mean(entry["lateral"] for entry in target_values if entry is not None)
+                ),
+            }
+    return tuple(goals), dominant_nodes, axis_targets, axis_weights
 
 
 def _initial_phase_weight_map(
@@ -940,7 +1008,7 @@ def _adjust_phase_weights_with_dominance(
             spec["brake_event"],
             spec["support_event"],
         )
-        goals, dominant_nodes = _build_goals(
+        goals, dominant_nodes, axis_targets, axis_weights = _build_goals(
             archetype,
             bundles,
             records,
@@ -948,6 +1016,8 @@ def _adjust_phase_weights_with_dominance(
         )
         spec["goals"] = goals
         spec["dominant_nodes"] = dominant_nodes
+        spec["phase_axis_targets"] = axis_targets
+        spec["phase_axis_weights"] = axis_weights
         active_goal = max(
             goals,
             key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
