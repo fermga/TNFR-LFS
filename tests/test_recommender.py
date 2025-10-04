@@ -6,6 +6,8 @@ from typing import Sequence, Tuple
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
+
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -22,6 +24,7 @@ from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.io.profiles import AeroProfile, ProfileManager
 from tnfr_lfs.recommender.rules import (
     AeroCoherenceRule,
+    BottomingPriorityRule,
     DetuneRatioRule,
     MANUAL_REFERENCES,
     PhaseDeltaDeviationRule,
@@ -178,6 +181,34 @@ def _udr_microsector(
         window_occupancy={goal.phase: {}},
         operator_events=operator_events or {},
     )
+
+
+@pytest.fixture
+def bottoming_microsectors() -> Tuple[Microsector, Microsector]:
+    goal = _udr_goal("entry", 0.25)
+    smooth = _udr_microsector(
+        goal,
+        udr=0.32,
+        sample_count=5,
+        filtered_measures={
+            "bottoming_ratio_front": 0.62,
+            "bottoming_ratio_rear": 0.14,
+        },
+        index=2,
+    )
+    rough = _udr_microsector(
+        goal,
+        udr=0.34,
+        sample_count=5,
+        filtered_measures={
+            "bottoming_ratio_front": 0.18,
+            "bottoming_ratio_rear": 0.71,
+        },
+        index=3,
+    )
+    smooth = replace(smooth, context_factors={"surface": 0.94})
+    rough = replace(rough, context_factors={"surface": 1.28})
+    return smooth, rough
 
 
 def test_tyre_balance_rule_generates_guidance():
@@ -1272,6 +1303,27 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
     targeted = [rec for rec in recommendations if rec.parameter == "brake_bias_pct"]
     assert targeted
     assert all(rec.priority <= rule.priority - 1 for rec in targeted)
+
+
+def test_bottoming_priority_rule_switches_focus(bottoming_microsectors) -> None:
+    smooth, rough = bottoming_microsectors
+    rule = BottomingPriorityRule(
+        priority=18,
+        ratio_threshold=0.5,
+        smooth_surface_cutoff=1.1,
+        ride_height_delta=1.5,
+        bump_delta=3.0,
+    )
+    thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate([], [smooth, rough], context))
+    assert recommendations
+    height_targets = [rec for rec in recommendations if rec.parameter == "front_ride_height"]
+    bump_targets = [rec for rec in recommendations if rec.parameter == "rear_compression_clicks"]
+    assert height_targets
+    assert bump_targets
+    assert "altura" in height_targets[0].message.lower()
+    assert "compresión" in bump_targets[0].message.lower()
 
 
 def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:

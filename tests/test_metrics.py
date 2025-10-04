@@ -129,6 +129,108 @@ def test_compute_window_metrics_handles_small_windows() -> None:
     assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
 
 
+def _longitudinal_bundle(
+    timestamp: float,
+    delta_long: float,
+    travel_front: float,
+    travel_rear: float,
+    *,
+    si: float = 0.8,
+) -> EPIBundle:
+    share = delta_long / 7.0
+    return EPIBundle(
+        timestamp=timestamp,
+        epi=0.0,
+        delta_nfr=delta_long,
+        delta_nfr_longitudinal=delta_long,
+        delta_nfr_lateral=0.0,
+        sense_index=si,
+        tyres=TyresNode(delta_nfr=share, sense_index=si),
+        suspension=SuspensionNode(
+            delta_nfr=share,
+            sense_index=si,
+            travel_front=travel_front,
+            travel_rear=travel_rear,
+        ),
+        chassis=ChassisNode(
+            delta_nfr=share,
+            sense_index=si,
+            yaw=0.0,
+            pitch=0.0,
+            roll=0.0,
+            yaw_rate=0.0,
+            lateral_accel=0.0,
+            longitudinal_accel=0.0,
+        ),
+        brakes=BrakesNode(
+            delta_nfr=share,
+            sense_index=si,
+            brake_pressure=0.0,
+            locking=0.0,
+        ),
+        transmission=TransmissionNode(
+            delta_nfr=share,
+            sense_index=si,
+            throttle=0.0,
+            gear=3,
+            speed=0.0,
+            longitudinal_accel=0.0,
+            rpm=0.0,
+            line_deviation=0.0,
+        ),
+        track=TrackNode(
+            delta_nfr=share,
+            sense_index=si,
+            axle_load_balance=0.0,
+            axle_velocity_balance=0.0,
+            yaw=0.0,
+            lateral_accel=0.0,
+        ),
+        driver=DriverNode(
+            delta_nfr=share,
+            sense_index=si,
+            steer=0.0,
+            throttle=0.0,
+            style_index=si,
+        ),
+    )
+
+
+def test_compute_window_metrics_bottoming_ratio_tracks_overlap() -> None:
+    records: list[TelemetryRecord] = []
+    bundles: list[EPIBundle] = []
+    travels_front = [0.02, 0.012, 0.011, 0.018, 0.009]
+    delta_long = [0.12, 0.52, 0.55, 0.18, 0.57]
+    for index, (front, delta_value) in enumerate(zip(travels_front, delta_long)):
+        timestamp = index * 0.1
+        record = _record(timestamp, 100.0 + index, si=0.82)
+        records.append(
+            replace(
+                record,
+                suspension_travel_front=front,
+                suspension_travel_rear=0.026,
+            )
+        )
+        bundles.append(
+            _longitudinal_bundle(
+                timestamp,
+                delta_value,
+                travel_front=front,
+                travel_rear=0.026,
+                si=record.si,
+            )
+        )
+
+    metrics = compute_window_metrics(
+        records,
+        bundles=bundles,
+        objectives={"bottoming_delta_nfr_threshold": 0.4},
+    )
+
+    assert metrics.bottoming_ratio_front == pytest.approx(1.0)
+    assert metrics.bottoming_ratio_rear == pytest.approx(0.0)
+
+
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
     assert metrics == WindowMetrics(
@@ -151,6 +253,8 @@ def test_compute_window_metrics_empty_window() -> None:
         structural_contraction_longitudinal=0.0,
         structural_expansion_lateral=0.0,
         structural_contraction_lateral=0.0,
+        bottoming_ratio_front=0.0,
+        bottoming_ratio_rear=0.0,
         frequency_label="",
         aero_coherence=AeroCoherence(),
         aero_mechanical_coherence=0.0,

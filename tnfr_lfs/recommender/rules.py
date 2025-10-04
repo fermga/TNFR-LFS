@@ -832,6 +832,84 @@ class LoadBalanceRule:
                 )
 
 
+class BottomingPriorityRule:
+    """Bias ride height vs bump adjustments using bottoming ratios."""
+
+    def __init__(
+        self,
+        *,
+        priority: int = 18,
+        ratio_threshold: float = 0.35,
+        smooth_surface_cutoff: float = 1.05,
+        ride_height_delta: float = 1.0,
+        bump_delta: float = 2.0,
+    ) -> None:
+        self.priority = int(priority)
+        self.ratio_threshold = float(ratio_threshold)
+        self.smooth_surface_cutoff = float(smooth_surface_cutoff)
+        self.ride_height_delta = float(ride_height_delta)
+        self.bump_delta = float(bump_delta)
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors:
+            return []
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            if not isinstance(measures, Mapping):
+                continue
+            front_ratio = float(measures.get("bottoming_ratio_front", 0.0))
+            rear_ratio = float(measures.get("bottoming_ratio_rear", 0.0))
+            factors = getattr(microsector, "context_factors", {}) or {}
+            surface_factor = 1.0
+            if isinstance(factors, Mapping):
+                surface_factor = float(factors.get("surface", surface_factor))
+            is_rough = surface_factor >= self.smooth_surface_cutoff
+            category = phase_family(getattr(microsector, "active_phase", "apex"))
+            for axle, ratio, ride_param, bump_param in (
+                ("delantero", front_ratio, "front_ride_height", "front_compression_clicks"),
+                ("trasero", rear_ratio, "rear_ride_height", "rear_compression_clicks"),
+            ):
+                if ratio < self.ratio_threshold:
+                    continue
+                if is_rough:
+                    parameter = bump_param
+                    delta = self.bump_delta
+                    focus = "endurecer compresión"
+                    reference = MANUAL_REFERENCES["antiroll"]
+                else:
+                    parameter = ride_param
+                    delta = self.ride_height_delta
+                    focus = "elevar altura"
+                    reference = MANUAL_REFERENCES["ride_height"]
+                surface_label = "bacheada" if is_rough else "lisa"
+                message = (
+                    f"Operador bottoming: {focus} {axle} en microsector {microsector.index}"
+                )
+                rationale = (
+                    f"Índice de bottoming {ratio:.2f} en el eje {axle} coincide con picos de ΔNFR∥ "
+                    f"en microsector {microsector.index}. Superficie {surface_label}"
+                    f" (factor {surface_factor:.2f}) → prioriza {focus}. {reference}."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category=category,
+                        message=message,
+                        rationale=rationale,
+                        priority=self.priority,
+                        parameter=parameter,
+                        delta=delta,
+                    )
+                )
+        return recommendations
+
+
 class StabilityIndexRule:
     """Issue recommendations when the sense index degrades."""
 
@@ -2353,6 +2431,7 @@ class RecommendationEngine:
                     reference_key="antiroll",
                 ),
                 TyreBalanceRule(priority=24),
+                BottomingPriorityRule(priority=18),
                 DetuneRatioRule(priority=24),
                 UsefulDissonanceRule(priority=26),
                 CurbComplianceRule(priority=25),
