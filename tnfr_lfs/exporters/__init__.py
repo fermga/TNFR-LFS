@@ -122,6 +122,28 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         lines.append("**Efectos esperados**")
         lines.extend(f"- {item}" for item in expected_effects)
 
+    aero_guidance = plan.get("aero_guidance")
+    aero_metrics = plan.get("aero_metrics", {}) or {}
+    amc_value = plan.get("aero_mechanical_coherence")
+    if amc_value is None:
+        amc_value = aero_metrics.get("aero_mechanical_coherence")
+    if aero_guidance or aero_metrics or amc_value is not None:
+        lines.append("")
+        lines.append("**Indicadores aerodinámicos**")
+        if amc_value is not None:
+            try:
+                lines.append(f"- C(a/m) {float(amc_value):.2f}")
+            except (TypeError, ValueError):
+                lines.append(f"- C(a/m) {amc_value}")
+        if aero_guidance:
+            lines.append(f"- {aero_guidance}")
+        high = aero_metrics.get("high_speed_imbalance")
+        low = aero_metrics.get("low_speed_imbalance")
+        if high is not None and low is not None:
+            lines.append(
+                f"- Δaero alta {float(high):+.2f} · baja {float(low):+.2f}"
+            )
+
     sensitivities = plan.get("sensitivities", {})
     if sensitivities:
         lines.append("")

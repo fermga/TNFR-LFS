@@ -35,7 +35,7 @@ from ..acquisition import (
 )
 from .osd import OSDController
 from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
-from ..core.metrics import compute_aero_coherence
+from ..core.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
 from ..core.resonance import analyse_modal_resonance
 from ..core.operators import orchestrate_delta_metrics
 from ..core.segmentation import Microsector, segment_microsectors
@@ -1939,11 +1939,28 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         aggregated_effects = default_effects
 
     aero = compute_aero_coherence((), plan.telemetry)
+    suspension_deltas = [
+        float(getattr(getattr(bundle, "suspension", None), "delta_nfr", 0.0))
+        for bundle in plan.telemetry
+    ]
+    tyre_deltas = [
+        float(getattr(getattr(bundle, "tyres", None), "delta_nfr", 0.0))
+        for bundle in plan.telemetry
+    ]
+    coherence_series = [float(getattr(bundle, "coherence_index", 0.0)) for bundle in plan.telemetry]
+    avg_coherence = mean(coherence_series) if coherence_series else 0.0
+    aero_mechanical = resolve_aero_mechanical_coherence(
+        avg_coherence,
+        aero,
+        suspension_deltas=suspension_deltas,
+        tyre_deltas=tyre_deltas,
+    )
     aero_metrics = {
         "low_speed_imbalance": aero.low_speed_imbalance,
         "high_speed_imbalance": aero.high_speed_imbalance,
         "low_speed_samples": float(aero.low_speed_samples),
         "high_speed_samples": float(aero.high_speed_samples),
+        "aero_mechanical_coherence": aero_mechanical,
     }
 
     setup_plan = SetupPlan(
@@ -1958,6 +1975,7 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         phase_axis_weights={},
         aero_guidance=aero.guidance,
         aero_metrics=aero_metrics,
+        aero_mechanical_coherence=aero_mechanical,
     )
 
     payload = {

@@ -21,7 +21,13 @@ from .spectrum import phase_alignment
 from .resonance import estimate_excitation_frequency
 from .structural_time import resolve_time_axis
 
-__all__ = ["AeroCoherence", "WindowMetrics", "compute_window_metrics", "compute_aero_coherence"]
+__all__ = [
+    "AeroCoherence",
+    "WindowMetrics",
+    "compute_window_metrics",
+    "compute_aero_coherence",
+    "resolve_aero_mechanical_coherence",
+]
 
 
 _FRONT_FEATURE_KEYS = {
@@ -93,6 +99,7 @@ class WindowMetrics:
     structural_contraction_lateral: float
     frequency_label: str
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
+    aero_mechanical_coherence: float = 0.0
 
 
 def compute_window_metrics(
@@ -143,6 +150,7 @@ def compute_window_metrics(
             0.0,
             "",
             AeroCoherence(),
+            0.0,
         )
 
     def _objective(name: str, default: float) -> float:
@@ -165,6 +173,8 @@ def compute_window_metrics(
     support_samples: list[float] = []
     longitudinal_series: list[float] = []
     lateral_series: list[float] = []
+    suspension_series: list[float] = []
+    tyre_series: list[float] = []
 
     context_matrix = load_context_matrix()
 
@@ -211,6 +221,10 @@ def compute_window_metrics(
             + max(0.0, float(bundle.suspension.delta_nfr))
             for bundle in bundles
         ]
+        suspension_series = [
+            float(getattr(bundle.suspension, "delta_nfr", 0.0)) for bundle in bundles
+        ]
+        tyre_series = [float(getattr(bundle.tyres, "delta_nfr", 0.0)) for bundle in bundles]
         longitudinal_series = [
             float(getattr(bundle, "delta_nfr_longitudinal", 0.0)) for bundle in bundles
         ]
@@ -313,6 +327,19 @@ def compute_window_metrics(
     si_factor = si_value / target_si if target_si > 0 else 0.0
     normalised_coherence = max(0.0, min(1.0, raw_coherence * si_factor))
 
+    target_delta_nfr = abs(_objective("target_delta_nfr", 0.0))
+    target_mechanical_ratio = max(0.0, min(1.0, _objective("target_mechanical_ratio", 0.55)))
+    target_aero_imbalance = float(_objective("target_aero_imbalance", 0.12))
+    aero_mechanical = resolve_aero_mechanical_coherence(
+        normalised_coherence,
+        aero,
+        suspension_deltas=suspension_series,
+        tyre_deltas=tyre_series,
+        target_delta_nfr=target_delta_nfr,
+        target_mechanical_ratio=target_mechanical_ratio,
+        target_aero_imbalance=target_aero_imbalance,
+    )
+
     return WindowMetrics(
         si=si_value,
         d_nfr_couple=couple,
@@ -334,6 +361,7 @@ def compute_window_metrics(
         structural_contraction_lateral=lat_contraction,
         frequency_label=frequency_label,
         aero_coherence=aero,
+        aero_mechanical_coherence=aero_mechanical,
     )
 
 
@@ -454,6 +482,79 @@ def compute_aero_coherence(
         high_speed_samples=high_samples,
         guidance=guidance,
     )
+
+
+def resolve_aero_mechanical_coherence(
+    coherence_index: float,
+    aero: AeroCoherence,
+    *,
+    suspension_deltas: Sequence[float] | None = None,
+    tyre_deltas: Sequence[float] | None = None,
+    target_delta_nfr: float = 0.0,
+    target_mechanical_ratio: float = 0.55,
+    target_aero_imbalance: float = 0.12,
+) -> float:
+    """Return a blended aero-mechanical coherence indicator in ``[0, 1]``."""
+
+    coherence = max(0.0, min(1.0, float(coherence_index)))
+    if coherence <= 0.0 or not math.isfinite(coherence):
+        return 0.0
+
+    suspension_samples = [abs(float(value)) for value in suspension_deltas or ()]
+    tyre_samples = [abs(float(value)) for value in tyre_deltas or ()]
+    suspension_average = mean(suspension_samples) if suspension_samples else 0.0
+    tyre_average = mean(tyre_samples) if tyre_samples else 0.0
+
+    total_samples = max(0, int(aero.high_speed_samples) + int(aero.low_speed_samples))
+    if total_samples > 0:
+        high_weight = float(aero.high_speed_samples) / total_samples
+        low_weight = float(aero.low_speed_samples) / total_samples
+    else:
+        high_weight = 0.5
+        low_weight = 0.5
+
+    aero_magnitude = (
+        (abs(float(aero.high_speed_front)) + abs(float(aero.high_speed_rear)))
+        * 0.5
+        * high_weight
+        + (abs(float(aero.low_speed_front)) + abs(float(aero.low_speed_rear)))
+        * 0.5
+        * low_weight
+    )
+
+    mechanical_ratio_target = max(0.0, min(1.0, float(target_mechanical_ratio)))
+    mechanical_component = suspension_average
+    combined_mechanical = suspension_average + tyre_average
+    combined_total = mechanical_component + aero_magnitude
+    if combined_total <= 1e-9:
+        mechanical_ratio = mechanical_ratio_target
+    else:
+        mechanical_ratio = mechanical_component / combined_total
+    if mechanical_ratio >= mechanical_ratio_target:
+        ratio_span = max(1e-6, mechanical_ratio_target)
+    else:
+        ratio_span = max(1e-6, 1.0 - mechanical_ratio_target)
+    ratio_error = abs(mechanical_ratio - mechanical_ratio_target)
+    ratio_factor = max(0.0, 1.0 - min(1.0, ratio_error / ratio_span))
+
+    support_total = combined_mechanical + aero_magnitude
+    target_delta = max(0.0, float(target_delta_nfr))
+    if target_delta > 1e-6:
+        coverage_factor = max(0.0, min(1.0, support_total / target_delta))
+    else:
+        coverage_factor = 1.0 if support_total > 0.0 else 0.0
+
+    imbalance_target = max(0.05, abs(float(target_aero_imbalance)))
+    weighted_imbalance = (
+        abs(float(aero.high_speed_imbalance)) * high_weight
+        + abs(float(aero.low_speed_imbalance)) * low_weight
+    )
+    aero_factor = max(0.0, 1.0 - min(1.0, weighted_imbalance / imbalance_target))
+    if total_samples == 0:
+        aero_factor *= 0.5
+
+    composite = (ratio_factor + coverage_factor + aero_factor) / 3.0
+    return max(0.0, min(1.0, coherence * composite))
 
 
 def _segment_gradients(

@@ -286,11 +286,16 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
         expected_effects=(),
         sensitivities={},
         aero_guidance="Alta velocidad → sube alerón trasero",
-        aero_metrics={"low_speed_imbalance": 0.02, "high_speed_imbalance": 0.3},
+        aero_metrics={
+            "low_speed_imbalance": 0.02,
+            "high_speed_imbalance": 0.3,
+            "aero_mechanical_coherence": 0.68,
+        },
     )
     output = osd_module._render_page_c(None, plan, thresholds, None)
     assert "Aero Alta velocidad" in output
     assert "Δaero alta" in output
+    assert "C(a/m) 0.68" in output
 
 
 def test_render_page_a_includes_wave_when_active_phase():
@@ -338,6 +343,7 @@ def test_render_page_a_includes_wave_when_active_phase():
         structural_contraction_lateral=0.02,
         frequency_label="ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
         aero_coherence=aero,
+        aero_mechanical_coherence=0.64,
     )
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
     curve_label = f"Curva {microsector.index + 1}"
@@ -354,6 +360,11 @@ def test_render_page_a_includes_wave_when_active_phase():
     )
     if len((output + "\n" + aero_line).encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
         assert "Δaero" in output
+    amc_line = osd_module._truncate_line(
+        f"C(a/m) {window_metrics.aero_mechanical_coherence:.2f}"
+    )
+    if len((output + "\n" + amc_line).encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
+        assert "C(a/m)" in output
 
 
 def test_render_page_a_displays_brake_meter_on_severe_events():
@@ -424,6 +435,7 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
         structural_contraction_lateral=0.06,
         frequency_label="ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
         aero_coherence=aero,
+        aero_mechanical_coherence=0.58,
     )
     page = osd_module._render_page_a(active, bundles[0], 0.2, window_metrics, bundles)
     assert "ΔNFR frenada" in page

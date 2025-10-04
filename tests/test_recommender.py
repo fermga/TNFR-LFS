@@ -271,6 +271,7 @@ def test_aero_coherence_rule_flags_high_speed_bias() -> None:
             "aero_low_imbalance": 0.0,
             "aero_high_samples": 6,
             "aero_low_samples": 6,
+            "aero_mechanical_coherence": 0.45,
         },
     )
     rule = AeroCoherenceRule(high_speed_threshold=0.1, low_speed_tolerance=0.05, min_high_samples=2, delta_step=0.75)
@@ -283,6 +284,7 @@ def test_aero_coherence_rule_flags_high_speed_bias() -> None:
     assert rec.delta and rec.delta > 0
     assert "Alta velocidad" in rec.message
     assert "carga trasera" in rec.rationale
+    assert "C(a/m)" in rec.rationale
 
 
 def test_aero_coherence_rule_respects_low_speed_window() -> None:
@@ -307,6 +309,7 @@ def test_aero_coherence_rule_respects_low_speed_window() -> None:
             "aero_low_imbalance": 0.2,
             "aero_high_samples": 8,
             "aero_low_samples": 8,
+            "aero_mechanical_coherence": 0.4,
         },
     )
     rule = AeroCoherenceRule(high_speed_threshold=0.1, low_speed_tolerance=0.05, min_high_samples=2)
