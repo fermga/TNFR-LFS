@@ -11,7 +11,7 @@ import struct
 import subprocess
 import sys
 import tempfile
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from statistics import mean, fmean
 from time import monotonic, sleep
@@ -33,7 +33,7 @@ from ..acquisition import (
     OutSimUDPClient,
     TelemetryFusion,
 )
-from .osd import OSDController
+from .osd import OSDController, TelemetryHUD
 from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
 from ..core.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
 from ..core.resonance import analyse_modal_resonance
@@ -60,6 +60,13 @@ from ..io import logs
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
 from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
+from ..config_loader import (
+    Car as PackCar,
+    Profile as PackProfile,
+    load_cars as load_pack_cars,
+    load_profiles as load_pack_profiles,
+    resolve_targets as resolve_pack_targets,
+)
 
 
 Records = List[TelemetryRecord]
@@ -70,6 +77,114 @@ DEFAULT_CONFIG_FILENAME = "tnfr-lfs.toml"
 DEFAULT_OUTPUT_DIR = Path("out")
 PROFILES_ENV_VAR = "TNFR_LFS_PROFILES"
 DEFAULT_PROFILES_FILENAME = "profiles.toml"
+
+
+@dataclass(frozen=True, slots=True)
+class ProfilesContext:
+    """Container for CLI profile settings and pack resources."""
+
+    storage_path: Path
+    pack_profiles: Mapping[str, PackProfile]
+
+
+def _resolve_pack_root(
+    namespace: argparse.Namespace | None, config: Mapping[str, Any]
+) -> Path | None:
+    """Determine the root directory for an optional configuration pack."""
+
+    candidate: Path | None = None
+    if namespace is not None:
+        raw = getattr(namespace, "pack_root", None)
+        if raw:
+            candidate = Path(raw)
+    if candidate is None:
+        paths_cfg = config.get("paths")
+        if isinstance(paths_cfg, Mapping):
+            raw = paths_cfg.get("pack_root")
+            if isinstance(raw, str) and raw.strip():
+                candidate = Path(raw)
+    if candidate is None:
+        return None
+    return candidate.expanduser()
+
+
+def _pack_data_dir(pack_root: Path | None, name: str) -> Path | None:
+    """Resolve a directory inside ``data`` or at the root of the pack."""
+
+    if pack_root is None:
+        return None
+    candidates = [pack_root / "data" / name, pack_root / name]
+    for candidate in candidates:
+        expanded = candidate.expanduser()
+        if expanded.exists() and expanded.is_dir():
+            return expanded
+    return None
+
+
+def _load_pack_profiles(pack_root: Path | None) -> Mapping[str, PackProfile]:
+    """Load TNFR profiles from a pack or fall back to bundled resources."""
+
+    profiles_dir = _pack_data_dir(pack_root, "profiles")
+    if profiles_dir is not None:
+        return load_pack_profiles(profiles_dir)
+    return load_pack_profiles()
+
+
+def _load_pack_cars(pack_root: Path | None) -> Mapping[str, PackCar]:
+    """Load car metadata from a pack or from the bundled dataset."""
+
+    cars_dir = _pack_data_dir(pack_root, "cars")
+    if cars_dir is not None:
+        return load_pack_cars(cars_dir)
+    return load_pack_cars()
+
+
+def _serialise_pack_payload(payload: Any) -> Any:
+    """Convert pack metadata into JSON-serialisable primitives."""
+
+    if is_dataclass(payload):
+        return _serialise_pack_payload(asdict(payload))
+    if isinstance(payload, Mapping):
+        return {str(key): _serialise_pack_payload(value) for key, value in payload.items()}
+    if isinstance(payload, (list, tuple, set)):
+        return [_serialise_pack_payload(item) for item in payload]
+    return payload
+
+
+def _resolve_tnfr_targets(
+    car_model: str, cars: Mapping[str, PackCar], profiles: Mapping[str, PackProfile]
+) -> Mapping[str, Any] | None:
+    """Return TNFR objectives for ``car_model`` when available."""
+
+    if car_model not in cars:
+        return None
+    try:
+        return resolve_pack_targets(car_model, cars, profiles)
+    except KeyError:
+        return None
+
+
+def _extract_target_objectives(
+    targets: Mapping[str, Any] | None,
+) -> tuple[float | None, float | None]:
+    """Extract ΔNFR/Sense Index targets from pack metadata if present."""
+
+    if not isinstance(targets, Mapping):
+        return None, None
+    targets_section = targets.get("targets")
+    if not isinstance(targets_section, Mapping):
+        return None, None
+    balance = targets_section.get("balance")
+    delta_target: float | None = None
+    sense_target: float | None = None
+    if isinstance(balance, Mapping):
+        delta_value = balance.get("delta_nfr")
+        if isinstance(delta_value, (int, float)):
+            delta_target = float(delta_value)
+        sense_value = balance.get("sense_index")
+        if isinstance(sense_value, (int, float)):
+            sense_target = float(sense_value)
+    return delta_target, sense_target
 
 
 def _validated_export(value: Any, *, fallback: str) -> str:
@@ -127,16 +242,24 @@ def _resolve_output_dir(config: Mapping[str, Any]) -> Path:
     return DEFAULT_OUTPUT_DIR
 
 
-def _resolve_profiles_path(config: Mapping[str, Any]) -> Path:
+def _resolve_profiles_path(
+    config: Mapping[str, Any], *, pack_root: Path | None = None
+) -> ProfilesContext:
+    """Resolve the profile storage path and pack definitions."""
+
     env_path = os.environ.get(PROFILES_ENV_VAR)
     if env_path:
-        return Path(env_path).expanduser()
-    paths_cfg = config.get("paths")
-    if isinstance(paths_cfg, Mapping):
-        profile_path = paths_cfg.get("profiles")
-        if isinstance(profile_path, str):
-            return Path(profile_path).expanduser()
-    return Path(DEFAULT_PROFILES_FILENAME)
+        storage = Path(env_path).expanduser()
+    else:
+        storage = Path(DEFAULT_PROFILES_FILENAME)
+        paths_cfg = config.get("paths")
+        if isinstance(paths_cfg, Mapping):
+            profile_path = paths_cfg.get("profiles")
+            if isinstance(profile_path, str):
+                storage = Path(profile_path).expanduser()
+
+    pack_profiles = _load_pack_profiles(pack_root)
+    return ProfilesContext(storage_path=storage, pack_profiles=pack_profiles)
 
 
 def _default_car_model(config: Mapping[str, Any]) -> str:
@@ -1033,6 +1156,16 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         default=None,
         help="Ruta del fichero de configuración TOML a utilizar.",
     )
+    parser.add_argument(
+        "--pack-root",
+        dest="pack_root",
+        type=Path,
+        default=None,
+        help=(
+            "Directorio raíz de un pack TNFR × LFS con config/ y data/. "
+            "Sobrescribe paths.pack_root."
+        ),
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -1453,6 +1586,39 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         style=layout_defaults.style,
         type_in=layout_defaults.type_in,
     )
+    pack_root = _resolve_pack_root(namespace, config)
+    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
+    profile_manager = ProfileManager(profiles_ctx.storage_path)
+    resolved_car_model = str(namespace.car_model or _default_car_model(config)).strip()
+    if not resolved_car_model:
+        resolved_car_model = _default_car_model(config)
+    resolved_track = str(namespace.track or _default_track_name(config)).strip()
+    if not resolved_track:
+        resolved_track = _default_track_name(config)
+    cars = _load_pack_cars(pack_root)
+    tnfr_targets = _resolve_tnfr_targets(
+        resolved_car_model, cars, profiles_ctx.pack_profiles
+    )
+    pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
+    engine = RecommendationEngine(
+        car_model=resolved_car_model,
+        track_name=resolved_track,
+        profile_manager=profile_manager,
+    )
+    if pack_delta is not None or pack_si is not None:
+        base_profile = engine._lookup_profile(resolved_car_model, resolved_track)
+        snapshot = profile_manager.resolve(resolved_car_model, resolved_track, base_profile)
+        profile_manager.update_objectives(
+            resolved_car_model,
+            resolved_track,
+            pack_delta if pack_delta is not None else snapshot.objectives.target_delta_nfr,
+            pack_si if pack_si is not None else snapshot.objectives.target_sense_index,
+        )
+    hud = TelemetryHUD(
+        car_model=resolved_car_model,
+        track_name=resolved_track,
+        recommendation_engine=engine,
+    )
     controller = OSDController(
         host=str(namespace.host),
         outsim_port=int(namespace.outsim_port),
@@ -1460,9 +1626,10 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         insim_port=int(namespace.insim_port),
         insim_keepalive=float(namespace.insim_keepalive),
         update_rate=float(namespace.update_rate),
-        car_model=str(namespace.car_model or _default_car_model(config)),
-        track_name=str(namespace.track or _default_track_name(config)),
+        car_model=resolved_car_model,
+        track_name=resolved_track,
         layout=layout,
+        hud=hud,
     )
     return controller.run()
 
@@ -1631,7 +1798,13 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     records = _load_records(namespace.telemetry)
     car_model = _default_car_model(config)
     track_name = _default_track_name(config)
-    profile_manager = ProfileManager(_resolve_profiles_path(config))
+    pack_root = _resolve_pack_root(namespace, config)
+    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
+    profile_manager = ProfileManager(profiles_ctx.storage_path)
+    cars = _load_pack_cars(pack_root)
+    tnfr_targets = _resolve_tnfr_targets(car_model, cars, profiles_ctx.pack_profiles)
+    car_metadata = cars.get(car_model)
+    pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     engine = RecommendationEngine(
         car_model=car_model,
         track_name=track_name,
@@ -1652,8 +1825,12 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     target_si = namespace.target_si
     if snapshot and target_delta == default_target_delta:
         target_delta = objectives.target_delta_nfr
+    elif not snapshot and target_delta == default_target_delta and pack_delta is not None:
+        target_delta = pack_delta
     if snapshot and target_si == default_target_si:
         target_si = objectives.target_sense_index
+    elif not snapshot and target_si == default_target_si and pack_si is not None:
+        target_si = pack_si
     profile_manager.update_objectives(car_model, track_name, target_delta, target_si)
     lap_segments = _group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
@@ -1716,6 +1893,10 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         "phase_messages": phase_messages,
         "reports": reports,
     }
+    if car_metadata is not None:
+        payload["car"] = _serialise_pack_payload(car_metadata)
+    if tnfr_targets is not None:
+        payload["tnfr_targets"] = _serialise_pack_payload(tnfr_targets)
     if phase_templates:
         payload["phase_templates"] = phase_templates
     return _render_payload(payload, _resolve_exports(namespace))
@@ -1723,7 +1904,15 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 
 def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
-    profile_manager = ProfileManager(_resolve_profiles_path(config))
+    pack_root = _resolve_pack_root(namespace, config)
+    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
+    profile_manager = ProfileManager(profiles_ctx.storage_path)
+    cars = _load_pack_cars(pack_root)
+    tnfr_targets = _resolve_tnfr_targets(
+        namespace.car_model, cars, profiles_ctx.pack_profiles
+    )
+    car_metadata = cars.get(namespace.car_model)
+    pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     engine = RecommendationEngine(
         car_model=namespace.car_model,
         track_name=namespace.track,
@@ -1739,6 +1928,15 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     lap_segments = _group_records_by_lap(records)
     suggest_cfg = dict(config.get("suggest", {}))
     objectives = snapshot.objectives if snapshot else ProfileObjectives()
+    if snapshot is None and pack_delta is not None:
+        objectives = ProfileObjectives(
+            target_delta_nfr=float(pack_delta),
+            target_sense_index=(
+                float(pack_si)
+                if pack_si is not None
+                else objectives.target_sense_index
+            ),
+        )
     target_delta = float(suggest_cfg.get("target_delta", objectives.target_delta_nfr))
     target_si = float(suggest_cfg.get("target_si", objectives.target_sense_index))
     profile_manager.update_objectives(
@@ -1789,6 +1987,10 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         "phase_messages": phase_messages,
         "reports": reports,
     }
+    if car_metadata is not None:
+        payload["car"] = _serialise_pack_payload(car_metadata)
+    if tnfr_targets is not None:
+        payload["tnfr_targets"] = _serialise_pack_payload(tnfr_targets)
     if metrics:
         payload["metrics"] = {
             "delta_nfr": metrics.get("delta_nfr", 0.0),
@@ -1806,7 +2008,9 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
     records = _load_records(namespace.telemetry)
     car_model = _default_car_model(config)
     track_name = _default_track_name(config)
-    profile_manager = ProfileManager(_resolve_profiles_path(config))
+    pack_root = _resolve_pack_root(namespace, config)
+    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
+    profile_manager = ProfileManager(profiles_ctx.storage_path)
     engine = RecommendationEngine(
         car_model=car_model,
         track_name=track_name,
@@ -1891,7 +2095,15 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         namespace.set_output = normalise_set_output_name(namespace.set_output, namespace.car_model)
 
     records = _load_records(namespace.telemetry)
-    profile_manager = ProfileManager(_resolve_profiles_path(config))
+    pack_root = _resolve_pack_root(namespace, config)
+    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
+    profile_manager = ProfileManager(profiles_ctx.storage_path)
+    cars = _load_pack_cars(pack_root)
+    tnfr_targets = _resolve_tnfr_targets(
+        namespace.car_model, cars, profiles_ctx.pack_profiles
+    )
+    car_metadata = cars.get(namespace.car_model)
+    pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     track_name = _default_track_name(config)
     engine = RecommendationEngine(
         car_model=namespace.car_model,
@@ -1906,6 +2118,15 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         profile_manager=profile_manager,
     )
     objectives = snapshot.objectives if snapshot else ProfileObjectives()
+    if snapshot is None and pack_delta is not None:
+        objectives = ProfileObjectives(
+            target_delta_nfr=float(pack_delta),
+            target_sense_index=(
+                float(pack_si)
+                if pack_si is not None
+                else objectives.target_sense_index
+            ),
+        )
     profile_manager.update_objectives(
         namespace.car_model,
         track_name,
@@ -2034,6 +2255,10 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         "sensitivities": plan.sensitivities,
         "set_output": namespace.set_output,
     }
+    if car_metadata is not None:
+        payload["car"] = _serialise_pack_payload(car_metadata)
+    if tnfr_targets is not None:
+        payload["tnfr_targets"] = _serialise_pack_payload(tnfr_targets)
     return _render_payload(payload, _resolve_exports(namespace))
 
 
@@ -2232,7 +2457,11 @@ def run_cli(args: Sequence[str] | None = None) -> str:
     config_parser.add_argument(
         "--config", dest="config_path", type=Path, default=None
     )
+    config_parser.add_argument("--pack-root", dest="pack_root", type=Path, default=None)
     preliminary, remaining = config_parser.parse_known_args(args)
+    remaining = list(remaining)
+    if preliminary.pack_root is not None:
+        remaining = ["--pack-root", str(preliminary.pack_root)] + remaining
     config = load_cli_config(preliminary.config_path)
     parser = build_parser(config)
     parser.set_defaults(config_path=preliminary.config_path)

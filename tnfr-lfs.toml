@@ -13,6 +13,7 @@ track = "valencia"
 
 [paths]
 output_dir = "out"
+pack_root = "."
 
 [limits.delta_nfr]
 entry = 0.5
