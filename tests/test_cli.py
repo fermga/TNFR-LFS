@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 import pytest
@@ -454,32 +454,11 @@ def test_repository_template_configures_default_ports_and_profiles() -> None:
     assert limits["exit"] == pytest.approx(0.6, rel=1e-3)
 
 
-class _FakeSocket:
-    def __init__(self) -> None:
-        self.bound: list[tuple[str, int]] = []
-        self.connected: list[tuple[str, int]] = []
-
-    def __enter__(self) -> "_FakeSocket":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> bool:  # type: ignore[override]
-        return False
-
-    def setsockopt(self, *args, **kwargs) -> None:
-        return None
-
-    def settimeout(self, timeout: float) -> None:
-        return None
-
-    def bind(self, address: tuple[str, int]) -> None:
-        self.bound.append(address)
-
-    def connect(self, address: tuple[str, int]) -> None:
-        self.connected.append(address)
-
-
 def test_diagnose_reports_success(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg_path = tmp_path / "cfg.txt"
+    lfs_root = tmp_path / "LFS"
+    cfg_dir = lfs_root / "cfg"
+    cfg_dir.mkdir(parents=True)
+    cfg_path = cfg_dir / "cfg.txt"
     cfg_path.write_text(
         """
 OutSim Mode 1
@@ -494,37 +473,70 @@ InSim Port 29999
         encoding="utf8",
     )
 
-    def fake_socket(*args, **kwargs):
-        return _FakeSocket()
-
-    monkeypatch.setattr("tnfr_lfs.cli.tnfr_lfs_cli.socket.socket", fake_socket)
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._outsim_ping",
+        lambda host, port, timeout: (True, f"OutSim respondió desde {host}:{port}"),
+    )
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._outgauge_ping",
+        lambda host, port, timeout: (True, f"OutGauge respondió desde {host}:{port}"),
+    )
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._insim_handshake",
+        lambda host, port, timeout: (True, "InSim respondió con versión 9"),
+    )
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._check_setups_directory",
+        lambda path: (True, "Permisos de escritura confirmados en /fake/setups"),
+    )
 
     result = run_cli(["diagnose", str(cfg_path), "--timeout", "0.05"])
     captured = capsys.readouterr()
     assert "Estado: correcto" in captured.out
-    assert "OutSim listo" in result
-    assert "OutGauge listo" in result
-    assert "InSim alcanzable" in result
+    assert "OutSim respondió" in result
+    assert "OutGauge respondió" in result
+    assert "InSim respondió" in result
+    assert "Permisos de escritura confirmados" in result
 
 
-def test_diagnose_detects_disabled_modes(tmp_path: Path, capsys) -> None:
-    cfg_path = tmp_path / "cfg.txt"
+def test_diagnose_detects_disabled_modes(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
+    lfs_root = tmp_path / "LFS"
+    cfg_dir = lfs_root / "cfg"
+    cfg_dir.mkdir(parents=True)
+    cfg_path = cfg_dir / "cfg.txt"
     cfg_path.write_text(
         """
 OutSim Mode 0
+OutSim IP 127.0.0.1
 OutSim Port 4123
 OutGauge Mode 0
+OutGauge IP 127.0.0.1
 OutGauge Port 3000
 """,
         encoding="utf8",
+    )
+
+    copied: list[list[str]] = []
+
+    def fake_copy(commands: Iterable[str]) -> bool:
+        copied.append(list(commands))
+        return True
+
+    monkeypatch.setattr("tnfr_lfs.cli.tnfr_lfs_cli._copy_to_clipboard", fake_copy)
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._check_setups_directory",
+        lambda path: (True, "Permisos de escritura confirmados en /fake/setups"),
     )
 
     with pytest.raises(ValueError) as excinfo:
         run_cli(["diagnose", str(cfg_path)])
 
     captured = capsys.readouterr()
-    assert "OutSim Mode" in captured.out
-    assert "OutGauge Mode" in str(excinfo.value)
+    assert "/outsim 1 127.0.0.1 4123" in captured.out
+    assert "/outgauge 1 127.0.0.1 3000" in captured.out
+    assert "copiado" in captured.out
+    assert copied and "/outsim 1 127.0.0.1 4123" in copied[0]
+    assert "OutSim Mode" in str(excinfo.value)
 
 
 def test_profiles_persist_and_adjust(
@@ -616,18 +628,13 @@ profiles = "profiles.toml"
     assert "last_result" in profiles_path.read_text(encoding="utf8")
 
 
-class _BusySocket(_FakeSocket):
-    def bind(self, address: tuple[str, int]) -> None:
-        raise OSError("address already in use")
-
-    def connect(self, address: tuple[str, int]) -> None:
-        raise OSError("address already in use")
-
-
-def test_diagnose_detects_socket_errors(
+def test_diagnose_reports_missing_udp_response(
     tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cfg_path = tmp_path / "cfg.txt"
+    lfs_root = tmp_path / "LFS"
+    cfg_dir = lfs_root / "cfg"
+    cfg_dir.mkdir(parents=True)
+    cfg_path = cfg_dir / "cfg.txt"
     cfg_path.write_text(
         """
 OutSim Mode 1
@@ -636,15 +643,78 @@ OutSim Port 4123
 OutGauge Mode 1
 OutGauge IP 127.0.0.1
 OutGauge Port 3000
+InSim IP 127.0.0.1
+InSim Port 29999
 """,
         encoding="utf8",
     )
 
-    monkeypatch.setattr("tnfr_lfs.cli.tnfr_lfs_cli.socket.socket", lambda *a, **k: _BusySocket())
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._outsim_ping",
+        lambda host, port, timeout: (False, "Sin respuesta de OutSim 127.0.0.1:4123 tras 0.05s"),
+    )
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._outgauge_ping",
+        lambda host, port, timeout: (True, "OutGauge respondió"),
+    )
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._insim_handshake",
+        lambda host, port, timeout: (True, "InSim respondió"),
+    )
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._check_setups_directory",
+        lambda path: (True, "Permisos ok"),
+    )
 
     with pytest.raises(ValueError) as excinfo:
         run_cli(["diagnose", str(cfg_path)])
 
     captured = capsys.readouterr()
-    assert "OutSim falló" in captured.out
-    assert "OutGauge falló" in str(excinfo.value)
+    assert "Sin respuesta de OutSim" in captured.out
+    assert "Sin respuesta de OutSim" in str(excinfo.value)
+
+
+def test_diagnose_reports_permission_error(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lfs_root = tmp_path / "LFS"
+    cfg_dir = lfs_root / "cfg"
+    cfg_dir.mkdir(parents=True)
+    cfg_path = cfg_dir / "cfg.txt"
+    cfg_path.write_text(
+        """
+OutSim Mode 1
+OutSim IP 127.0.0.1
+OutSim Port 4123
+OutGauge Mode 1
+OutGauge IP 127.0.0.1
+OutGauge Port 3000
+InSim IP 127.0.0.1
+InSim Port 29999
+""",
+        encoding="utf8",
+    )
+
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._outsim_ping",
+        lambda host, port, timeout: (True, "OutSim respondió"),
+    )
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._outgauge_ping",
+        lambda host, port, timeout: (True, "OutGauge respondió"),
+    )
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._insim_handshake",
+        lambda host, port, timeout: (True, "InSim respondió"),
+    )
+    monkeypatch.setattr(
+        "tnfr_lfs.cli.tnfr_lfs_cli._check_setups_directory",
+        lambda path: (False, "No hay permisos de escritura en setups"),
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        run_cli(["diagnose", str(cfg_path)])
+
+    captured = capsys.readouterr()
+    assert "No hay permisos" in captured.out
+    assert "No hay permisos" in str(excinfo.value)
