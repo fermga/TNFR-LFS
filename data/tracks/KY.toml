@@ -1,0 +1,35 @@
+[config.KY1]
+name = "Kyoto Oval"
+length_km = 5.8
+surface = "asphalt"
+track_profile = "p_roval_long"
+
+[config.KY2]
+name = "Kyoto National"
+length_km = 4.7
+surface = "asphalt"
+track_profile = "p_fast_medium"
+
+[config.KY2R]
+name = "Kyoto National Reverse"
+length_km = 4.7
+surface = "asphalt"
+track_profile = "p_fast_medium"
+
+[config.KY3]
+name = "Kyoto GP Long"
+length_km = 6.7
+surface = "asphalt"
+track_profile = "p_fast_long"
+
+[config.KY3R]
+name = "Kyoto GP Long Reverse"
+length_km = 6.7
+surface = "asphalt"
+track_profile = "p_fast_long"
+
+[config.KY31]
+name = "Kyoto GP Short"
+length_km = 5.1
+surface = "asphalt"
+track_profile = "p_balanced_long"

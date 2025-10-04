@@ -1,0 +1,29 @@
+[config.BL1]
+name = "Blackwood GP"
+length_km = 3.3
+surface = "asphalt"
+track_profile = "p_balanced_medium"
+
+[config.BL1R]
+name = "Blackwood GP Reverse"
+length_km = 3.3
+surface = "asphalt"
+track_profile = "p_balanced_medium"
+
+[config.BL2]
+name = "Blackwood Rallycross"
+length_km = 3.8
+surface = "mixed"
+track_profile = "p_rallycross"
+
+[config.BL2R]
+name = "Blackwood Rallycross Reverse"
+length_km = 3.8
+surface = "mixed"
+track_profile = "p_rallycross"
+
+[config.BL3]
+name = "Blackwood Kart"
+length_km = 1.8
+surface = "asphalt"
+track_profile = "p_autocross"

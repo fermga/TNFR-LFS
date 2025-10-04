@@ -1,0 +1,29 @@
+[config.WE1]
+name = "Westhill International"
+length_km = 5.6
+surface = "asphalt"
+track_profile = "p_balanced_long"
+
+[config.WE1R]
+name = "Westhill International Reverse"
+length_km = 5.6
+surface = "asphalt"
+track_profile = "p_balanced_long"
+
+[config.WE2]
+name = "Westhill National"
+length_km = 4.4
+surface = "asphalt"
+track_profile = "p_balanced_medium"
+
+[config.WE2R]
+name = "Westhill National Reverse"
+length_km = 4.4
+surface = "asphalt"
+track_profile = "p_balanced_medium"
+
+[config.WE3]
+name = "Westhill Karting"
+length_km = 1.8
+surface = "asphalt"
+track_profile = "p_autocross"

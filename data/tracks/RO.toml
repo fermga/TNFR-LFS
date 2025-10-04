@@ -1,0 +1,23 @@
+[config.RO1]
+name = "Rockingham ISSC"
+length_km = 3.5
+surface = "asphalt"
+track_profile = "p_balanced_medium"
+
+[config.RO2]
+name = "Rockingham ISSC Long"
+length_km = 5.0
+surface = "asphalt"
+track_profile = "p_balanced_long"
+
+[config.RO3]
+name = "Rockingham Oval"
+length_km = 1.8
+surface = "asphalt"
+track_profile = "p_roval_long"
+
+[config.RO4]
+name = "Rockingham Lake"
+length_km = 3.0
+surface = "asphalt"
+track_profile = "p_technical_medium"

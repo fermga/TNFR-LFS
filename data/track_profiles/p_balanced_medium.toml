@@ -1,0 +1,25 @@
+[meta]
+id = "p_balanced_medium"
+archetype = "balanced"
+length_category = "medium"
+
+[weights.entry]
+__default__ = 1.0
+brakes = 1.05
+tyres = 1.15
+suspension = 1.08
+
+[weights.apex]
+__default__ = 1.0
+anti_roll = 1.08
+aero = 1.05
+
+[weights.exit]
+__default__ = 1.0
+transmission = 1.05
+differential = 1.1
+
+[hints]
+microsector_span = "standard"
+rho_detune_threshold = 0.7
+notes = "Perfil todoterreno para trazados medios con mezcla de curvas rápidas y lentas."

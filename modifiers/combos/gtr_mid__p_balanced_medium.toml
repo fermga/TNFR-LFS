@@ -1,0 +1,24 @@
+[meta]
+id = "gtr_mid__p_balanced_medium"
+car_group = "gtr_mid"
+base_profile = "p_balanced_medium"
+description = "Refuerza la agilidad en GT con motor central para trazados mixtos."
+
+[scale.weights.entry]
+__default__ = 1.02
+brakes = 1.08
+suspension = 1.05
+
+[scale.weights.apex]
+__default__ = 1.04
+anti_roll = 1.06
+aero = 1.03
+
+[scale.weights.exit]
+__default__ = 1.03
+differential = 1.05
+transmission = 1.04
+
+[hints]
+slip_ratio_bias = "neutral"
+notes = "Permite rotación rápida manteniendo estabilidad en frenadas."

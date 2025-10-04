@@ -1,0 +1,47 @@
+[config.AS1]
+name = "Aston Club"
+length_km = 3.1
+surface = "asphalt"
+track_profile = "p_balanced_medium"
+
+[config.AS2]
+name = "Aston National"
+length_km = 3.4
+surface = "asphalt"
+track_profile = "p_balanced_medium"
+
+[config.AS3]
+name = "Aston Historic"
+length_km = 5.1
+surface = "asphalt"
+track_profile = "p_fast_long"
+
+[config.AS4]
+name = "Aston Grand Prix"
+length_km = 5.6
+surface = "asphalt"
+track_profile = "p_balanced_long"
+
+[config.AS5]
+name = "Aston International"
+length_km = 5.5
+surface = "asphalt"
+track_profile = "p_balanced_long"
+
+[config.AS6]
+name = "Aston Grand Touring"
+length_km = 8.8
+surface = "asphalt"
+track_profile = "p_fast_long"
+
+[config.AS7]
+name = "Aston North"
+length_km = 5.8
+surface = "asphalt"
+track_profile = "p_technical_long"
+
+[config.AS7R]
+name = "Aston North Reverse"
+length_km = 5.8
+surface = "asphalt"
+track_profile = "p_technical_long"

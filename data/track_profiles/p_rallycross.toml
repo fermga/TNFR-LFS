@@ -1,0 +1,25 @@
+[meta]
+id = "p_rallycross"
+archetype = "rallycross"
+length_category = "short"
+
+[weights.entry]
+__default__ = 1.1
+brakes = 1.2
+tyres = 1.25
+
+[weights.apex]
+__default__ = 1.08
+suspension = 1.15
+damping = 1.12
+
+[weights.exit]
+__default__ = 1.06
+differential = 1.15
+traction_control = 1.08
+
+[hints]
+microsector_span = "mixed"
+rho_detune_threshold = 0.64
+surface = "mixed"
+notes = "Preparado para superficies mixtas con saltos y secciones de tierra."

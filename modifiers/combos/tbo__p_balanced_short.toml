@@ -1,0 +1,24 @@
+[meta]
+id = "tbo__p_balanced_short"
+car_group = "tbo"
+base_profile = "p_balanced_short"
+description = "Ajuste para turismos turbo en circuitos cortos urbanos."
+
+[scale.weights.entry]
+__default__ = 1.05
+brakes = 1.12
+tyres = 1.15
+
+[scale.weights.apex]
+__default__ = 1.03
+anti_roll = 1.07
+springs = 1.05
+
+[scale.weights.exit]
+__default__ = 1.04
+transmission = 1.08
+differential = 1.1
+
+[hints]
+slip_ratio_bias = "rear"
+notes = "Controla el lag del turbo con reparto de frenada y diferencial progresivo."

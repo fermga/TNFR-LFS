@@ -1,0 +1,24 @@
+[meta]
+id = "rallycross__p_rallycross"
+car_group = "rallycross"
+base_profile = "p_rallycross"
+description = "Escala los pesos para coches RX con saltos pronunciados."
+
+[scale.weights.entry]
+__default__ = 1.12
+brakes = 1.18
+tyres = 1.25
+
+[scale.weights.apex]
+__default__ = 1.1
+suspension = 1.18
+damping = 1.14
+
+[scale.weights.exit]
+__default__ = 1.08
+differential = 1.18
+traction_control = 1.1
+
+[hints]
+surface = "mixed"
+notes = "Absorbe baches y mantiene tracción en saltos sucesivos."

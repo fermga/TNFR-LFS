@@ -1,0 +1,24 @@
+[meta]
+id = "ufr__p_autocross"
+car_group = "ufr"
+base_profile = "p_autocross"
+description = "Afinado para microsectores con el Mini de copa."
+
+[scale.weights.entry]
+__default__ = 1.1
+brakes = 1.16
+tyres = 1.18
+
+[scale.weights.apex]
+__default__ = 1.08
+anti_roll = 1.12
+springs = 1.1
+
+[scale.weights.exit]
+__default__ = 1.05
+differential = 1.07
+transmission = 1.04
+
+[hints]
+slip_ratio_bias = "front"
+notes = "Evita el subviraje ajustando convergencia y reparto de frenada."

@@ -1,0 +1,3 @@
+recursive-include data/tracks *.toml
+recursive-include data/track_profiles *.toml
+recursive-include modifiers/combos *.toml

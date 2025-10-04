@@ -1,0 +1,25 @@
+[meta]
+id = "p_balanced_short"
+archetype = "balanced"
+length_category = "short"
+
+[weights.entry]
+__default__ = 1.0
+brakes = 1.1
+tyres = 1.2
+suspension = 1.05
+
+[weights.apex]
+__default__ = 1.0
+anti_roll = 1.1
+springs = 1.05
+
+[weights.exit]
+__default__ = 1.0
+transmission = 1.1
+differential = 1.08
+
+[hints]
+microsector_span = "compact"
+rho_detune_threshold = 0.68
+notes = "Prioriza la agilidad y un balance neutro para pistas cortas y encadenadas."
