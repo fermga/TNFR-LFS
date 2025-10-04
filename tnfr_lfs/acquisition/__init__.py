@@ -1,6 +1,6 @@
 """Telemetry acquisition backends."""
 
-from .insim import ButtonEvent, ButtonLayout, InSimClient, OverlayManager
+from .insim import ButtonEvent, ButtonLayout, InSimClient, MacroQueue, OverlayManager
 from .outsim_client import OutSimClient, TelemetryFormatError
 from .outsim_udp import OutSimPacket, OutSimUDPClient
 from .outgauge_udp import OutGaugePacket, OutGaugeUDPClient
@@ -15,6 +15,7 @@ __all__ = [
     "ButtonEvent",
     "ButtonLayout",
     "InSimClient",
+    "MacroQueue",
     "OverlayManager",
     "OutGaugePacket",
     "OutGaugeUDPClient",

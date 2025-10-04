@@ -12,6 +12,7 @@ from ..acquisition import (
     ButtonEvent,
     ButtonLayout,
     InSimClient,
+    MacroQueue,
     OverlayManager,
     OutGaugeUDPClient,
     OutSimUDPClient,
@@ -55,13 +56,27 @@ class ActivePhase:
     goal: Goal | None
 
 
+@dataclass(frozen=True)
+class MacroStatus:
+    """State exposed in the “Aplicar” HUD page."""
+
+    next_change: SetupChange | None = None
+    warnings: Tuple[str, ...] = ()
+    queue_size: int = 0
+
+
 class HUDPager:
     """Track the active HUD page and react to button clicks."""
 
     def __init__(self, pages: Sequence[str] | None = None) -> None:
         self._pages: Tuple[str, ...] = tuple(pages or ())
         if not self._pages:
-            self._pages = ("Esperando telemetría…",) * 3
+            self._pages = (
+                "Esperando telemetría…",
+                "ΔNFR nodal en espera",
+                "Plan en preparación…",
+                "Aplicar en espera…",
+            )
         self._index = 0
 
     @property
@@ -77,6 +92,10 @@ class HUDPager:
 
     def current(self) -> str:
         return self._pages[self._index]
+
+    @property
+    def index(self) -> int:
+        return self._index
 
     def advance(self) -> None:
         if not self._pages:
@@ -122,16 +141,18 @@ class TelemetryHUD:
         self._operator_state: MutableMapping[str, Dict[str, Dict[str, object]]] = {}
         self._microsectors: Sequence[Microsector] = ()
         self._bundles: Sequence[object] = ()
-        self._pages: Tuple[str, str, str] = (
+        self._pages: Tuple[str, str, str, str] = (
             "Esperando telemetría…",
             "ΔNFR nodal en espera",
             "Plan en preparación…",
+            "Aplicar en espera…",
         )
         self._dirty = True
         self._plan_interval = max(0.0, float(plan_interval))
         self._time_fn = time_fn
         self._last_plan_time = -math.inf
         self._cached_plan: SetupPlan | None = None
+        self._macro_status = MacroStatus()
         self._thresholds: ThresholdProfile = (
             self.recommendation_engine._resolve_context(  # type: ignore[attr-defined]
                 car_model, track_name
@@ -142,10 +163,21 @@ class TelemetryHUD:
         self._records.append(record)
         self._dirty = True
 
-    def pages(self) -> Tuple[str, str, str]:
+    def pages(self) -> Tuple[str, str, str, str]:
         if self._dirty:
             self._recompute()
         return self._pages
+
+    def plan(self) -> SetupPlan | None:
+        if self._dirty:
+            self._recompute()
+        return self._cached_plan
+
+    def update_macro_status(self, status: "MacroStatus") -> None:
+        if status == self._macro_status:
+            return
+        self._macro_status = status
+        self._dirty = True
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -157,6 +189,7 @@ class TelemetryHUD:
                 "Esperando telemetría…",
                 "ΔNFR nodal en espera",
                 "Plan en preparación…",
+                "Aplicar en espera…",
             )
             self._dirty = False
             return
@@ -220,6 +253,10 @@ class TelemetryHUD:
         if active:
             tolerance = self._thresholds.tolerance_for_phase(active.phase)
 
+        top_changes: Tuple[SetupChange, ...] = ()
+        if self._cached_plan:
+            top_changes = tuple(self._cached_plan.changes[:3])
+
         self._pages = (
             _render_page_a(
                 active,
@@ -234,6 +271,7 @@ class TelemetryHUD:
                 self._thresholds,
                 active,
             ),
+            _render_page_d(top_changes, self._macro_status),
         )
         self._dirty = False
 
@@ -332,6 +370,41 @@ def _render_page_c(
     return _ensure_limit("\n".join(lines))
 
 
+def _render_page_d(
+    top_changes: Sequence[SetupChange],
+    status: MacroStatus,
+) -> str:
+    lines: List[str] = ["Aplicar recomendaciones"]
+    if top_changes:
+        for index, change in enumerate(top_changes, start=1):
+            descriptor = _truncate_line(
+                f"{index}. {change.parameter}: {change.delta:+.2f}"
+            )
+            lines.append(descriptor)
+    else:
+        lines.append("Sin recomendaciones disponibles")
+
+    if status.next_change:
+        change = status.next_change
+        lines.append(
+            _truncate_line(f"Siguiente → {change.parameter} {change.delta:+.2f}")
+        )
+    else:
+        lines.append("Siguiente → --")
+
+    if status.queue_size:
+        lines.append(f"Cola macros {status.queue_size}")
+
+    lines.append("APLICAR SIGUIENTE (Shift+Clic)")
+
+    for warning in status.warnings:
+        if not warning:
+            continue
+        lines.append(_truncate_line(f"⚠️ {warning}"))
+
+    return _ensure_limit("\n".join(lines))
+
+
 def _nodal_delta_map(bundle) -> Mapping[str, float]:
     nodes = {
         "tyres": getattr(bundle, "tyres", None),
@@ -419,6 +492,15 @@ class OSDController:
         )
         self._pager = HUDPager(self.hud.pages())
         self._idle_backoff = 0.01
+        self._macro_queue: MacroQueue | None = None
+        self._menu_open = False
+        self._menu_open_last_seen = 0.0
+        self._car_stopped = True
+        self._next_change_index = 0
+        self._last_plan_signature: Tuple[Tuple[str, float], ...] = ()
+
+    APPLY_TRIGGER_FLAG = 0x10
+    STOPPED_SPEED_THRESHOLD = 1.0
 
     def run(self) -> str:
         outsim: OutSimUDPClient | None = None
@@ -438,6 +520,8 @@ class OSDController:
             insim.subscribe_controls()
             overlay = OverlayManager(insim, layout=self.layout)
             overlay.show("Inicializando HUD…")
+            self._macro_queue = MacroQueue(insim.send_command)
+            self._refresh_macro_status()
             last_render = monotonic()
             try:
                 while True:
@@ -446,12 +530,15 @@ class OSDController:
                     if outsim_packet and outgauge_packet:
                         record = self.fusion.fuse(outsim_packet, outgauge_packet)
                         self.hud.append(record)
+                        self._update_vehicle_state(record)
+                        self._infer_menu_state(outgauge_packet)
                         self._pager.update(self.hud.pages())
+                        self._refresh_macro_status()
                     else:
                         sleep(self._idle_backoff)
 
                     event = overlay.poll_button(0.0)
-                    self._pager.handle_event(event, self.layout)
+                    self._handle_button_event(event)
 
                     now = monotonic()
                     if now - last_render >= self.update_period:
@@ -459,6 +546,8 @@ class OSDController:
                         last_render = now
 
                     overlay.tick()
+                    if self._macro_queue and self._macro_queue.tick():
+                        self._refresh_macro_status()
             except KeyboardInterrupt:
                 return "HUD detenido por el usuario."
         finally:
@@ -472,6 +561,126 @@ class OSDController:
             if outgauge is not None:
                 outgauge.close()
         return "HUD finalizado."
+
+    def set_menu_open(self, open_state: bool) -> None:
+        self._menu_open = bool(open_state)
+        if open_state:
+            self._menu_open_last_seen = monotonic()
+        self._refresh_macro_status()
+
+    def _handle_button_event(self, event: ButtonEvent | None) -> None:
+        if event is None:
+            return
+        if event.type_in != 0:
+            return
+        if event.click_id != self.layout.click_id:
+            return
+
+        if self._pager.index == len(self._pager.pages) - 1 and self._should_trigger_macro(event):
+            self._attempt_enqueue_macro()
+        else:
+            self._pager.advance()
+
+    def _should_trigger_macro(self, event: ButtonEvent) -> bool:
+        if event.flags & self.APPLY_TRIGGER_FLAG:
+            return True
+        if event.typed_char and event.typed_char.lower() in {"a", "\r"}:
+            return True
+        return False
+
+    def _attempt_enqueue_macro(self) -> None:
+        queue = self._macro_queue
+        if queue is None:
+            return
+        next_change = self._resolve_next_change()
+        warnings = self._macro_preflight_warnings(next_change)
+        if warnings:
+            self.hud.update_macro_status(
+                MacroStatus(
+                    next_change=next_change,
+                    warnings=tuple(warnings),
+                    queue_size=len(queue),
+                )
+            )
+            self._pager.update(self.hud.pages())
+            return
+
+        if not next_change:
+            self._pager.advance()
+            return
+
+        sequence = self._sequence_for_change(next_change)
+        queue.enqueue_press_sequence(sequence)
+        self._next_change_index += 1
+        self.hud.update_macro_status(
+            MacroStatus(
+                next_change=self._resolve_next_change(),
+                queue_size=len(queue),
+            )
+        )
+        self._pager.update(self.hud.pages())
+
+    def _sequence_for_change(self, change: SetupChange) -> Sequence[str]:
+        direction = "+" if change.delta >= 0 else "-"
+        steps = max(1, int(round(abs(change.delta))))
+        sequence = ["F12", "F11"]
+        sequence.extend(direction for _ in range(steps))
+        sequence.append("F12")
+        return sequence
+
+    def _resolve_next_change(self) -> SetupChange | None:
+        plan = self.hud.plan()
+        if not plan or not plan.changes:
+            self._next_change_index = 0
+            self._last_plan_signature = ()
+            return None
+
+        signature = tuple((change.parameter, float(change.delta)) for change in plan.changes)
+        if signature != self._last_plan_signature:
+            self._next_change_index = 0
+            self._last_plan_signature = signature
+
+        if self._next_change_index >= len(plan.changes):
+            self._next_change_index = 0
+        return plan.changes[self._next_change_index]
+
+    def _macro_preflight_warnings(self, next_change: SetupChange | None) -> List[str]:
+        warnings: List[str] = []
+        if next_change is None:
+            warnings.append("Sin cambios pendientes")
+        if not self._menu_open:
+            warnings.append("Abre el menú de boxes (F12)")
+        if not self._car_stopped:
+            warnings.append("Detén el coche antes de aplicar")
+        return warnings
+
+    def _refresh_macro_status(self) -> None:
+        next_change = self._resolve_next_change()
+        queue_size = len(self._macro_queue) if self._macro_queue else 0
+        warnings = tuple(self._macro_preflight_warnings(next_change))
+        self.hud.update_macro_status(
+            MacroStatus(
+                next_change=next_change,
+                warnings=warnings,
+                queue_size=queue_size,
+            )
+        )
+        self._pager.update(self.hud.pages())
+
+    def _update_vehicle_state(self, record: TelemetryRecord) -> None:
+        self._car_stopped = abs(record.speed) <= self.STOPPED_SPEED_THRESHOLD
+
+    def _infer_menu_state(self, outgauge) -> None:
+        if outgauge is None:
+            return
+        display = f"{outgauge.display1} {outgauge.display2}".strip().upper()
+        keywords = ("F12", "PIT", "BOX", "SETUP")
+        now = monotonic()
+        if any(keyword in display for keyword in keywords):
+            self._menu_open = True
+            self._menu_open_last_seen = now
+        elif self._menu_open and (now - self._menu_open_last_seen) > 3.0:
+            self._menu_open = False
 
 
 def _build_setup_plan(plan, car_model: str) -> SetupPlan:
@@ -537,6 +746,7 @@ def _build_setup_plan(plan, car_model: str) -> SetupPlan:
 __all__ = [
     "ActivePhase",
     "HUDPager",
+    "MacroStatus",
     "OSDController",
     "TelemetryHUD",
 ]
