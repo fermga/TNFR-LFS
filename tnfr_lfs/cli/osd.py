@@ -475,28 +475,54 @@ class OSDController:
 
 
 def _build_setup_plan(plan, car_model: str) -> SetupPlan:
-    rationales = [rec.rationale for rec in plan.recommendations if rec.rationale]
-    effects = [rec.message for rec in plan.recommendations if rec.message]
-    if not rationales:
-        rationales = ["Optimización de objetivo Si/ΔNFR"]
-    if not effects:
-        effects = ["Mejora equilibrada del coche"]
-
-    unique_rationales = list(dict.fromkeys(rationales))
-    unique_effects = list(dict.fromkeys(effects))
-    rationale_text = "; ".join(unique_rationales)
-    effect_text = "; ".join(unique_effects)
-
-    changes = [
-        SetupChange(
-            parameter=parameter,
-            delta=float(value),
-            rationale=rationale_text,
-            expected_effect=effect_text,
-        )
-        for parameter, value in plan.decision_vector.items()
-        if abs(value) > 1e-6
+    action_recommendations = [
+        rec
+        for rec in plan.recommendations
+        if rec.parameter and rec.delta is not None
     ]
+
+    ordered_actions = sorted(
+        action_recommendations,
+        key=lambda rec: (rec.priority, -abs(rec.delta or 0.0)),
+    )
+
+    aggregated_rationales = [rec.rationale for rec in plan.recommendations if rec.rationale]
+    aggregated_effects = [rec.message for rec in plan.recommendations if rec.message]
+
+    if ordered_actions:
+        changes = [
+            SetupChange(
+                parameter=rec.parameter or "",
+                delta=float(rec.delta or 0.0),
+                rationale=rec.rationale or "",
+                expected_effect=rec.message,
+            )
+            for rec in ordered_actions
+        ]
+        if not aggregated_rationales:
+            aggregated_rationales = [rec.rationale for rec in ordered_actions if rec.rationale]
+        if not aggregated_effects:
+            aggregated_effects = [rec.message for rec in ordered_actions if rec.message]
+    else:
+        unique_rationales = list(dict.fromkeys(aggregated_rationales))
+        unique_effects = list(dict.fromkeys(aggregated_effects))
+        rationale_text = "; ".join(unique_rationales or ["Optimización de objetivo Si/ΔNFR"])
+        effect_text = "; ".join(unique_effects or ["Mejora equilibrada del coche"])
+        changes = [
+            SetupChange(
+                parameter=parameter,
+                delta=float(value),
+                rationale=rationale_text,
+                expected_effect=effect_text,
+            )
+            for parameter, value in plan.decision_vector.items()
+            if abs(value) > 1e-6
+        ]
+        aggregated_rationales = unique_rationales or ["Optimización de objetivo Si/ΔNFR"]
+        aggregated_effects = unique_effects or ["Mejora equilibrada del coche"]
+
+    unique_rationales = list(dict.fromkeys(aggregated_rationales or ["Optimización de objetivo Si/ΔNFR"]))
+    unique_effects = list(dict.fromkeys(aggregated_effects or ["Mejora equilibrada del coche"]))
 
     return SetupPlan(
         car_model=car_model,

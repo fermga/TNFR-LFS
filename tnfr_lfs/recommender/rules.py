@@ -85,6 +85,162 @@ _BASE_PHASE_ACTIONS: Mapping[str, Mapping[str, Mapping[str, str]]] = {
     },
 }
 
+
+@dataclass(frozen=True)
+class PhaseActionTemplate:
+    """Template that translates gradients into actionable setup deltas."""
+
+    metric: str
+    parameter: str
+    scale: float
+    min_value: float
+    max_value: float
+    message_pattern: str
+    step: float
+    nodes: Tuple[str, ...] | None = None
+    priority_offset: int = 0
+
+
+_PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
+    "entry": (
+        PhaseActionTemplate(
+            metric="delta_nfr",
+            parameter="brake_bias_pct",
+            scale=-1.0,
+            min_value=-4.0,
+            max_value=4.0,
+            message_pattern="{delta:+.1f}% bias delante",
+            step=0.5,
+        ),
+        PhaseActionTemplate(
+            metric="nu_f",
+            parameter="front_rebound_clicks",
+            scale=-0.5,
+            min_value=-6.0,
+            max_value=6.0,
+            message_pattern="{delta:+.0f} clicks rebote delante",
+            step=1.0,
+            nodes=("suspension",),
+            priority_offset=1,
+        ),
+        PhaseActionTemplate(
+            metric="nu_f",
+            parameter="front_compression_clicks",
+            scale=-0.5,
+            min_value=-6.0,
+            max_value=6.0,
+            message_pattern="{delta:+.0f} clicks compresión delante",
+            step=1.0,
+            nodes=("suspension",),
+            priority_offset=2,
+        ),
+        PhaseActionTemplate(
+            metric="sense_index",
+            parameter="front_tyre_pressure",
+            scale=20.0,
+            min_value=-0.6,
+            max_value=0.6,
+            message_pattern="{delta:+.1f} psi eje delantero",
+            step=0.1,
+            priority_offset=3,
+        ),
+    ),
+    "apex": (
+        PhaseActionTemplate(
+            metric="delta_nfr",
+            parameter="front_arb_steps",
+            scale=-0.6,
+            min_value=-5.0,
+            max_value=5.0,
+            message_pattern="{delta:+.0f} pasos barra delantera",
+            step=1.0,
+        ),
+        PhaseActionTemplate(
+            metric="delta_nfr",
+            parameter="rear_arb_steps",
+            scale=0.6,
+            min_value=-5.0,
+            max_value=5.0,
+            message_pattern="{delta:+.0f} pasos barra trasera",
+            step=1.0,
+            priority_offset=1,
+        ),
+        PhaseActionTemplate(
+            metric="sense_index",
+            parameter="front_tyre_pressure",
+            scale=18.0,
+            min_value=-0.6,
+            max_value=0.6,
+            message_pattern="{delta:+.1f} psi exteriores",
+            step=0.1,
+            priority_offset=2,
+        ),
+        PhaseActionTemplate(
+            metric="nu_f",
+            parameter="rear_rebound_clicks",
+            scale=-0.5,
+            min_value=-6.0,
+            max_value=6.0,
+            message_pattern="{delta:+.0f} clicks rebote trasero",
+            step=1.0,
+            nodes=("suspension",),
+            priority_offset=3,
+        ),
+    ),
+    "exit": (
+        PhaseActionTemplate(
+            metric="delta_nfr",
+            parameter="diff_power_lock",
+            scale=-2.0,
+            min_value=-20.0,
+            max_value=20.0,
+            message_pattern="{delta:+.0f}% LSD potencia",
+            step=5.0,
+        ),
+        PhaseActionTemplate(
+            metric="delta_nfr",
+            parameter="rear_ride_height",
+            scale=-0.5,
+            min_value=-4.0,
+            max_value=4.0,
+            message_pattern="{delta:+.1f} mm altura trasera",
+            step=0.5,
+            priority_offset=1,
+        ),
+        PhaseActionTemplate(
+            metric="sense_index",
+            parameter="rear_tyre_pressure",
+            scale=20.0,
+            min_value=-0.6,
+            max_value=0.6,
+            message_pattern="{delta:+.1f} psi eje trasero",
+            step=0.1,
+            priority_offset=2,
+        ),
+        PhaseActionTemplate(
+            metric="nu_f",
+            parameter="diff_coast_lock",
+            scale=-2.0,
+            min_value=-20.0,
+            max_value=20.0,
+            message_pattern="{delta:+.0f}% LSD retención",
+            step=5.0,
+            nodes=("transmission",),
+            priority_offset=3,
+        ),
+        PhaseActionTemplate(
+            metric="sense_index",
+            parameter="rear_wing_angle",
+            scale=10.0,
+            min_value=-3.0,
+            max_value=3.0,
+            message_pattern="{delta:+.1f}° ala trasera",
+            step=0.5,
+            priority_offset=4,
+        ),
+    ),
+}
+
 _OPERATOR_NODE_ACTIONS: Dict[str, Mapping[str, Mapping[str, str]]] = dict(_BASE_PHASE_ACTIONS)
 for legacy, phases in LEGACY_PHASE_MAP.items():
     actions = _BASE_PHASE_ACTIONS.get(legacy)
@@ -102,6 +258,8 @@ class Recommendation:
     message: str
     rationale: str
     priority: int = 0
+    parameter: str | None = None
+    delta: float | None = None
 
 
 @dataclass(frozen=True)
@@ -510,6 +668,65 @@ def _slider_action(phase: str, node: str, direction: str) -> str:
     return f"reducir la influencia de {node_label}"
 
 
+def _phase_action_templates(phase: str, metric: str, node: str | None = None) -> Sequence[PhaseActionTemplate]:
+    key = phase_family(phase)
+    templates = _PHASE_ACTION_ROADMAP.get(key, ())
+    selected: List[PhaseActionTemplate] = []
+    for template in templates:
+        if template.metric != metric:
+            continue
+        if template.nodes and node not in template.nodes:
+            continue
+        selected.append(template)
+    return selected
+
+
+def _apply_action_template(template: PhaseActionTemplate, raw_value: float) -> float | None:
+    value = raw_value * template.scale
+    value = max(template.min_value, min(template.max_value, value))
+    if template.step > 0:
+        value = round(value / template.step) * template.step
+        value = max(template.min_value, min(template.max_value, value))
+    threshold = template.step * 0.5 if template.step > 0 else 1e-3
+    if abs(value) < threshold:
+        return None
+    return value
+
+
+def _phase_action_recommendations(
+    *,
+    phase: str,
+    category: str,
+    metric: str,
+    raw_value: float,
+    base_rationale: str,
+    priority: int,
+    reference_key: str,
+    node: str | None = None,
+) -> List[Recommendation]:
+    recommendations: List[Recommendation] = []
+    for template in _phase_action_templates(phase, metric, node):
+        value = _apply_action_template(template, raw_value)
+        if value is None:
+            continue
+        message = template.message_pattern.format(delta=value)
+        rationale = (
+            f"{base_rationale} Acción sugerida: {message}. Consulta "
+            f"{MANUAL_REFERENCES[reference_key]} para aplicar el ajuste."
+        )
+        recommendations.append(
+            Recommendation(
+                category=category,
+                message=message,
+                rationale=rationale,
+                priority=priority + template.priority_offset,
+                parameter=template.parameter,
+                delta=float(value),
+            )
+        )
+    return recommendations
+
+
 class PhaseDeltaDeviationRule:
     """Detects ΔNFR mismatches for a given phase of the corner."""
 
@@ -552,26 +769,64 @@ class PhaseDeltaDeviationRule:
             deviation = actual_delta - goal.target_delta_nfr
             if abs(deviation) <= tolerance:
                 continue
-            action = "incrementar" if deviation < 0 else "reducir"
+            base_rationale = (
+                f"{self.operator_label} aplicado sobre la fase de {self.phase_label} en "
+                f"microsector {microsector.index}. El objetivo ΔNFR era "
+                f"{goal.target_delta_nfr:.2f}, pero la media registrada fue "
+                f"{actual_delta:.2f} ({deviation:+.2f}). La tolerancia definida para "
+                f"{context.profile_label} es ±{tolerance:.2f}."
+            )
+            recommendations.extend(
+                _phase_action_recommendations(
+                    phase=self.phase,
+                    category=self.category,
+                    metric="delta_nfr",
+                    raw_value=deviation,
+                    base_rationale=base_rationale,
+                    priority=self.priority,
+                    reference_key=self.reference_key,
+                )
+            )
+
+            direction = "incrementar" if deviation < 0 else "reducir"
+            summary_message = (
+                f"{self.operator_label} · objetivo ΔNFR global: {direction} ΔNFR "
+                f"en microsector {microsector.index} ({MANUAL_REFERENCES[self.reference_key]})"
+            )
+            summary_rationale = (
+                f"{base_rationale} Se recomienda {direction} ΔNFR global y revisar "
+                f"{MANUAL_REFERENCES[self.reference_key]} para la fase de {self.phase_label}."
+            )
             recommendations.append(
                 Recommendation(
                     category=self.category,
-                    message=(
-                        f"{self.operator_label} · objetivo ΔNFR global: {action} ΔNFR "
-                        f"en microsector {microsector.index} "
-                        f"({MANUAL_REFERENCES[self.reference_key]})"
-                    ),
-                    rationale=(
-                        f"{self.operator_label} aplicado sobre la fase de {self.phase_label} en "
-                        f"microsector {microsector.index}. El objetivo ΔNFR era "
-                        f"{goal.target_delta_nfr:.2f}, pero la media registrada fue "
-                        f"{actual_delta:.2f} ({deviation:+.2f}). La tolerancia definida para "
-                        f"{context.profile_label} es ±{tolerance:.2f}. Repasa "
-                        f"{MANUAL_REFERENCES[self.reference_key]} para ajustar este tramo."
-                    ),
-                    priority=self.priority,
+                    message=summary_message,
+                    rationale=summary_rationale,
+                    priority=self.priority + 40,
                 )
             )
+
+            target_si = getattr(goal, "target_sense_index", None)
+            if target_si is not None:
+                actual_si = mean(bundle.sense_index for bundle in samples)
+                si_delta = target_si - actual_si
+                si_tolerance = 0.01
+                if abs(si_delta) > si_tolerance:
+                    si_rationale = (
+                        f"El objetivo de sense index era {target_si:.2f} y se observó "
+                        f"{actual_si:.2f} ({si_delta:+.2f})."
+                    )
+                    recommendations.extend(
+                        _phase_action_recommendations(
+                            phase=self.phase,
+                            category=self.category,
+                            metric="sense_index",
+                            raw_value=si_delta,
+                            base_rationale=f"{base_rationale} {si_rationale}",
+                            priority=self.priority + 5,
+                            reference_key=self.reference_key,
+                        )
+                    )
         return recommendations
 
 
@@ -625,29 +880,42 @@ class PhaseNodeOperatorRule:
                 deviation = actual_nu_f - target_nu_f
                 if abs(deviation) <= tolerance:
                     continue
-                direction = "increase" if deviation < 0 else "decrease"
                 node_label = _node_label(node)
-                action_text = _slider_action(self.phase, node, direction)
-                message = (
-                    f"{self.operator_label} · nodo objetivo {node_label}: {action_text} "
-                    f"para acercar ν_f a {target_nu_f:.2f} "
-                    f"({MANUAL_REFERENCES[self.reference_key]})"
-                )
                 dominant_list = ", ".join(_node_label(name) for name in goal.dominant_nodes)
-                rationale = (
+                base_rationale = (
                     f"{self.operator_label} aplicado al nodo {node_label} en microsector "
                     f"{microsector.index}. La estrategia del objetivo destaca a "
                     f"{dominant_list or 'los nodos dominantes'} y fija ν_f={target_nu_f:.2f}. "
                     f"Se midió ν_f medio {actual_nu_f:.2f} ({deviation:+.2f}), superando la "
-                    f"tolerancia ±{tolerance:.2f} definida para {context.profile_label}. "
-                    f"Se propone {action_text.lower()} para alinear la contribución de {node_label}. "
-                    f"Consulta {MANUAL_REFERENCES[self.reference_key]} para los ajustes."
+                    f"tolerancia ±{tolerance:.2f} definida para {context.profile_label}."
                 )
+                actions = _phase_action_recommendations(
+                    phase=self.phase,
+                    category=self.category,
+                    metric="nu_f",
+                    raw_value=deviation,
+                    base_rationale=base_rationale,
+                    priority=self.priority,
+                    reference_key=self.reference_key,
+                    node=node,
+                )
+                if actions:
+                    recommendations.extend(actions)
+                    continue
+                direction = "increase" if deviation < 0 else "decrease"
+                action_text = _slider_action(self.phase, node, direction)
                 recommendations.append(
                     Recommendation(
                         category=self.category,
-                        message=message,
-                        rationale=rationale,
+                        message=(
+                            f"{self.operator_label} · nodo objetivo {node_label}: {action_text} "
+                            f"para acercar ν_f a {target_nu_f:.2f} "
+                            f"({MANUAL_REFERENCES[self.reference_key]})"
+                        ),
+                        rationale=(
+                            f"{base_rationale} Acción sugerida: {action_text}. Consulta "
+                            f"{MANUAL_REFERENCES[self.reference_key]} para los ajustes."
+                        ),
                         priority=self.priority,
                     )
                 )
