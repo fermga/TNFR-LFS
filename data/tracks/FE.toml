@@ -1,0 +1,35 @@
+[config.FE1]
+name = "Fern Bay Club"
+length_km = 3.1
+surface = "asphalt"
+track_profile = "p_balanced_short"
+
+[config.FE2]
+name = "Fern Bay Green"
+length_km = 3.6
+surface = "asphalt"
+track_profile = "p_technical_medium"
+
+[config.FE3]
+name = "Fern Bay Gold"
+length_km = 4.1
+surface = "asphalt"
+track_profile = "p_technical_medium"
+
+[config.FE4]
+name = "Fern Bay Black"
+length_km = 4.0
+surface = "asphalt"
+track_profile = "p_technical_long"
+
+[config.FE5]
+name = "Fern Bay Rallycross"
+length_km = 3.5
+surface = "mixed"
+track_profile = "p_rallycross"
+
+[config.FE6]
+name = "Fern Bay Rallycross Reverse"
+length_km = 3.5
+surface = "mixed"
+track_profile = "p_rallycross"

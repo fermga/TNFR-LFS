@@ -1,0 +1,24 @@
+[meta]
+id = "p_autocross"
+archetype = "autocross"
+length_category = "short"
+
+[weights.entry]
+__default__ = 1.12
+brakes = 1.18
+tyres = 1.22
+
+[weights.apex]
+__default__ = 1.1
+anti_roll = 1.15
+springs = 1.12
+
+[weights.exit]
+__default__ = 1.06
+differential = 1.08
+transmission = 1.04
+
+[hints]
+microsector_span = "micro"
+rho_detune_threshold = 0.62
+notes = "Pensado para layouts de conos con giros muy cerrados y ritmo irregular."

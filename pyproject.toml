@@ -54,3 +54,8 @@ warn_unused_configs = true
 
 [tool.setuptools.package-data]
 "tnfr_lfs.data" = ["*.toml"]
+
+[tool.setuptools.data-files]
+"tnfr_lfs_pack/data/tracks" = ["data/tracks/*.toml"]
+"tnfr_lfs_pack/data/track_profiles" = ["data/track_profiles/*.toml"]
+"tnfr_lfs_pack/modifiers/combos" = ["modifiers/combos/*.toml"]

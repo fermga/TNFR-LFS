@@ -1,0 +1,24 @@
+[meta]
+id = "p_fast_medium"
+archetype = "fast"
+length_category = "medium"
+
+[weights.entry]
+__default__ = 0.96
+aero = 1.05
+brakes = 0.92
+
+[weights.apex]
+__default__ = 1.04
+aero = 1.08
+springs = 1.02
+
+[weights.exit]
+__default__ = 1.08
+transmission = 1.1
+differential = 1.12
+
+[hints]
+microsector_span = "standard"
+rho_detune_threshold = 0.72
+notes = "Entrega rotación rápida manteniendo velocidad media elevada."

@@ -1,0 +1,24 @@
+[meta]
+id = "p_technical_medium"
+archetype = "technical"
+length_category = "medium"
+
+[weights.entry]
+__default__ = 1.02
+brakes = 1.12
+suspension = 1.1
+
+[weights.apex]
+__default__ = 1.06
+anti_roll = 1.1
+springs = 1.08
+
+[weights.exit]
+__default__ = 1.03
+differential = 1.1
+transmission = 1.05
+
+[hints]
+microsector_span = "standard"
+rho_detune_threshold = 0.68
+notes = "Compensa curvas mixtas con frenadas fuertes y apoyos largos."

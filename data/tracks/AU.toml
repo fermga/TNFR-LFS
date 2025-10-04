@@ -1,0 +1,17 @@
+[config.AU1]
+name = "Autocross Arena"
+length_km = 1.2
+surface = "asphalt"
+track_profile = "p_autocross"
+
+[config.AU2]
+name = "Autocross Skidpan"
+length_km = 0.9
+surface = "asphalt"
+track_profile = "p_autocross"
+
+[config.AU3]
+name = "Autocross Drag"
+length_km = 0.4
+surface = "asphalt"
+track_profile = "p_fast_medium"

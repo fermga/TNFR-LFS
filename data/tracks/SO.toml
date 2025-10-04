@@ -1,0 +1,35 @@
+[config.SO1]
+name = "South City Classic"
+length_km = 2.0
+surface = "asphalt"
+track_profile = "p_technical_short"
+
+[config.SO2]
+name = "South City Sprint 1"
+length_km = 2.3
+surface = "asphalt"
+track_profile = "p_balanced_short"
+
+[config.SO3]
+name = "South City Sprint 2"
+length_km = 2.1
+surface = "asphalt"
+track_profile = "p_technical_short"
+
+[config.SO4]
+name = "South City Long"
+length_km = 4.0
+surface = "asphalt"
+track_profile = "p_technical_medium"
+
+[config.SO5]
+name = "South City Town Course"
+length_km = 3.1
+surface = "asphalt"
+track_profile = "p_technical_medium"
+
+[config.SO6]
+name = "South City Chicane Route"
+length_km = 3.6
+surface = "asphalt"
+track_profile = "p_balanced_medium"

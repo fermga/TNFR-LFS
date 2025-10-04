@@ -1,0 +1,25 @@
+[meta]
+id = "p_roval_long"
+archetype = "roval"
+length_category = "long"
+
+[weights.entry]
+__default__ = 0.97
+brakes = 1.0
+aero = 1.08
+
+[weights.apex]
+__default__ = 1.02
+anti_roll = 1.05
+springs = 1.04
+
+[weights.exit]
+__default__ = 1.1
+transmission = 1.1
+differential = 1.12
+aero = 1.06
+
+[hints]
+microsector_span = "extended"
+rho_detune_threshold = 0.73
+notes = "Ajustado para rovales con secciones ovales de alta carga lateral."

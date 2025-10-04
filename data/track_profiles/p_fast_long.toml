@@ -1,0 +1,25 @@
+[meta]
+id = "p_fast_long"
+archetype = "fast"
+length_category = "long"
+
+[weights.entry]
+__default__ = 0.95
+aero = 1.1
+brakes = 0.9
+
+[weights.apex]
+__default__ = 1.05
+aero = 1.12
+anti_roll = 1.08
+
+[weights.exit]
+__default__ = 1.1
+transmission = 1.12
+differential = 1.15
+engine = 1.08
+
+[hints]
+microsector_span = "extended"
+rho_detune_threshold = 0.74
+notes = "Optimiza velocidad punta y tracción en rectas prolongadas."

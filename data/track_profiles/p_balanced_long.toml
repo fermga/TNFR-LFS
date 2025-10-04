@@ -1,0 +1,25 @@
+[meta]
+id = "p_balanced_long"
+archetype = "balanced"
+length_category = "long"
+
+[weights.entry]
+__default__ = 0.98
+brakes = 1.02
+suspension = 1.05
+
+[weights.apex]
+__default__ = 1.0
+anti_roll = 1.05
+aero = 1.1
+
+[weights.exit]
+__default__ = 1.02
+transmission = 1.08
+differential = 1.12
+engine = 1.05
+
+[hints]
+microsector_span = "extended"
+rho_detune_threshold = 0.72
+notes = "Reduce la fatiga térmica priorizando estabilidad en stint largos."
