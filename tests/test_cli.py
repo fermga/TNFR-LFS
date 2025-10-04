@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import csv
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
 from tnfr_lfs.cli.tnfr_lfs_cli import run_cli
+from tnfr_lfs.io.profiles import ProfileManager
+from tnfr_lfs.recommender.rules import RecommendationEngine
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -483,6 +487,95 @@ OutGauge Port 3000
     captured = capsys.readouterr()
     assert "OutSim Mode" in captured.out
     assert "OutGauge Mode" in str(excinfo.value)
+
+
+def test_profiles_persist_and_adjust(
+    tmp_path: Path,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "tnfr-lfs.toml"
+    config_path.write_text(
+        """
+[suggest]
+car_model = "generic_gt"
+track = "valencia"
+
+[write_set]
+car_model = "generic_gt"
+
+[paths]
+profiles = "profiles.toml"
+""".strip()
+        + "\n",
+        encoding="utf8",
+    )
+
+    baseline_path = tmp_path / "baseline.csv"
+    baseline_path.write_bytes(synthetic_stint_path.read_bytes())
+
+    improved_path = tmp_path / "improved.csv"
+    with synthetic_stint_path.open("r", encoding="utf8", newline="") as source, improved_path.open(
+        "w",
+        encoding="utf8",
+        newline="",
+    ) as destination:
+        reader = csv.reader(source)
+        writer = csv.writer(destination)
+        header = next(reader)
+        writer.writerow(header)
+        for row in reader:
+            if not row:
+                continue
+            values = list(row)
+            try:
+                nfr_value = float(values[10])
+                si_value = float(values[11])
+            except (ValueError, IndexError):
+                writer.writerow(values)
+                continue
+            values[10] = f"{nfr_value * 0.5:.6f}"
+            values[11] = f"{min(0.99, si_value + 0.1):.6f}"
+            writer.writerow(values)
+
+    run_cli(["suggest", str(baseline_path), "--export", "json"])
+
+    profiles_path = tmp_path / "profiles.toml"
+    assert profiles_path.exists()
+
+    run_cli(["write-set", str(baseline_path), "--car-model", "generic_gt"])
+
+    def entry_weight() -> float:
+        manager = ProfileManager(profiles_path)
+        engine = RecommendationEngine(
+            car_model="generic_gt",
+            track_name="valencia",
+            profile_manager=manager,
+        )
+        weights = engine._resolve_context("generic_gt", "valencia").thresholds.weights_for_phase("entry")
+        if isinstance(weights, Mapping):
+            return float(weights.get("__default__", 1.0))
+        return float(weights)
+
+    before_weight = entry_weight()
+
+    run_cli(["suggest", str(improved_path), "--export", "json"])
+
+    after_weight = entry_weight()
+    assert after_weight > before_weight
+
+    manager = ProfileManager(profiles_path)
+    engine = RecommendationEngine(
+        car_model="generic_gt",
+        track_name="valencia",
+        profile_manager=manager,
+    )
+    base_profile = engine._lookup_profile("generic_gt", "valencia")
+    snapshot = manager.resolve("generic_gt", "valencia", base_profile)
+    assert not snapshot.pending_plan
+    assert snapshot.last_result is not None
+    assert "last_result" in profiles_path.read_text(encoding="utf8")
 
 
 class _BusySocket(_FakeSocket):

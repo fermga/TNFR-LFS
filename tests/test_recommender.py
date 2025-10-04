@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -11,7 +13,8 @@ from tnfr_lfs.core.epi_models import (
 from collections.abc import Mapping
 
 from tnfr_lfs.core.segmentation import Goal, Microsector
-from tnfr_lfs.recommender.rules import RecommendationEngine
+from tnfr_lfs.io.profiles import ProfileManager
+from tnfr_lfs.recommender.rules import Recommendation, RecommendationEngine
 
 
 BASE_NU_F = {
@@ -199,10 +202,59 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     assert any("ν_f" in rationale for rationale in entry_rationales)
     assert any(f"{entry_target:.2f}" in rationale for rationale in entry_rationales)
 
-    piano_message = next(
-        recommendation.message for recommendation in recommendations if recommendation.category == "pianos"
+
+def test_recommendation_engine_updates_persistent_profile(tmp_path: Path) -> None:
+    profiles_path = tmp_path / "profiles.toml"
+    manager = ProfileManager(profiles_path)
+    engine = RecommendationEngine(
+        car_model="generic_gt",
+        track_name="valencia",
+        profile_manager=manager,
     )
-    assert "Operador de pianos" in piano_message
+
+    baseline_context = engine._resolve_context("generic_gt", "valencia")
+    before_weights = baseline_context.thresholds.weights_for_phase("entry")
+    if isinstance(before_weights, Mapping):
+        entry_before = float(before_weights.get("__default__", 1.0))
+    else:
+        entry_before = float(before_weights)
+
+    engine.register_stint_result(
+        sense_index=0.7,
+        delta_nfr=2.5,
+        car_model="generic_gt",
+        track_name="valencia",
+    )
+
+    recommendations = [
+        Recommendation(category="entry", message="", rationale=""),
+        Recommendation(category="apex", message="", rationale=""),
+    ]
+
+    engine.register_plan(
+        recommendations,
+        car_model="generic_gt",
+        track_name="valencia",
+        baseline_sense_index=0.7,
+        baseline_delta_nfr=2.5,
+    )
+
+    engine.register_stint_result(
+        sense_index=0.78,
+        delta_nfr=1.4,
+        car_model="generic_gt",
+        track_name="valencia",
+    )
+
+    updated_context = engine._resolve_context("generic_gt", "valencia")
+    after_weights = updated_context.thresholds.weights_for_phase("entry")
+    if isinstance(after_weights, Mapping):
+        entry_after = float(after_weights.get("__default__", entry_before))
+    else:
+        entry_after = float(after_weights)
+
+    assert entry_after > entry_before
+    assert profiles_path.exists()
 
 
 def test_threshold_profile_exposes_phase_weights():

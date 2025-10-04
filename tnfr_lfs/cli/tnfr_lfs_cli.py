@@ -8,7 +8,7 @@ import os
 import socket
 from dataclasses import asdict
 from pathlib import Path
-from statistics import mean
+from statistics import mean, fmean
 from time import monotonic, sleep
 from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
 
@@ -36,6 +36,7 @@ from ..core.segmentation import Microsector, segment_microsectors
 from ..exporters import exporters_registry
 from ..exporters.setup_plan import SetupChange, SetupPlan
 from ..io import logs
+from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
 from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
 
@@ -46,6 +47,8 @@ Bundles = Sequence[Any]
 CONFIG_ENV_VAR = "TNFR_LFS_CONFIG"
 DEFAULT_CONFIG_FILENAME = "tnfr-lfs.toml"
 DEFAULT_OUTPUT_DIR = Path("out")
+PROFILES_ENV_VAR = "TNFR_LFS_PROFILES"
+DEFAULT_PROFILES_FILENAME = "profiles.toml"
 
 
 def _validated_export(value: Any, *, fallback: str) -> str:
@@ -92,6 +95,18 @@ def _resolve_output_dir(config: Mapping[str, Any]) -> Path:
     return DEFAULT_OUTPUT_DIR
 
 
+def _resolve_profiles_path(config: Mapping[str, Any]) -> Path:
+    env_path = os.environ.get(PROFILES_ENV_VAR)
+    if env_path:
+        return Path(env_path).expanduser()
+    paths_cfg = config.get("paths")
+    if isinstance(paths_cfg, Mapping):
+        profile_path = paths_cfg.get("profiles")
+        if isinstance(profile_path, str):
+            return Path(profile_path).expanduser()
+    return Path(DEFAULT_PROFILES_FILENAME)
+
+
 def _default_car_model(config: Mapping[str, Any]) -> str:
     for section in ("analyze", "suggest", "write_set"):
         section_cfg = config.get(section)
@@ -110,6 +125,19 @@ def _default_track_name(config: Mapping[str, Any]) -> str:
             if isinstance(candidate, str) and candidate.strip():
                 return candidate
     return "generic"
+
+
+def _effective_delta_metric(metrics: Mapping[str, Any]) -> float:
+    series = metrics.get("delta_nfr_series")
+    if isinstance(series, Sequence):
+        values = [abs(float(value)) for value in series if isinstance(value, (int, float))]
+        if values:
+            return float(fmean(values))
+    value = metrics.get("delta_nfr", 0.0)
+    try:
+        return abs(float(value))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _resolve_baseline_destination(
@@ -1307,20 +1335,46 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     records = _load_records(namespace.telemetry)
     car_model = _default_car_model(config)
     track_name = _default_track_name(config)
-    bundles, microsectors, thresholds = _compute_insights(
+    profile_manager = ProfileManager(_resolve_profiles_path(config))
+    engine = RecommendationEngine(
+        car_model=car_model,
+        track_name=track_name,
+        profile_manager=profile_manager,
+    )
+    bundles, microsectors, thresholds, snapshot = _compute_insights(
         records,
         car_model=car_model,
         track_name=track_name,
+        engine=engine,
+        profile_manager=profile_manager,
     )
+    analyze_cfg = dict(config.get("analyze", {}))
+    default_target_delta = float(analyze_cfg.get("target_delta", 0.0))
+    default_target_si = float(analyze_cfg.get("target_si", 0.75))
+    objectives = snapshot.objectives if snapshot else ProfileObjectives()
+    target_delta = namespace.target_delta
+    target_si = namespace.target_si
+    if snapshot and target_delta == default_target_delta:
+        target_delta = objectives.target_delta_nfr
+    if snapshot and target_si == default_target_si:
+        target_si = objectives.target_sense_index
+    profile_manager.update_objectives(car_model, track_name, target_delta, target_si)
     lap_segments = _group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
         lap_segments,
-        namespace.target_delta,
-        namespace.target_si,
+        target_delta,
+        target_si,
         coherence_window=namespace.coherence_window,
         recursion_decay=namespace.recursion_decay,
         microsectors=microsectors,
         phase_weights=thresholds.phase_weights,
+    )
+    delta_metric = _effective_delta_metric(metrics)
+    engine.register_stint_result(
+        sense_index=metrics.get("sense_index", 0.0),
+        delta_nfr=delta_metric,
+        car_model=car_model,
+        track_name=track_name,
     )
     phase_messages = _phase_deviation_messages(
         bundles,
@@ -1372,25 +1426,48 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 
 def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
-    bundles, microsectors, thresholds = _compute_insights(
+    profile_manager = ProfileManager(_resolve_profiles_path(config))
+    engine = RecommendationEngine(
+        car_model=namespace.car_model,
+        track_name=namespace.track,
+        profile_manager=profile_manager,
+    )
+    bundles, microsectors, thresholds, snapshot = _compute_insights(
         records,
         car_model=namespace.car_model,
         track_name=namespace.track,
+        engine=engine,
+        profile_manager=profile_manager,
     )
     lap_segments = _group_records_by_lap(records)
     suggest_cfg = dict(config.get("suggest", {}))
+    objectives = snapshot.objectives if snapshot else ProfileObjectives()
+    target_delta = float(suggest_cfg.get("target_delta", objectives.target_delta_nfr))
+    target_si = float(suggest_cfg.get("target_si", objectives.target_sense_index))
+    profile_manager.update_objectives(
+        namespace.car_model,
+        namespace.track,
+        target_delta,
+        target_si,
+    )
     metrics = orchestrate_delta_metrics(
         lap_segments,
-        float(suggest_cfg.get("target_delta", 0.0)),
-        float(suggest_cfg.get("target_si", 0.75)),
+        target_delta,
+        target_si,
         coherence_window=int(suggest_cfg.get("coherence_window", 3)),
         recursion_decay=float(suggest_cfg.get("recursion_decay", 0.4)),
         microsectors=microsectors,
         phase_weights=thresholds.phase_weights,
     )
-    engine = RecommendationEngine()
     recommendations = engine.generate(
         bundles, microsectors, car_model=namespace.car_model, track_name=namespace.track
+    )
+    delta_metric = _effective_delta_metric(metrics)
+    engine.register_stint_result(
+        sense_index=metrics.get("sense_index", 0.0),
+        delta_nfr=delta_metric,
+        car_model=namespace.car_model,
+        track_name=namespace.track,
     )
     phase_messages = _phase_deviation_messages(
         bundles,
@@ -1432,20 +1509,46 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
     records = _load_records(namespace.telemetry)
     car_model = _default_car_model(config)
     track_name = _default_track_name(config)
-    bundles, microsectors, thresholds = _compute_insights(
+    profile_manager = ProfileManager(_resolve_profiles_path(config))
+    engine = RecommendationEngine(
+        car_model=car_model,
+        track_name=track_name,
+        profile_manager=profile_manager,
+    )
+    bundles, microsectors, thresholds, snapshot = _compute_insights(
         records,
         car_model=car_model,
         track_name=track_name,
+        engine=engine,
+        profile_manager=profile_manager,
     )
+    report_cfg = dict(config.get("report", {}))
+    default_target_delta = float(report_cfg.get("target_delta", 0.0))
+    default_target_si = float(report_cfg.get("target_si", 0.75))
+    objectives = snapshot.objectives if snapshot else ProfileObjectives()
+    target_delta = namespace.target_delta
+    target_si = namespace.target_si
+    if snapshot and target_delta == default_target_delta:
+        target_delta = objectives.target_delta_nfr
+    if snapshot and target_si == default_target_si:
+        target_si = objectives.target_sense_index
+    profile_manager.update_objectives(car_model, track_name, target_delta, target_si)
     lap_segments = _group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
         lap_segments,
-        namespace.target_delta,
-        namespace.target_si,
+        target_delta,
+        target_si,
         coherence_window=namespace.coherence_window,
         recursion_decay=namespace.recursion_decay,
         microsectors=microsectors,
         phase_weights=thresholds.phase_weights,
+    )
+    delta_metric = _effective_delta_metric(metrics)
+    engine.register_stint_result(
+        sense_index=metrics.get("sense_index", 0.0),
+        delta_nfr=delta_metric,
+        car_model=car_model,
+        track_name=track_name,
     )
     reports = _generate_out_reports(
         records,
@@ -1484,13 +1587,53 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
 
 def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
-    bundles, microsectors, _ = _compute_insights(
+    profile_manager = ProfileManager(_resolve_profiles_path(config))
+    track_name = _default_track_name(config)
+    engine = RecommendationEngine(
+        car_model=namespace.car_model,
+        track_name=track_name,
+        profile_manager=profile_manager,
+    )
+    bundles, microsectors, thresholds, snapshot = _compute_insights(
         records,
         car_model=namespace.car_model,
-        track_name=_default_track_name(config),
+        track_name=track_name,
+        engine=engine,
+        profile_manager=profile_manager,
     )
-    planner = SetupPlanner()
+    objectives = snapshot.objectives if snapshot else ProfileObjectives()
+    profile_manager.update_objectives(
+        namespace.car_model,
+        track_name,
+        objectives.target_delta_nfr,
+        objectives.target_sense_index,
+    )
+    lap_segments = _group_records_by_lap(records)
+    metrics = orchestrate_delta_metrics(
+        lap_segments,
+        objectives.target_delta_nfr,
+        objectives.target_sense_index,
+        coherence_window=3,
+        recursion_decay=0.4,
+        microsectors=microsectors,
+        phase_weights=thresholds.phase_weights,
+    )
+    delta_metric = _effective_delta_metric(metrics)
+    engine.register_stint_result(
+        sense_index=metrics.get("sense_index", 0.0),
+        delta_nfr=delta_metric,
+        car_model=namespace.car_model,
+        track_name=track_name,
+    )
+    planner = SetupPlanner(recommendation_engine=engine)
     plan = planner.plan(bundles, microsectors, car_model=namespace.car_model)
+    engine.register_plan(
+        plan.recommendations,
+        car_model=namespace.car_model,
+        track_name=track_name,
+        baseline_sense_index=metrics.get("sense_index", 0.0),
+        baseline_delta_nfr=delta_metric,
+    )
 
     action_recommendations = [
         rec for rec in plan.recommendations if rec.parameter and rec.delta is not None
@@ -1595,22 +1738,34 @@ def _compute_insights(
     *,
     car_model: str,
     track_name: str,
-) -> tuple[Bundles, Sequence[Microsector], ThresholdProfile]:
-    engine = RecommendationEngine(car_model=car_model, track_name=track_name)
-    profile = engine._resolve_context(car_model, track_name).thresholds  # type: ignore[attr-defined]
+    engine: RecommendationEngine | None = None,
+    profile_manager: ProfileManager | None = None,
+) -> tuple[Bundles, Sequence[Microsector], ThresholdProfile, ProfileSnapshot | None]:
+    engine = engine or RecommendationEngine(
+        car_model=car_model,
+        track_name=track_name,
+        profile_manager=profile_manager,
+    )
+    base_profile = engine._lookup_profile(car_model, track_name)
+    snapshot: ProfileSnapshot | None = None
+    if profile_manager is not None:
+        snapshot = profile_manager.resolve(car_model, track_name, base_profile)
+        profile = snapshot.thresholds
+    else:
+        profile = base_profile
     if not records:
-        return [], [], profile
+        return [], [], profile, snapshot
     extractor = EPIExtractor()
     bundles = extractor.extract(records)
     if not bundles:
-        return bundles, [], profile
+        return bundles, [], profile, snapshot
     overrides = profile.phase_weights
     microsectors = segment_microsectors(
         records,
         bundles,
         phase_weight_overrides=overrides if overrides else None,
     )
-    return bundles, microsectors, profile
+    return bundles, microsectors, profile, snapshot
 
 
 def _capture_udp_samples(
