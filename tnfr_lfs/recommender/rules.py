@@ -867,6 +867,7 @@ class AeroCoherenceRule:
         priority: int = 108,
         profile_name: str = "race",
         delta_step: float = 0.5,
+        min_aero_mechanical: float = 0.7,
     ) -> None:
         self.high_speed_threshold = float(high_speed_threshold)
         self.low_speed_tolerance = float(low_speed_tolerance)
@@ -874,6 +875,7 @@ class AeroCoherenceRule:
         self.priority = int(priority)
         self.profile_name = profile_name
         self.delta_step = float(delta_step)
+        self.min_aero_mechanical = float(min_aero_mechanical)
 
     def evaluate(
         self,
@@ -897,11 +899,14 @@ class AeroCoherenceRule:
                 continue
             high_imbalance = float(measures.get("aero_high_imbalance", 0.0))
             low_imbalance = float(measures.get("aero_low_imbalance", 0.0))
+            am_coherence = float(measures.get("aero_mechanical_coherence", 1.0))
             high_deviation = high_imbalance - target_high
             low_deviation = low_imbalance - target_low
             if abs(low_deviation) > self.low_speed_tolerance:
                 continue
             if abs(high_deviation) < self.high_speed_threshold:
+                continue
+            if am_coherence > self.min_aero_mechanical:
                 continue
 
             if high_deviation > 0:
@@ -919,7 +924,8 @@ class AeroCoherenceRule:
                     message=f"Alta velocidad microsector {microsector.index}: {action}",
                     rationale=(
                         f"ΔNFR aero alta velocidad {high_imbalance:+.2f} frente al objetivo {target_high:+.2f} "
-                        f"con baja velocidad estable ({low_imbalance:+.2f}). Refuerza carga {direction} "
+                        f"con baja velocidad estable ({low_imbalance:+.2f}) y C(a/m) {am_coherence:.2f}. "
+                        f"Refuerza carga {direction} "
                         f"({MANUAL_REFERENCES['aero']})."
                     ),
                     priority=self.priority,

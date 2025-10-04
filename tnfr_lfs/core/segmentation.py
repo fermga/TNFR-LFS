@@ -495,6 +495,7 @@ def segment_microsectors(
                 "aero_high_imbalance": window_metrics.aero_coherence.high_speed_imbalance,
                 "aero_low_samples": float(window_metrics.aero_coherence.low_speed_samples),
                 "aero_high_samples": float(window_metrics.aero_coherence.high_speed_samples),
+                "aero_mechanical_coherence": window_metrics.aero_mechanical_coherence,
             }
         )
         rec_trace: Tuple[Mapping[str, float | str | None], ...] = ()

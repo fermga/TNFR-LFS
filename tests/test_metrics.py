@@ -7,10 +7,21 @@ from tnfr_lfs.core.metrics import (
     WindowMetrics,
     compute_aero_coherence,
     compute_window_metrics,
+    resolve_aero_mechanical_coherence,
 )
 from dataclasses import replace
 from types import SimpleNamespace
 from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.core.epi_models import (
+    BrakesNode,
+    ChassisNode,
+    DriverNode,
+    EPIBundle,
+    SuspensionNode,
+    TrackNode,
+    TransmissionNode,
+    TyresNode,
+)
 
 
 def _record(timestamp: float, nfr: float, si: float = 0.8) -> TelemetryRecord:
@@ -77,6 +88,7 @@ def test_compute_window_metrics_trending_series() -> None:
     assert isinstance(metrics.aero_coherence, AeroCoherence)
     assert metrics.aero_coherence.high_speed_samples == 0
     assert metrics.aero_coherence.low_speed_samples == 0
+    assert metrics.aero_mechanical_coherence == pytest.approx(0.0)
 
 
 def test_compute_window_metrics_handles_small_windows() -> None:
@@ -96,6 +108,7 @@ def test_compute_window_metrics_handles_small_windows() -> None:
     assert metrics.coherence_index == pytest.approx(0.0)
     assert metrics.frequency_label == ""
     assert metrics.aero_coherence.high_speed_samples == 0
+    assert metrics.aero_mechanical_coherence == pytest.approx(0.0)
 
 
 def test_compute_window_metrics_empty_window() -> None:
@@ -121,6 +134,7 @@ def test_compute_window_metrics_empty_window() -> None:
         structural_contraction_lateral=0.0,
         frequency_label="",
         aero_coherence=AeroCoherence(),
+        aero_mechanical_coherence=0.0,
     )
 
 
@@ -147,3 +161,65 @@ def test_compute_aero_coherence_splits_bins() -> None:
     assert aero.low_speed_imbalance == pytest.approx(0.2)
     assert aero.high_speed_imbalance == pytest.approx(-0.5)
     assert "Aero" in aero.guidance or "Alta velocidad" in aero.guidance
+
+
+def test_aero_mechanical_coherence_blends_components() -> None:
+    records = [
+        replace(_record(0.0, 95.0, si=0.76), speed=28.0),
+        replace(_record(1.0, 96.5, si=0.77), speed=32.0),
+        replace(_record(2.0, 97.5, si=0.75), speed=58.0),
+        replace(_record(3.0, 98.5, si=0.74), speed=62.0),
+    ]
+    bundles = [
+        EPIBundle(
+            timestamp=record.timestamp,
+            epi=0.0,
+            delta_nfr=0.18 + 0.12,
+            sense_index=record.si,
+            tyres=TyresNode(delta_nfr=0.18, sense_index=record.si),
+            suspension=SuspensionNode(delta_nfr=0.12, sense_index=record.si),
+            chassis=ChassisNode(delta_nfr=0.0, sense_index=record.si, yaw_rate=record.yaw_rate),
+            brakes=BrakesNode(delta_nfr=0.0, sense_index=record.si),
+            transmission=TransmissionNode(
+                delta_nfr=0.0,
+                sense_index=record.si,
+                speed=record.speed,
+            ),
+            track=TrackNode(delta_nfr=0.0, sense_index=record.si),
+            driver=DriverNode(delta_nfr=0.0, sense_index=record.si),
+            structural_timestamp=float(index) * 0.4,
+            delta_breakdown={
+                "tyres": {
+                    "mu_eff_front": 0.24 - 0.02 * index,
+                    "mu_eff_rear": 0.14 + 0.04 * index,
+                }
+            },
+            delta_nfr_longitudinal=0.06,
+            delta_nfr_lateral=0.03,
+            coherence_index=0.78,
+        )
+        for index, record in enumerate(records)
+    ]
+
+    objectives = {
+        "target_sense_index": 0.75,
+        "target_delta_nfr": 0.5,
+        "target_mechanical_ratio": 0.45,
+        "target_aero_imbalance": 0.2,
+    }
+
+    metrics = compute_window_metrics(records, bundles=bundles, objectives=objectives)
+
+    assert 0.0 <= metrics.aero_mechanical_coherence <= 1.0
+    suspension_deltas = [bundle.suspension.delta_nfr for bundle in bundles]
+    tyre_deltas = [bundle.tyres.delta_nfr for bundle in bundles]
+    expected = resolve_aero_mechanical_coherence(
+        metrics.coherence_index,
+        metrics.aero_coherence,
+        suspension_deltas=suspension_deltas,
+        tyre_deltas=tyre_deltas,
+        target_delta_nfr=objectives["target_delta_nfr"],
+        target_mechanical_ratio=objectives["target_mechanical_ratio"],
+        target_aero_imbalance=objectives["target_aero_imbalance"],
+    )
+    assert metrics.aero_mechanical_coherence == pytest.approx(expected)

@@ -15,7 +15,13 @@ from .epi import (
     delta_nfr_by_node,
 )
 from .epi_models import EPIBundle
-from .metrics import AeroCoherence, WindowMetrics, compute_aero_coherence, compute_window_metrics
+from .metrics import (
+    AeroCoherence,
+    WindowMetrics,
+    compute_aero_coherence,
+    compute_window_metrics,
+    resolve_aero_mechanical_coherence,
+)
 from .operators import (
     DissonanceBreakdown,
     acoplamiento_operator,
@@ -52,6 +58,7 @@ __all__ = [
     "CalibrationSnapshot",
     "compute_window_metrics",
     "compute_aero_coherence",
+    "resolve_aero_mechanical_coherence",
     "compute_structural_timestamps",
     "resolve_time_axis",
     "AeroCoherence",

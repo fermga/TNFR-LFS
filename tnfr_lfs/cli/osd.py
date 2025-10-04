@@ -499,6 +499,12 @@ def _render_page_a(
         candidate = "\n".join((*lines, nu_wave))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(nu_wave)
+    amc_value = float(getattr(window_metrics, "aero_mechanical_coherence", 0.0))
+    if amc_value > 0.0:
+        amc_line = _truncate_line(f"C(a/m) {amc_value:.2f}")
+        candidate = "\n".join((*lines, amc_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(amc_line)
     lines.append(gradient_line)
     if (
         window_metrics.aero_coherence.high_speed_samples
@@ -895,6 +901,15 @@ def _render_page_c(
         if aero_guidance:
             lines.append(_truncate_line(f"Aero {aero_guidance}"))
         aero_metrics = getattr(plan, "aero_metrics", {}) or {}
+        amc_value = aero_metrics.get("aero_mechanical_coherence")
+        if amc_value is None:
+            amc_value = getattr(plan, "aero_mechanical_coherence", None)
+        try:
+            amc_float = float(amc_value) if amc_value is not None else None
+        except (TypeError, ValueError):
+            amc_float = None
+        if amc_float is not None:
+            lines.append(_truncate_line(f"C(a/m) {amc_float:.2f}"))
         high_imbalance = aero_metrics.get("high_speed_imbalance")
         low_imbalance = aero_metrics.get("low_speed_imbalance")
         if high_imbalance is not None and low_imbalance is not None:
