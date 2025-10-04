@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
-from tnfr_lfs.core.epi import TelemetryRecord, resolve_nu_f_by_node
+from tnfr_lfs.core.epi import TelemetryRecord
 
 
 def _record(timestamp: float, nfr: float, si: float = 0.8) -> TelemetryRecord:
@@ -58,11 +58,9 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.d_nfr_couple == pytest.approx(2.0)
     assert metrics.d_nfr_res == pytest.approx(2.0)
     assert metrics.d_nfr_flat == pytest.approx(2.0)
-    expected_nu_f = sum(
-        sum(resolve_nu_f_by_node(record).values()) / len(resolve_nu_f_by_node(record))
-        for record in records
-    ) / len(records)
-    assert metrics.nu_f == pytest.approx(expected_nu_f)
+    assert metrics.nu_f == pytest.approx(0.0)
+    assert metrics.phase_lag == pytest.approx(0.0)
+    assert metrics.phase_alignment == pytest.approx(1.0)
 
 
 def test_compute_window_metrics_handles_small_windows() -> None:
@@ -72,12 +70,11 @@ def test_compute_window_metrics_handles_small_windows() -> None:
     assert metrics.d_nfr_couple == 0.0
     assert metrics.d_nfr_res == 0.0
     assert metrics.d_nfr_flat == 0.0
-    expected_nu_f = sum(resolve_nu_f_by_node(single).values()) / len(
-        resolve_nu_f_by_node(single)
-    )
-    assert metrics.nu_f == pytest.approx(expected_nu_f)
+    assert metrics.nu_f == pytest.approx(0.0)
+    assert metrics.phase_lag == pytest.approx(0.0)
+    assert metrics.phase_alignment == pytest.approx(1.0)
 
 
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
-    assert metrics == WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0)
+    assert metrics == WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)

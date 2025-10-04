@@ -99,6 +99,17 @@ con el nuevo arquetipo antes de integrarlos en el reporte.  De este modo el
 estado se conserva entre invocaciones y la estrategia resultante se adapta a
 las condiciones cambiantes del stint.
 
+### Métricas de alineación de fase
+
+Cada microsector conserva ahora el desfase medido ``θ`` y su coseno ``Siφ``
+para cada fase, junto con los objetivos de alineación asociados al arquetipo
+vigente.  Los valores se derivan de un espectro cruzado entre la dirección del
+piloto y la respuesta combinada yaw/aceleración lateral, lo que expone la
+frecuencia dominante del apoyo y permite detectar atrasos o adelantos del
+chasis.  El HUD y las reglas del recomendador utilizan estas métricas para
+invertir las sugerencias de barras y amortiguadores cuando la fase medida
+pierde la alineación con el objetivo.
+
 ## Artefactos generados
 - `TNFR.pdf` se mantiene como artefacto compilado. Cualquier actualización sustantiva debe reflejarse primero en este `DESIGN.md`; el PDF puede regenerarse a partir del contenido actualizado y debe tratarse como derivado.
 

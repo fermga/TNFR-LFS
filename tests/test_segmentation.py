@@ -54,9 +54,17 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
             assert goal.slip_long_window[0] <= goal.slip_long_window[1]
             assert goal.yaw_rate_window[0] <= goal.yaw_rate_window[1]
             assert goal.dominant_nodes == microsector.dominant_nodes[goal.phase]
+            assert -math.pi <= goal.target_phase_lag <= math.pi
+            assert -1.0 <= goal.target_phase_alignment <= 1.0
+            assert -math.pi <= goal.measured_phase_lag <= math.pi
+            assert -1.0 <= goal.measured_phase_alignment <= 1.0
             indices = list(microsector.phase_indices(goal.phase))
             if indices:
                 assert goal.dominant_nodes
+        assert microsector.phase_lag
+        assert microsector.phase_alignment
+        assert set(microsector.phase_lag) >= set(PHASE_SEQUENCE)
+        assert set(microsector.phase_alignment) >= set(PHASE_SEQUENCE)
 
 
 def test_segment_microsectors_returns_empty_when_no_curvature():

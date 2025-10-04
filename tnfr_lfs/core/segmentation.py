@@ -33,6 +33,7 @@ from .epi import (
 from .epi_models import EPIBundle
 from .operators import mutation_operator, recursivity_operator
 from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias
+from .spectrum import phase_alignment
 
 # Thresholds derived from typical race car dynamics.  They can be tuned in
 # the future without affecting the public API of the segmentation module.
@@ -55,6 +56,10 @@ class Goal:
     target_delta_nfr: float
     target_sense_index: float
     nu_f_target: float
+    target_phase_lag: float
+    target_phase_alignment: float
+    measured_phase_lag: float
+    measured_phase_alignment: float
     slip_lat_window: Tuple[float, float]
     slip_long_window: Tuple[float, float]
     yaw_rate_window: Tuple[float, float]
@@ -79,6 +84,8 @@ class Microsector:
     dominant_nodes: Mapping[PhaseLiteral, Tuple[str, ...]]
     phase_weights: Mapping[PhaseLiteral, Mapping[str, float] | float]
     grip_rel: float
+    phase_lag: Mapping[PhaseLiteral, float]
+    phase_alignment: Mapping[PhaseLiteral, float]
     filtered_measures: Mapping[str, float]
     recursivity_trace: Tuple[Mapping[str, float | str | None], ...]
     last_mutation: Mapping[str, object] | None
@@ -367,6 +374,25 @@ def segment_microsectors(
                 for key, value in (mutation_info or {}).items()
             }
         occupancy = _compute_window_occupancy(goals, phase_samples, records)
+        phase_lag_map = {
+            goal.phase: float(goal.measured_phase_lag) for goal in goals
+        }
+        phase_alignment_map = {
+            goal.phase: float(goal.measured_phase_alignment) for goal in goals
+        }
+        for legacy, phases in LEGACY_PHASE_MAP.items():
+            lag_values = [phase_lag_map.get(candidate) for candidate in phases if candidate in phase_lag_map]
+            align_values = [
+                phase_alignment_map.get(candidate)
+                for candidate in phases
+                if candidate in phase_alignment_map
+            ]
+            if lag_values:
+                phase_lag_map[legacy] = float(mean(value for value in lag_values if value is not None))
+            if align_values:
+                phase_alignment_map[legacy] = float(
+                    mean(value for value in align_values if value is not None)
+                )
         microsectors.append(
             Microsector(
                 index=spec["index"],
@@ -383,6 +409,8 @@ def segment_microsectors(
                 dominant_nodes=dict(dominant_nodes),
                 phase_weights=phase_weights,
                 grip_rel=float(filtered_measures.get("grip_rel", grip_rel)),
+                phase_lag=dict(phase_lag_map),
+                phase_alignment=dict(phase_alignment_map),
                 filtered_measures=dict(filtered_measures),
                 recursivity_trace=rec_trace,
                 last_mutation=dict(mutation_details) if mutation_details is not None else None,
@@ -593,6 +621,7 @@ def _build_goals(
     boundaries: Mapping[PhaseLiteral, Tuple[int, int]],
 ) -> Tuple[Tuple[Goal, ...], Mapping[PhaseLiteral, Tuple[str, ...]]]:
     descriptions = _goal_descriptions(archetype)
+    alignment_targets = _phase_alignment_targets(archetype)
     goals: List[Goal] = []
     dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = {}
     for phase in PHASE_SEQUENCE:
@@ -606,6 +635,11 @@ def _build_goals(
         else:
             avg_delta = 0.0
             avg_si = 1.0
+
+        _, measured_lag, measured_alignment = phase_alignment(phase_records)
+        target_lag, target_alignment = alignment_targets.get(
+            phase, (0.0, 0.9)
+        )
 
         node_metrics: Dict[str, Dict[str, float]] = defaultdict(lambda: {"abs_delta": 0.0, "nu_f_weight": 0.0})
         for local_index, idx in enumerate(indices):
@@ -661,6 +695,10 @@ def _build_goals(
                 target_delta_nfr=avg_delta,
                 target_sense_index=avg_si,
                 nu_f_target=nu_f_target,
+                target_phase_lag=target_lag,
+                target_phase_alignment=target_alignment,
+                measured_phase_lag=measured_lag,
+                measured_phase_alignment=measured_alignment,
                 slip_lat_window=slip_lat_window,
                 slip_long_window=slip_long_window,
                 yaw_rate_window=yaw_rate_window,
@@ -867,6 +905,55 @@ def _adjust_phase_weights_with_dominance(
                 adjusted = True
         spec["phase_weights"] = profile
     return adjusted
+
+
+def _phase_alignment_targets(archetype: str) -> Mapping[str, Tuple[float, float]]:
+    base: Dict[str, Tuple[float, float]] = {
+        "entry1": (0.0, 0.9),
+        "entry2": (0.0, 0.9),
+        "apex3a": (0.0, 0.92),
+        "apex3b": (0.0, 0.92),
+        "exit4": (0.0, 0.88),
+    }
+    if archetype == "apoyo":
+        adjustments = {
+            "entry1": (-0.08, 0.9),
+            "entry2": (-0.05, 0.9),
+            "apex3a": (-0.02, 0.93),
+            "apex3b": (0.0, 0.94),
+            "exit4": (0.04, 0.9),
+        }
+    elif archetype == "liberacion":
+        adjustments = {
+            "entry1": (0.05, 0.85),
+            "entry2": (0.08, 0.82),
+            "apex3a": (0.12, 0.8),
+            "apex3b": (0.14, 0.78),
+            "exit4": (0.18, 0.75),
+        }
+    elif archetype == "recuperacion":
+        adjustments = {
+            "entry1": (0.0, 0.88),
+            "entry2": (0.0, 0.9),
+            "apex3a": (0.0, 0.9),
+            "apex3b": (0.0, 0.92),
+            "exit4": (0.02, 0.9),
+        }
+    else:
+        adjustments = {
+            "entry1": (0.0, 0.92),
+            "entry2": (0.0, 0.92),
+            "apex3a": (0.0, 0.94),
+            "apex3b": (0.0, 0.94),
+            "exit4": (0.0, 0.9),
+        }
+    result: Dict[str, Tuple[float, float]] = {}
+    for phase, defaults in base.items():
+        if phase in adjustments:
+            result[phase] = adjustments[phase]
+        else:
+            result[phase] = defaults
+    return result
 
 
 def _goal_descriptions(archetype: str) -> Mapping[str, str]:

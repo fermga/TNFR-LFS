@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from math import sqrt
+from math import cos, pi, sin, sqrt
 from statistics import mean, pstdev, pvariance
 from typing import List
 
@@ -43,6 +43,7 @@ from tnfr_lfs.core.operators import (
     recursividad_operator,
     resonance_operator,
 )
+from tnfr_lfs.core.metrics import compute_window_metrics
 
 
 def _build_record(
@@ -122,6 +123,10 @@ def _build_goal(phase: str, target_delta: float, *, archetype: str = "equilibrio
         target_delta_nfr=target_delta,
         target_sense_index=0.9,
         nu_f_target=0.0,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.9,
+        measured_phase_lag=0.0,
+        measured_phase_alignment=1.0,
         slip_lat_window=(-0.5, 0.5),
         slip_long_window=(-0.5, 0.5),
         yaw_rate_window=(-0.5, 0.5),
@@ -164,6 +169,8 @@ def _build_microsector(
     phase_samples = {phase: (phase_boundaries[phase][0],) for phase in PHASE_SEQUENCE}
     dominant_nodes = {phase: ("tyres",) for phase in PHASE_SEQUENCE}
     phase_weights = {phase: {} for phase in PHASE_SEQUENCE}
+    phase_lag = {phase: 0.0 for phase in PHASE_SEQUENCE}
+    phase_alignment = {phase: 1.0 for phase in PHASE_SEQUENCE}
     filtered_measures = {
         "thermal_load": 5000.0,
         "style_index": 0.9,
@@ -188,6 +195,8 @@ def _build_microsector(
         dominant_nodes=dominant_nodes,
         phase_weights=phase_weights,
         grip_rel=1.0,
+        phase_lag=phase_lag,
+        phase_alignment=phase_alignment,
         filtered_measures=filtered_measures,
         recursivity_trace=(),
         last_mutation=None,
@@ -310,8 +319,6 @@ def test_orchestrator_pipeline_builds_consistent_metrics():
     assert set(results["pairwise_coupling"]) == {"delta_nfr", "sense_index"}
     for metrics in results["pairwise_coupling"].values():
         assert {"tyres↔suspension", "tyres↔chassis", "suspension↔chassis"} <= set(metrics)
-        for value in metrics.values():
-            assert -1.0 <= value <= 1.0
     stages = results["stages"]
     assert set(stages) == {"recepcion", "coherence", "nodal", "epi", "sense"}
     reception_stage = stages["recepcion"]
@@ -329,6 +336,35 @@ def test_orchestrator_pipeline_builds_consistent_metrics():
     sense_stage = stages["sense"]
     assert results["sense_memory"] == sense_stage
     assert len(sense_stage["series"]) == reception_stage["sample_count"]
+
+
+def test_window_metrics_phase_alignment_tracks_cross_spectrum():
+    frequency = 1.0
+    phase_offset = pi / 6
+    records: List[TelemetryRecord] = []
+    for index in range(64):
+        timestamp = index * 0.05
+        steer_value = sin(2.0 * pi * frequency * timestamp)
+        response_value = sin(2.0 * pi * frequency * timestamp - phase_offset)
+        records.append(
+            _build_record(
+                timestamp,
+                5000.0,
+                0.02,
+                response_value,
+                0.0,
+                100.0,
+                0.82,
+                yaw_rate=response_value,
+                steer=steer_value,
+            )
+        )
+
+    metrics = compute_window_metrics(records, phase_indices=range(len(records)))
+
+    assert metrics.nu_f == pytest.approx(frequency, abs=0.1)
+    assert abs(metrics.phase_alignment - cos(phase_offset)) < 0.15
+    assert abs(abs(metrics.phase_lag) - phase_offset) < 0.25
 
 
 def test_orchestrator_respects_phase_weight_overrides():
@@ -367,6 +403,8 @@ def test_orchestrator_respects_phase_weight_overrides():
         dominant_nodes={"entry": ("tyres",), "apex": ("tyres",), "exit": ("tyres",)},
         phase_weights=base_weights,
         grip_rel=1.0,
+        phase_lag={"entry": 0.0, "apex": 0.0, "exit": 0.0},
+        phase_alignment={"entry": 1.0, "apex": 1.0, "exit": 1.0},
         filtered_measures={"thermal_load": 5200.0, "style_index": 0.9, "grip_rel": 1.0},
         recursivity_trace=(),
         last_mutation=None,

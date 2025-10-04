@@ -307,6 +307,10 @@ def acceptance_microsectors() -> List[Microsector]:
             target_delta_nfr=0.3,
             target_sense_index=0.7,
             nu_f_target=0.18,
+            target_phase_lag=-0.05,
+            target_phase_alignment=0.88,
+            measured_phase_lag=-0.02,
+            measured_phase_alignment=0.9,
             slip_lat_window=(-0.4, 0.4),
             slip_long_window=(-0.4, 0.4),
             yaw_rate_window=(-0.4, 0.4),
@@ -319,6 +323,10 @@ def acceptance_microsectors() -> List[Microsector]:
             target_delta_nfr=0.6,
             target_sense_index=0.8,
             nu_f_target=0.2,
+            target_phase_lag=0.0,
+            target_phase_alignment=0.92,
+            measured_phase_lag=0.01,
+            measured_phase_alignment=0.91,
             slip_lat_window=(-0.35, 0.35),
             slip_long_window=(-0.35, 0.35),
             yaw_rate_window=(-0.3, 0.3),
@@ -331,6 +339,10 @@ def acceptance_microsectors() -> List[Microsector]:
             target_delta_nfr=0.2,
             target_sense_index=0.75,
             nu_f_target=0.16,
+            target_phase_lag=0.04,
+            target_phase_alignment=0.87,
+            measured_phase_lag=0.05,
+            measured_phase_alignment=0.86,
             slip_lat_window=(-0.3, 0.3),
             slip_long_window=(-0.3, 0.3),
             yaw_rate_window=(-0.25, 0.25),
@@ -348,6 +360,8 @@ def acceptance_microsectors() -> List[Microsector]:
         "exit": 0.85,
         "__default__": 1.0,
     }
+    phase_lag = {"entry": -0.02, "apex": 0.01, "exit": 0.05}
+    phase_alignment = {"entry": 0.9, "apex": 0.91, "exit": 0.86}
     microsector = Microsector(
         index=0,
         start_time=0.0,
@@ -367,6 +381,8 @@ def acceptance_microsectors() -> List[Microsector]:
         },
         phase_weights=phase_weights,
         grip_rel=1.08,
+        phase_lag=phase_lag,
+        phase_alignment=phase_alignment,
         filtered_measures={"thermal_load": 5185.0, "style_index": 0.63},
         recursivity_trace=(
             {"phase": "entry", "thermal_load": 5050.0, "style_index": 0.6},

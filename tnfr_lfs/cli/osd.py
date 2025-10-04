@@ -228,7 +228,10 @@ class TelemetryHUD:
             microsectors=self._microsectors,
             phase_weights=self._thresholds.phase_weights,
         )
-        window_metrics = compute_window_metrics(records)
+        phase_indices: Sequence[int] | None = None
+        if active:
+            phase_indices = active.microsector.phase_samples.get(active.phase)
+        window_metrics = compute_window_metrics(records, phase_indices=phase_indices)
         resonance = analyse_modal_resonance(records)
         recommendations = self.recommendation_engine.generate(
             bundles,
@@ -236,13 +239,32 @@ class TelemetryHUD:
             car_model=self.car_model,
             track_name=self.track_name,
         )
+        alignment_hint = None
+        if active and active.goal:
+            target_alignment = float(active.goal.target_phase_alignment)
+            target_lag = float(active.goal.target_phase_lag)
+            measured_alignment = float(window_metrics.phase_alignment)
+            measured_lag = float(window_metrics.phase_lag)
+            if (
+                measured_alignment < target_alignment - 0.1
+                or measured_alignment < 0.0
+                or abs(measured_lag - target_lag) > 0.2
+            ):
+                alignment_hint = (
+                    f"θ {measured_lag:+.2f}rad · Siφ {measured_alignment:+.2f}"
+                    f" (obj θ {target_lag:+.2f} · Siφ {target_alignment:+.2f})"
+                )
         phase_hint = None
         if active:
             active_family = phase_family(active.phase)
             for recommendation in recommendations:
                 if phase_family(recommendation.category) == active_family:
                     phase_hint = recommendation.message
+                    if alignment_hint:
+                        phase_hint = f"{phase_hint} · {alignment_hint}"
                     break
+        if phase_hint is None and alignment_hint:
+            phase_hint = alignment_hint
 
         now = self._time_fn()
         if self._plan_interval == 0.0 or now >= self._last_plan_time + self._plan_interval:
@@ -341,7 +363,8 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
     return (
         f"Si {window_metrics.si:.2f} · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
         f" · ∇Res {window_metrics.d_nfr_res:+.2f} · ∇Flat {window_metrics.d_nfr_flat:+.2f}"
-        f" · ν_f {window_metrics.nu_f:.2f}Hz"
+        f" · ν_f {window_metrics.nu_f:.2f}Hz · θ {window_metrics.phase_lag:+.2f}rad"
+        f" · Siφ {window_metrics.phase_alignment:+.2f}"
     )
 
 
