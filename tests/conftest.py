@@ -302,7 +302,7 @@ def acceptance_microsectors() -> List[Microsector]:
     goals = (
         Goal(
             phase="entry",
-            archetype="ataque",
+            archetype="hairpin",
             description="Entrada controlada",
             target_delta_nfr=0.3,
             target_sense_index=0.7,
@@ -320,7 +320,7 @@ def acceptance_microsectors() -> List[Microsector]:
         ),
         Goal(
             phase="apex",
-            archetype="apoyo",
+            archetype="chicane",
             description="Apoyo estable",
             target_delta_nfr=0.6,
             target_sense_index=0.8,
@@ -338,7 +338,7 @@ def acceptance_microsectors() -> List[Microsector]:
         ),
         Goal(
             phase="exit",
-            archetype="salida",
+            archetype="fast",
             description="Tracción progresiva",
             target_delta_nfr=0.2,
             target_sense_index=0.75,

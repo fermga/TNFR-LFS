@@ -119,7 +119,7 @@ def _axis_bundle(delta_nfr: float, long_component: float, lat_component: float, 
 def _udr_goal(phase: str = "apex", target_delta: float = 0.2) -> Goal:
     return Goal(
         phase=phase,
-        archetype="apoyo",
+        archetype="hairpin",
         description="",
         target_delta_nfr=target_delta,
         target_sense_index=0.85,
@@ -134,6 +134,7 @@ def _udr_goal(phase: str = "apex", target_delta: float = 0.2) -> Goal:
         slip_long_window=(-0.3, 0.3),
         yaw_rate_window=(-0.3, 0.3),
         dominant_nodes=("suspension", "chassis"),
+        detune_ratio_weights={"longitudinal": 0.7, "lateral": 0.3},
     )
 
 
@@ -167,7 +168,7 @@ def _udr_microsector(goal: Goal, *, udr: float, sample_count: int) -> Microsecto
 def test_tyre_balance_rule_generates_guidance():
     goal = Goal(
         phase="apex",
-        archetype="equilibrio",
+        archetype="medium",
         description="",
         target_delta_nfr=0.4,
         target_sense_index=0.9,
@@ -327,7 +328,7 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         goals=(
             Goal(
                 phase="entry",
-                archetype="apoyo",
+                archetype="hairpin",
                 description="",
                 target_delta_nfr=entry_target,
                 target_sense_index=0.9,
@@ -345,7 +346,7 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
             ),
             Goal(
                 phase="apex",
-                archetype="apoyo",
+                archetype="hairpin",
                 description="",
                 target_delta_nfr=apex_target,
                 target_sense_index=0.9,
@@ -363,7 +364,7 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
             ),
             Goal(
                 phase="exit",
-                archetype="apoyo",
+                archetype="hairpin",
                 description="",
                 target_delta_nfr=exit_target,
                 target_sense_index=0.9,
@@ -615,7 +616,7 @@ def test_track_specific_profile_tightens_entry_threshold():
         goals=(
             Goal(
                 phase="entry",
-                archetype="apoyo",
+                archetype="hairpin",
                 description="",
                 target_delta_nfr=0.0,
                 target_sense_index=0.9,
@@ -633,7 +634,7 @@ def test_track_specific_profile_tightens_entry_threshold():
             ),
             Goal(
                 phase="apex",
-                archetype="apoyo",
+                archetype="hairpin",
                 description="",
                 target_delta_nfr=0.2,
                 target_sense_index=0.9,
@@ -651,7 +652,7 @@ def test_track_specific_profile_tightens_entry_threshold():
             ),
             Goal(
                 phase="exit",
-                archetype="apoyo",
+                archetype="hairpin",
                 description="",
                 target_delta_nfr=-0.1,
                 target_sense_index=0.9,
@@ -913,7 +914,7 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
     results = [_bundle(1.5, 0.0), _bundle(1.55, 0.1)]
     goal = Goal(
         phase="apex",
-        archetype="apoyo",
+        archetype="hairpin",
         description="",
         target_delta_nfr=0.2,
         target_sense_index=0.88,
@@ -965,7 +966,7 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
 def test_detune_ratio_rule_emits_modal_guidance() -> None:
     goal = Goal(
         phase="apex",
-        archetype="apoyo",
+        archetype="hairpin",
         description="",
         target_delta_nfr=0.3,
         target_sense_index=0.85,
@@ -980,6 +981,7 @@ def test_detune_ratio_rule_emits_modal_guidance() -> None:
         slip_long_window=(-0.3, 0.3),
         yaw_rate_window=(-0.3, 0.3),
         dominant_nodes=("suspension", "chassis"),
+        detune_ratio_weights={"longitudinal": 0.7, "lateral": 0.3},
     )
     microsector = Microsector(
         index=4,
@@ -1019,6 +1021,8 @@ def test_detune_ratio_rule_emits_modal_guidance() -> None:
     rationale = recommendations[0].rationale.lower()
     assert "ρ=" in recommendations[0].rationale
     assert "barras" in rationale
+    assert "detune" in rationale
+    assert "longitudinal" in rationale
 
 
 def test_useful_dissonance_rule_reinforces_rear_when_udr_high(car_track_thresholds):
@@ -1155,7 +1159,7 @@ def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
     )
     goal = Goal(
         phase="apex3a",
-        archetype="apoyo",
+        archetype="hairpin",
         description="",
         target_delta_nfr=0.05,
         target_sense_index=0.88,

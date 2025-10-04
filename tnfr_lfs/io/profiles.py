@@ -12,6 +12,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
+from ..core.archetypes import PhaseArchetypeTargets
 from ..recommender.rules import (
     DEFAULT_THRESHOLD_LIBRARY,
     DEFAULT_THRESHOLD_PROFILE,
@@ -106,6 +107,7 @@ class ProfileRecord:
             rho_detune_threshold=base_profile.rho_detune_threshold,
             phase_targets=base_profile.phase_targets,
             phase_weights=merged_weights,
+            archetype_phase_targets=base_profile.archetype_phase_targets,
         )
 
     def apply_mutation(
@@ -182,6 +184,7 @@ class ProfileSnapshot:
     jacobian: Mapping[str, Mapping[str, float]]
     phase_jacobian: Mapping[str, Mapping[str, Mapping[str, float]]]
     tyre_offsets: Mapping[str, float]
+    archetype_targets: Mapping[str, Mapping[str, PhaseArchetypeTargets]]
 
 
 class ProfileManager:
@@ -242,6 +245,7 @@ class ProfileManager:
             jacobian=MappingProxyType(jacobian_snapshot),
             phase_jacobian=MappingProxyType(phase_jacobian_snapshot),
             tyre_offsets=offsets_snapshot,
+            archetype_targets=thresholds.archetype_phase_targets,
         )
 
     def register_plan(

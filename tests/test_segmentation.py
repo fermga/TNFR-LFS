@@ -5,6 +5,7 @@ from dataclasses import replace
 from statistics import mean
 from typing import Tuple
 
+from tnfr_lfs.core.archetypes import archetype_phase_targets
 from tnfr_lfs.core.coherence import sense_index
 from tnfr_lfs.core.epi import (
     DEFAULT_PHASE_WEIGHTS,
@@ -14,7 +15,7 @@ from tnfr_lfs.core.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias
+from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias, phase_family
 from tnfr_lfs.core.segmentation import Microsector, segment_microsectors
 
 
@@ -107,6 +108,66 @@ def test_segment_microsectors_returns_empty_when_no_curvature():
     assert segment_microsectors(records, bundles) == []
 
 
+def _dynamic_record(timestamp: float, lateral: float, speed: float) -> TelemetryRecord:
+    return TelemetryRecord(
+        timestamp=timestamp,
+        vertical_load=5200.0,
+        slip_ratio=0.03,
+        lateral_accel=lateral,
+        longitudinal_accel=-0.2,
+        yaw=0.0,
+        pitch=0.0,
+        roll=0.0,
+        brake_pressure=0.5,
+        locking=0.0,
+        nfr=480.0,
+        si=0.82,
+        speed=speed,
+        yaw_rate=0.0,
+        slip_angle=0.02,
+        steer=0.1,
+        throttle=0.6,
+        gear=3,
+        vertical_load_front=2600.0,
+        vertical_load_rear=2600.0,
+        mu_eff_front=0.82,
+        mu_eff_rear=0.78,
+        mu_eff_front_lateral=0.84,
+        mu_eff_front_longitudinal=0.74,
+        mu_eff_rear_lateral=0.82,
+        mu_eff_rear_longitudinal=0.72,
+        suspension_travel_front=0.02,
+        suspension_travel_rear=0.02,
+        suspension_velocity_front=0.1,
+        suspension_velocity_rear=0.1,
+    )
+
+
+def _classify_from_series(lateral: list[float], speeds: list[float], dt: float) -> str:
+    records = [_dynamic_record(index * dt, lat, speeds[index]) for index, lat in enumerate(lateral)]
+    bundles = EPIExtractor().extract(records)
+    microsectors = segment_microsectors(records, bundles)
+    assert microsectors
+    return microsectors[0].goals[0].archetype
+
+
+def test_archetype_detection_uses_dynamic_thresholds() -> None:
+    hairpin_lateral = [2.5, 2.6, 2.7, 2.6, 2.5, 2.4]
+    hairpin_speeds = [42.0, 36.0, 30.0, 28.0, 30.0, 34.0]
+    hairpin = _classify_from_series(hairpin_lateral, hairpin_speeds, 0.5)
+    assert hairpin == "hairpin"
+
+    chicane_lateral = [1.8, 1.7, -1.8, -1.7, 1.6, 1.5]
+    chicane_speeds = [48.0, 47.0, 46.0, 45.0, 46.0, 47.0]
+    chicane = _classify_from_series(chicane_lateral, chicane_speeds, 0.35)
+    assert chicane == "chicane"
+
+    fast_lateral = [1.35, 1.4, 1.42, 1.38]
+    fast_speeds = [62.0, 61.0, 60.5, 60.0]
+    fast = _classify_from_series(fast_lateral, fast_speeds, 0.4)
+    assert fast == "fast"
+
+
 def _yaw_rate(records: list[TelemetryRecord], index: int) -> float:
     if index <= 0:
         return 0.0
@@ -177,6 +238,19 @@ def test_goal_targets_match_phase_averages(
             yaw_rates = [_yaw_rate(synthetic_records, idx) for idx in indices]
             for value in yaw_rates:
                 assert yaw_low - 1e-6 <= value <= yaw_high + 1e-6
+
+
+def test_goals_expose_archetype_targets(synthetic_microsectors) -> None:
+    for microsector in synthetic_microsectors:
+        for goal in microsector.goals:
+            targets = archetype_phase_targets(goal.archetype)
+            family = phase_family(goal.phase)
+            phase_target = targets.get(family)
+            assert phase_target is not None
+            assert goal.archetype_delta_nfr_long_target == pytest.approx(phase_target.delta_nfr_long)
+            assert goal.archetype_delta_nfr_lat_target == pytest.approx(phase_target.delta_nfr_lat)
+            assert goal.archetype_nu_f_target == pytest.approx(phase_target.nu_f)
+            assert goal.archetype_si_phi_target == pytest.approx(phase_target.si_phi)
 
 
 def test_segment_microsectors_applies_phase_weight_overrides(

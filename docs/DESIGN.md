@@ -94,21 +94,23 @@ dos operadores con estado ubicados en ``tnfr_lfs.core.operators``:
 
 La segmentación de microsectores invoca ambos operadores: primero suaviza las
 medidas del microsector activo y después evalúa si la combinación de entropía,
-fase y condiciones dinámicas (eventos de frenada o apoyo) requiere mutar los
-objetivos generados por :func:`segment_microsectors`.  Cuando se produce una
-mutación, la segmentación recalcula los objetivos de entrada, vértice y salida
-con el nuevo arquetipo antes de integrarlos en el reporte.  De este modo el
-estado se conserva entre invocaciones y la estrategia resultante se adapta a
-las condiciones cambiantes del stint.
+fase y condiciones dinámicas (curvatura sostenida, duración del apoyo,
+reducciones de velocidad y cambios de dirección) requiere mutar los objetivos
+generados por :func:`segment_microsectors`.  Cuando se produce una mutación, la
+segmentación recalcula los objetivos de entrada, vértice y salida con el nuevo
+arquetipo —``hairpin``, ``medium``, ``fast`` o ``chicane``— antes de integrarlos
+en el reporte.  De este modo el estado se conserva entre invocaciones y la
+estrategia resultante se adapta a las condiciones cambiantes del stint.
 
 ### Métricas de alineación de fase
 
 Cada microsector conserva ahora el desfase medido ``θ`` y su coseno ``Siφ``
-para cada fase, junto con los objetivos de alineación asociados al arquetipo
-vigente.  Los valores se derivan de un espectro cruzado entre la dirección del
-piloto y la respuesta combinada yaw/aceleración lateral, lo que expone la
-frecuencia dominante del apoyo y permite detectar atrasos o adelantos del
-chasis.  El HUD y las reglas del recomendador utilizan estas métricas para
+para cada fase, junto con los objetivos de alineación y los pesos de detune
+asociados al arquetipo vigente.  Los valores se derivan de un espectro cruzado
+entre la dirección del piloto y la respuesta combinada yaw/aceleración lateral,
+lo que expone la frecuencia dominante del apoyo y permite detectar atrasos o
+adelantos del chasis.  El HUD y las reglas del recomendador utilizan estas
+métricas, junto con los objetivos ΔNFR⊥/∥ y ``ν_f`` fijados por arquetipo, para
 invertir las sugerencias de barras y amortiguadores cuando la fase medida
 pierde la alineación con el objetivo.
 
