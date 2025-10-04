@@ -208,6 +208,13 @@ persists ``out/<baseline-stem>/sense_index_map.json`` and
 ``paths.output_dir`` setting) so external tooling can reuse the Sense
 Index heatmap and modal resonance analysis without re-running the CLI.
 
+When a configuration pack is available the JSON exporter also emits
+``car`` and ``tnfr_targets`` sections. The former mirrors the metadata
+resolved via ``data/cars`` (abbreviation, drivetrain, rotation group…)
+while the latter surfaces the TNFR objectives declared in
+``data/profiles`` so dashboards can expose the active targets alongside
+the time-series.
+
 ### ``suggest``
 
 Runs the rule-based recommendation engine on top of an existing baseline
@@ -216,6 +223,10 @@ and exports the suggestions using the chosen exporter.  Use
 The exported payload mirrors ``analyze`` by embedding
 ``phase_messages`` and the ``reports`` artefacts so the tuning rationale
 remains transparent when sharing the recommendations.
+
+Pack-aware runs expose the same ``car`` and ``tnfr_targets`` sections as
+``analyze`` to capture the resolved TNFR objectives inside the exported
+payload.
 
 ### ``report``
 
@@ -245,6 +256,10 @@ The additional artefacts provide:
 Creates a setup plan by blending the optimisation-aware search module
 with the rule engine.  The resulting payload follows the
 ``tnfr_lfs.exporters.setup_plan.SetupPlan`` schema, including:
+
+When the CLI has access to a configuration pack (``paths.pack_root`` or
+``--pack-root``) the JSON payload embeds the vehicle metadata and pack
+objectives under ``car`` and ``tnfr_targets`` respectively.
 
 ```
 {
@@ -302,6 +317,7 @@ track = "spa"
 
 [paths]
 output_dir = "out"
+pack_root = "~/tnfr-pack"
 
 [limits.delta_nfr]
 entry = 0.5
@@ -313,6 +329,8 @@ This configuration adjusts the default UDP ports used by ``baseline``,
 selects the exporter for analytics/reporting, sets the default
 car/track for ``suggest`` and overrides the tolerance used when
 highlighting ΔNFR↓ deviations in ``phase_messages``.
+
+When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config/global.toml`` together with ``data/cars`` and ``data/profiles``) the CLI resolves car metadata and TNFR objectives from that bundle. The ``--pack-root`` flag overrides the configured value for a single invocation.
 
 ### Preparing ``cfg.txt``
 

@@ -4,6 +4,7 @@ import csv
 import json
 import re
 from collections.abc import Iterable, Mapping
+from textwrap import dedent
 from pathlib import Path
 
 import pytest
@@ -61,6 +62,77 @@ def test_baseline_generates_timestamped_run(
     assert str(run_path.relative_to(tmp_path)) in captured.out
 
 
+@pytest.fixture()
+def cli_config_pack(tmp_path: Path) -> Path:
+    pack_root = tmp_path / "pack"
+    config_dir = pack_root / "config"
+    cars_dir = pack_root / "data" / "cars"
+    profiles_dir = pack_root / "data" / "profiles"
+    profiles_dir.mkdir(parents=True)
+    cars_dir.mkdir(parents=True)
+    config_dir.mkdir(parents=True)
+
+    cars_dir.joinpath("ABC.toml").write_text(
+        dedent(
+            """
+            abbrev = "ABC"
+            name = "Alpha"
+            license = "demo"
+            engine_layout = "front"
+            drive = "RWD"
+            weight_kg = 900
+            wheel_rotation_group_deg = 30
+            profile = "custom-profile"
+            """
+        ),
+        encoding="utf8",
+    )
+
+    profiles_dir.joinpath("custom.toml").write_text(
+        dedent(
+            """
+            [meta]
+            id = "custom-profile"
+            category = "road"
+
+            [targets.balance]
+            delta_nfr = 0.42
+            sense_index = 0.83
+
+            [policy.steering]
+            aggressiveness = 0.5
+
+            [recommender.steering]
+            kp = 1.0
+            """
+        ),
+        encoding="utf8",
+    )
+
+    config_dir.joinpath("global.toml").write_text(
+        dedent(
+            """
+            [analyze]
+            car_model = "ABC"
+
+            [suggest]
+            car_model = "ABC"
+            track = "valencia"
+
+            [write_set]
+            car_model = "ABC"
+
+            [osd]
+            car_model = "ABC"
+            track = "valencia"
+            """
+        ),
+        encoding="utf8",
+    )
+
+    return pack_root
+
+
 def test_template_command_emits_phase_presets() -> None:
     output = run_cli([
         "template",
@@ -103,6 +175,8 @@ def test_analyze_pipeline_json_export(
 
     captured = capsys.readouterr()
     payload = json.loads(output)
+    assert payload["car"]["abbrev"] == "XFG"
+    assert payload["tnfr_targets"]["meta"]["category"] == "road"
     assert payload["telemetry_samples"] == 17
     assert len(payload["microsectors"]) == 2
     assert "microsectors" in captured.out
@@ -169,6 +243,10 @@ def test_suggest_pipeline(
     ])
 
     payload = json.loads(output)
+    if "car" in payload:
+        assert isinstance(payload["car"], dict)
+    if "tnfr_targets" in payload:
+        assert "targets" in payload["tnfr_targets"]
     assert "recommendations" in payload
     assert isinstance(payload["recommendations"], list)
     assert payload["phase_messages"]
@@ -646,6 +724,53 @@ profiles = "profiles.toml"
     assert not snapshot.pending_plan
     assert snapshot.last_result is not None
     assert "last_result" in profiles_path.read_text(encoding="utf8")
+
+
+def test_analyze_uses_pack_root_metadata(
+    tmp_path: Path,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cli_config_pack: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    baseline_path = tmp_path / "baseline.jsonl"
+    config_path = cli_config_pack / "config" / "global.toml"
+    pack_arg = str(cli_config_pack)
+
+    run_cli(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+            "--config",
+            str(config_path),
+            "--pack-root",
+            pack_arg,
+        ]
+    )
+
+    payload = json.loads(
+        run_cli(
+            [
+                "analyze",
+                str(baseline_path),
+                "--export",
+                "json",
+                "--config",
+                str(config_path),
+                "--pack-root",
+                pack_arg,
+            ]
+        )
+    )
+
+    assert payload["car"]["abbrev"] == "ABC"
+    assert payload["tnfr_targets"]["meta"]["id"] == "custom-profile"
+    assert payload["tnfr_targets"]["targets"]["balance"]["delta_nfr"] == pytest.approx(
+        0.42, rel=1e-3
+    )
+    assert (tmp_path / "profiles.toml").exists()
 
 
 def test_diagnose_reports_missing_udp_response(

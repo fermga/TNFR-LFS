@@ -43,6 +43,8 @@ La documentación completa se encuentra en el directorio `docs/` y se publica co
 
 El archivo `tnfr-lfs.toml` ubicado en la raíz del repositorio proporciona una plantilla lista para usar con los valores por defecto documentados en [`docs/cli.md`](docs/cli.md). Copia este archivo en `~/.config/tnfr-lfs.toml` o en el directorio de trabajo de tus sesiones para personalizar los puertos OutSim/OutGauge/InSim, el coche/pista iniciales y los límites de ΔNFR por fase antes de invocar el CLI.
 
+Desde esta versión el CLI también puede resolver un *pack* TNFR × LFS completo (metadatos de coches y perfiles objetivo) apuntando `paths.pack_root` al directorio que contiene `config/global.toml`, `data/cars` y `data/profiles`. La opción global `--pack-root` permite cambiar el pack en una ejecución concreta sin modificar el fichero TOML. Los resultados de `analyze`, `suggest` y `write-set` incluyen ahora las secciones `car` y `tnfr_targets`, derivadas de ese pack, para que los exports JSON reflejen el contexto TNFR activo.
+
 ## Branding y relación con la teoría
 
 - **TNFR** se refiere únicamente a la teoría original: el marco conceptual que define los EPI, las métricas ΔNFR/ΔSi y los principios resonantes.
