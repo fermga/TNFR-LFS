@@ -87,6 +87,11 @@ tnfr-lfs report stint.jsonl --target-delta 0.5 --target-si 0.8 --export markdown
 
 Reports orchestrate the operators, highlight ΔNFR gaps relative to the
 requested objectives, and produce a Markdown summary ready for sharing.
+The command also writes the coherence map, operator trajectories and ΔNFR
+bifurcation artefacts under ``out/<baseline>/``.  Select the preferred
+representation with ``--report-format``: ``json`` for machine processing,
+``markdown`` for notebooks, or ``visual`` to generate compact ASCII
+sketches that can be pasted into chat tools.
 
 ## 5. Create a setup plan (optional)
 

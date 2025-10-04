@@ -136,7 +136,13 @@ recompensando configuraciones con mayor ``C(t)`` y penalizando retrasos en la
 respuesta.
 
 ## Artefactos generados
-- `TNFR.pdf` se mantiene como artefacto compilado. Cualquier actualización sustantiva debe reflejarse primero en este `DESIGN.md`; el PDF puede regenerarse a partir del contenido actualizado y debe tratarse como derivado.
+
+- ``TNFR.pdf`` se mantiene como artefacto compilado. Cualquier actualización sustantiva debe reflejarse primero en este ``DESIGN.md``; el PDF puede regenerarse a partir del contenido actualizado y debe tratarse como derivado.
+- ``coherence_map.<ext>`` serializa el promedio y el rango de ``C(t)`` por microsector junto con la distancia acumulada estimada a partir de ``TransmissionNode.speed``.  Permite reconstruir el mapa de coherencia de toda la vuelta y correlacionarlo con los objetivos de pista.
+- ``operator_trajectories.<ext>`` aplica ``Microsector.operator_events`` para reconstruir la línea temporal estructural de los detectores ``AL``/``OZ``/``IL`` y cuantificar la severidad media de cada operador.
+- ``delta_bifurcations.<ext>`` analiza las series ΔNFR en el eje estructural, detectando cruces de signo y extremos locales para identificar bifurcaciones que requieran ajustes de setup.
+
+Los sufijos ``.json``, ``.md`` o ``.viz`` dependen del formato elegido con ``--report-format`` y comparten la misma semántica sin importar el modo de renderizado.
 
 ## Próximos pasos sugeridos
 1. Completar la transcripción detallada de cada subsección utilizando herramientas con soporte para fuentes personalizadas o mediante revisión manual.

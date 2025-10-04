@@ -39,7 +39,17 @@ from ..core.metrics import compute_aero_coherence
 from ..core.resonance import analyse_modal_resonance
 from ..core.operators import orchestrate_delta_metrics
 from ..core.segmentation import Microsector, segment_microsectors
-from ..exporters import exporters_registry, normalise_set_output_name
+from ..exporters import (
+    REPORT_ARTIFACT_FORMATS,
+    build_coherence_map_payload,
+    build_delta_bifurcation_payload,
+    build_operator_trajectories_payload,
+    exporters_registry,
+    normalise_set_output_name,
+    render_coherence_map,
+    render_delta_bifurcation,
+    render_operator_trajectories,
+)
 from ..exporters.setup_plan import SetupChange, SetupPlan
 from ..io import logs
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
@@ -662,9 +672,20 @@ def _generate_out_reports(
     *,
     microsector_variability: Sequence[Mapping[str, Any]] | None = None,
     metrics: Mapping[str, Any] | None = None,
+    artifact_format: str = "json",
 ) -> Dict[str, Any]:
     destination.mkdir(parents=True, exist_ok=True)
-    sense_map = _sense_index_map(bundles, microsectors)
+    format_key = artifact_format.lower()
+    if format_key not in REPORT_ARTIFACT_FORMATS:
+        raise ValueError(
+            f"Formato de artefacto desconocido '{artifact_format}'. "
+            f"Formatos soportados: {', '.join(REPORT_ARTIFACT_FORMATS)}"
+        )
+    extension_map = {"json": "json", "markdown": "md", "visual": "viz"}
+    artifact_extension = extension_map[format_key]
+
+    bundle_list = list(bundles)
+    sense_map = _sense_index_map(bundle_list, microsectors)
     resonance = analyse_modal_resonance(records)
     breakdown = _delta_breakdown_summary(bundles)
     metrics = dict(metrics or {})
@@ -866,6 +887,30 @@ def _generate_out_reports(
     variability_path = destination / "microsector_variability.json"
     with variability_path.open("w", encoding="utf8") as handle:
         json.dump(variability_data, handle, indent=2, sort_keys=True)
+
+    def _persist_artifact(path: Path, text: str) -> None:
+        output = text if text.endswith("\n") else f"{text}\n"
+        path.write_text(output, encoding="utf8")
+
+    artifact_context = {
+        "microsectors": microsectors,
+        "series": bundle_list,
+    }
+    coherence_payload = build_coherence_map_payload(artifact_context)
+    coherence_render = render_coherence_map(coherence_payload, fmt=format_key)
+    coherence_path = destination / f"coherence_map.{artifact_extension}"
+    _persist_artifact(coherence_path, coherence_render)
+
+    operator_payload = build_operator_trajectories_payload(artifact_context)
+    operator_render = render_operator_trajectories(operator_payload, fmt=format_key)
+    operator_path = destination / f"operator_trajectories.{artifact_extension}"
+    _persist_artifact(operator_path, operator_render)
+
+    bifurcation_payload = build_delta_bifurcation_payload(artifact_context)
+    bifurcation_render = render_delta_bifurcation(bifurcation_payload, fmt=format_key)
+    bifurcation_path = destination / f"delta_bifurcations.{artifact_extension}"
+    _persist_artifact(bifurcation_path, bifurcation_render)
+
     return {
         "sense_index_map": {"path": str(sense_path), "data": sense_map},
         "modal_resonance": {"path": str(resonance_path), "data": resonance_payload},
@@ -879,6 +924,21 @@ def _generate_out_reports(
         "dissonance_breakdown": {"path": str(dissonance_path), "data": dissonance_payload},
         "sense_memory": {"path": str(memory_path), "data": memory_payload},
         "metrics_summary": {"path": str(summary_path), "data": summary_text},
+        "coherence_map": {
+            "path": str(coherence_path),
+            "data": coherence_payload,
+            **({"rendered": coherence_render} if format_key != "json" else {}),
+        },
+        "operator_trajectories": {
+            "path": str(operator_path),
+            "data": operator_payload,
+            **({"rendered": operator_render} if format_key != "json" else {}),
+        },
+        "delta_bifurcations": {
+            "path": str(bifurcation_path),
+            "data": bifurcation_payload,
+            **({"rendered": bifurcation_render} if format_key != "json" else {}),
+        },
     }
 
 _TELEMETRY_DEFAULTS: Mapping[str, Any] = {
@@ -1242,6 +1302,14 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         default=float(report_cfg.get("recursion_decay", 0.4)),
         help="Decay factor for the recursive operator when computing hysteresis.",
     )
+    report_parser.add_argument(
+        "--report-format",
+        choices=REPORT_ARTIFACT_FORMATS,
+        default=str(report_cfg.get("artifact_format", "json")),
+        help=(
+            "Formato de los artefactos adicionales generados (json, markdown o visual)."
+        ),
+    )
     report_parser.set_defaults(handler=_handle_report)
 
     write_set_cfg = dict(config.get("write_set", {}))
@@ -1570,6 +1638,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         _resolve_output_dir(config) / namespace.telemetry.stem,
         microsector_variability=metrics.get("microsector_variability"),
         metrics=metrics,
+        artifact_format=getattr(namespace, "report_format", "json"),
     )
     phase_templates = _phase_templates_from_config(config, "analyze")
     intermediate_metrics = {
@@ -1737,6 +1806,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         _resolve_output_dir(config) / namespace.telemetry.stem,
         microsector_variability=metrics.get("microsector_variability"),
         metrics=metrics,
+        artifact_format=getattr(namespace, "report_format", "json"),
     )
     payload: Dict[str, Any] = {
         "objectives": metrics.get("objectives", {}),
