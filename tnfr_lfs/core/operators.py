@@ -16,6 +16,7 @@ from .contextual_delta import (
 from .dissonance import compute_useful_dissonance_stats
 from .epi import (
     EPIExtractor,
+    NaturalFrequencyAnalyzer,
     TelemetryRecord,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
@@ -834,6 +835,7 @@ def _stage_epi_evolution(
 
     prev_epi = 0.0
     prev_timestamp = records[0].timestamp
+    analyzer = NaturalFrequencyAnalyzer()
 
     for index, record in enumerate(records):
         delta_map = delta_nfr_by_node(record)
@@ -847,6 +849,7 @@ def _stage_epi_evolution(
             record,
             phase=phase,
             phase_weights=weights,
+            analyzer=analyzer,
         )
         dt = 0.0 if index == 0 else max(0.0, record.timestamp - prev_timestamp)
         new_epi, derivative, nodal = evolve_epi(prev_epi, delta_map, dt, nu_map)

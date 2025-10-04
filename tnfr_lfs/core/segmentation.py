@@ -26,6 +26,7 @@ from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tupl
 from .epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
+    NaturalFrequencyAnalyzer,
     TelemetryRecord,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
@@ -619,6 +620,7 @@ def _recompute_bundles(
     weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]],
     goal_nu_f_lookup: Mapping[int, Mapping[str, float] | float] | None = None,
 ) -> List[EPIBundle]:
+    analyzer = NaturalFrequencyAnalyzer()
     recomputed: List[EPIBundle] = []
     prev_integrated: float | None = None
     prev_timestamp = records[0].timestamp if records else 0.0
@@ -646,6 +648,7 @@ def _recompute_bundles(
             record,
             phase=phase,
             phase_weights=phase_weights,
+            analyzer=analyzer,
         )
         epi_value = bundles[idx].epi if idx < len(bundles) else 0.0
         recomputed_bundle = DeltaCalculator.compute_bundle(

@@ -5,7 +5,14 @@ from .coherence_calibration import (
     CalibrationSnapshot,
     CoherenceCalibrationStore,
 )
-from .epi import DeltaCalculator, EPIExtractor, TelemetryRecord, delta_nfr_by_node
+from .epi import (
+    DeltaCalculator,
+    EPIExtractor,
+    NaturalFrequencyAnalyzer,
+    NaturalFrequencySettings,
+    TelemetryRecord,
+    delta_nfr_by_node,
+)
 from .epi_models import EPIBundle
 from .metrics import AeroCoherence, WindowMetrics, compute_aero_coherence, compute_window_metrics
 from .operators import (
@@ -32,6 +39,8 @@ from .structural_time import compute_structural_timestamps, resolve_time_axis
 __all__ = [
     "TelemetryRecord",
     "EPIExtractor",
+    "NaturalFrequencyAnalyzer",
+    "NaturalFrequencySettings",
     "DeltaCalculator",
     "EPIBundle",
     "delta_nfr_by_node",
