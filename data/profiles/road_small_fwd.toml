@@ -1,0 +1,34 @@
+[meta]
+category = "road"
+segment = "small"
+drivetrain = "FWD"
+description = "Baseline TNFR policy for lightweight front-wheel-drive road cars."
+
+[targets.balance]
+delta_nfr = 0.30
+nu_f = 0.28
+yaw_rate_deg_s = 0.62
+
+[targets.stability]
+slip_lat_window = [-0.45, 0.45]
+slip_long_window = [-0.35, 0.35]
+
+[policy.steering]
+aggressiveness = 0.60
+limit_deg = 560.0
+smoothing = 0.35
+
+[policy.throttle]
+aggressiveness = 0.55
+lift_margin = 0.08
+blip_compensation = 0.10
+
+[recommender.steering]
+kp = 1.30
+ki = 0.05
+kd = 0.12
+
+[recommender.throttle]
+kp = 0.90
+ki = 0.03
+kd = 0.07

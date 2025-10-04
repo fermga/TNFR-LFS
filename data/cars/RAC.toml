@@ -1,0 +1,8 @@
+abbrev = "RAC"
+name = "RaceAbout"
+license = "s2"
+engine_layout = "mid_longitudinal"
+drive = "RWD"
+weight_kg = 800
+wheel_rotation_group_deg = 26
+profile = "prototype_low"

@@ -1,0 +1,8 @@
+abbrev = "XFR"
+name = "XF GTR"
+license = "s2"
+engine_layout = "front_transverse"
+drive = "FWD"
+weight_kg = 900
+wheel_rotation_group_deg = 26
+profile = "gt_club"

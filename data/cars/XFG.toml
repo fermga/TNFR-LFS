@@ -1,0 +1,8 @@
+abbrev = "XFG"
+name = "XF GTi"
+license = "demo"
+engine_layout = "front_transverse"
+drive = "FWD"
+weight_kg = 960
+wheel_rotation_group_deg = 30
+profile = "road_small_fwd"

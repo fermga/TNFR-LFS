@@ -1,0 +1,8 @@
+abbrev = "UF1"
+name = "UF 1000"
+license = "demo"
+engine_layout = "front_transverse"
+drive = "FWD"
+weight_kg = 600
+wheel_rotation_group_deg = 30
+profile = "road_small_fwd"

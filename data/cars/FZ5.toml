@@ -1,0 +1,8 @@
+abbrev = "FZ5"
+name = "FZ50"
+license = "s2"
+engine_layout = "rear_longitudinal"
+drive = "RWD"
+weight_kg = 1230
+wheel_rotation_group_deg = 30
+profile = "road_large_rwd"

@@ -1,0 +1,8 @@
+abbrev = "FOX"
+name = "Formula XR"
+license = "s2"
+engine_layout = "rear_longitudinal"
+drive = "RWD"
+weight_kg = 540
+wheel_rotation_group_deg = 18
+profile = "formula_mid"

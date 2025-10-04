@@ -1,0 +1,34 @@
+[meta]
+category = "road"
+segment = "small"
+drivetrain = "RWD"
+description = "Policy tuned for lightweight mid-engine kit cars."
+
+[targets.balance]
+delta_nfr = 0.18
+nu_f = 0.35
+yaw_rate_deg_s = 0.82
+
+[targets.stability]
+slip_lat_window = [-0.40, 0.40]
+slip_long_window = [-0.30, 0.30]
+
+[policy.steering]
+aggressiveness = 0.68
+limit_deg = 520.0
+smoothing = 0.28
+
+[policy.throttle]
+aggressiveness = 0.50
+lift_margin = 0.11
+blip_compensation = 0.06
+
+[recommender.steering]
+kp = 1.38
+ki = 0.05
+kd = 0.10
+
+[recommender.throttle]
+kp = 0.86
+ki = 0.02
+kd = 0.05
