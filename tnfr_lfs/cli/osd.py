@@ -273,6 +273,7 @@ class TelemetryHUD:
                     bundles,
                     microsectors=self._microsectors,
                     car_model=self.car_model,
+                    track_name=self.track_name,
                 )
                 try:
                     decision_space = self.setup_planner._space_for_car(self.car_model)
@@ -877,6 +878,7 @@ def _build_setup_plan(plan, car_model: str, decision_space=None) -> SetupPlan:
         rationales=tuple(unique_rationales),
         expected_effects=tuple(unique_effects),
         sensitivities=plan.sensitivities,
+        phase_sensitivities=plan.phase_sensitivities,
         clamped_parameters=tuple(clamped),
     )
 

@@ -119,6 +119,14 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
         sensitivities={
             "sense_index": {"brake_bias_pct": -0.0125, "front_arb_steps": 0.0451},
             "objective_score": {"brake_bias_pct": 0.0312, "front_arb_steps": -0.0148},
+            "delta_nfr_integral": {
+                "brake_bias_pct": -0.021,
+                "front_arb_steps": 0.084,
+            },
+        },
+        phase_sensitivities={
+            "entry": {"delta_nfr_integral": {"front_arb_steps": -0.062}},
+            "apex": {"delta_nfr_integral": {"front_arb_steps": -0.084}},
         },
         clamped_parameters=("front_arb_steps",),
         tnfr_rationale_by_node={
@@ -146,6 +154,12 @@ def test_serialise_setup_plan_collects_unique_fields():
     assert any("Telemetry indicates" in item for item in payload["rationales"])
     assert any("Optimised braking" in item for item in payload["expected_effects"])
     assert pytest.approx(payload["dsi_dparam"]["front_arb_steps"], rel=1e-6) == 0.0451
+    assert pytest.approx(payload["dnfr_integral_dparam"]["front_arb_steps"], rel=1e-6) == 0.084
+    assert payload["phase_sensitivities"]["apex"]["delta_nfr_integral"]["front_arb_steps"] == pytest.approx(-0.084)
+    assert (
+        payload["phase_dnfr_integral_dparam"]["entry"]["front_arb_steps"]
+        == pytest.approx(-0.062)
+    )
     assert "tyres" in payload["tnfr_rationale_by_node"]
     assert "entry" in payload["tnfr_rationale_by_phase"]
     assert "tyres" in payload["expected_effects_by_node"]
@@ -160,6 +174,8 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "brake_bias_pct" in output
     assert "Telemetry indicates oscillations" in output
     assert "**dSi/dparam**" in output
+    assert "**d∫|ΔNFR|/dparam**" in output
+    assert "**Gradientes de ∫|ΔNFR| por fase**" in output
     assert "**Racionales TNFR por nodo**" in output
     assert "**Efectos esperados por fase**" in output
 

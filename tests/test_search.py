@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Mapping, Sequence
 
+from pathlib import Path
+
 import pytest
 
 from tnfr_lfs.core.epi_models import (
@@ -15,6 +17,8 @@ from tnfr_lfs.core.epi_models import (
     TyresNode,
 )
 from tnfr_lfs.core.segmentation import Goal, Microsector
+from tnfr_lfs.io.profiles import ProfileManager
+from tnfr_lfs.recommender import RecommendationEngine
 from tnfr_lfs.recommender.search import DEFAULT_DECISION_LIBRARY, SetupPlanner, objective_score
 
 
@@ -40,6 +44,35 @@ BASE_NU_F = {
     "track": 0.08,
     "driver": 0.05,
 }
+
+
+def _timestamp_delta(results, index: int) -> float:
+    if index + 1 < len(results):
+        return max(1e-3, results[index + 1].timestamp - results[index].timestamp)
+    if index > 0:
+        return max(1e-3, results[index].timestamp - results[index - 1].timestamp)
+    return 1e-3
+
+
+def _absolute_integral(results) -> float:
+    total = 0.0
+    for idx, bundle in enumerate(results):
+        total += abs(bundle.delta_nfr) * _timestamp_delta(results, idx)
+    return total
+
+
+def _phase_integrals(results, microsectors) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    if not microsectors:
+        return totals
+    for microsector in microsectors:
+        for phase, (start, stop) in microsector.phase_boundaries.items():
+            subtotal = 0.0
+            for idx in range(start, min(stop, len(results))):
+                subtotal += abs(results[idx].delta_nfr) * _timestamp_delta(results, idx)
+            if subtotal:
+                totals[phase] = totals.get(phase, 0.0) + subtotal
+    return totals
 
 
 def _build_bundle(timestamp: float, delta_nfr: float, si: float) -> EPIBundle:
@@ -267,6 +300,8 @@ def test_setup_planner_converges_and_respects_bounds(car_model: str):
     assert plan.objective_value > baseline_score
     assert plan.recommendations  # ensure explainable rules are still available
     assert plan.sensitivities  # gradients are reported
+    assert "delta_nfr_integral" in plan.sensitivities
+    assert plan.phase_sensitivities
 
 
 def test_setup_planner_reports_consistent_sensitivities():
@@ -312,6 +347,8 @@ def test_setup_planner_reports_consistent_sensitivities():
 
     mean_si = sum(bundle.sense_index for bundle in plan.telemetry) / len(plan.telemetry)
     score = objective_score(plan.telemetry, [microsector])
+    base_integral = _absolute_integral(plan.telemetry)
+    base_phase = _phase_integrals(plan.telemetry, [microsector])
 
     space = DEFAULT_DECISION_LIBRARY["generic_gt"]
     for variable in space.variables:
@@ -334,9 +371,18 @@ def test_setup_planner_reports_consistent_sensitivities():
             si_minus = sum(bundle.sense_index for bundle in minus_results) / len(minus_results)
             objective_plus = objective_score(plus_results, [microsector])
             objective_minus = objective_score(minus_results, [microsector])
+            integral_plus = _absolute_integral(plus_results)
+            integral_minus = _absolute_integral(minus_results)
+            phase_plus = _phase_integrals(plus_results, [microsector])
+            phase_minus = _phase_integrals(minus_results, [microsector])
             denom = 2.0 * central_step
             expected_si = (si_plus - si_minus) / denom
             expected_objective = (objective_plus - objective_minus) / denom
+            expected_integral = (integral_plus - integral_minus) / denom
+            expected_phase = {
+                phase: (phase_plus.get(phase, 0.0) - phase_minus.get(phase, 0.0)) / denom
+                for phase in set(phase_plus) | set(phase_minus)
+            }
         elif forward_room > 1e-9:
             step = min(raw_step, forward_room)
             plus_vector = dict(plan.decision_vector)
@@ -346,6 +392,13 @@ def test_setup_planner_reports_consistent_sensitivities():
             objective_plus = objective_score(plus_results, [microsector])
             expected_si = (si_plus - mean_si) / step
             expected_objective = (objective_plus - score) / step
+            integral_plus = _absolute_integral(plus_results)
+            phase_plus = _phase_integrals(plus_results, [microsector])
+            expected_integral = (integral_plus - base_integral) / step
+            expected_phase = {
+                phase: (phase_plus.get(phase, 0.0) - base_phase.get(phase, 0.0)) / step
+                for phase in set(phase_plus) | set(base_phase)
+            }
         elif backward_room > 1e-9:
             step = min(raw_step, backward_room)
             minus_vector = dict(plan.decision_vector)
@@ -355,14 +408,32 @@ def test_setup_planner_reports_consistent_sensitivities():
             objective_minus = objective_score(minus_results, [microsector])
             expected_si = (mean_si - si_minus) / step
             expected_objective = (score - objective_minus) / step
+            integral_minus = _absolute_integral(minus_results)
+            phase_minus = _phase_integrals(minus_results, [microsector])
+            expected_integral = (base_integral - integral_minus) / step
+            expected_phase = {
+                phase: (base_phase.get(phase, 0.0) - phase_minus.get(phase, 0.0)) / step
+                for phase in set(phase_minus) | set(base_phase)
+            }
         else:
             expected_si = 0.0
             expected_objective = 0.0
+            expected_integral = 0.0
+            expected_phase = {}
 
         reported_si = plan.sensitivities["sense_index"][variable.name]
         reported_objective = plan.sensitivities["objective_score"][variable.name]
+        reported_integral = plan.sensitivities["delta_nfr_integral"][variable.name]
         assert reported_si == pytest.approx(expected_si, rel=1e-2, abs=1e-4)
         assert reported_objective == pytest.approx(expected_objective, rel=1e-2, abs=1e-4)
+        assert reported_integral == pytest.approx(expected_integral, rel=1e-2, abs=1e-4)
+        for phase, gradient in expected_phase.items():
+            reported_phase = (
+                plan.phase_sensitivities.get(phase, {})
+                .get("delta_nfr_integral", {})
+                .get(variable.name, 0.0)
+            )
+            assert reported_phase == pytest.approx(gradient, rel=1e-2, abs=1e-4)
 
 
 def test_setup_planner_rejects_unknown_car_model():
@@ -373,3 +444,61 @@ def test_setup_planner_rejects_unknown_car_model():
     planner = SetupPlanner()
     with pytest.raises(ValueError):
         planner.plan(baseline, (), car_model="UNKNOWN")
+
+
+def test_setup_planner_consults_profile_jacobian(tmp_path: Path) -> None:
+    profiles_path = tmp_path / "profiles.toml"
+    manager = ProfileManager(profiles_path)
+    car_model = "generic_gt"
+    track = "generic"
+    manager.resolve(car_model, track)
+    manager.register_plan(
+        car_model,
+        track,
+        {"entry": 1.0},
+        baseline_metrics=(0.6, 4.0),
+        jacobian={
+            "sense_index": {
+                "rear_wing_angle": 1.6,
+                "front_camber_deg": 0.1,
+            },
+            "delta_nfr_integral": {"rear_wing_angle": -0.9},
+        },
+        phase_jacobian={"entry": {"delta_nfr_integral": {"rear_wing_angle": -0.5}}},
+    )
+    manager.register_result(car_model, track, sense_index=0.7, delta_nfr=3.2)
+    stored_overall, _ = manager.gradient_history(car_model, track)
+    assert stored_overall["sense_index"]["rear_wing_angle"] == pytest.approx(1.6)
+    assert stored_overall["delta_nfr_integral"]["rear_wing_angle"] == pytest.approx(-0.9)
+
+    engine = RecommendationEngine(
+        car_model=car_model, track_name=track, profile_manager=manager
+    )
+
+    class RecordingOptimiser:
+        def __init__(self) -> None:
+            self.seen_order: tuple[str, ...] = ()
+            self.step_by_param: dict[str, float] = {}
+
+        def optimise(self, objective, space, initial_vector=None):
+            self.seen_order = tuple(var.name for var in space.variables)
+            self.step_by_param = {var.name: var.step for var in space.variables}
+            vector = space.clamp(initial_vector or space.initial_guess())
+            return vector, objective(vector), 0, 1
+
+    optimiser = RecordingOptimiser()
+    planner = SetupPlanner(recommendation_engine=engine, optimiser=optimiser)
+    baseline = [
+        _build_bundle(0.0, delta_nfr=5.0, si=0.6),
+        _build_bundle(0.1, delta_nfr=4.9, si=0.61),
+        _build_bundle(0.2, delta_nfr=4.7, si=0.62),
+    ]
+
+    planner.plan(baseline, (), car_model=car_model, track_name=track)
+
+    assert optimiser.seen_order[0] == "rear_wing_angle"
+    original_space = DEFAULT_DECISION_LIBRARY[car_model]
+    original_step = next(
+        var.step for var in original_space.variables if var.name == "rear_wing_angle"
+    )
+    assert optimiser.step_by_param["rear_wing_angle"] < original_step

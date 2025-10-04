@@ -26,6 +26,9 @@ class SetupPlan:
     rationales: Sequence[str] = field(default_factory=tuple)
     expected_effects: Sequence[str] = field(default_factory=tuple)
     sensitivities: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    phase_sensitivities: Mapping[str, Mapping[str, Mapping[str, float]]] = field(
+        default_factory=dict
+    )
     clamped_parameters: Sequence[str] = field(default_factory=tuple)
     tnfr_rationale_by_node: Mapping[str, Sequence[str]] = field(default_factory=dict)
     tnfr_rationale_by_phase: Mapping[str, Sequence[str]] = field(default_factory=dict)
@@ -67,6 +70,16 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
         for metric, derivatives in plan.sensitivities.items()
     }
 
+    phase_sensitivities_payload: Dict[str, Dict[str, Dict[str, float]]] = {}
+    for phase, metrics in plan.phase_sensitivities.items():
+        phase_payload: Dict[str, Dict[str, float]] = {}
+        for metric, derivatives in metrics.items():
+            phase_payload[str(metric)] = {
+                parameter: float(value)
+                for parameter, value in derivatives.items()
+            }
+        phase_sensitivities_payload[str(phase)] = phase_payload
+
     def _normalise_mapping(
         mapping: Mapping[str, Sequence[str]] | None,
     ) -> Dict[str, List[str]]:
@@ -77,6 +90,20 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
     dsi_payload = {
         parameter: float(value)
         for parameter, value in plan.sensitivities.get("sense_index", {}).items()
+    }
+
+    dnfr_payload = {
+        parameter: float(value)
+        for parameter, value in plan.sensitivities.get("delta_nfr_integral", {}).items()
+    }
+
+    phase_dnfr_payload = {
+        phase: {
+            parameter: float(value)
+            for parameter, value in metrics.get("delta_nfr_integral", {}).items()
+        }
+        for phase, metrics in plan.phase_sensitivities.items()
+        if "delta_nfr_integral" in metrics
     }
 
     tnfr_node = _normalise_mapping(plan.tnfr_rationale_by_node)
@@ -92,6 +119,9 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
         "expected_effects": expected_effects,
         "sensitivities": sensitivities_payload,
         "dsi_dparam": dsi_payload,
+        "phase_sensitivities": phase_sensitivities_payload,
+        "dnfr_integral_dparam": dnfr_payload,
+        "phase_dnfr_integral_dparam": phase_dnfr_payload,
         "clamped_parameters": list(plan.clamped_parameters),
         "tnfr_rationale_by_node": tnfr_node,
         "tnfr_rationale_by_phase": tnfr_phase,

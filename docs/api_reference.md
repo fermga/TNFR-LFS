@@ -134,4 +134,8 @@ tnfr_lfs.exporters.setup_plan.serialise_setup_plan(plan: SetupPlan) -> Dict[str,
 The setup plan dataclasses model the actionable advice produced by the
 CLI's ``write-set`` command and by :class:`SetupPlanner`.  Use
 :func:`serialise_setup_plan` to convert the plan into a JSON-compatible
-payload with deduplicated rationales and expected effects.
+payload with deduplicated rationales and expected effects.  The
+``sensitivities`` mapping now captures both ΔSi/Δp and
+Δ∫|ΔNFR|/Δp entries, while ``phase_sensitivities`` stores the
+per-phase Δ∫|ΔNFR|/Δp gradients used by the optimiser and the
+profile persistence layer.

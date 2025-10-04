@@ -151,6 +151,36 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
                 formatted = str(value)
             lines.append(f"| {parameter} | {formatted} |")
 
+    dnfr_dparam = plan.get("dnfr_integral_dparam", {})
+    if dnfr_dparam:
+        lines.append("")
+        lines.append("**d∫|ΔNFR|/dparam**")
+        lines.append("| Parámetro | Sensibilidad |")
+        lines.append("| --- | --- |")
+        for parameter in sorted(dnfr_dparam):
+            value = dnfr_dparam[parameter]
+            try:
+                formatted = f"{float(value):+.6f}"
+            except (TypeError, ValueError):
+                formatted = str(value)
+            lines.append(f"| {parameter} | {formatted} |")
+
+    phase_dnfr = plan.get("phase_dnfr_integral_dparam", {})
+    if phase_dnfr:
+        lines.append("")
+        lines.append("**Gradientes de ∫|ΔNFR| por fase**")
+        lines.append("| Fase | Parámetro | Sensibilidad |")
+        lines.append("| --- | --- | --- |")
+        for phase in sorted(phase_dnfr):
+            derivatives = phase_dnfr[phase]
+            for parameter in sorted(derivatives):
+                value = derivatives[parameter]
+                try:
+                    formatted = f"{float(value):+.6f}"
+                except (TypeError, ValueError):
+                    formatted = str(value)
+                lines.append(f"| {phase} | {parameter} | {formatted} |")
+
     def _extend_mapping_section(title: str, mapping: Mapping[str, Sequence[str]] | None) -> None:
         if not mapping:
             return
