@@ -49,6 +49,10 @@ the same coherence widgets, (C) setup hints aligned with the current phase and
 the ``Si plan`` trace.  Use the ``--layout-*`` overrides if you need to move the
 40×16 button to a different area of the HUD.
 
+Consult the [setup equivalence guide](setup_equivalences.md) to interpret how
+the HUD surfaces `ΔNFR_lat`, `ν_f` and `C(t)` para cada subsistema antes de
+realizar ajustes en directo.
+
 ## 1. Capture a baseline
 
 ```bash
@@ -78,6 +82,10 @@ tnfr-lfs suggest stint.jsonl --car-model generic_gt --track spa --export json > 
 The recommendation engine evaluates the telemetry against the thresholds
 defined for the selected car model and track.  The resulting payload
 contains rule identifiers, rationales, and expected effects.
+
+Cross-check those insights with the [equivalence tables](setup_equivalences.md)
+to translate each metric (`ΔNFR_lat`, `ν_f`, `C(t)`) into actionable setup
+changes aligned with the TNFR plan.
 
 ## 4. Build a report
 

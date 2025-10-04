@@ -97,6 +97,10 @@ and every page is trimmed to 239 bytes so it fits within the
 ``--layout-left``/``--layout-top``/``--layout-width``/``--layout-height`` if
 another mod already occupies that region.
 
+Refer to the [setup equivalence guide](setup_equivalences.md) for a
+metric-by-metric breakdown (`ΔNFR_lat`, `ν_f`, `C(t)`) that matches the HUD
+widgets and the recommendations emitted by ``osd``.
+
 ```bash
 tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
 ```
