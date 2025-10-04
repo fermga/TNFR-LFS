@@ -8,6 +8,8 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
+from collections.abc import Mapping
+
 from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.recommender.rules import RecommendationEngine
 
@@ -201,6 +203,17 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         recommendation.message for recommendation in recommendations if recommendation.category == "pianos"
     )
     assert "Operador de pianos" in piano_message
+
+
+def test_threshold_profile_exposes_phase_weights():
+    engine = RecommendationEngine(car_model="generic_gt", track_name="valencia")
+    profile = engine._resolve_context("generic_gt", "valencia").thresholds  # type: ignore[attr-defined]
+    entry_weights = profile.weights_for_phase("entry")
+    assert isinstance(entry_weights, Mapping)
+    assert entry_weights.get("tyres", 0.0) > 1.0
+    apex_weights = profile.weights_for_phase("apex")
+    assert isinstance(apex_weights, Mapping)
+    assert apex_weights.get("suspension", 0.0) >= 1.0
 
 
 def test_track_specific_profile_tightens_entry_threshold():

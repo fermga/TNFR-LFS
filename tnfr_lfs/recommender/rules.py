@@ -114,6 +114,9 @@ class ThresholdProfile:
     exit_delta_tolerance: float
     piano_delta_tolerance: float
     phase_targets: Mapping[str, PhaseTargetWindow] = field(default_factory=dict)
+    phase_weights: Mapping[str, Mapping[str, float] | float] = field(
+        default_factory=dict
+    )
 
     def tolerance_for_phase(self, phase: str) -> float:
         mapping = {
@@ -125,6 +128,16 @@ class ThresholdProfile:
 
     def target_for_phase(self, phase: str) -> PhaseTargetWindow | None:
         return self.phase_targets.get(phase)
+
+    def weights_for_phase(self, phase: str) -> Mapping[str, float] | float:
+        profile = self.phase_weights.get(phase)
+        if profile is None:
+            profile = self.phase_weights.get("__default__")
+        if isinstance(profile, Mapping):
+            return MappingProxyType(dict(profile))
+        if isinstance(profile, (int, float)):
+            return float(profile)
+        return MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -156,6 +169,24 @@ def _freeze_phase_targets(targets: Mapping[str, PhaseTargetWindow]) -> Mapping[s
     return MappingProxyType(dict(targets))
 
 
+def _freeze_phase_weights(
+    weights: Mapping[str, Mapping[str, float] | float]
+) -> Mapping[str, Mapping[str, float] | float]:
+    frozen: Dict[str, Mapping[str, float] | float] = {}
+    for phase, profile in weights.items():
+        if isinstance(profile, Mapping):
+            frozen[str(phase)] = MappingProxyType(
+                {
+                    str(node): float(value)
+                    for node, value in profile.items()
+                    if isinstance(value, (int, float))
+                }
+            )
+        elif isinstance(profile, (int, float)):
+            frozen[str(phase)] = float(profile)
+    return MappingProxyType(frozen)
+
+
 _BASELINE_PHASE_TARGETS = _freeze_phase_targets(
     {
         "entry": PhaseTargetWindow(
@@ -178,6 +209,9 @@ _BASELINE_PHASE_TARGETS = _freeze_phase_targets(
         ),
     }
 )
+
+
+_BASELINE_PHASE_WEIGHTS = _freeze_phase_weights({})
 
 
 def _coerce_window(
@@ -220,6 +254,34 @@ def _build_phase_targets(
     return _freeze_phase_targets(targets)
 
 
+def _build_phase_weights(
+    payload: Mapping[str, object] | None,
+    *,
+    defaults: Mapping[str, Mapping[str, float] | float],
+) -> Mapping[str, Mapping[str, float] | float]:
+    if not isinstance(payload, Mapping):
+        return defaults
+    weights: Dict[str, Mapping[str, float] | float] = {}
+    for phase, profile in payload.items():
+        if isinstance(profile, Mapping):
+            entry: Dict[str, float] = {}
+            for node, value in profile.items():
+                try:
+                    entry[str(node)] = float(value)
+                except (TypeError, ValueError):
+                    continue
+            if entry:
+                weights[str(phase)] = MappingProxyType(entry)
+        else:
+            try:
+                weights[str(phase)] = float(profile)
+            except (TypeError, ValueError):
+                continue
+    if not weights:
+        return defaults
+    return _freeze_phase_weights(weights)
+
+
 def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
     defaults = {
         "entry_delta_tolerance": 1.5,
@@ -230,12 +292,16 @@ def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
     phase_targets = _build_phase_targets(
         payload.get("targets"), defaults=_BASELINE_PHASE_TARGETS
     )
+    phase_weights = _build_phase_weights(
+        payload.get("phase_weights"), defaults=_BASELINE_PHASE_WEIGHTS
+    )
     return ThresholdProfile(
         entry_delta_tolerance=float(payload.get("entry_delta_tolerance", defaults["entry_delta_tolerance"])),
         apex_delta_tolerance=float(payload.get("apex_delta_tolerance", defaults["apex_delta_tolerance"])),
         exit_delta_tolerance=float(payload.get("exit_delta_tolerance", defaults["exit_delta_tolerance"])),
         piano_delta_tolerance=float(payload.get("piano_delta_tolerance", defaults["piano_delta_tolerance"])),
         phase_targets=phase_targets,
+        phase_weights=phase_weights,
     )
 
 
@@ -360,6 +426,7 @@ DEFAULT_THRESHOLD_PROFILE = ThresholdProfile(
     exit_delta_tolerance=2.0,
     piano_delta_tolerance=2.5,
     phase_targets=_BASELINE_PHASE_TARGETS,
+    phase_weights=_BASELINE_PHASE_WEIGHTS,
 )
 
 

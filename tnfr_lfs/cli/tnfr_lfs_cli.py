@@ -1305,7 +1305,13 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
 def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
-    bundles, microsectors = _compute_insights(records)
+    car_model = _default_car_model(config)
+    track_name = _default_track_name(config)
+    bundles, microsectors, thresholds = _compute_insights(
+        records,
+        car_model=car_model,
+        track_name=track_name,
+    )
     lap_segments = _group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
         lap_segments,
@@ -1314,13 +1320,14 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         coherence_window=namespace.coherence_window,
         recursion_decay=namespace.recursion_decay,
         microsectors=microsectors,
+        phase_weights=thresholds.phase_weights,
     )
     phase_messages = _phase_deviation_messages(
         bundles,
         microsectors,
         config,
-        car_model=_default_car_model(config),
-        track_name=_default_track_name(config),
+        car_model=car_model,
+        track_name=track_name,
     )
     reports = _generate_out_reports(
         records,
@@ -1365,7 +1372,11 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 
 def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
-    bundles, microsectors = _compute_insights(records)
+    bundles, microsectors, thresholds = _compute_insights(
+        records,
+        car_model=namespace.car_model,
+        track_name=namespace.track,
+    )
     lap_segments = _group_records_by_lap(records)
     suggest_cfg = dict(config.get("suggest", {}))
     metrics = orchestrate_delta_metrics(
@@ -1375,6 +1386,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         coherence_window=int(suggest_cfg.get("coherence_window", 3)),
         recursion_decay=float(suggest_cfg.get("recursion_decay", 0.4)),
         microsectors=microsectors,
+        phase_weights=thresholds.phase_weights,
     )
     engine = RecommendationEngine()
     recommendations = engine.generate(
@@ -1418,7 +1430,13 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 
 def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
-    bundles, microsectors = _compute_insights(records)
+    car_model = _default_car_model(config)
+    track_name = _default_track_name(config)
+    bundles, microsectors, thresholds = _compute_insights(
+        records,
+        car_model=car_model,
+        track_name=track_name,
+    )
     lap_segments = _group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
         lap_segments,
@@ -1427,6 +1445,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         coherence_window=namespace.coherence_window,
         recursion_decay=namespace.recursion_decay,
         microsectors=microsectors,
+        phase_weights=thresholds.phase_weights,
     )
     reports = _generate_out_reports(
         records,
@@ -1465,7 +1484,11 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
 
 def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
-    bundles, microsectors = _compute_insights(records)
+    bundles, microsectors, _ = _compute_insights(
+        records,
+        car_model=namespace.car_model,
+        track_name=_default_track_name(config),
+    )
     planner = SetupPlanner()
     plan = planner.plan(bundles, microsectors, car_model=namespace.car_model)
 
@@ -1544,15 +1567,27 @@ def _group_records_by_lap(records: Records) -> List[Records]:
     return groups or [records]
 
 
-def _compute_insights(records: Records) -> tuple[Bundles, Sequence[Microsector]]:
+def _compute_insights(
+    records: Records,
+    *,
+    car_model: str,
+    track_name: str,
+) -> tuple[Bundles, Sequence[Microsector], ThresholdProfile]:
+    engine = RecommendationEngine(car_model=car_model, track_name=track_name)
+    profile = engine._resolve_context(car_model, track_name).thresholds  # type: ignore[attr-defined]
     if not records:
-        return [], []
+        return [], [], profile
     extractor = EPIExtractor()
     bundles = extractor.extract(records)
     if not bundles:
-        return bundles, []
-    microsectors = segment_microsectors(records, bundles)
-    return bundles, microsectors
+        return bundles, [], profile
+    overrides = profile.phase_weights
+    microsectors = segment_microsectors(
+        records,
+        bundles,
+        phase_weight_overrides=overrides if overrides else None,
+    )
+    return bundles, microsectors, profile
 
 
 def _capture_udp_samples(

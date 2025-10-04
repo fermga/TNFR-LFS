@@ -158,7 +158,12 @@ class TelemetryHUD:
 
         self._bundles = bundles
         self._microsectors = segment_microsectors(
-            records, bundles, operator_state=self._operator_state
+            records,
+            bundles,
+            operator_state=self._operator_state,
+            phase_weight_overrides=self._thresholds.phase_weights
+            if self._thresholds.phase_weights
+            else None,
         )
         active = _resolve_active_phase(self._microsectors, len(records) - 1)
 
@@ -170,6 +175,7 @@ class TelemetryHUD:
             goal_delta,
             goal_si,
             microsectors=self._microsectors,
+            phase_weights=self._thresholds.phase_weights,
         )
         resonance = analyse_modal_resonance(records)
         recommendations = self.recommendation_engine.generate(

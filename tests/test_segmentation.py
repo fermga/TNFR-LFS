@@ -161,6 +161,41 @@ def test_goal_targets_match_phase_averages(
                 assert yaw_low - 1e-6 <= value <= yaw_high + 1e-6
 
 
+def test_segment_microsectors_applies_phase_weight_overrides(
+    synthetic_records,
+    synthetic_bundles,
+):
+    baseline_micro = segment_microsectors(
+        synthetic_records,
+        list(synthetic_bundles),
+    )
+    override_micro = segment_microsectors(
+        synthetic_records,
+        list(synthetic_bundles),
+        phase_weight_overrides={"entry": {"tyres": 1.8}},
+    )
+    assert baseline_micro and override_micro
+    base_entry = baseline_micro[0].phase_weights.get("entry", {})
+    override_entry = override_micro[0].phase_weights.get("entry", {})
+    assert isinstance(base_entry, dict) and isinstance(override_entry, dict)
+    assert override_entry.get("tyres", 0.0) > base_entry.get("tyres", 0.0)
+    entry_samples = override_micro[0].phase_samples.get("entry", ())
+    assert entry_samples
+    sample_index = entry_samples[0]
+    record = synthetic_records[sample_index]
+    base_nu = resolve_nu_f_by_node(
+        record,
+        phase="entry",
+        phase_weights=baseline_micro[0].phase_weights,
+    )
+    override_nu = resolve_nu_f_by_node(
+        record,
+        phase="entry",
+        phase_weights=override_micro[0].phase_weights,
+    )
+    assert override_nu["tyres"] > base_nu["tyres"]
+
+
 def test_phase_weighting_penalises_sense_index(
     synthetic_microsectors,
     synthetic_records,

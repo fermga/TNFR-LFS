@@ -313,6 +313,73 @@ def test_orchestrator_pipeline_builds_consistent_metrics():
     assert len(sense_stage["series"]) == reception_stage["sample_count"]
 
 
+def test_orchestrator_respects_phase_weight_overrides():
+    raw_records = [
+        _build_record(0.0, 5200.0, 0.06, 1.2, 0.4, 500.0, 0.88),
+        _build_record(0.1, 5300.0, 0.08, 1.3, 0.35, 502.0, 0.86),
+    ]
+    baseline = _build_record(0.0, 5100.0, 0.02, 1.0, 0.2, 498.0, 0.9)
+    records = [replace(sample, reference=baseline) for sample in raw_records]
+    base_weights = {
+        "entry": {"__default__": 1.0, "tyres": 1.0},
+        "apex": {"__default__": 1.0},
+        "exit": {"__default__": 1.0},
+    }
+    boosted_weights = {
+        "entry": {"__default__": 1.0, "tyres": 2.0},
+        "apex": {"__default__": 1.0},
+        "exit": {"__default__": 1.0},
+    }
+    base_microsector = Microsector(
+        index=0,
+        start_time=records[0].timestamp,
+        end_time=records[-1].timestamp,
+        curvature=1.5,
+        brake_event=False,
+        support_event=False,
+        delta_nfr_signature=0.0,
+        goals=(
+            _build_goal("entry", 0.0),
+            _build_goal("apex", 0.0),
+            _build_goal("exit", 0.0),
+        ),
+        phase_boundaries={"entry": (0, 2), "apex": (2, 2), "exit": (2, 2)},
+        phase_samples={"entry": (0, 1), "apex": (), "exit": ()},
+        active_phase="entry",
+        dominant_nodes={"entry": ("tyres",), "apex": ("tyres",), "exit": ("tyres",)},
+        phase_weights=base_weights,
+        grip_rel=1.0,
+        filtered_measures={"thermal_load": 5200.0, "style_index": 0.9, "grip_rel": 1.0},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={
+            "entry": {"slip_lat": 0.0, "slip_long": 0.0, "yaw_rate": 0.0},
+            "apex": {"slip_lat": 0.0, "slip_long": 0.0, "yaw_rate": 0.0},
+            "exit": {"slip_lat": 0.0, "slip_long": 0.0, "yaw_rate": 0.0},
+        },
+    )
+    boosted_microsector = replace(base_microsector, phase_weights=boosted_weights)
+
+    base_metrics = orchestrate_delta_metrics(
+        [records],
+        target_delta_nfr=0.0,
+        target_sense_index=0.9,
+        microsectors=[base_microsector],
+        phase_weights=base_weights,
+    )
+    boosted_metrics = orchestrate_delta_metrics(
+        [records],
+        target_delta_nfr=0.0,
+        target_sense_index=0.9,
+        microsectors=[boosted_microsector],
+        phase_weights=boosted_weights,
+    )
+
+    base_series = base_metrics["epi_evolution"]["per_node_derivative"]["tyres"]
+    boosted_series = boosted_metrics["epi_evolution"]["per_node_derivative"]["tyres"]
+    assert boosted_series[0] > base_series[0]
+
+
 def test_orchestrator_consumes_fixture_segments(synthetic_records):
     segments = [synthetic_records[:9], synthetic_records[9:]]
 
