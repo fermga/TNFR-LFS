@@ -271,3 +271,60 @@ def test_insim_client_button_serialisation():
     )
     assert clear_header[6] == InSimClient.BTN_STYLE_CLEAR
     assert captured["clear"][-1] == 0
+
+
+def test_insim_client_poll_button_click():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+
+    def _server() -> None:
+        conn, _ = server.accept()
+        with conn:
+            header = _recv_exact(conn, 1)
+            _recv_exact(conn, header[0] - 1)
+            version_packet = InSimClient.VER_STRUCT.pack(
+                InSimClient.VER_STRUCT.size,
+                InSimClient.ISP_VER,
+                9,
+                0,
+                InSimClient.INSIM_VERSION,
+            )
+            conn.sendall(version_packet)
+            _recv_exact(conn, InSimClient.TINY_STRUCT.size)
+            btc_packet = InSimClient.BTC_STRUCT.pack(
+                InSimClient.BTC_STRUCT.size,
+                InSimClient.ISP_BTC,
+                4,
+                2,
+                7,
+                1,
+                0,
+                0,
+                0,
+                0x0200,
+            )
+            conn.sendall(btc_packet)
+
+    thread = threading.Thread(target=_server, daemon=True)
+    thread.start()
+
+    client = InSimClient(host="127.0.0.1", port=port, request_id=4)
+    try:
+        client.connect()
+        client.subscribe_controls()
+        event = client.poll_button(timeout=0.2)
+    finally:
+        client.close()
+
+    thread.join(timeout=1.0)
+    server.close()
+
+    assert event is not None
+    assert event.ucid == 2
+    assert event.click_id == 7
+    assert event.inst == 1
+    assert event.type_in == 0
+    assert event.typed_char is None
+    assert event.flags == 0x0200

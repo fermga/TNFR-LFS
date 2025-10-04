@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import select
 import socket
 import struct
 from dataclasses import dataclass
@@ -42,6 +43,18 @@ class ButtonLayout:
         )
 
 
+@dataclass(slots=True)
+class ButtonEvent:
+    """Simplified view of ``IS_BTC`` button control packets."""
+
+    ucid: int
+    click_id: int
+    inst: int
+    type_in: int
+    typed_char: Optional[str] = None
+    flags: int = 0
+
+
 class InSimClient:
     """Very small InSim TCP client focused on button overlays."""
 
@@ -49,6 +62,7 @@ class InSimClient:
     ISP_VER = 2
     ISP_TINY = 3
     ISP_BTN = 18
+    ISP_BTC = 19
 
     TINY_NONE = 0
     TINY_ALIVE = 1
@@ -63,6 +77,7 @@ class InSimClient:
     VER_STRUCT = struct.Struct("<BBBBH")
     TINY_STRUCT = struct.Struct("<BBBB")
     BTN_HEADER_STRUCT = struct.Struct("<BBBBBBBBBBBB")
+    BTC_STRUCT = struct.Struct("<BBBBBBBBHH")
 
     def __init__(
         self,
@@ -140,6 +155,64 @@ class InSimClient:
             self.TINY_SUBT_BTC,
         )
         self._socket.sendall(packet)  # type: ignore[union-attr]
+
+    def poll_button(self, timeout: float = 0.0) -> Optional[ButtonEvent]:
+        """Poll for a pending ``IS_BTC`` packet without blocking.
+
+        Returns ``None`` if no packet is available within ``timeout`` seconds
+        or if the received packet is not a button click event (``TypeIn`` != 0).
+        """
+
+        self._ensure_connected()
+        sock = self._socket
+        if sock is None:
+            raise RuntimeError("InSim client is not connected")
+        readable, _, _ = select.select([sock], [], [], timeout)
+        if not readable:
+            return None
+
+        header = self._recv_exact(sock, 1)
+        if not header:
+            return None
+        size = header[0]
+        payload = self._recv_exact(sock, size - 1)
+        data = header + payload
+
+        if size != self.BTC_STRUCT.size or data[1] != self.ISP_BTC:
+            return None
+
+        (
+            _size,
+            _type,
+            _reqi,
+            ucid,
+            click_id,
+            inst,
+            type_in,
+            typed,
+            unicode_char,
+            flags,
+        ) = self.BTC_STRUCT.unpack(data)
+
+        if type_in != 0:
+            return None
+
+        typed_char: Optional[str]
+        if unicode_char:
+            typed_char = chr(unicode_char)
+        elif typed:
+            typed_char = chr(typed)
+        else:
+            typed_char = None
+
+        return ButtonEvent(
+            ucid=ucid,
+            click_id=click_id,
+            inst=inst,
+            type_in=type_in,
+            typed_char=typed_char,
+            flags=flags,
+        )
 
     def send_button(self, text: str, layout: ButtonLayout | None = None) -> None:
         """Render or update a button overlay using ``IS_BTN`` packets."""
@@ -291,6 +364,11 @@ class OverlayManager:
             self.client.send_keepalive()
             self._schedule_keepalive(now)
 
+    def poll_button(self, timeout: float = 0.0) -> Optional[ButtonEvent]:
+        """Proxy to :meth:`InSimClient.poll_button`."""
+
+        return self.client.poll_button(timeout)
+
     def close(self) -> None:
         try:
             self.hide()
@@ -302,4 +380,4 @@ class OverlayManager:
         self._next_keepalive = reference + self.client.keepalive_interval
 
 
-__all__ = ["ButtonLayout", "InSimClient", "OverlayManager"]
+__all__ = ["ButtonLayout", "ButtonEvent", "InSimClient", "OverlayManager"]
