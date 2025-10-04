@@ -47,3 +47,5 @@ def test_profile_manager_updates_tyre_offsets(tmp_path: Path) -> None:
     snapshot = reloaded.resolve(car_model, track)
     assert snapshot.tyre_offsets["pressure_front"] == pytest.approx(-0.04)
     assert snapshot.tyre_offsets["camber_rear"] == pytest.approx(0.08)
+    assert "hairpin" in snapshot.archetype_targets
+    assert "entry" in snapshot.archetype_targets["hairpin"]

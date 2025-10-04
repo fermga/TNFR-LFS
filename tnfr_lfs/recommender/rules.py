@@ -26,6 +26,11 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 from ..core.epi_models import EPIBundle
 from ..core.operators import TyreBalanceControlOutput, tyre_balance_controller
 from ..core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
+from ..core.archetypes import (
+    ARCHETYPE_MEDIUM,
+    DEFAULT_ARCHETYPE_PHASE_TARGETS,
+    PhaseArchetypeTargets,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..io.profiles import ProfileManager
@@ -333,6 +338,9 @@ class ThresholdProfile:
     phase_weights: Mapping[str, Mapping[str, float] | float] = field(
         default_factory=dict
     )
+    archetype_phase_targets: Mapping[str, Mapping[str, PhaseArchetypeTargets]] = field(
+        default_factory=dict
+    )
 
     def tolerance_for_phase(self, phase: str) -> float:
         mapping = {
@@ -364,6 +372,14 @@ class ThresholdProfile:
         if isinstance(profile, (int, float)):
             return float(profile)
         return MappingProxyType({})
+
+    def archetype_targets_for(
+        self, archetype: str
+    ) -> Mapping[str, PhaseArchetypeTargets]:
+        table = self.archetype_phase_targets.get(archetype)
+        if table is None:
+            table = self.archetype_phase_targets.get(ARCHETYPE_MEDIUM, {})
+        return table
 
 
 @dataclass(frozen=True)
@@ -414,6 +430,15 @@ def _freeze_phase_weights(
     return MappingProxyType(frozen)
 
 
+def _freeze_archetype_targets(
+    targets: Mapping[str, Mapping[str, PhaseArchetypeTargets]]
+) -> Mapping[str, Mapping[str, PhaseArchetypeTargets]]:
+    frozen: Dict[str, Mapping[str, PhaseArchetypeTargets]] = {}
+    for archetype, phases in targets.items():
+        frozen[str(archetype)] = MappingProxyType(dict(phases))
+    return MappingProxyType(frozen)
+
+
 _BASELINE_PHASE_TARGETS = _freeze_phase_targets(
     {
         "entry": PhaseTargetWindow(
@@ -439,6 +464,11 @@ _BASELINE_PHASE_TARGETS = _freeze_phase_targets(
 
 
 _BASELINE_PHASE_WEIGHTS = _freeze_phase_weights({})
+
+
+_BASELINE_ARCHETYPE_TARGETS = _freeze_archetype_targets(
+    DEFAULT_ARCHETYPE_PHASE_TARGETS
+)
 
 
 def _coerce_window(
@@ -531,6 +561,7 @@ def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
         rho_detune_threshold=float(payload.get("rho_detune_threshold", defaults["rho_detune_threshold"])),
         phase_targets=phase_targets,
         phase_weights=phase_weights,
+        archetype_phase_targets=_BASELINE_ARCHETYPE_TARGETS,
     )
 
 
@@ -657,6 +688,7 @@ DEFAULT_THRESHOLD_PROFILE = ThresholdProfile(
     rho_detune_threshold=0.7,
     phase_targets=_BASELINE_PHASE_TARGETS,
     phase_weights=_BASELINE_PHASE_WEIGHTS,
+    archetype_phase_targets=_BASELINE_ARCHETYPE_TARGETS,
 )
 
 
@@ -1295,16 +1327,25 @@ class DetuneRatioRule:
             goal = _goal_for_phase(microsector, microsector.active_phase)
             target_rho = getattr(goal, "rho_target", None) if goal else None
             target_exc = getattr(goal, "nu_exc_target", None) if goal else None
+            detune_weights = getattr(goal, "detune_ratio_weights", {}) if goal else {}
             category = phase_family(microsector.active_phase)
             target_text = ""
             if target_rho:
                 target_text += f" Objetivo ρ≈{target_rho:.2f}."
             if target_exc:
                 target_text += f" ν_exc ref {target_exc:.2f}Hz."
+            focus_text = ""
+            if isinstance(detune_weights, Mapping):
+                long_weight = float(detune_weights.get("longitudinal", 0.5))
+                lat_weight = float(detune_weights.get("lateral", 0.5))
+                if long_weight > lat_weight:
+                    focus_text = " Prioridad detune longitudinal."
+                elif lat_weight > long_weight:
+                    focus_text = " Prioridad detune lateral."
             rationale = (
                 f"Detune ratio ρ={rho:.2f} en microsector {microsector.index}"
                 f" cae por debajo del umbral {threshold:.2f} con ∇Res {d_nfr_res:+.2f}."
-                f"{target_text} Revisa barras estabilizadoras y amortiguadores"
+                f"{target_text}{focus_text} Revisa barras estabilizadoras y amortiguadores"
                 f" ({MANUAL_REFERENCES['antiroll']})."
             )
             message = (

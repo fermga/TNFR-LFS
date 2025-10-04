@@ -130,7 +130,7 @@ def _microsector() -> Microsector:
         goals=(
             Goal(
                 phase="entry",
-                archetype="apoyo",
+                archetype="hairpin",
                 description="",
                 target_delta_nfr=0.0,
                 target_sense_index=0.9,
@@ -148,7 +148,7 @@ def _microsector() -> Microsector:
             ),
             Goal(
                 phase="apex",
-                archetype="apoyo",
+                archetype="hairpin",
                 description="",
                 target_delta_nfr=0.0,
                 target_sense_index=0.9,
@@ -166,7 +166,7 @@ def _microsector() -> Microsector:
             ),
             Goal(
                 phase="exit",
-                archetype="apoyo",
+                archetype="hairpin",
                 description="",
                 target_delta_nfr=0.0,
                 target_sense_index=0.9,

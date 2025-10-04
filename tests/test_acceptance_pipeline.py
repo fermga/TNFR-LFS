@@ -150,9 +150,9 @@ def test_acceptance_memory_and_mutation_converge() -> None:
         mutation_state,
         {
             "microsector_id": "0",
-            "current_archetype": "equilibrio",
-            "candidate_archetype": "ataque",
-            "fallback_archetype": "recuperacion",
+            "current_archetype": "medium",
+            "candidate_archetype": "hairpin",
+            "fallback_archetype": "medium",
             "entropy": 0.72,
             "style_index": 0.88,
             "style_reference": 0.7,
@@ -163,13 +163,13 @@ def test_acceptance_memory_and_mutation_converge() -> None:
         style_threshold=0.12,
     )
     assert initial["mutated"]
-    assert initial["archetype"] == "ataque"
+    assert initial["archetype"] == "hairpin"
 
     steady_triggers = {
         "microsector_id": "0",
         "current_archetype": initial["archetype"],
         "candidate_archetype": initial["archetype"],
-        "fallback_archetype": "recuperacion",
+        "fallback_archetype": "medium",
         "entropy": 0.6,
         "style_index": 0.71,
         "style_reference": 0.7,

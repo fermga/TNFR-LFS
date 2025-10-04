@@ -16,6 +16,7 @@ from .epi import (
 )
 from .epi_models import EPIBundle
 from .phases import expand_phase_alias, phase_family
+from .archetypes import ARCHETYPE_MEDIUM
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
     from .segmentation import Microsector
@@ -552,9 +553,9 @@ def mutation_operator(
     if not isinstance(microsector_id, str) or not microsector_id:
         raise ValueError("microsector_id trigger must be a non-empty string")
 
-    current_archetype = str(triggers.get("current_archetype", "equilibrio"))
+    current_archetype = str(triggers.get("current_archetype", ARCHETYPE_MEDIUM))
     candidate_archetype = str(triggers.get("candidate_archetype", current_archetype))
-    fallback_archetype = str(triggers.get("fallback_archetype", "recuperacion"))
+    fallback_archetype = str(triggers.get("fallback_archetype", ARCHETYPE_MEDIUM))
 
     entropy = float(triggers.get("entropy", 0.0))
     style_index = float(triggers.get("style_index", 1.0))

@@ -185,7 +185,7 @@ def test_delta_calculator_decomposes_lateral_component():
     assert abs(bundle.delta_nfr_lateral) > abs(bundle.delta_nfr_longitudinal)
 
 
-def _build_goal(phase: str, target_delta: float, *, archetype: str = "equilibrio") -> Goal:
+def _build_goal(phase: str, target_delta: float, *, archetype: str = "medium") -> Goal:
     aliases = expand_phase_alias(phase)
     actual_phase = aliases[-1] if aliases else phase
     return Goal(
@@ -216,7 +216,7 @@ def _build_microsector(
     *,
     apex_target: float,
     support_event: bool = True,
-    archetype: str = "apoyo",
+    archetype: str = "hairpin",
 ) -> Microsector:
     target_map = {
         "entry1": 0.0,
@@ -785,9 +785,9 @@ def test_mutation_operator_detects_style_and_entropy_mutations():
     state: dict[str, dict[str, object]] = {}
     base_triggers = {
         "microsector_id": "ms-5",
-        "current_archetype": "equilibrio",
-        "candidate_archetype": "apoyo",
-        "fallback_archetype": "recuperacion",
+        "current_archetype": "medium",
+        "candidate_archetype": "hairpin",
+        "fallback_archetype": "medium",
         "entropy": 0.3,
         "style_index": 0.82,
         "style_reference": 0.82,
@@ -796,14 +796,14 @@ def test_mutation_operator_detects_style_and_entropy_mutations():
 
     initial = mutation_operator(state, base_triggers)
     assert not initial["mutated"]
-    assert initial["archetype"] == "equilibrio"
+    assert initial["archetype"] == "medium"
 
     style_shift = mutation_operator(
         state,
         {**base_triggers, "style_index": 0.55, "dynamic_conditions": True},
     )
     assert style_shift["mutated"]
-    assert style_shift["archetype"] == "apoyo"
+    assert style_shift["archetype"] == "hairpin"
 
     entropy_spike = mutation_operator(
         state,
@@ -815,7 +815,7 @@ def test_mutation_operator_detects_style_and_entropy_mutations():
         },
     )
     assert entropy_spike["mutated"]
-    assert entropy_spike["archetype"] == "recuperacion"
+    assert entropy_spike["archetype"] == "medium"
 
     phase_adjustment = mutation_operator(
         state,
@@ -827,7 +827,7 @@ def test_mutation_operator_detects_style_and_entropy_mutations():
         },
     )
     assert phase_adjustment["mutated"]
-    assert phase_adjustment["archetype"] == "apoyo"
+    assert phase_adjustment["archetype"] == "hairpin"
     assert state["ms-5"]["phase"] == "apex"
 
 

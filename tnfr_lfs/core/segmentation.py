@@ -33,7 +33,14 @@ from .epi import (
 from .epi_models import EPIBundle
 from .metrics import compute_window_metrics
 from .operators import mutation_operator, recursivity_operator
-from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias
+from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias, phase_family
+from .archetypes import (
+    ARCHETYPE_CHICANE,
+    ARCHETYPE_HAIRPIN,
+    ARCHETYPE_FAST,
+    ARCHETYPE_MEDIUM,
+    archetype_phase_targets,
+)
 from .resonance import estimate_excitation_frequency
 from .spectrum import phase_alignment
 
@@ -71,6 +78,13 @@ class Goal:
     target_delta_nfr_long: float = 0.0
     target_delta_nfr_lat: float = 0.0
     delta_axis_weights: Mapping[str, float] = field(
+        default_factory=lambda: {"longitudinal": 0.5, "lateral": 0.5}
+    )
+    archetype_delta_nfr_long_target: float = 0.0
+    archetype_delta_nfr_lat_target: float = 0.0
+    archetype_nu_f_target: float = 0.0
+    archetype_si_phi_target: float = 0.0
+    detune_ratio_weights: Mapping[str, float] = field(
         default_factory=lambda: {"longitudinal": 0.5, "lateral": 0.5}
     )
 
@@ -188,6 +202,11 @@ def segment_microsectors(
         grip_rel = (
             avg_vertical_load / baseline_vertical if baseline_vertical > 1e-9 else 0.0
         )
+        duration = max(0.0, record_window[-1].timestamp - record_window[0].timestamp)
+        entry_speed = float(record_window[0].speed)
+        min_speed = min(float(record.speed) for record in record_window)
+        speed_drop = max(0.0, entry_speed - min_speed)
+        direction_changes = _direction_changes(record_window)
         wheel_temperatures = {
             "tyre_temp_fl": mean(record.tyre_temp_fl for record in record_window),
             "tyre_temp_fr": mean(record.tyre_temp_fr for record in record_window),
@@ -220,6 +239,9 @@ def segment_microsectors(
                 "phase_weights": phase_weight_map,
                 "wheel_temperatures": wheel_temperatures,
                 "wheel_pressures": wheel_pressures,
+                "duration": duration,
+                "speed_drop": speed_drop,
+                "direction_changes": direction_changes,
                 "end_timestamp": float(records[end].timestamp),
             }
         )
@@ -258,10 +280,10 @@ def segment_microsectors(
         delta_signature = mean(b.delta_nfr for b in recomputed_bundles[start : end + 1])
         avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
         archetype = _classify_archetype(
-            delta_signature,
-            avg_si,
-            spec["brake_event"],
-            spec["support_event"],
+            spec["curvature"],
+            spec.get("duration", 0.0),
+            spec.get("speed_drop", 0.0),
+            spec.get("direction_changes", 0),
         )
         goals, _, _, _ = _build_goals(
             archetype,
@@ -300,7 +322,12 @@ def segment_microsectors(
         grip_rel = float(spec.get("grip_rel", 0.0))
         delta_signature = mean(b.delta_nfr for b in recomputed_bundles[start : end + 1])
         avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
-        archetype = _classify_archetype(delta_signature, avg_si, brake_event, support_event)
+        archetype = _classify_archetype(
+            curvature,
+            spec.get("duration", 0.0),
+            spec.get("speed_drop", 0.0),
+            spec.get("direction_changes", 0),
+        )
         goals, dominant_nodes, axis_targets, axis_weights = _build_goals(
             archetype,
             recomputed_bundles,
@@ -636,19 +663,33 @@ def _detect_support_event(records: Sequence[TelemetryRecord]) -> bool:
     return max(loads) - min(loads) >= SUPPORT_THRESHOLD
 
 
+def _direction_changes(records: Sequence[TelemetryRecord]) -> int:
+    last_sign = 0
+    changes = 0
+    for record in records:
+        value = float(record.lateral_accel)
+        if abs(value) < 0.25:
+            continue
+        sign = 1 if value > 0 else -1
+        if last_sign and sign != last_sign:
+            changes += 1
+        last_sign = sign
+    return changes
+
+
 def _classify_archetype(
-    delta_signature: float,
-    sense_index_value: float,
-    brake_event: bool,
-    support_event: bool,
+    curvature: float,
+    duration: float,
+    speed_drop: float,
+    direction_changes: int,
 ) -> str:
-    if sense_index_value < 0.55:
-        return "recuperacion"
-    if delta_signature > 5.0 and support_event:
-        return "apoyo"
-    if delta_signature < -5.0 and brake_event:
-        return "liberacion"
-    return "equilibrio"
+    if direction_changes >= 1:
+        return ARCHETYPE_CHICANE
+    if curvature >= 2.2 and duration >= 2.4 and speed_drop >= 10.0:
+        return ARCHETYPE_HAIRPIN
+    if curvature <= 1.6 and duration <= 2.4 and speed_drop <= 7.5:
+        return ARCHETYPE_FAST
+    return ARCHETYPE_MEDIUM
 
 
 def _compute_yaw_rate(records: Sequence[TelemetryRecord], index: int) -> float:
@@ -699,6 +740,8 @@ def _build_goals(
 ]:
     descriptions = _goal_descriptions(archetype)
     alignment_targets = _phase_alignment_targets(archetype)
+    archetype_targets = archetype_phase_targets(archetype)
+    default_targets = archetype_phase_targets(ARCHETYPE_MEDIUM)
     goals: List[Goal] = []
     dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = {}
     axis_targets: Dict[PhaseLiteral, Dict[str, float]] = {}
@@ -724,8 +767,12 @@ def _build_goals(
             abs_lat = 0.0
 
         _, measured_lag, measured_alignment = phase_alignment(phase_records)
+        family = phase_family(phase)
+        phase_target = archetype_targets.get(family)
+        if phase_target is None:
+            phase_target = default_targets.get(family)
         target_lag, target_alignment = alignment_targets.get(
-            phase, (0.0, 0.9)
+            phase, (phase_target.lag if phase_target else 0.0, phase_target.si_phi if phase_target else 0.9)
         )
 
         node_metrics: Dict[str, Dict[str, float]] = defaultdict(lambda: {"abs_delta": 0.0, "nu_f_weight": 0.0})
@@ -794,6 +841,10 @@ def _build_goals(
             "lateral": float(weight_map["lateral"]),
         }
 
+        detune_weights = (
+            dict(phase_target.detune_weights) if phase_target is not None else weight_map
+        )
+
         goals.append(
             Goal(
                 phase=phase,
@@ -815,6 +866,19 @@ def _build_goals(
                 target_delta_nfr_long=avg_long,
                 target_delta_nfr_lat=avg_lat,
                 delta_axis_weights=weight_map,
+                archetype_delta_nfr_long_target=(
+                    phase_target.delta_nfr_long if phase_target is not None else avg_long
+                ),
+                archetype_delta_nfr_lat_target=(
+                    phase_target.delta_nfr_lat if phase_target is not None else avg_lat
+                ),
+                archetype_nu_f_target=(
+                    phase_target.nu_f if phase_target is not None else nu_f_target
+                ),
+                archetype_si_phi_target=(
+                    phase_target.si_phi if phase_target is not None else target_alignment
+                ),
+                detune_ratio_weights=detune_weights,
             )
         )
     for legacy, phases in LEGACY_PHASE_MAP.items():
@@ -1003,10 +1067,10 @@ def _adjust_phase_weights_with_dominance(
     for spec in specs:
         phase_boundaries = spec["phase_boundaries"]
         archetype = _classify_archetype(
-            mean(b.delta_nfr for b in bundles[spec["start"] : spec["end"] + 1]),
-            mean(b.sense_index for b in bundles[spec["start"] : spec["end"] + 1]),
-            spec["brake_event"],
-            spec["support_event"],
+            spec["curvature"],
+            spec.get("duration", 0.0),
+            spec.get("speed_drop", 0.0),
+            spec.get("direction_changes", 0),
         )
         goals, dominant_nodes, axis_targets, axis_weights = _build_goals(
             archetype,
@@ -1042,51 +1106,19 @@ def _adjust_phase_weights_with_dominance(
 
 
 def _phase_alignment_targets(archetype: str) -> Mapping[str, Tuple[float, float]]:
-    base: Dict[str, Tuple[float, float]] = {
-        "entry1": (0.0, 0.9),
-        "entry2": (0.0, 0.9),
-        "apex3a": (0.0, 0.92),
-        "apex3b": (0.0, 0.92),
-        "exit4": (0.0, 0.88),
-    }
-    if archetype == "apoyo":
-        adjustments = {
-            "entry1": (-0.08, 0.9),
-            "entry2": (-0.05, 0.9),
-            "apex3a": (-0.02, 0.93),
-            "apex3b": (0.0, 0.94),
-            "exit4": (0.04, 0.9),
-        }
-    elif archetype == "liberacion":
-        adjustments = {
-            "entry1": (0.05, 0.85),
-            "entry2": (0.08, 0.82),
-            "apex3a": (0.12, 0.8),
-            "apex3b": (0.14, 0.78),
-            "exit4": (0.18, 0.75),
-        }
-    elif archetype == "recuperacion":
-        adjustments = {
-            "entry1": (0.0, 0.88),
-            "entry2": (0.0, 0.9),
-            "apex3a": (0.0, 0.9),
-            "apex3b": (0.0, 0.92),
-            "exit4": (0.02, 0.9),
-        }
-    else:
-        adjustments = {
-            "entry1": (0.0, 0.92),
-            "entry2": (0.0, 0.92),
-            "apex3a": (0.0, 0.94),
-            "apex3b": (0.0, 0.94),
-            "exit4": (0.0, 0.9),
-        }
+    table = archetype_phase_targets(archetype)
     result: Dict[str, Tuple[float, float]] = {}
-    for phase, defaults in base.items():
-        if phase in adjustments:
-            result[phase] = adjustments[phase]
+    for phase in PHASE_SEQUENCE:
+        family = phase_family(phase)
+        target = table.get(family)
+        if target is None:
+            fallback = archetype_phase_targets(ARCHETYPE_MEDIUM).get(family)
         else:
-            result[phase] = defaults
+            fallback = target
+        if fallback is None:
+            result[phase] = (0.0, 0.9)
+        else:
+            result[phase] = (fallback.lag, fallback.si_phi)
     return result
 
 
@@ -1098,34 +1130,44 @@ def _goal_descriptions(archetype: str) -> Mapping[str, str]:
         "apex3b": "Sostener el vértice según el arquetipo de {archetype} manteniendo ΔNFR estable.",
         "exit4": "Liberar energía siguiendo el arquetipo de {archetype} hacia la salida.",
     }
-    if archetype == "apoyo":
+    if archetype == ARCHETYPE_HAIRPIN:
         base.update(
             {
-                "entry1": "Generar deceleración progresiva para preparar el apoyo.",
-                "entry2": "Consolidar la transferencia previa reforzando el apoyo.",
-                "apex3a": "Sostener la carga máxima al llegar al vértice.",
-                "apex3b": "Mantener el apoyo al pivotar sobre el vértice.",
-                "exit4": "Transferir carga manteniendo el apoyo en la tracción inicial.",
+                "entry1": "Extender la frenada para clavar la horquilla con control.",
+                "entry2": "Depositar el coche en apoyo máximo antes del vértice.",
+                "apex3a": "Pivotar con paciencia cerrando la horquilla.",
+                "apex3b": "Administrar la rotación manteniendo el punto de apoyo.",
+                "exit4": "Progresar la reapertura priorizando tracción.",
             }
         )
-    elif archetype == "liberacion":
+    elif archetype == ARCHETYPE_CHICANE:
         base.update(
             {
-                "entry1": "Extender la frenada inicial para inducir liberación controlada.",
-                "entry2": "Dosificar la liberación antes del vértice.",
-                "apex3a": "Permitir la rotación asociada al arquetipo de liberación.",
-                "apex3b": "Dirigir la liberación hacia la reaplicación de par.",
-                "exit4": "Reequilibrar al salir para cerrar la fase de liberación.",
+                "entry1": "Preparar el primer cambio de dirección con balance neutro.",
+                "entry2": "Sincronizar el traspaso de masas hacia el segundo apoyo.",
+                "apex3a": "Encadenar vértices manteniendo fluidez en la transición.",
+                "apex3b": "Sostener la ligereza para no saturar el segundo apoyo.",
+                "exit4": "Completar la chicana estabilizando el coche a la salida.",
             }
         )
-    elif archetype == "recuperacion":
+    elif archetype == ARCHETYPE_FAST:
         base.update(
             {
-                "entry1": "Recuperar estabilidad en la aproximación inicial.",
-                "entry2": "Afirmar la estabilidad antes del vértice.",
-                "apex3a": "Maximizar el índice de sentido al tomar el vértice.",
-                "apex3b": "Garantizar la recuperación durante la transición del vértice.",
-                "exit4": "Asegurar la tracción evitando pérdidas posteriores.",
+                "entry1": "Trazar la aproximación rápida sin comprometer estabilidad.",
+                "entry2": "Afinar la trayectoria minimizando correcciones.",
+                "apex3a": "Cruzar el vértice con carga constante y suave.",
+                "apex3b": "Sostener la velocidad en apoyo continuo.",
+                "exit4": "Proyectar la salida manteniendo ritmo alto.",
+            }
+        )
+    elif archetype == ARCHETYPE_MEDIUM:
+        base.update(
+            {
+                "entry1": "Asentar la frenada equilibrando el coche.",
+                "entry2": "Preparar el vértice con transferencia progresiva.",
+                "apex3a": "Encadenar el giro manteniendo carga homogénea.",
+                "apex3b": "Controlar la deriva para sostener la línea.",
+                "exit4": "Reaplicar potencia sin romper la estabilidad.",
             }
         )
     return {phase: message.format(archetype=archetype) for phase, message in base.items()}
