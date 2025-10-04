@@ -1,0 +1,106 @@
+from dataclasses import replace
+
+import pytest
+
+from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.core.metrics import compute_window_metrics
+from tnfr_lfs.core.structural_time import compute_structural_timestamps
+
+
+def _record(
+    timestamp: float,
+    *,
+    brake: float = 0.0,
+    throttle: float = 0.0,
+    yaw_rate: float = 0.0,
+    steer: float = 0.0,
+    nfr: float = 0.0,
+    si: float = 0.8,
+) -> TelemetryRecord:
+    return TelemetryRecord(
+        timestamp=timestamp,
+        structural_timestamp=None,
+        vertical_load=5000.0,
+        slip_ratio=0.0,
+        lateral_accel=0.0,
+        longitudinal_accel=0.0,
+        yaw=0.0,
+        pitch=0.0,
+        roll=0.0,
+        brake_pressure=brake,
+        locking=0.0,
+        nfr=nfr,
+        si=si,
+        speed=0.0,
+        yaw_rate=yaw_rate,
+        slip_angle=0.0,
+        steer=steer,
+        throttle=throttle,
+        gear=3,
+        vertical_load_front=2500.0,
+        vertical_load_rear=2500.0,
+        mu_eff_front=1.0,
+        mu_eff_rear=1.0,
+        mu_eff_front_lateral=1.0,
+        mu_eff_front_longitudinal=0.95,
+        mu_eff_rear_lateral=1.0,
+        mu_eff_rear_longitudinal=0.95,
+        suspension_travel_front=0.0,
+        suspension_travel_rear=0.0,
+        suspension_velocity_front=0.0,
+        suspension_velocity_rear=0.0,
+    )
+
+
+def test_structural_time_dense_sequences_expand_span() -> None:
+    sparse_records = [
+        _record(float(index), brake=0.1 if index == 3 else 0.0, yaw_rate=0.05, steer=0.02)
+        for index in range(8)
+    ]
+    dense_records = [
+        _record(
+            float(index),
+            brake=0.6 if index % 2 else 0.0,
+            throttle=0.7 if index % 3 == 0 else 0.2,
+            yaw_rate=0.4 if index >= 2 else 0.05,
+            steer=0.3 if index >= 4 else 0.1,
+        )
+        for index in range(8)
+    ]
+
+    sparse_axis = compute_structural_timestamps(sparse_records, window_size=3)
+    dense_axis = compute_structural_timestamps(dense_records, window_size=3)
+
+    assert sparse_axis[0] == pytest.approx(dense_axis[0])
+    assert dense_axis[-1] - dense_axis[0] > sparse_axis[-1] - sparse_axis[0]
+    assert all(
+        later >= earlier for earlier, later in zip(dense_axis, dense_axis[1:])
+    ), "structural axis must be monotonic"
+
+
+def test_structural_time_modulates_gradients_with_weights() -> None:
+    records = [
+        _record(float(index), brake=0.8 if index in {1, 2} else 0.1, nfr=float(index))
+        for index in range(6)
+    ]
+
+    brake_weights = {"brake_pressure": 0.7, "throttle": 0.1, "yaw_rate": 0.1, "steer": 0.1}
+    throttle_weights = {"brake_pressure": 0.1, "throttle": 0.7, "yaw_rate": 0.1, "steer": 0.1}
+
+    brake_axis = compute_structural_timestamps(records, weights=brake_weights, window_size=2)
+    throttle_axis = compute_structural_timestamps(records, weights=throttle_weights, window_size=2)
+
+    brake_records = [
+        replace(record, structural_timestamp=axis)
+        for record, axis in zip(records, brake_axis)
+    ]
+    throttle_records = [
+        replace(record, structural_timestamp=axis)
+        for record, axis in zip(records, throttle_axis)
+    ]
+
+    brake_metrics = compute_window_metrics(brake_records)
+    throttle_metrics = compute_window_metrics(throttle_records)
+
+    assert brake_metrics.d_nfr_couple < throttle_metrics.d_nfr_couple
+    assert brake_metrics.d_nfr_res <= throttle_metrics.d_nfr_res

@@ -137,6 +137,7 @@ class EPIBundle:
     transmission: TransmissionNode
     track: TrackNode
     driver: DriverNode
+    structural_timestamp: float | None = None
     delta_breakdown: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     dEPI_dt: float = 0.0
     integrated_epi: float = 0.0

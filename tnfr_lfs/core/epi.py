@@ -122,6 +122,7 @@ class TelemetryRecord:
     suspension_travel_rear: float
     suspension_velocity_front: float
     suspension_velocity_rear: float
+    structural_timestamp: float | None = None
     tyre_temp_fl: float = 0.0
     tyre_temp_fr: float = 0.0
     tyre_temp_rl: float = 0.0
@@ -404,9 +405,22 @@ class EPIExtractor:
         results: List[EPIBundle] = []
         prev_integrated_epi: Optional[float] = None
         prev_timestamp = records[0].timestamp
+        prev_structural = getattr(records[0], "structural_timestamp", None)
         for index, record in enumerate(records):
             epi_value = self._compute_epi(record)
-            dt = 0.0 if index == 0 else max(0.0, record.timestamp - prev_timestamp)
+            structural_ts = getattr(record, "structural_timestamp", None)
+            if index == 0:
+                dt = 0.0
+            else:
+                if (
+                    structural_ts is not None
+                    and prev_structural is not None
+                    and math.isfinite(structural_ts)
+                    and math.isfinite(prev_structural)
+                ):
+                    dt = max(0.0, structural_ts - prev_structural)
+                else:
+                    dt = max(0.0, record.timestamp - prev_timestamp)
             nu_f_map = resolve_nu_f_by_node(record)
             bundle = DeltaCalculator.compute_bundle(
                 record,
@@ -419,6 +433,8 @@ class EPIExtractor:
             results.append(bundle)
             prev_integrated_epi = bundle.integrated_epi
             prev_timestamp = record.timestamp
+            if structural_ts is not None and math.isfinite(structural_ts):
+                prev_structural = structural_ts
         return results
 
     def _compute_epi(self, record: TelemetryRecord) -> float:
@@ -438,6 +454,11 @@ class DeltaCalculator:
 
         return TelemetryRecord(
             timestamp=records[0].timestamp,
+            structural_timestamp=(
+                records[0].structural_timestamp
+                if getattr(records[0], "structural_timestamp", None) is not None
+                else records[0].timestamp
+            ),
             vertical_load=mean(record.vertical_load for record in records),
             slip_ratio=mean(record.slip_ratio for record in records),
             lateral_accel=mean(record.lateral_accel for record in records),
@@ -491,6 +512,7 @@ class DeltaCalculator:
         | float
         | None = None,
     ) -> EPIBundle:
+        structural_timestamp = getattr(record, "structural_timestamp", None)
         delta_nfr = record.nfr - baseline.nfr
         feature_contributions = _node_feature_contributions(record, baseline)
         node_signals = {
@@ -539,6 +561,11 @@ class DeltaCalculator:
         )
         return EPIBundle(
             timestamp=record.timestamp,
+            structural_timestamp=(
+                float(structural_timestamp)
+                if structural_timestamp is not None
+                else float(record.timestamp)
+            ),
             epi=epi_value,
             delta_nfr=delta_nfr,
             delta_nfr_longitudinal=longitudinal_delta,

@@ -37,6 +37,7 @@ class TelemetrySchema:
 DEFAULT_SCHEMA = TelemetrySchema(
     columns=(
         "timestamp",
+        "structural_timestamp",
         "vertical_load",
         "slip_ratio",
         "lateral_accel",
@@ -76,6 +77,18 @@ DEFAULT_SCHEMA = TelemetrySchema(
         "tyre_pressure_rr",
     ),
 )
+
+OPTIONAL_SCHEMA_COLUMNS = {
+    "structural_timestamp",
+    "tyre_temp_fl",
+    "tyre_temp_fr",
+    "tyre_temp_rl",
+    "tyre_temp_rr",
+    "tyre_pressure_fl",
+    "tyre_pressure_fr",
+    "tyre_pressure_rl",
+    "tyre_pressure_rr",
+}
 
 LEGACY_COLUMNS = (
     "timestamp",
@@ -156,22 +169,37 @@ class OutSimClient:
         header_columns = [column.strip() for column in header.split(self.schema.delimiter)]
         is_legacy = tuple(header_columns) == LEGACY_COLUMNS
         lap_column_present = False
+        value_columns: Sequence[str] = header_columns
+        column_lookup: dict[str, int] = {}
         if not is_legacy:
             schema_columns = tuple(self.schema.columns)
-            normalised_header = tuple(column.lower() for column in header_columns)
             normalised_schema = tuple(column.lower() for column in schema_columns)
-            if normalised_header == normalised_schema:
-                pass
-            elif (
-                len(header_columns) == len(schema_columns) + 1
-                and normalised_header[:-1] == normalised_schema
-                and normalised_header[-1] == "lap"
-            ):
+            normalised_header = tuple(column.lower() for column in header_columns)
+            if normalised_header and normalised_header[-1] == "lap":
                 lap_column_present = True
+                header_core = normalised_header[:-1]
+                value_columns = header_columns[:-1]
             else:
+                header_core = normalised_header
+                value_columns = header_columns
+            header_without_optional = tuple(
+                column for column in header_core if column not in OPTIONAL_SCHEMA_COLUMNS
+            )
+            schema_without_optional = tuple(
+                column for column in normalised_schema if column not in OPTIONAL_SCHEMA_COLUMNS
+            )
+            if header_without_optional != schema_without_optional:
                 raise TelemetryFormatError(
                     f"Unexpected header {header_columns!r}. Expected {self.schema.columns!r}"
                 )
+            column_lookup = {
+                column.lower(): index for index, column in enumerate(value_columns)
+            }
+        else:
+            value_columns = header_columns
+            column_lookup = {column.lower(): index for index, column in enumerate(value_columns)}
+
+        value_columns = tuple(value_columns)
 
         records: List[TelemetryRecord] = []
         for line in iterator:
@@ -180,7 +208,7 @@ class OutSimClient:
             values = [value.strip() for value in line.split(self.schema.delimiter)]
             expected_len = len(LEGACY_COLUMNS)
             if not is_legacy:
-                expected_len = len(self.schema.columns) + (1 if lap_column_present else 0)
+                expected_len = len(value_columns) + (1 if lap_column_present else 0)
             if len(values) != expected_len:
                 raise TelemetryFormatError(
                     f"Expected {expected_len} columns, got {len(values)}: {values!r}"
@@ -243,46 +271,56 @@ class OutSimClient:
                         lap=None,
                     )
                 else:
-                    base_values = values[: len(self.schema.columns)]
+                    data_values = values[:-1] if lap_column_present else values
+                    value_map = {
+                        column: data_values[index]
+                        for column, index in column_lookup.items()
+                    }
+                    structural_value = value_map.get("structural_timestamp")
                     record = TelemetryRecord(
-                        timestamp=float(base_values[0]),
-                        vertical_load=float(base_values[1]),
-                        slip_ratio=float(base_values[2]),
-                        lateral_accel=float(base_values[3]),
-                        longitudinal_accel=float(base_values[4]),
-                        yaw=float(base_values[5]),
-                        pitch=float(base_values[6]),
-                        roll=float(base_values[7]),
-                        brake_pressure=float(base_values[8]),
-                        locking=float(base_values[9]),
-                        nfr=float(base_values[10]),
-                        si=float(base_values[11]),
-                        speed=float(base_values[12]),
-                        yaw_rate=float(base_values[13]),
-                        slip_angle=float(base_values[14]),
-                        steer=float(base_values[15]),
-                        throttle=float(base_values[16]),
-                        gear=int(float(base_values[17])),
-                        vertical_load_front=float(base_values[18]),
-                        vertical_load_rear=float(base_values[19]),
-                        mu_eff_front=float(base_values[20]),
-                        mu_eff_rear=float(base_values[21]),
-                        mu_eff_front_lateral=float(base_values[22]),
-                        mu_eff_front_longitudinal=float(base_values[23]),
-                        mu_eff_rear_lateral=float(base_values[24]),
-                        mu_eff_rear_longitudinal=float(base_values[25]),
-                        suspension_travel_front=float(base_values[26]),
-                        suspension_travel_rear=float(base_values[27]),
-                        suspension_velocity_front=float(base_values[28]),
-                        suspension_velocity_rear=float(base_values[29]),
-                        tyre_temp_fl=float(base_values[30]),
-                        tyre_temp_fr=float(base_values[31]),
-                        tyre_temp_rl=float(base_values[32]),
-                        tyre_temp_rr=float(base_values[33]),
-                        tyre_pressure_fl=float(base_values[34]),
-                        tyre_pressure_fr=float(base_values[35]),
-                        tyre_pressure_rl=float(base_values[36]),
-                        tyre_pressure_rr=float(base_values[37]),
+                        timestamp=float(value_map["timestamp"]),
+                        structural_timestamp=(
+                            float(structural_value)
+                            if structural_value not in (None, "")
+                            else None
+                        ),
+                        vertical_load=float(value_map["vertical_load"]),
+                        slip_ratio=float(value_map["slip_ratio"]),
+                        lateral_accel=float(value_map["lateral_accel"]),
+                        longitudinal_accel=float(value_map["longitudinal_accel"]),
+                        yaw=float(value_map["yaw"]),
+                        pitch=float(value_map["pitch"]),
+                        roll=float(value_map["roll"]),
+                        brake_pressure=float(value_map["brake_pressure"]),
+                        locking=float(value_map["locking"]),
+                        nfr=float(value_map["nfr"]),
+                        si=float(value_map["si"]),
+                        speed=float(value_map["speed"]),
+                        yaw_rate=float(value_map["yaw_rate"]),
+                        slip_angle=float(value_map["slip_angle"]),
+                        steer=float(value_map["steer"]),
+                        throttle=float(value_map["throttle"]),
+                        gear=int(float(value_map["gear"])),
+                        vertical_load_front=float(value_map["vertical_load_front"]),
+                        vertical_load_rear=float(value_map["vertical_load_rear"]),
+                        mu_eff_front=float(value_map["mu_eff_front"]),
+                        mu_eff_rear=float(value_map["mu_eff_rear"]),
+                        mu_eff_front_lateral=float(value_map["mu_eff_front_lateral"]),
+                        mu_eff_front_longitudinal=float(value_map["mu_eff_front_longitudinal"]),
+                        mu_eff_rear_lateral=float(value_map["mu_eff_rear_lateral"]),
+                        mu_eff_rear_longitudinal=float(value_map["mu_eff_rear_longitudinal"]),
+                        suspension_travel_front=float(value_map["suspension_travel_front"]),
+                        suspension_travel_rear=float(value_map["suspension_travel_rear"]),
+                        suspension_velocity_front=float(value_map["suspension_velocity_front"]),
+                        suspension_velocity_rear=float(value_map["suspension_velocity_rear"]),
+                        tyre_temp_fl=float(value_map.get("tyre_temp_fl", 0.0)),
+                        tyre_temp_fr=float(value_map.get("tyre_temp_fr", 0.0)),
+                        tyre_temp_rl=float(value_map.get("tyre_temp_rl", 0.0)),
+                        tyre_temp_rr=float(value_map.get("tyre_temp_rr", 0.0)),
+                        tyre_pressure_fl=float(value_map.get("tyre_pressure_fl", 0.0)),
+                        tyre_pressure_fr=float(value_map.get("tyre_pressure_fr", 0.0)),
+                        tyre_pressure_rl=float(value_map.get("tyre_pressure_rl", 0.0)),
+                        tyre_pressure_rr=float(value_map.get("tyre_pressure_rr", 0.0)),
                         lap=lap_value,
                     )
             except ValueError as exc:  # pragma: no cover - defensive branch
