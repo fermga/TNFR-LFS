@@ -103,3 +103,5 @@ def test_window_metrics_support_efficiency_uses_structural_windows() -> None:
     assert metrics.structural_contraction_longitudinal == pytest.approx(0.0666666667, rel=1e-6)
     assert metrics.structural_expansion_lateral == pytest.approx(0.1133333333, rel=1e-6)
     assert metrics.structural_contraction_lateral == pytest.approx(0.08, rel=1e-6)
+    assert metrics.si_variance == pytest.approx(0.0, abs=1e-9)
+    assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)

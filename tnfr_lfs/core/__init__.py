@@ -40,7 +40,13 @@ from .operators import (
     tyre_balance_controller,
 )
 from .resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
-from .segmentation import Goal, Microsector, segment_microsectors
+from .segmentation import (
+    Goal,
+    Microsector,
+    detect_quiet_microsector_streaks,
+    microsector_stability_metrics,
+    segment_microsectors,
+)
 from .structural_time import compute_structural_timestamps, resolve_time_axis
 
 __all__ = [
@@ -80,6 +86,8 @@ __all__ = [
     "TyreBalanceControlOutput",
     "Goal",
     "Microsector",
+    "detect_quiet_microsector_streaks",
+    "microsector_stability_metrics",
     "segment_microsectors",
     "analyse_modal_resonance",
     "ModalPeak",

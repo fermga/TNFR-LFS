@@ -496,6 +496,8 @@ def segment_microsectors(
                 "aero_low_samples": float(window_metrics.aero_coherence.low_speed_samples),
                 "aero_high_samples": float(window_metrics.aero_coherence.high_speed_samples),
                 "aero_mechanical_coherence": window_metrics.aero_mechanical_coherence,
+                "si_variance": window_metrics.si_variance,
+                "epi_derivative_abs": window_metrics.epi_derivative_abs,
             }
         )
         rec_trace: Tuple[Mapping[str, float | str | None], ...] = ()
@@ -507,6 +509,8 @@ def segment_microsectors(
                 "phase": active_goal.phase,
                 "grip_rel": grip_rel,
                 "d_nfr_flat": window_metrics.d_nfr_flat,
+                "si_variance": window_metrics.si_variance,
+                "epi_derivative_abs": window_metrics.epi_derivative_abs,
                 "timestamp": float(spec.get("end_timestamp", records[spec["end"]].timestamp)),
             }
             measures.update(wheel_temperatures)
@@ -591,6 +595,8 @@ def segment_microsectors(
                 "structural_contraction_longitudinal": window_metrics.structural_contraction_longitudinal,
                 "structural_expansion_lateral": window_metrics.structural_expansion_lateral,
                 "structural_contraction_lateral": window_metrics.structural_contraction_lateral,
+                "si_variance": window_metrics.si_variance,
+                "epi_derivative_abs": window_metrics.epi_derivative_abs,
             }
             defaults.update(wheel_temperatures)
             defaults.update(wheel_pressures)
@@ -667,6 +673,10 @@ def segment_microsectors(
                 global_end = max(global_start, min(end, start + max(0, local_end)))
                 payload.setdefault("global_start_index", global_start)
                 payload.setdefault("global_end_index", global_end)
+                payload.setdefault("si_variance", float(window_metrics.si_variance))
+                payload.setdefault(
+                    "epi_derivative_abs", float(window_metrics.epi_derivative_abs)
+                )
                 if name in {"OZ", "IL"}:
                     delta_values: List[float] = []
                     for idx in range(global_start, global_end + 1):
@@ -1360,6 +1370,77 @@ def _compute_window_occupancy(
             aggregated[key] = mean(entry.get(key, 0.0) for entry in values)
         occupancy[legacy] = aggregated
     return occupancy
+
+
+def microsector_stability_metrics(
+    microsector: Microsector,
+) -> Tuple[float, float, float, float]:
+    """Return structural silence coverage and variance metrics for ``microsector``."""
+
+    events = getattr(microsector, "operator_events", {}) or {}
+    payloads = [
+        payload
+        for payload in events.get("SILENCIO", ())  # type: ignore[assignment]
+        if isinstance(payload, Mapping)
+    ]
+    start_time = float(getattr(microsector, "start_time", 0.0))
+    end_time = float(getattr(microsector, "end_time", 0.0))
+    duration = max(0.0, end_time - start_time)
+    quiet_duration = sum(
+        max(0.0, float(payload.get("duration", 0.0))) for payload in payloads
+    )
+    coverage = 0.0
+    if duration > 1e-9:
+        coverage = min(1.0, quiet_duration / duration)
+    slack = max((float(payload.get("slack", 0.0)) for payload in payloads), default=0.0)
+    filtered = getattr(microsector, "filtered_measures", {}) or {}
+    try:
+        si_variance = abs(float(filtered.get("si_variance", 0.0)))
+    except (TypeError, ValueError):
+        si_variance = 0.0
+    try:
+        epi_abs = abs(float(filtered.get("epi_derivative_abs", 0.0)))
+    except (TypeError, ValueError):
+        epi_abs = 0.0
+    return coverage, slack, si_variance, epi_abs
+
+
+def detect_quiet_microsector_streaks(
+    microsectors: Sequence[Microsector],
+    *,
+    min_length: int = 3,
+    coverage_threshold: float = 0.65,
+    slack_threshold: float = 0.25,
+    si_variance_threshold: float = 0.0025,
+    epi_derivative_threshold: float = 0.18,
+) -> List[Tuple[int, ...]]:
+    """Return index streaks where consecutive microsectors remain quiet."""
+
+    if min_length <= 0:
+        min_length = 1
+    quiet_flags: List[bool] = []
+    for microsector in microsectors:
+        coverage, slack, si_variance, epi_abs = microsector_stability_metrics(microsector)
+        quiet_flags.append(
+            coverage >= coverage_threshold
+            and slack >= slack_threshold
+            and si_variance <= si_variance_threshold
+            and epi_abs <= epi_derivative_threshold
+        )
+
+    sequences: List[Tuple[int, ...]] = []
+    start: int | None = None
+    for index, quiet in enumerate(quiet_flags):
+        if quiet:
+            if start is None:
+                start = index
+        elif start is not None:
+            if index - start >= min_length:
+                sequences.append(tuple(range(start, index)))
+            start = None
+    if start is not None and len(quiet_flags) - start >= min_length:
+        sequences.append(tuple(range(start, len(quiet_flags))))
+    return sequences
 
 
 def _adjust_phase_weights_with_dominance(

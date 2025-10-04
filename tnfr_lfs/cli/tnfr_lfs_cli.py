@@ -38,7 +38,12 @@ from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
 from ..core.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
 from ..core.resonance import analyse_modal_resonance
 from ..core.operators import orchestrate_delta_metrics
-from ..core.segmentation import Microsector, segment_microsectors
+from ..core.segmentation import (
+    Microsector,
+    detect_quiet_microsector_streaks,
+    microsector_stability_metrics,
+    segment_microsectors,
+)
 from ..exporters import (
     REPORT_ARTIFACT_FORMATS,
     build_coherence_map_payload,
@@ -165,6 +170,46 @@ def _effective_delta_metric(metrics: Mapping[str, Any]) -> float:
         return abs(float(value))
     except (TypeError, ValueError):
         return 0.0
+
+
+def _format_quiet_sequence(sequence: Sequence[int]) -> str:
+    if not sequence:
+        return ""
+    start = sequence[0] + 1
+    end = sequence[-1] + 1
+    if start == end:
+        return f"Curva {start}"
+    return f"Curvas {start}-{end}"
+
+
+def _quiet_cli_notice(
+    microsectors: Sequence[Microsector], sequences: Sequence[Sequence[int]]
+) -> str:
+    descriptors: List[str] = []
+    coverage_values: List[float] = []
+    si_values: List[float] = []
+    epi_values: List[float] = []
+    for sequence in sequences:
+        descriptors.append(_format_quiet_sequence(sequence))
+        for index in sequence:
+            if index < 0 or index >= len(microsectors):
+                continue
+            coverage, _, si_variance, epi_abs = microsector_stability_metrics(
+                microsectors[index]
+            )
+            coverage_values.append(coverage)
+            si_values.append(si_variance)
+            epi_values.append(epi_abs)
+    message = f"No tocar: {', '.join(descriptors)}"
+    if coverage_values:
+        coverage_avg = sum(coverage_values) / len(coverage_values)
+        si_avg = sum(si_values) / len(si_values) if si_values else 0.0
+        epi_avg = sum(epi_values) / len(epi_values) if epi_values else 0.0
+        message = (
+            f"{message} · silencio μ {coverage_avg * 100.0:.0f}%"
+            f" · Siσ μ {si_avg:.4f} · |dEPI| μ {epi_avg:.3f}"
+        )
+    return message
 
 
 def _resolve_baseline_destination(
@@ -532,6 +577,9 @@ def _phase_deviation_messages(
         ]
 
     tolerances = _phase_tolerances(config, car_model, track_name)
+    quiet_sequences = detect_quiet_microsector_streaks(microsectors)
+    if quiet_sequences:
+        return [_quiet_cli_notice(microsectors, quiet_sequences)]
     messages: List[str] = []
     bundle_count = len(bundles)
     for microsector in microsectors:

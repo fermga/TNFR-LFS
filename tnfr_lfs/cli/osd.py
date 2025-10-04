@@ -23,7 +23,13 @@ from ..core.metrics import WindowMetrics, compute_window_metrics
 from ..core.operators import orchestrate_delta_metrics
 from ..core.phases import PHASE_SEQUENCE, phase_family
 from ..core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
-from ..core.segmentation import Goal, Microsector, segment_microsectors
+from ..core.segmentation import (
+    Goal,
+    Microsector,
+    detect_quiet_microsector_streaks,
+    microsector_stability_metrics,
+    segment_microsectors,
+)
 from ..exporters.setup_plan import SetupChange, SetupPlan
 from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObjectives
@@ -163,6 +169,7 @@ class TelemetryHUD:
             "memory": (),
             "average": 0.0,
         }
+        self._quiet_sequences: Tuple[Tuple[int, ...], ...] = ()
         self._dirty = True
         self._plan_interval = max(0.0, float(plan_interval))
         self._time_fn = time_fn
@@ -217,6 +224,7 @@ class TelemetryHUD:
             self._coherence_index = 0.0
             self._frequency_classification = "sin datos"
             self._sense_state = {"series": (), "memory": (), "average": 0.0}
+            self._quiet_sequences = ()
             self._dirty = False
             return
 
@@ -226,6 +234,7 @@ class TelemetryHUD:
             self._coherence_index = 0.0
             self._frequency_classification = "sin datos"
             self._sense_state = {"series": (), "memory": (), "average": 0.0}
+            self._quiet_sequences = ()
             self._dirty = False
             return
 
@@ -238,6 +247,8 @@ class TelemetryHUD:
             if self._thresholds.phase_weights
             else None,
         )
+        quiet_sequences = detect_quiet_microsector_streaks(self._microsectors)
+        self._quiet_sequences = tuple(tuple(sequence) for sequence in quiet_sequences)
         active = _resolve_active_phase(self._microsectors, len(records) - 1)
 
         bundle = bundles[-1]
@@ -362,6 +373,7 @@ class TelemetryHUD:
                 coherence_index=self._coherence_index,
                 frequency_classification=self._frequency_classification,
                 sense_state=self._sense_state,
+                quiet_sequences=self._quiet_sequences,
             ),
             _render_page_b(
                 bundle,
@@ -377,6 +389,8 @@ class TelemetryHUD:
                 self._thresholds,
                 active,
                 sense_state=self._sense_state,
+                microsectors=self._microsectors,
+                quiet_sequences=self._quiet_sequences,
             ),
             _render_page_d(top_changes, self._macro_status),
         )
@@ -409,6 +423,7 @@ def _render_page_a(
     coherence_index: float | None = None,
     frequency_classification: str = "",
     sense_state: Mapping[str, object] | None = None,
+    quiet_sequences: Sequence[Sequence[int]] | None = None,
 ) -> str:
     coherence_value = (
         float(coherence_index)
@@ -473,6 +488,13 @@ def _render_page_a(
         f"Δ∥ {long_component:+.2f} obj {goal_long:+.2f} · Δ⊥ {lat_component:+.2f} obj {goal_lat:+.2f}"
         f" · w∥ {weight_long:.2f} · w⊥ {weight_lat:.2f}",
     ]
+    quiet_line: str | None = None
+    if quiet_sequences and active is not None:
+        quiet_line = _quiet_notice_line(active.microsector, quiet_sequences)
+        if quiet_line:
+            candidate = "\n".join((*lines, quiet_line))
+            if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+                lines.append(quiet_line)
     gradient_line = _gradient_line(window_metrics)
     if spark_delta and spark_si:
         spark_line = _truncate_line(f"Fases Δ{spark_delta} · Si{spark_si}")
@@ -768,6 +790,66 @@ def _silence_event_meter(microsector: Microsector) -> str | None:
     )
 
 
+def _format_quiet_descriptor(sequence: Sequence[int]) -> str:
+    if not sequence:
+        return ""
+    start = sequence[0] + 1
+    end = sequence[-1] + 1
+    if start == end:
+        return f"Curva {start}"
+    return f"Curvas {start}-{end}"
+
+
+def _quiet_notice_line(
+    microsector: Microsector, sequences: Sequence[Sequence[int]]
+) -> str | None:
+    index = getattr(microsector, "index", -1)
+    for sequence in sequences:
+        if index not in sequence:
+            continue
+        descriptor = _format_quiet_descriptor(sequence)
+        coverage, slack, si_variance, epi_abs = microsector_stability_metrics(microsector)
+        return _truncate_line(
+            f"{descriptor} estables · no tocar · silencio {coverage * 100.0:.0f}%"
+            f" · Siσ {si_variance:.4f} · |dEPI| {epi_abs:.3f} · slack {slack:.2f}"
+        )
+    return None
+
+
+def _quiet_summary_line(
+    microsectors: Sequence[Microsector], sequences: Sequence[Sequence[int]]
+) -> str | None:
+    if not sequences:
+        return None
+    descriptors: List[str] = []
+    coverage_values: List[float] = []
+    si_values: List[float] = []
+    epi_values: List[float] = []
+    for sequence in sequences:
+        descriptors.append(_format_quiet_descriptor(sequence))
+        for index in sequence:
+            if index < 0 or index >= len(microsectors):
+                continue
+            coverage, _, si_variance, epi_abs = microsector_stability_metrics(
+                microsectors[index]
+            )
+            coverage_values.append(coverage)
+            si_values.append(si_variance)
+            epi_values.append(epi_abs)
+    if not descriptors:
+        return None
+    summary = f"No tocar: {', '.join(descriptors)}"
+    if coverage_values:
+        coverage_avg = sum(coverage_values) / len(coverage_values)
+        si_avg = sum(si_values) / len(si_values) if si_values else 0.0
+        epi_avg = sum(epi_values) / len(epi_values) if epi_values else 0.0
+        summary = (
+            f"{summary} · silencio μ {coverage_avg * 100.0:.0f}%"
+            f" · Siσ μ {si_avg:.4f} · |dEPI| μ {epi_avg:.3f}"
+        )
+    return _truncate_line(summary)
+
+
 def _render_page_b(
     bundle,
     resonance: Mapping[str, ModalAnalysis],
@@ -865,11 +947,17 @@ def _render_page_c(
     active: ActivePhase | None,
     *,
     sense_state: Mapping[str, object] | None = None,
+    microsectors: Sequence[Microsector] | None = None,
+    quiet_sequences: Sequence[Sequence[int]] | None = None,
 ) -> str:
     lines: List[str] = []
     sense_line = _sense_state_line(sense_state, prefix="Si plan ")
     if sense_line:
         lines.append(sense_line)
+    if quiet_sequences and microsectors:
+        summary_line = _quiet_summary_line(microsectors, quiet_sequences)
+        if summary_line:
+            lines.append(summary_line)
     if active and phase_hint:
         lines.append(_truncate_line(f"Hint {phase_hint}"))
     elif active:
