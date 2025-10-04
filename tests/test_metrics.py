@@ -247,6 +247,7 @@ def test_compute_window_metrics_empty_window() -> None:
         useful_dissonance_ratio=0.0,
         useful_dissonance_percentage=0.0,
         coherence_index=0.0,
+        ackermann_parallel_index=0.0,
         support_effective=0.0,
         load_support_ratio=0.0,
         structural_expansion_longitudinal=0.0,

@@ -451,6 +451,14 @@ class TelemetryRecord:
     suspension_travel_rear: float
     suspension_velocity_front: float
     suspension_velocity_rear: float
+    slip_ratio_fl: float = 0.0
+    slip_ratio_fr: float = 0.0
+    slip_ratio_rl: float = 0.0
+    slip_ratio_rr: float = 0.0
+    slip_angle_fl: float = 0.0
+    slip_angle_fr: float = 0.0
+    slip_angle_rl: float = 0.0
+    slip_angle_rr: float = 0.0
     structural_timestamp: float | None = None
     tyre_temp_fl: float = 0.0
     tyre_temp_fr: float = 0.0
@@ -462,6 +470,9 @@ class TelemetryRecord:
     tyre_pressure_rr: float = 0.0
     rpm: float = 0.0
     line_deviation: float = 0.0
+    instantaneous_radius: float = 0.0
+    front_track_width: float = 1.5
+    wheelbase: float = 2.6
     lap: int | str | None = None
     reference: Optional["TelemetryRecord"] = None
     car_model: str | None = None
@@ -484,6 +495,37 @@ def _abs_delta(value: float, base: float) -> float:
     if not math.isfinite(delta_value):
         return 0.0
     return abs(delta_value)
+
+
+def _ackermann_parallel_delta(record: TelemetryRecord, baseline: TelemetryRecord) -> float:
+    radius = getattr(record, "instantaneous_radius", 0.0)
+    if not math.isfinite(radius) or abs(radius) <= 1e-6:
+        return 0.0
+    track = getattr(record, "front_track_width", None)
+    if track is None or not math.isfinite(track):
+        track = getattr(baseline, "front_track_width", 1.5)
+    wheelbase = getattr(record, "wheelbase", None)
+    if wheelbase is None or not math.isfinite(wheelbase):
+        wheelbase = getattr(baseline, "wheelbase", 2.6)
+    wheelbase = max(1e-6, float(wheelbase))
+    track = max(1e-6, float(track))
+    half_track = track * 0.5
+    effective_radius = abs(float(radius))
+    inner_radius = max(1e-6, effective_radius - half_track)
+    outer_radius = max(1e-6, effective_radius + half_track)
+    expected_inner = math.atan2(wheelbase, inner_radius)
+    expected_outer = math.atan2(wheelbase, outer_radius)
+    if radius >= 0.0:
+        observed_inner = float(getattr(record, "slip_angle_fl", record.slip_angle))
+        observed_outer = float(getattr(record, "slip_angle_fr", record.slip_angle))
+    else:
+        observed_inner = float(getattr(record, "slip_angle_fr", record.slip_angle))
+        observed_outer = float(getattr(record, "slip_angle_fl", record.slip_angle))
+    expected_delta = expected_inner - expected_outer
+    observed_delta = observed_inner - observed_outer
+    if not math.isfinite(observed_delta) or not math.isfinite(expected_delta):
+        return 0.0
+    return observed_delta - expected_delta
 
 
 def _node_feature_contributions(
@@ -849,6 +891,10 @@ class DeltaCalculator:
             ),
             vertical_load=mean(record.vertical_load for record in records),
             slip_ratio=mean(record.slip_ratio for record in records),
+            slip_ratio_fl=mean(record.slip_ratio_fl for record in records),
+            slip_ratio_fr=mean(record.slip_ratio_fr for record in records),
+            slip_ratio_rl=mean(record.slip_ratio_rl for record in records),
+            slip_ratio_rr=mean(record.slip_ratio_rr for record in records),
             lateral_accel=mean(record.lateral_accel for record in records),
             longitudinal_accel=mean(record.longitudinal_accel for record in records),
             yaw=mean(record.yaw for record in records),
@@ -861,6 +907,10 @@ class DeltaCalculator:
             speed=mean(record.speed for record in records),
             yaw_rate=mean(record.yaw_rate for record in records),
             slip_angle=mean(record.slip_angle for record in records),
+            slip_angle_fl=mean(record.slip_angle_fl for record in records),
+            slip_angle_fr=mean(record.slip_angle_fr for record in records),
+            slip_angle_rl=mean(record.slip_angle_rl for record in records),
+            slip_angle_rr=mean(record.slip_angle_rr for record in records),
             steer=mean(record.steer for record in records),
             throttle=mean(record.throttle for record in records),
             gear=int(round(mean(record.gear for record in records))),
@@ -882,6 +932,9 @@ class DeltaCalculator:
             suspension_travel_rear=mean(record.suspension_travel_rear for record in records),
             suspension_velocity_front=mean(record.suspension_velocity_front for record in records),
             suspension_velocity_rear=mean(record.suspension_velocity_rear for record in records),
+            instantaneous_radius=mean(record.instantaneous_radius for record in records),
+            front_track_width=mean(record.front_track_width for record in records),
+            wheelbase=mean(record.wheelbase for record in records),
             car_model=getattr(records[0], "car_model", None),
             track_name=getattr(records[0], "track_name", None),
             tyre_compound=getattr(records[0], "tyre_compound", None),
@@ -968,6 +1021,7 @@ class DeltaCalculator:
         nodes = DeltaCalculator._build_nodes(
             record, node_deltas, delta_nfr, nu_f_map, nodal_evolution
         )
+        ackermann_delta = _ackermann_parallel_delta(record, baseline)
         return EPIBundle(
             timestamp=record.timestamp,
             structural_timestamp=(
@@ -996,6 +1050,7 @@ class DeltaCalculator:
             nu_f_label=nu_f_snapshot.frequency_label,
             nu_f_dominant=nu_f_snapshot.dominant_frequency,
             coherence_index=nu_f_snapshot.coherence_index,
+            ackermann_parallel_index=ackermann_delta,
         )
 
     @staticmethod

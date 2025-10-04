@@ -151,4 +151,5 @@ class EPIBundle:
     nu_f_label: str = ""
     nu_f_dominant: float = 0.0
     coherence_index: float = 0.0
+    ackermann_parallel_index: float = 0.0
 
