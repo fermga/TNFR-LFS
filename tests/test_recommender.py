@@ -1452,6 +1452,142 @@ def test_phase_delta_rule_emits_geometry_actions_for_coherence_gap() -> None:
     assert all(rec.priority <= rule.priority - 1 for rec in geometry_recs)
 
 
+def test_phase_delta_rule_prioritises_front_spring_with_lateral_bias() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="apex",
+        operator_label="Operador de vértice",
+        category="apex",
+        phase_label="vértice",
+        priority=22,
+        reference_key="antiroll",
+    )
+    goal = Goal(
+        phase="apex",
+        archetype="medium",
+        description="",
+        target_delta_nfr=0.25,
+        target_sense_index=0.9,
+        nu_f_target=0.28,
+        nu_exc_target=0.23,
+        rho_target=0.9,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.88,
+        measured_phase_lag=0.12,
+        measured_phase_alignment=0.8,
+        slip_lat_window=(-0.4, 0.4),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.5, 0.5),
+        dominant_nodes=("suspension",),
+        target_delta_nfr_long=0.06,
+        target_delta_nfr_lat=0.18,
+    )
+    samples = tuple(range(4))
+    microsector = Microsector(
+        index=12,
+        start_time=0.0,
+        end_time=0.4,
+        curvature=1.6,
+        brake_event=False,
+        support_event=True,
+        delta_nfr_signature=0.32,
+        goals=(goal,),
+        phase_boundaries={goal.phase: (0, len(samples))},
+        phase_samples={goal.phase: samples},
+        active_phase=goal.phase,
+        dominant_nodes={goal.phase: goal.dominant_nodes},
+        phase_weights={goal.phase: {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={goal.phase: goal.measured_phase_lag},
+        phase_alignment={goal.phase: goal.measured_phase_alignment},
+        filtered_measures={},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={goal.phase: {}},
+        operator_events={},
+    )
+    raw_results: list[EPIBundle] = []
+    for lat_component in (0.3, 0.32, 0.31, 0.29):
+        bundle = _axis_bundle(0.38, 0.07, lat_component)
+        suspension = replace(bundle.suspension, nu_f=0.36)
+        raw_results.append(replace(bundle, suspension=suspension))
+    thresholds = ThresholdProfile(0.1, 0.05, 0.1, 0.2, 0.5)
+    context = RuleContext(car_model="GT3", track_name="VAL", thresholds=thresholds)
+    recommendations = list(rule.evaluate(raw_results, [microsector], context))
+    spring_recs = [rec for rec in recommendations if rec.parameter == "front_spring_stiffness"]
+    assert spring_recs, "expected front spring recommendation under lateral dominance"
+    assert all(rec.delta is not None and rec.delta < 0 for rec in spring_recs)
+    assert all("νf_susp" in rec.message for rec in spring_recs)
+    assert all("ΔNFR⊥" in rec.rationale for rec in spring_recs)
+
+
+def test_phase_delta_rule_scales_rear_spring_with_lateral_bias_and_low_frequency() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="exit",
+        operator_label="Operador de salida",
+        category="exit",
+        phase_label="salida",
+        priority=24,
+        reference_key="differential",
+    )
+    goal = Goal(
+        phase="exit",
+        archetype="medium",
+        description="",
+        target_delta_nfr=0.3,
+        target_sense_index=0.88,
+        nu_f_target=0.26,
+        nu_exc_target=0.2,
+        rho_target=0.85,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.86,
+        measured_phase_lag=0.08,
+        measured_phase_alignment=0.81,
+        slip_lat_window=(-0.4, 0.4),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.5, 0.5),
+        dominant_nodes=("suspension",),
+        target_delta_nfr_long=0.08,
+        target_delta_nfr_lat=0.14,
+    )
+    sample_indices = tuple(range(3))
+    microsector = Microsector(
+        index=14,
+        start_time=0.0,
+        end_time=0.3,
+        curvature=1.2,
+        brake_event=False,
+        support_event=False,
+        delta_nfr_signature=0.34,
+        goals=(goal,),
+        phase_boundaries={goal.phase: (0, len(sample_indices))},
+        phase_samples={goal.phase: sample_indices},
+        active_phase=goal.phase,
+        dominant_nodes={goal.phase: goal.dominant_nodes},
+        phase_weights={goal.phase: {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={goal.phase: goal.measured_phase_lag},
+        phase_alignment={goal.phase: goal.measured_phase_alignment},
+        filtered_measures={},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={goal.phase: {}},
+        operator_events={},
+    )
+    bundles: list[EPIBundle] = []
+    for lat_component in (0.22, 0.24, 0.23):
+        bundle = _axis_bundle(0.36, 0.05, lat_component)
+        suspension = replace(bundle.suspension, nu_f=0.18)
+        bundles.append(replace(bundle, suspension=suspension))
+    thresholds = ThresholdProfile(0.1, 0.05, 0.08, 0.2, 0.5)
+    context = RuleContext(car_model="GT3", track_name="VAL", thresholds=thresholds)
+    recommendations = list(rule.evaluate(bundles, [microsector], context))
+    rear_spring_recs = [rec for rec in recommendations if rec.parameter == "rear_spring_stiffness"]
+    assert rear_spring_recs, "expected rear spring recommendation for exit phase"
+    assert all(rec.delta is not None and rec.delta > 0 for rec in rear_spring_recs)
+    assert all("νf_susp" in rec.message for rec in rear_spring_recs)
+    assert all("ΔNFR⊥" in rec.rationale for rec in rear_spring_recs)
+
+
 def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
     rule = PhaseNodeOperatorRule(
         phase="apex",
