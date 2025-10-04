@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from statistics import mean
 from typing import Dict, Iterable, List, Sequence
 
 from .epi import TelemetryRecord
+from .spectrum import detrend, estimate_sample_rate, power_spectrum
 
 
 @dataclass(frozen=True)
@@ -38,71 +37,6 @@ def _extract_axis_series(records: Sequence[TelemetryRecord]) -> AxisSeries:
         series["roll"].append(float(record.roll))
         series["pitch"].append(float(record.pitch))
     return series
-
-
-def _estimate_sample_rate(records: Sequence[TelemetryRecord]) -> float:
-    deltas: List[float] = []
-    previous: float | None = None
-    for record in records:
-        timestamp = float(record.timestamp)
-        if previous is not None:
-            delta = timestamp - previous
-            if delta > 1e-9 and math.isfinite(delta):
-                deltas.append(delta)
-        previous = timestamp
-    if not deltas:
-        return 0.0
-    average_delta = sum(deltas) / len(deltas)
-    if average_delta <= 0.0:
-        return 0.0
-    return 1.0 / average_delta
-
-
-def _hann_window(length: int) -> List[float]:
-    if length <= 1:
-        return [1.0] * length
-    factor = 2.0 * math.pi / (length - 1)
-    return [0.5 - 0.5 * math.cos(factor * idx) for idx in range(length)]
-
-
-def _apply_window(samples: Sequence[float], window: Sequence[float]) -> List[float]:
-    return [value * window[idx] for idx, value in enumerate(samples)]
-
-
-def _detrend(values: Sequence[float]) -> List[float]:
-    if not values:
-        return []
-    centre = mean(values)
-    return [value - centre for value in values]
-
-
-def _discrete_spectrum(samples: Sequence[float], sample_rate: float) -> List[tuple[float, float]]:
-    length = len(samples)
-    if length < 2 or sample_rate <= 0.0:
-        return []
-
-    window = _hann_window(length)
-    windowed = _apply_window(samples, window)
-
-    spectrum: List[tuple[float, float]] = []
-    # Only positive frequencies are relevant for modal analysis.
-    upper = length // 2
-    for index in range(1, upper + 1):
-        real = 0.0
-        imag = 0.0
-        angle_factor = -2.0 * math.pi * index / length
-        for sample_index, value in enumerate(windowed):
-            angle = angle_factor * sample_index
-            real += value * math.cos(angle)
-            imag += value * math.sin(angle)
-        amplitude = math.hypot(real, imag)
-        # Normalise by the window energy to make energy comparisons consistent.
-        energy = (amplitude ** 2) / length
-        frequency = index * sample_rate / length
-        spectrum.append((frequency, energy))
-    return spectrum
-
-
 def _extract_peaks(
     spectrum: Iterable[tuple[float, float]],
     max_peaks: int = 3,
@@ -138,13 +72,13 @@ def analyse_modal_resonance(
 ) -> Dict[str, ModalAnalysis]:
     """Compute modal energy for yaw/roll/pitch axes."""
 
-    sample_rate = _estimate_sample_rate(records)
+    sample_rate = estimate_sample_rate(records)
     axis_series = _extract_axis_series(records)
     analysis: Dict[str, ModalAnalysis] = {}
     for axis, values in axis_series.items():
-        detrended = _detrend(values)
+        detrended = detrend(values)
         total_energy = sum(value * value for value in detrended)
-        spectrum = _discrete_spectrum(detrended, sample_rate)
+        spectrum = power_spectrum(detrended, sample_rate)
         peaks = _extract_peaks(spectrum, max_peaks=max_peaks)
         analysis[axis] = ModalAnalysis(
             sample_rate=float(sample_rate),

@@ -42,6 +42,10 @@ MANUAL_REFERENCES = {
 }
 
 
+_ALIGNMENT_ALIGNMENT_GAP = 0.15
+_ALIGNMENT_LAG_GAP = 0.3
+
+
 NODE_LABELS = {
     "tyres": "neumáticos",
     "suspension": "suspensión",
@@ -759,6 +763,32 @@ def _phase_action_recommendations(
     return recommendations
 
 
+def _alignment_snapshot(goal: Goal, microsector: Microsector | None) -> Tuple[float, float, float, float]:
+    measured_lag = getattr(goal, "measured_phase_lag", 0.0)
+    measured_alignment = getattr(goal, "measured_phase_alignment", 1.0)
+    if microsector is not None:
+        measured_lag = microsector.phase_lag.get(goal.phase, measured_lag)
+        measured_alignment = microsector.phase_alignment.get(goal.phase, measured_alignment)
+    target_lag = getattr(goal, "target_phase_lag", 0.0)
+    target_alignment = getattr(goal, "target_phase_alignment", 1.0)
+    return measured_lag, measured_alignment, target_lag, target_alignment
+
+
+def _should_flip_alignment(
+    measured_alignment: float,
+    target_alignment: float,
+    measured_lag: float,
+    target_lag: float,
+) -> bool:
+    if measured_alignment < 0.0:
+        return True
+    if target_alignment - measured_alignment > _ALIGNMENT_ALIGNMENT_GAP:
+        return True
+    if abs(measured_lag - target_lag) > _ALIGNMENT_LAG_GAP and measured_alignment < target_alignment:
+        return True
+    return False
+
+
 class PhaseDeltaDeviationRule:
     """Detects ΔNFR mismatches for a given phase of the corner."""
 
@@ -904,6 +934,12 @@ class PhaseNodeOperatorRule:
                 continue
             target_nu_f = float(goal.nu_f_target)
             tolerance = max(0.05, abs(target_nu_f) * 0.2)
+            measured_lag, measured_alignment, target_lag, target_alignment = _alignment_snapshot(
+                goal, microsector
+            )
+            flip_alignment = _should_flip_alignment(
+                measured_alignment, target_alignment, measured_lag, target_lag
+            )
             for node in dominant_nodes:
                 node_values = _node_nu_f_values(results, indices, node)
                 if not node_values:
@@ -914,18 +950,25 @@ class PhaseNodeOperatorRule:
                     continue
                 node_label = _node_label(node)
                 dominant_list = ", ".join(_node_label(name) for name in goal.dominant_nodes)
+                suggested_delta = -deviation if flip_alignment else deviation
+                alignment_summary = (
+                    f"θ {measured_lag:+.2f}rad / Siφ {measured_alignment:+.2f} "
+                    f"(objetivo θ {target_lag:+.2f}rad / Siφ {target_alignment:+.2f})."
+                )
                 base_rationale = (
                     f"{self.operator_label} aplicado al nodo {node_label} en microsector "
                     f"{microsector.index}. La estrategia del objetivo destaca a "
                     f"{dominant_list or 'los nodos dominantes'} y fija ν_f={target_nu_f:.2f}. "
                     f"Se midió ν_f medio {actual_nu_f:.2f} ({deviation:+.2f}), superando la "
-                    f"tolerancia ±{tolerance:.2f} definida para {context.profile_label}."
+                    f"tolerancia ±{tolerance:.2f} definida para {context.profile_label}. {alignment_summary}"
                 )
+                if flip_alignment:
+                    base_rationale += " Se invierte el sentido del ajuste para recuperar la alineación de fase."
                 actions = _phase_action_recommendations(
                     phase=self.phase,
                     category=self.category,
                     metric="nu_f",
-                    raw_value=deviation,
+                    raw_value=suggested_delta,
                     base_rationale=base_rationale,
                     priority=self.priority,
                     reference_key=self.reference_key,
@@ -934,7 +977,7 @@ class PhaseNodeOperatorRule:
                 if actions:
                     recommendations.extend(actions)
                     continue
-                direction = "increase" if deviation < 0 else "decrease"
+                direction = "increase" if suggested_delta < 0 else "decrease"
                 action_text = _slider_action(self.phase, node, direction)
                 recommendations.append(
                     Recommendation(

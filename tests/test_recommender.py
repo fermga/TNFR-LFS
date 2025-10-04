@@ -16,7 +16,11 @@ from collections.abc import Mapping
 
 from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.io.profiles import ProfileManager
-from tnfr_lfs.recommender.rules import Recommendation, RecommendationEngine
+from tnfr_lfs.recommender.rules import (
+    PhaseNodeOperatorRule,
+    Recommendation,
+    RecommendationEngine,
+)
 
 
 BASE_NU_F = {
@@ -101,6 +105,8 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         "style_index": 0.9,
         "grip_rel": 1.0,
     }
+    phase_lag = {"entry": 0.0, "apex": 0.0, "exit": 0.0}
+    phase_alignment = {"entry": 1.0, "apex": 1.0, "exit": 1.0}
     microsector = Microsector(
         index=3,
         start_time=0.0,
@@ -117,6 +123,10 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 target_delta_nfr=entry_target,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                target_phase_lag=0.0,
+                target_phase_alignment=0.9,
+                measured_phase_lag=0.0,
+                measured_phase_alignment=1.0,
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
@@ -129,6 +139,10 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 target_delta_nfr=apex_target,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                target_phase_lag=0.0,
+                target_phase_alignment=0.9,
+                measured_phase_lag=0.0,
+                measured_phase_alignment=1.0,
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
@@ -141,6 +155,10 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 target_delta_nfr=exit_target,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                target_phase_lag=0.0,
+                target_phase_alignment=0.9,
+                measured_phase_lag=0.0,
+                measured_phase_alignment=1.0,
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
@@ -161,6 +179,8 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         },
         phase_weights=phase_weights,
         grip_rel=1.0,
+        phase_lag=phase_lag,
+        phase_alignment=phase_alignment,
         filtered_measures=filtered_measures,
         recursivity_trace=(),
         last_mutation=None,
@@ -362,6 +382,8 @@ def test_track_specific_profile_tightens_entry_threshold():
         "style_index": 0.9,
         "grip_rel": 1.0,
     }
+    phase_lag = {"entry": 0.0, "apex": 0.0, "exit": 0.0}
+    phase_alignment = {"entry": 1.0, "apex": 1.0, "exit": 1.0}
     window_occupancy = {
         "entry": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
         "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
@@ -383,6 +405,10 @@ def test_track_specific_profile_tightens_entry_threshold():
                 target_delta_nfr=0.0,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                target_phase_lag=0.0,
+                target_phase_alignment=0.9,
+                measured_phase_lag=0.0,
+                measured_phase_alignment=1.0,
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
@@ -395,6 +421,10 @@ def test_track_specific_profile_tightens_entry_threshold():
                 target_delta_nfr=0.2,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                target_phase_lag=0.0,
+                target_phase_alignment=0.9,
+                measured_phase_lag=0.0,
+                measured_phase_alignment=1.0,
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
@@ -407,6 +437,10 @@ def test_track_specific_profile_tightens_entry_threshold():
                 target_delta_nfr=-0.1,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                target_phase_lag=0.0,
+                target_phase_alignment=0.9,
+                measured_phase_lag=0.0,
+                measured_phase_alignment=1.0,
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
@@ -435,6 +469,8 @@ def test_track_specific_profile_tightens_entry_threshold():
             "exit": {"__default__": 1.0},
         },
         grip_rel=1.0,
+        phase_lag=phase_lag,
+        phase_alignment=phase_alignment,
         filtered_measures=filtered_measures,
         recursivity_trace=(),
         last_mutation=None,
@@ -489,6 +525,8 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
     window = (-0.05, 0.05)
     yaw_window = (-0.3, 0.3)
     exit_nodes = ("transmission",)
+    phase_lag = {"entry": 0.0, "apex": 0.0, "exit": 0.0}
+    phase_alignment = {"entry": 1.0, "apex": 1.0, "exit": 1.0}
     microsector = Microsector(
         index=7,
         start_time=0.0,
@@ -505,6 +543,10 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
                 target_delta_nfr=0.0,
                 target_sense_index=0.9,
                 nu_f_target=0.1,
+                target_phase_lag=0.0,
+                target_phase_alignment=0.9,
+                measured_phase_lag=0.0,
+                measured_phase_alignment=1.0,
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
@@ -517,6 +559,10 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
                 target_delta_nfr=0.1,
                 target_sense_index=0.9,
                 nu_f_target=0.15,
+                target_phase_lag=0.0,
+                target_phase_alignment=0.9,
+                measured_phase_lag=0.0,
+                measured_phase_alignment=1.0,
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
@@ -529,6 +575,10 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
                 target_delta_nfr=-0.05,
                 target_sense_index=0.9,
                 nu_f_target=0.2,
+                target_phase_lag=0.0,
+                target_phase_alignment=0.9,
+                measured_phase_lag=0.0,
+                measured_phase_alignment=1.0,
                 slip_lat_window=window,
                 slip_long_window=window,
                 yaw_rate_window=yaw_window,
@@ -557,6 +607,8 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
             "exit": {"__default__": 1.0},
         },
         grip_rel=1.0,
+        phase_lag=phase_lag,
+        phase_alignment=phase_alignment,
         filtered_measures={
             "thermal_load": 5000.0,
             "style_index": 0.9,
@@ -599,3 +651,83 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
     assert "transmisión" in rationale
     assert "ν_f medio" in rationale
     assert "generic_gt/valencia" in rationale
+
+
+def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> None:
+    engine = RecommendationEngine(
+        car_model="generic_gt", track_name="valencia", threshold_library=car_track_thresholds
+    )
+    context = engine._resolve_context("generic_gt", "valencia")
+    rule = PhaseNodeOperatorRule(
+        phase="apex",
+        operator_label="Operador",
+        category="apex",
+        priority=25,
+        reference_key="antiroll",
+    )
+
+    def _bundle(nu_f: float, timestamp: float) -> EPIBundle:
+        return EPIBundle(
+            timestamp=timestamp,
+            epi=0.0,
+            delta_nfr=0.8,
+            sense_index=0.82,
+            tyres=TyresNode(delta_nfr=0.2, sense_index=0.82, nu_f=BASE_NU_F["tyres"]),
+            suspension=SuspensionNode(delta_nfr=0.4, sense_index=0.82, nu_f=nu_f),
+            chassis=ChassisNode(delta_nfr=0.2, sense_index=0.82, nu_f=BASE_NU_F["chassis"]),
+            brakes=BrakesNode(delta_nfr=0.05, sense_index=0.82, nu_f=BASE_NU_F["brakes"]),
+            transmission=TransmissionNode(
+                delta_nfr=0.05, sense_index=0.82, nu_f=BASE_NU_F["transmission"]
+            ),
+            track=TrackNode(delta_nfr=0.05, sense_index=0.82, nu_f=BASE_NU_F["track"]),
+            driver=DriverNode(delta_nfr=0.05, sense_index=0.82, nu_f=BASE_NU_F["driver"]),
+        )
+
+    results = [_bundle(1.5, 0.0), _bundle(1.55, 0.1)]
+    goal = Goal(
+        phase="apex",
+        archetype="apoyo",
+        description="",
+        target_delta_nfr=0.2,
+        target_sense_index=0.88,
+        nu_f_target=0.25,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.9,
+        measured_phase_lag=0.6,
+        measured_phase_alignment=-0.4,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.3, 0.3),
+        dominant_nodes=("suspension",),
+    )
+    microsector = Microsector(
+        index=12,
+        start_time=0.0,
+        end_time=0.2,
+        curvature=1.4,
+        brake_event=False,
+        support_event=False,
+        delta_nfr_signature=0.4,
+        goals=(goal,),
+        phase_boundaries={"apex": (0, 2)},
+        phase_samples={"apex": (0, 1)},
+        active_phase="apex",
+        dominant_nodes={"apex": ("suspension",)},
+        phase_weights={"apex": {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={"apex": 0.6},
+        phase_alignment={"apex": -0.4},
+        filtered_measures={"thermal_load": 5000.0, "style_index": 0.8},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"apex": {"slip_lat": 75.0, "slip_long": 70.0, "yaw_rate": 68.0}},
+    )
+
+    recommendations = list(rule.evaluate(results, [microsector], context=context))
+
+    rebound_actions = [rec for rec in recommendations if rec.parameter == "rear_rebound_clicks"]
+    assert rebound_actions, "expected rebound click recommendation"
+    assert rebound_actions[0].delta > 0
+    assert "θ" in rebound_actions[0].rationale
+    assert "Siφ" in rebound_actions[0].rationale
+    assert "invierte el sentido" in rebound_actions[0].rationale.lower()

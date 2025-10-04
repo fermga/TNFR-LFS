@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import Iterable, Sequence
 
-from .epi import TelemetryRecord, resolve_nu_f_by_node
+from .epi import TelemetryRecord
+from .spectrum import phase_alignment
 
 __all__ = ["WindowMetrics", "compute_window_metrics"]
 
@@ -20,9 +21,15 @@ class WindowMetrics:
     d_nfr_res: float
     d_nfr_flat: float
     nu_f: float
+    phase_lag: float
+    phase_alignment: float
 
 
-def compute_window_metrics(records: Sequence[TelemetryRecord]) -> WindowMetrics:
+def compute_window_metrics(
+    records: Sequence[TelemetryRecord],
+    *,
+    phase_indices: Sequence[int] | None = None,
+) -> WindowMetrics:
     """Return averaged plan metrics for a telemetry window.
 
     Parameters
@@ -32,16 +39,21 @@ def compute_window_metrics(records: Sequence[TelemetryRecord]) -> WindowMetrics:
     """
 
     if not records:
-        return WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0)
+        return WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
 
     si_value = mean(record.si for record in records)
 
-    nu_f_samples = []
-    for record in records:
-        mapping = resolve_nu_f_by_node(record)
-        if mapping:
-            nu_f_samples.append(mean(mapping.values()))
-    nu_f_value = mean(nu_f_samples) if nu_f_samples else 0.0
+    if phase_indices:
+        selected = [
+            records[index]
+            for index in phase_indices
+            if 0 <= index < len(records)
+        ]
+    else:
+        selected = list(records)
+    if len(selected) < 4:
+        selected = list(records)
+    freq, lag, alignment = phase_alignment(selected)
 
     couple, resonance, flatten = _segment_gradients(records, segments=3)
 
@@ -50,7 +62,9 @@ def compute_window_metrics(records: Sequence[TelemetryRecord]) -> WindowMetrics:
         d_nfr_couple=couple,
         d_nfr_res=resonance,
         d_nfr_flat=flatten,
-        nu_f=nu_f_value,
+        nu_f=freq,
+        phase_lag=lag,
+        phase_alignment=alignment,
     )
 
 

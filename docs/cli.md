@@ -65,7 +65,8 @@ telemetry interfaces:
 The HUD cycles through three pages (press the button to advance):
 
 * **Página A** – curva y fase actuales, ΔNFR↓ frente al objetivo y su
-  tolerancia, acoplamiento global y porcentaje de disonancia útil/parásita.
+  tolerancia, acoplamiento global, fase θ/Siφ del microsector activo y
+  porcentaje de disonancia útil/parásita.
 * **Página B** – top‑3 contribuciones nodales a |ΔNFR↓| con barras ASCII de
   anchura fija y el modo resonante dominante (frecuencia y clasificación).
 * **Página C** – pista rápida para el operador activo y las 2–3 acciones
@@ -86,6 +87,12 @@ tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-po
 recommendation engine resolves the thresholds and phase hints using the
 ``--car-model`` and ``--track`` options, matching the behaviour of
 ``template``/``suggest``.
+
+The phase hint appended to page A now blends operator messages with the
+measured phase alignment when the archetype drifts away from its target.
+The gradient line reports the dominant frequency extracted from the
+steer-versus-yaw/lateral cross-spectrum together with the measured phase
+offset ``θ`` and its cosine ``Siφ``.
 
 ### ``diagnose``
 
