@@ -98,12 +98,13 @@ diferencial) or lateral balance (barras, toe, alineaciones).
 * ``dominant_nodes`` – the subsystems whose ΔNFR signature anchors the goal.
 * ``window_occupancy`` – percentage of telemetry samples that remain within
   each window for entry, apex, and exit.
-* ``operator_events`` – agrupados por ``AL``/``OZ``/``IL`` e
+* ``operator_events`` – agrupados por ``AL``/``OZ``/``IL``/``SILENCIO`` e
   incrementados con el tipo de superficie derivado de ``context_factors`` y
   el umbral ΔNFR contextual (``delta_nfr_threshold``) asociado al microsector.
   Cada evento incluye el pico/medio ΔNFR observado durante la ventana y la
-  relación frente al umbral (``delta_nfr_ratio``), de forma que reglas y HUDs
-  puedan minimizar eventos críticos de frenada.
+  relación frente al umbral (``delta_nfr_ratio``), mientras que el agregado
+  ``SILENCIO`` añade cobertura y densidad estructural medias para identificar
+  estados latentes de baja activación.
 
 ## Recommendation Engine
 

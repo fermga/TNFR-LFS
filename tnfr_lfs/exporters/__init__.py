@@ -664,6 +664,8 @@ def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str,
                 structural_start = _structural_for_time(lookup, start_time, index=start_idx)
                 structural_end = _structural_for_time(lookup, end_time, index=end_idx)
                 duration = max(0.0, end_time - start_time)
+                if duration <= 0.0:
+                    duration = max(0.0, _to_float(payload.get("duration"), default=0.0))
                 delta_metrics = dict(
                     _segment_delta_metrics(series, start_idx, end_idx)
                 )
@@ -683,6 +685,11 @@ def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str,
                         if key not in {"start_index", "end_index"}
                     },
                 }
+                structural_duration = _to_float(
+                    payload.get("structural_duration"), default=0.0
+                )
+                if structural_duration > 0.0:
+                    event_entry["structural_duration"] = structural_duration
                 events.append(event_entry)
                 stats = summary.setdefault(
                     str(name), {"count": 0.0, "duration": 0.0, "peak": 0.0}
@@ -690,15 +697,29 @@ def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str,
                 stats["count"] += 1.0
                 stats["duration"] += duration
                 stats["peak"] += abs(delta_metrics.get("peak", 0.0))
+                if str(name) == "SILENCIO":
+                    quiet_total = stats.setdefault("quiet_duration", 0.0)
+                    stats["quiet_duration"] = quiet_total + duration
+                    density_total = stats.setdefault("density_total", 0.0)
+                    stats["density_total"] = density_total + max(
+                        0.0, _to_float(payload.get("structural_density_mean"), default=0.0)
+                    )
+                    event_entry.setdefault("details", {})["latent_state"] = "SILENCIO"
 
     events.sort(key=lambda entry: (entry["structural_start"], entry["start_time"]))
     for name, stats in summary.items():
         count = stats.get("count", 0.0) or 1.0
-        stats["mean_duration"] = stats.get("duration", 0.0) / count
         stats["mean_peak"] = stats.get("peak", 0.0) / count
         stats["count"] = int(round(count))
-        stats.pop("duration", None)
+        total_duration = stats.pop("duration", 0.0)
         stats.pop("peak", None)
+        quiet_total = stats.pop("quiet_duration", None)
+        density_total = stats.pop("density_total", None)
+        stats["mean_duration"] = total_duration / (count or 1.0)
+        if quiet_total is not None:
+            stats["quiet_duration"] = quiet_total
+        if density_total is not None and stats["count"]:
+            stats["mean_density"] = density_total / stats["count"]
 
     if structural_values:
         structural_span = {
@@ -708,10 +729,18 @@ def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str,
     else:
         structural_span = {"start": 0.0, "end": 0.0}
 
+    latent_states: Mapping[str, Any] = {}
+    aggregated = results.get("operator_events")
+    if isinstance(aggregated, Mapping):
+        candidate = aggregated.get("latent_states")
+        if isinstance(candidate, Mapping):
+            latent_states = candidate
+
     return {
         "events": events,
         "summary": summary,
         "structural_span": structural_span,
+        "latent_states": latent_states,
     }
 
 

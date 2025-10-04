@@ -39,6 +39,7 @@ from tnfr_lfs.core.operators import (
     coherence_operator,
     dissonance_breakdown_operator,
     dissonance_operator,
+    _aggregate_operator_events,
     evolve_epi,
     emission_operator,
     mutation_operator,
@@ -957,4 +958,29 @@ def test_pairwise_coupling_operator_allows_unbalanced_lengths():
 
     expected = acoplamiento_operator(series["tyres"], series["suspension"], strict_length=False)
     assert pairwise["tyres↔suspension"] == pytest.approx(expected, rel=1e-9)
+
+
+def test_aggregate_operator_events_returns_latent_state_summary() -> None:
+    microsector = _build_microsector(1, 0, 2, 4, apex_target=0.3)
+    silence_payload = {
+        "name": "SILENCIO",
+        "start_index": 0,
+        "end_index": 4,
+        "start_time": 0.0,
+        "end_time": 4.0,
+        "duration": 4.0,
+        "load_span": 120.0,
+        "structural_density_mean": 0.04,
+        "slack": 0.6,
+    }
+    enriched = replace(microsector, operator_events={"SILENCIO": (silence_payload,)})
+    aggregated = _aggregate_operator_events([enriched])
+    events = aggregated.get("events", {})
+    assert "SILENCIO" in events
+    assert events["SILENCIO"][0]["microsector"] == enriched.index
+    latent = aggregated.get("latent_states", {})
+    assert "SILENCIO" in latent
+    summary = latent["SILENCIO"][enriched.index]
+    assert pytest.approx(summary["coverage"], rel=1e-6) == 1.0
+    assert pytest.approx(summary["duration"], rel=1e-6) == 4.0
 

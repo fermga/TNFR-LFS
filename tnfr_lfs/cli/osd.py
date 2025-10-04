@@ -478,6 +478,11 @@ def _render_page_a(
         candidate = "\n".join((*lines, spark_line, gradient_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(spark_line)
+    silence_line = _silence_event_meter(active.microsector)
+    if silence_line:
+        candidate = "\n".join((*lines, silence_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(silence_line)
     brake_line = _brake_event_meter(active.microsector)
     if brake_line:
         lines.append(brake_line)
@@ -662,6 +667,18 @@ def _sense_state_line(
 
 def _brake_event_meter(microsector: Microsector) -> str | None:
     events = getattr(microsector, "operator_events", {}) or {}
+    silence_payloads = events.get("SILENCIO", ())
+    micro_duration = _safe_float(getattr(microsector, "end_time", 0.0)) - _safe_float(
+        getattr(microsector, "start_time", 0.0)
+    )
+    if silence_payloads and micro_duration > 1e-9:
+        quiet_duration = sum(
+            max(0.0, _safe_float(payload.get("duration")))
+            for payload in silence_payloads
+            if isinstance(payload, Mapping)
+        )
+        if quiet_duration / micro_duration >= 0.65:
+            return None
     payloads: List[Dict[str, float | str]] = []
     for event_type in ("OZ", "IL"):
         for payload in events.get(event_type, ()):  # type: ignore[assignment]
@@ -706,6 +723,40 @@ def _brake_event_meter(microsector: Microsector) -> str | None:
     if remaining > 0:
         segments.append(f"+{remaining}")
     return _ensure_limit("ΔNFR frenada ⚠️ " + " · ".join(segments))
+
+
+def _silence_event_meter(microsector: Microsector) -> str | None:
+    events = getattr(microsector, "operator_events", {}) or {}
+    payloads = [
+        payload
+        for payload in events.get("SILENCIO", ())  # type: ignore[assignment]
+        if isinstance(payload, Mapping)
+    ]
+    if not payloads:
+        return None
+    micro_duration = _safe_float(getattr(microsector, "end_time", 0.0)) - _safe_float(
+        getattr(microsector, "start_time", 0.0)
+    )
+    quiet_duration = sum(max(0.0, _safe_float(payload.get("duration"))) for payload in payloads)
+    if quiet_duration <= 0.0:
+        return None
+    coverage = 0.0
+    if micro_duration > 1e-9:
+        coverage = min(1.0, quiet_duration / micro_duration)
+    density_values = [
+        max(0.0, _safe_float(payload.get("structural_density_mean"))) for payload in payloads
+    ]
+    density = sum(density_values) / len(density_values) if density_values else 0.0
+    load_span = max((_safe_float(payload.get("load_span")) for payload in payloads), default=0.0)
+    slack = max((_safe_float(payload.get("slack")) for payload in payloads), default=0.0)
+    return _ensure_limit(
+        "Silencio {:.0f}% ρ̄ {:.2f} carga±{:.0f}N σ {:.2f}".format(
+            coverage * 100.0,
+            density,
+            load_span,
+            slack,
+        )
+    )
 
 
 def _render_page_b(
@@ -939,6 +990,16 @@ def _ensure_limit(payload: str) -> str:
         payload = payload[:-1]
         encoded = payload.encode("utf8")
     return payload
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        numeric = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(numeric):
+        return default
+    return numeric
 
 
 class OSDController:

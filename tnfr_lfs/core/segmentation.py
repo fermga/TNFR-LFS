@@ -42,7 +42,7 @@ from .contextual_delta import (
     resolve_series_context,
 )
 from .metrics import compute_window_metrics
-from .operator_detection import detect_al, detect_il, detect_oz
+from .operator_detection import detect_al, detect_il, detect_oz, detect_silencio
 from .operators import mutation_operator, recursivity_operator
 from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias, phase_family
 from .archetypes import (
@@ -586,14 +586,37 @@ def segment_microsectors(
                     mean(value for value in align_values if value is not None)
                 )
         operator_events: Dict[str, Tuple[Mapping[str, object], ...]] = {}
-        for name, detector in (("AL", detect_al), ("OZ", detect_oz), ("IL", detect_il)):
+        silence_window = max(6, min(len(record_window), 25))
+        silence_struct_window = max(5, min(silence_window, 21))
+        micro_duration = (
+            float(record_window[-1].timestamp - record_window[0].timestamp)
+            if len(record_window) >= 2
+            else 0.0
+        )
+        detector_specs = (
+            ("AL", detect_al, {}),
+            ("OZ", detect_oz, {}),
+            ("IL", detect_il, {}),
+            (
+                "SILENCIO",
+                detect_silencio,
+                {
+                    "window": silence_window,
+                    "structural_window": silence_struct_window,
+                    "min_duration": max(0.6, micro_duration * 0.25),
+                },
+            ),
+        )
+        for name, detector, detector_kwargs in detector_specs:
             events: List[Mapping[str, object]] = []
-            for event in detector(record_window):
+            for event in detector(record_window, **detector_kwargs):
                 payload: Dict[str, object] = {**event, "microsector": spec["index"]}
                 local_start = int(event.get("start_index", 0))
                 local_end = int(event.get("end_index", local_start))
                 global_start = max(start, min(end, start + max(0, local_start)))
                 global_end = max(global_start, min(end, start + max(0, local_end)))
+                payload.setdefault("global_start_index", global_start)
+                payload.setdefault("global_end_index", global_end)
                 if name in {"OZ", "IL"}:
                     delta_values: List[float] = []
                     for idx in range(global_start, global_end + 1):
@@ -624,6 +647,23 @@ def segment_microsectors(
                             "surface_label": surface_label,
                             "surface_factor": surface_factor,
                         }
+                    )
+                elif name == "SILENCIO":
+                    payload.setdefault(
+                        "structural_start",
+                        float(
+                            getattr(recomputed_bundles[global_start], "structural_timestamp", 0.0)
+                            if 0 <= global_start < len(recomputed_bundles)
+                            else event.get("structural_start", 0.0)
+                        ),
+                    )
+                    payload.setdefault(
+                        "structural_end",
+                        float(
+                            getattr(recomputed_bundles[global_end], "structural_timestamp", 0.0)
+                            if 0 <= global_end < len(recomputed_bundles)
+                            else event.get("structural_end", 0.0)
+                        ),
                     )
                 events.append(payload)
             if events:

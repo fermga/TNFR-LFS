@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import List
 
 from tnfr_lfs.core.epi import TelemetryRecord
-from tnfr_lfs.core.operator_detection import detect_al, detect_il, detect_oz
+from tnfr_lfs.core.operator_detection import (
+    detect_al,
+    detect_il,
+    detect_oz,
+    detect_silencio,
+)
 
 
 def _record(**overrides) -> TelemetryRecord:
@@ -180,3 +185,65 @@ def test_detect_il_uses_speed_weighted_threshold() -> None:
         ]
     )
     assert detect_il(below_threshold, window=3, base_threshold=0.3, speed_gain=0.02) == []
+
+
+def test_detect_silencio_flags_quiet_structural_intervals() -> None:
+    quiet_series = _build_series(
+        [
+            {
+                "lateral_accel": 1.25,
+                "longitudinal_accel": 0.05,
+                "vertical_load": 4800.0,
+                "nfr": 102.0,
+                "brake_pressure": 0.04,
+                "throttle": 0.18,
+                "yaw_rate": 0.02,
+                "steer": 0.03,
+            }
+            for _ in range(16)
+        ]
+    )
+    events = detect_silencio(
+        quiet_series,
+        window=8,
+        load_threshold=150.0,
+        accel_threshold=0.85,
+        delta_nfr_threshold=5.0,
+        structural_density_threshold=0.05,
+        min_duration=0.4,
+    )
+    assert events
+    event = events[0]
+    assert event["name"] == "SILENCIO"
+    assert event["duration"] >= 0.4
+    assert event["structural_duration"] >= event["duration"]
+    assert event["load_span"] <= 150.0
+    assert event["structural_density_mean"] <= 0.05
+    assert event["slack"] > 0.0
+
+    noisy_series = _build_series(
+        [
+            {
+                "lateral_accel": 2.2,
+                "longitudinal_accel": 0.4,
+                "vertical_load": 5200.0 + (index * 50.0),
+                "nfr": 120.0 + index * 3.0,
+                "throttle": 0.6,
+                "yaw_rate": 0.12,
+                "steer": 0.2,
+            }
+            for index in range(16)
+        ]
+    )
+    assert (
+        detect_silencio(
+            noisy_series,
+            window=8,
+            load_threshold=150.0,
+            accel_threshold=0.85,
+            delta_nfr_threshold=5.0,
+            structural_density_threshold=0.05,
+            min_duration=0.4,
+        )
+        == []
+    )
