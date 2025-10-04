@@ -23,6 +23,7 @@ from .operators import (
 )
 from .resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
 from .segmentation import Goal, Microsector, segment_microsectors
+from .structural_time import compute_structural_timestamps, resolve_time_axis
 
 __all__ = [
     "TelemetryRecord",
@@ -34,6 +35,8 @@ __all__ = [
     "sense_index",
     "compute_window_metrics",
     "compute_aero_coherence",
+    "compute_structural_timestamps",
+    "resolve_time_axis",
     "AeroCoherence",
     "WindowMetrics",
     "emission_operator",

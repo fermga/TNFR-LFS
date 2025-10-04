@@ -538,8 +538,23 @@ def _recompute_bundles(
     recomputed: List[EPIBundle] = []
     prev_integrated: float | None = None
     prev_timestamp = records[0].timestamp if records else 0.0
+    prev_structural = (
+        getattr(records[0], "structural_timestamp", None) if records else None
+    )
     for idx, record in enumerate(records):
-        dt = 0.0 if idx == 0 else max(0.0, record.timestamp - prev_timestamp)
+        structural_ts = getattr(record, "structural_timestamp", None)
+        if idx == 0:
+            dt = 0.0
+        else:
+            if (
+                structural_ts is not None
+                and prev_structural is not None
+                and math.isfinite(structural_ts)
+                and math.isfinite(prev_structural)
+            ):
+                dt = max(0.0, structural_ts - prev_structural)
+            else:
+                dt = max(0.0, record.timestamp - prev_timestamp)
         phase = phase_assignments.get(idx, PHASE_SEQUENCE[0])
         phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
         target_nu_f = goal_nu_f_lookup.get(idx) if goal_nu_f_lookup else None
@@ -563,6 +578,8 @@ def _recompute_bundles(
         recomputed.append(recomputed_bundle)
         prev_integrated = recomputed_bundle.integrated_epi
         prev_timestamp = record.timestamp
+        if structural_ts is not None and math.isfinite(structural_ts):
+            prev_structural = structural_ts
     return recomputed
 
 

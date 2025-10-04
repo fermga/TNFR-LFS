@@ -11,6 +11,7 @@ from .epi import TelemetryRecord
 from .epi_models import EPIBundle
 from .spectrum import phase_alignment
 from .resonance import estimate_excitation_frequency
+from .structural_time import resolve_time_axis
 
 __all__ = ["AeroCoherence", "WindowMetrics", "compute_window_metrics", "compute_aero_coherence"]
 
@@ -72,6 +73,7 @@ def compute_window_metrics(
     *,
     phase_indices: Sequence[int] | None = None,
     bundles: Sequence[EPIBundle] | None = None,
+    fallback_to_chronological: bool = True,
 ) -> WindowMetrics:
     """Return averaged plan metrics for a telemetry window.
 
@@ -84,6 +86,11 @@ def compute_window_metrics(
         matching ``records``. When provided the ΔNFR derivative used for the
         Useful Dissonance Ratio (UDR) is computed from the smoothed bundle
         values.
+    fallback_to_chronological:
+        When ``True`` the metric computation gracefully falls back to the
+        chronological timestamps if the structural axis is missing or
+        non-monotonic.  Disabling the fallback raises a :class:`ValueError`
+        whenever the structural axis cannot be resolved.
     """
 
     if not records:
@@ -105,14 +112,24 @@ def compute_window_metrics(
     nu_exc = estimate_excitation_frequency(records)
     rho = nu_exc / freq if freq > 1e-9 else 0.0
 
-    couple, resonance, flatten = _segment_gradients(records, segments=3)
+    couple, resonance, flatten = _segment_gradients(
+        records, segments=3, fallback_to_chronological=fallback_to_chronological
+    )
 
     if bundles:
-        timestamps = [bundle.timestamp for bundle in bundles]
+        timestamps = resolve_time_axis(
+            bundles, fallback_to_chronological=fallback_to_chronological
+        )
+        if timestamps is None:
+            raise ValueError("Structural timeline unavailable and fallback disabled")
         delta_series = [bundle.delta_nfr for bundle in bundles]
         yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
     else:
-        timestamps = [record.timestamp for record in records]
+        timestamps = resolve_time_axis(
+            records, fallback_to_chronological=fallback_to_chronological
+        )
+        if timestamps is None:
+            raise ValueError("Structural timeline unavailable and fallback disabled")
         delta_series = [getattr(record, "delta_nfr", record.nfr) for record in records]
         yaw_rates = [record.yaw_rate for record in records]
     _useful_samples, _high_yaw_samples, udr = compute_useful_dissonance_stats(
@@ -259,10 +276,13 @@ def compute_aero_coherence(
 
 
 def _segment_gradients(
-    records: Sequence[TelemetryRecord], *, segments: int
+    records: Sequence[TelemetryRecord], *, segments: int, fallback_to_chronological: bool = True
 ) -> tuple[float, ...]:
     parts = _split_records(records, segments)
-    return tuple(_gradient(part) for part in parts)
+    return tuple(
+        _gradient(part, fallback_to_chronological=fallback_to_chronological)
+        for part in parts
+    )
 
 
 def _split_records(
@@ -286,13 +306,20 @@ def _split_records(
     return slices
 
 
-def _gradient(records: Iterable[TelemetryRecord]) -> float:
+def _gradient(
+    records: Iterable[TelemetryRecord], *, fallback_to_chronological: bool = True
+) -> float:
     iterator = list(records)
     if len(iterator) < 2:
         return 0.0
+    axis = resolve_time_axis(
+        iterator, fallback_to_chronological=fallback_to_chronological
+    )
+    if not axis or len(axis) < 2:
+        return 0.0
     start = iterator[0]
     end = iterator[-1]
-    dt = end.timestamp - start.timestamp
+    dt = axis[-1] - axis[0]
     if dt <= 0.0:
         return 0.0
     return (end.nfr - start.nfr) / dt
