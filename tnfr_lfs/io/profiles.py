@@ -12,7 +12,12 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from ..recommender.rules import DEFAULT_THRESHOLD_PROFILE, ThresholdProfile
+from ..recommender.rules import (
+    DEFAULT_THRESHOLD_LIBRARY,
+    DEFAULT_THRESHOLD_PROFILE,
+    ThresholdProfile,
+    lookup_threshold_profile,
+)
 
 
 @dataclass(frozen=True)
@@ -126,15 +131,22 @@ class ProfileSnapshot:
     objectives: ProfileObjectives
     pending_plan: Mapping[str, float]
     last_result: StintMetrics | None
+    phase_weights: Mapping[str, Mapping[str, float] | float]
 
 
 class ProfileManager:
     """Handle persistence of car/track recommendation profiles."""
 
-    def __init__(self, path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        *,
+        threshold_library: Mapping[str, Mapping[str, ThresholdProfile]] | None = None,
+    ) -> None:
         self.path = Path(path or "profiles.toml")
         self._profiles: Dict[Tuple[str, str], ProfileRecord] = {}
         self._base_profiles: Dict[Tuple[str, str], ThresholdProfile] = {}
+        self._threshold_library = threshold_library
         self._load()
 
     def resolve(
@@ -144,18 +156,23 @@ class ProfileManager:
         base_profile: ThresholdProfile | None = None,
     ) -> ProfileSnapshot:
         key = (car_model, track_name)
-        reference = base_profile or self._base_profiles.get(key) or DEFAULT_THRESHOLD_PROFILE
+        if base_profile is None:
+            reference = self._resolve_base_profile(car_model, track_name)
+        else:
+            reference = base_profile
         self._base_profiles[key] = reference
         record = self._profiles.get(key)
         if record is None:
             record = ProfileRecord.from_base(car_model, track_name, reference)
             self._profiles[key] = record
         thresholds = record.to_threshold_profile(reference)
+        record.weights = _normalise_phase_weights(thresholds.phase_weights)
         return ProfileSnapshot(
             thresholds=thresholds,
             objectives=record.objectives,
             pending_plan=MappingProxyType(dict(record.pending_plan)),
             last_result=record.last_result,
+            phase_weights=thresholds.phase_weights,
         )
 
     def register_plan(
@@ -235,7 +252,9 @@ class ProfileManager:
     def _ensure_record(self, key: Tuple[str, str]) -> ProfileRecord:
         record = self._profiles.get(key)
         if record is None:
-            base = self._base_profiles.get(key, DEFAULT_THRESHOLD_PROFILE)
+            base = self._base_profiles.get(key)
+            if base is None:
+                base = self._resolve_base_profile(key[0], key[1])
             record = ProfileRecord.from_base(key[0], key[1], base)
             self._profiles[key] = record
         return record
@@ -254,8 +273,22 @@ class ProfileManager:
             for track_name, spec in tracks.items():
                 if not isinstance(spec, Mapping):
                     continue
-                record = _record_from_mapping(str(car_model), str(track_name), spec)
-                self._profiles[(str(car_model), str(track_name))] = record
+                car_key = str(car_model)
+                track_key = str(track_name)
+                base_profile = self._resolve_base_profile(car_key, track_key)
+                record = _record_from_mapping(car_key, track_key, spec, base_profile)
+                self._profiles[(car_key, track_key)] = record
+                self._base_profiles[(car_key, track_key)] = base_profile
+
+    def _resolve_base_profile(self, car_model: str, track_name: str) -> ThresholdProfile:
+        key = (car_model, track_name)
+        cached = self._base_profiles.get(key)
+        if cached is not None:
+            return cached
+        library = self._threshold_library or DEFAULT_THRESHOLD_LIBRARY
+        profile = lookup_threshold_profile(car_model, track_name, library)
+        self._base_profiles[key] = profile
+        return profile
 
 
 def _normalise_phase_weights(
@@ -306,14 +339,19 @@ def _merge_phase_weights(
     return MappingProxyType(dict(merged))
 
 
-def _record_from_mapping(car_model: str, track_name: str, spec: Mapping[str, object]) -> ProfileRecord:
+def _record_from_mapping(
+    car_model: str,
+    track_name: str,
+    spec: Mapping[str, object],
+    base_profile: ThresholdProfile,
+) -> ProfileRecord:
     objectives = _objectives_from_spec(spec.get("objectives"))
     tolerances = _tolerances_from_spec(spec.get("tolerances"))
     weights = _weights_from_spec(spec.get("weights"))
     record = ProfileRecord.from_base(
         car_model,
         track_name,
-        DEFAULT_THRESHOLD_PROFILE,
+        base_profile,
         objectives=objectives,
         tolerances=tolerances,
         weights=weights,

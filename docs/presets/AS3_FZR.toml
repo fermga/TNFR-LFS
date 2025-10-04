@@ -1,0 +1,20 @@
+[phases.entry]
+target_delta_nfr = 0.90
+target_nu_f = 0.28
+slip_lat_window = [-0.040, 0.040]
+slip_long_window = [-0.030, 0.030]
+yaw_rate_window = [-0.250, 0.250]
+
+[phases.apex]
+target_delta_nfr = 0.55
+target_nu_f = 0.30
+slip_lat_window = [-0.035, 0.035]
+slip_long_window = [-0.028, 0.028]
+yaw_rate_window = [-0.220, 0.220]
+
+[phases.exit]
+target_delta_nfr = -0.25
+target_nu_f = 0.27
+slip_lat_window = [-0.050, 0.050]
+slip_long_window = [-0.040, 0.040]
+yaw_rate_window = [-0.280, 0.280]
