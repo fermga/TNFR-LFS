@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import Iterable, Sequence
 
+from .dissonance import compute_useful_dissonance_stats
 from .epi import TelemetryRecord
+from .epi_models import EPIBundle
 from .spectrum import phase_alignment
 from .resonance import estimate_excitation_frequency
 
@@ -26,12 +28,15 @@ class WindowMetrics:
     rho: float
     phase_lag: float
     phase_alignment: float
+    useful_dissonance_ratio: float
+    useful_dissonance_percentage: float
 
 
 def compute_window_metrics(
     records: Sequence[TelemetryRecord],
     *,
     phase_indices: Sequence[int] | None = None,
+    bundles: Sequence[EPIBundle] | None = None,
 ) -> WindowMetrics:
     """Return averaged plan metrics for a telemetry window.
 
@@ -39,10 +44,15 @@ def compute_window_metrics(
     ----------
     records:
         Ordered window of :class:`TelemetryRecord` samples.
+    bundles:
+        Optional precomputed :class:`~tnfr_lfs.core.epi_models.EPIBundle` series
+        matching ``records``. When provided the ΔNFR derivative used for the
+        Useful Dissonance Ratio (UDR) is computed from the smoothed bundle
+        values.
     """
 
     if not records:
-        return WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+        return WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
     si_value = mean(record.si for record in records)
 
@@ -62,6 +72,20 @@ def compute_window_metrics(
 
     couple, resonance, flatten = _segment_gradients(records, segments=3)
 
+    if bundles:
+        timestamps = [bundle.timestamp for bundle in bundles]
+        delta_series = [bundle.delta_nfr for bundle in bundles]
+        yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
+    else:
+        timestamps = [record.timestamp for record in records]
+        delta_series = [getattr(record, "delta_nfr", record.nfr) for record in records]
+        yaw_rates = [record.yaw_rate for record in records]
+    _useful_samples, _high_yaw_samples, udr = compute_useful_dissonance_stats(
+        timestamps,
+        delta_series,
+        yaw_rates,
+    )
+
     return WindowMetrics(
         si=si_value,
         d_nfr_couple=couple,
@@ -72,6 +96,8 @@ def compute_window_metrics(
         rho=rho,
         phase_lag=lag,
         phase_alignment=alignment,
+        useful_dissonance_ratio=udr,
+        useful_dissonance_percentage=udr * 100.0,
     )
 
 

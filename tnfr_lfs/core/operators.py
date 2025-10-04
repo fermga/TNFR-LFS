@@ -7,6 +7,7 @@ from math import sqrt
 from statistics import mean, pvariance
 from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
 
+from .dissonance import compute_useful_dissonance_stats
 from .epi import (
     EPIExtractor,
     TelemetryRecord,
@@ -34,6 +35,10 @@ class DissonanceBreakdown:
     total_events: int
     useful_events: int
     parasitic_events: int
+    useful_dissonance_ratio: float
+    useful_dissonance_percentage: float
+    high_yaw_acc_samples: int
+    useful_dissonance_samples: int
 
 
 def evolve_epi(
@@ -128,6 +133,8 @@ def dissonance_breakdown_operator(
     parasitic_events = 0
     useful_magnitude = 0.0
     parasitic_magnitude = 0.0
+    useful_dissonance_samples = 0
+    high_yaw_acc_samples = 0
 
     if microsectors and bundles:
         bundle_count = len(bundles)
@@ -164,6 +171,17 @@ def dissonance_breakdown_operator(
                 parasitic_events += 1
                 parasitic_magnitude += contribution
 
+    useful_dissonance_ratio = 0.0
+    if bundles:
+        timestamps = [bundle.timestamp for bundle in bundles]
+        delta_series = [bundle.delta_nfr for bundle in bundles]
+        yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
+        (
+            useful_dissonance_samples,
+            high_yaw_acc_samples,
+            useful_dissonance_ratio,
+        ) = compute_useful_dissonance_stats(timestamps, delta_series, yaw_rates)
+
     total_events = useful_events + parasitic_events
     total_magnitude = useful_magnitude + parasitic_magnitude
     if total_magnitude > 1e-12:
@@ -187,6 +205,10 @@ def dissonance_breakdown_operator(
         total_events=total_events,
         useful_events=useful_events,
         parasitic_events=parasitic_events,
+        useful_dissonance_ratio=useful_dissonance_ratio,
+        useful_dissonance_percentage=useful_dissonance_ratio * 100.0,
+        high_yaw_acc_samples=high_yaw_acc_samples,
+        useful_dissonance_samples=useful_dissonance_samples,
     )
 
 
@@ -530,6 +552,10 @@ def _stage_coherence(
             total_events=0,
             useful_events=0,
             parasitic_events=0,
+            useful_dissonance_ratio=0.0,
+            useful_dissonance_percentage=0.0,
+            high_yaw_acc_samples=0,
+            useful_dissonance_samples=0,
         )
         return {
             "raw_delta": [],
@@ -832,6 +858,10 @@ def orchestrate_delta_metrics(
             total_events=0,
             useful_events=0,
             parasitic_events=0,
+            useful_dissonance_ratio=0.0,
+            useful_dissonance_percentage=0.0,
+            high_yaw_acc_samples=0,
+            useful_dissonance_samples=0,
         )
         stages = {
             "recepcion": reception_stage,

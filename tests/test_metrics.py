@@ -63,6 +63,8 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.rho == pytest.approx(0.0)
     assert metrics.phase_lag == pytest.approx(0.0)
     assert metrics.phase_alignment == pytest.approx(1.0)
+    assert metrics.useful_dissonance_ratio == pytest.approx(0.0)
+    assert metrics.useful_dissonance_percentage == pytest.approx(0.0)
 
 
 def test_compute_window_metrics_handles_small_windows() -> None:
@@ -77,8 +79,10 @@ def test_compute_window_metrics_handles_small_windows() -> None:
     assert metrics.rho == pytest.approx(0.0)
     assert metrics.phase_lag == pytest.approx(0.0)
     assert metrics.phase_alignment == pytest.approx(1.0)
+    assert metrics.useful_dissonance_ratio == pytest.approx(0.0)
+    assert metrics.useful_dissonance_percentage == pytest.approx(0.0)
 
 
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
-    assert metrics == WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+    assert metrics == WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0)

@@ -231,7 +231,11 @@ class TelemetryHUD:
         phase_indices: Sequence[int] | None = None
         if active:
             phase_indices = active.microsector.phase_samples.get(active.phase)
-        window_metrics = compute_window_metrics(records, phase_indices=phase_indices)
+        window_metrics = compute_window_metrics(
+            records,
+            phase_indices=phase_indices,
+            bundles=bundles,
+        )
         resonance = analyse_modal_resonance(records)
         recommendations = self.recommendation_engine.generate(
             bundles,
@@ -367,6 +371,7 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · ν_f {window_metrics.nu_f:.2f}Hz/ν_exc {window_metrics.nu_exc:.2f}Hz"
         f" · ρ {window_metrics.rho:.2f} · θ {window_metrics.phase_lag:+.2f}rad"
         f" · Siφ {window_metrics.phase_alignment:+.2f}"
+        f" · UDR {window_metrics.useful_dissonance_ratio:.2f}"
     )
 
 

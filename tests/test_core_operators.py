@@ -206,7 +206,13 @@ def _build_microsector(
     )
 
 
-def _build_bundle(timestamp: float, tyre_delta: float, *, delta_nfr: float | None = None) -> EPIBundle:
+def _build_bundle(
+    timestamp: float,
+    tyre_delta: float,
+    *,
+    delta_nfr: float | None = None,
+    yaw_rate: float = 0.0,
+) -> EPIBundle:
     delta_value = tyre_delta if delta_nfr is None else delta_nfr
     return EPIBundle(
         timestamp=timestamp,
@@ -215,7 +221,7 @@ def _build_bundle(timestamp: float, tyre_delta: float, *, delta_nfr: float | Non
         sense_index=0.9,
         tyres=TyresNode(delta_nfr=tyre_delta, sense_index=0.9),
         suspension=SuspensionNode(delta_nfr=delta_value, sense_index=0.9),
-        chassis=ChassisNode(delta_nfr=delta_value, sense_index=0.9),
+        chassis=ChassisNode(delta_nfr=delta_value, sense_index=0.9, yaw_rate=yaw_rate),
         brakes=BrakesNode(delta_nfr=0.0, sense_index=0.9),
         transmission=TransmissionNode(delta_nfr=0.0, sense_index=0.9),
         track=TrackNode(delta_nfr=0.0, sense_index=0.9),
@@ -526,11 +532,11 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
 
 def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
     bundles = [
-        _build_bundle(0.0, 0.1),
-        _build_bundle(0.1, 0.6),
-        _build_bundle(0.2, 0.2),
-        _build_bundle(0.3, -0.4),
-        _build_bundle(0.4, -0.1),
+        _build_bundle(0.0, 0.1, yaw_rate=0.0),
+        _build_bundle(0.1, 0.6, yaw_rate=0.1),
+        _build_bundle(0.2, 0.2, yaw_rate=0.25),
+        _build_bundle(0.3, -0.4, yaw_rate=0.3),
+        _build_bundle(0.4, -0.1, yaw_rate=0.31),
     ]
     microsectors = [
         _build_microsector(0, 0, 1, 2, apex_target=0.5),
@@ -554,6 +560,10 @@ def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
     assert breakdown.parasitic_magnitude == pytest.approx(0.25)
     assert breakdown.useful_percentage == pytest.approx(61.53846153846154)
     assert breakdown.parasitic_percentage == pytest.approx(38.46153846153846)
+    assert breakdown.high_yaw_acc_samples == 3
+    assert breakdown.useful_dissonance_samples == 2
+    assert breakdown.useful_dissonance_ratio == pytest.approx(2 / 3)
+    assert breakdown.useful_dissonance_percentage == pytest.approx(66.66666666666666)
 
 
 def test_emission_operator_clamps_sense_index():
