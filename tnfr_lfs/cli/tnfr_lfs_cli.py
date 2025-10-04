@@ -1811,13 +1811,20 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         track_name=track_name,
     )
     planner = SetupPlanner(recommendation_engine=engine)
-    plan = planner.plan(bundles, microsectors, car_model=namespace.car_model)
+    plan = planner.plan(
+        bundles,
+        microsectors,
+        car_model=namespace.car_model,
+        track_name=track_name,
+    )
     engine.register_plan(
         plan.recommendations,
         car_model=namespace.car_model,
         track_name=track_name,
         baseline_sense_index=metrics.get("sense_index", 0.0),
         baseline_delta_nfr=delta_metric,
+        jacobian=plan.sensitivities,
+        phase_jacobian=plan.phase_sensitivities,
     )
 
     action_recommendations = [

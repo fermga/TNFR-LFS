@@ -1214,6 +1214,8 @@ class RecommendationEngine:
         track_name: str | None = None,
         baseline_sense_index: float | None = None,
         baseline_delta_nfr: float | None = None,
+        jacobian: Mapping[str, Mapping[str, float]] | None = None,
+        phase_jacobian: Mapping[str, Mapping[str, Mapping[str, float]]] | None = None,
     ) -> None:
         if self.profile_manager is None:
             return
@@ -1230,7 +1232,14 @@ class RecommendationEngine:
         baseline: tuple[float, float] | None = None
         if baseline_sense_index is not None and baseline_delta_nfr is not None:
             baseline = (float(baseline_sense_index), float(baseline_delta_nfr))
-        self.profile_manager.register_plan(resolved_car, resolved_track, phases, baseline)
+        self.profile_manager.register_plan(
+            resolved_car,
+            resolved_track,
+            phases,
+            baseline,
+            jacobian=jacobian,
+            phase_jacobian=phase_jacobian,
+        )
 
     def register_stint_result(
         self,

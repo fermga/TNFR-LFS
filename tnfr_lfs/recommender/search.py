@@ -70,6 +70,9 @@ class Plan:
     telemetry: Sequence[EPIBundle]
     recommendations: Sequence[Recommendation]
     sensitivities: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    phase_sensitivities: Mapping[str, Mapping[str, Mapping[str, float]]] = field(
+        default_factory=dict
+    )
 
 
 class CoordinateDescentOptimizer:
@@ -132,6 +135,29 @@ def _microsector_integral(results: Sequence[EPIBundle], microsector: Microsector
         for idx in range(start, min(stop, len(results))):
             integral += abs(results[idx].delta_nfr) * _timestamp_delta(results, idx)
     return integral
+
+
+def _absolute_delta_integral(results: Sequence[EPIBundle]) -> float:
+    total = 0.0
+    for idx, bundle in enumerate(results):
+        total += abs(bundle.delta_nfr) * _timestamp_delta(results, idx)
+    return total
+
+
+def _phase_integrals(
+    results: Sequence[EPIBundle], microsectors: Sequence[Microsector] | None
+) -> Dict[str, float]:
+    if not results or not microsectors:
+        return {}
+    totals: Dict[str, float] = {}
+    for microsector in microsectors:
+        for phase, (start, stop) in microsector.phase_boundaries.items():
+            subtotal = 0.0
+            for idx in range(start, min(stop, len(results))):
+                subtotal += abs(results[idx].delta_nfr) * _timestamp_delta(results, idx)
+            if subtotal:
+                totals[phase] = totals.get(phase, 0.0) + subtotal
+    return totals
 
 
 def objective_score(results: Sequence[EPIBundle], microsectors: Sequence[Microsector] | None = None) -> float:
@@ -315,11 +341,14 @@ class SetupPlanner:
         microsectors: Sequence[Microsector] | None = None,
         *,
         car_model: str = "XFG",
+        track_name: str | None = None,
         simulator: Callable[[Mapping[str, float], Sequence[EPIBundle]], Sequence[EPIBundle]] | None = None,
     ) -> Plan:
         """Generate the final plan that blends search and rule-based guidance."""
 
         space = self._space_for_car(car_model)
+        resolved_track = track_name or getattr(self.recommendation_engine, "track_name", "")
+        space = self._adapt_space(space, car_model, resolved_track)
         cache: MutableMapping[tuple[tuple[str, float], ...], tuple[float, Sequence[EPIBundle]]] = {}
 
         def _simulate_and_score(vector: Mapping[str, float]) -> tuple[float, Sequence[EPIBundle]]:
@@ -336,7 +365,7 @@ class SetupPlanner:
         vector, score, iterations, evaluations = self.optimiser.optimise(evaluate, space)
         telemetry = _simulate_and_score(vector)[1]
         recommendations = self.recommendation_engine.generate(telemetry, microsectors)
-        sensitivities = self._compute_sensitivities(
+        sensitivities, phase_sensitivities = self._compute_sensitivities(
             vector=vector,
             telemetry=telemetry,
             baseline=baseline,
@@ -352,7 +381,56 @@ class SetupPlanner:
             telemetry=telemetry,
             recommendations=tuple(recommendations),
             sensitivities=sensitivities,
+            phase_sensitivities=phase_sensitivities,
         )
+
+    def _adapt_space(
+        self,
+        space: DecisionSpace,
+        car_model: str,
+        track_name: str | None,
+    ) -> DecisionSpace:
+        manager = getattr(self.recommendation_engine, "profile_manager", None)
+        if manager is None:
+            return space
+        history, _ = manager.gradient_history(car_model, track_name or "")
+        if not history:
+            return space
+
+        magnitude: Dict[str, float] = {}
+        for metric in ("sense_index", "delta_nfr_integral"):
+            derivatives = history.get(metric, {})
+            for parameter, value in derivatives.items():
+                try:
+                    magnitude[parameter] = magnitude.get(parameter, 0.0) + abs(float(value))
+                except (TypeError, ValueError):
+                    continue
+        if not magnitude:
+            return space
+
+        def _score(variable: DecisionVariable) -> float:
+            return magnitude.get(variable.name, 0.0)
+
+        adapted: list[DecisionVariable] = []
+        for variable in sorted(space.variables, key=_score, reverse=True):
+            score = magnitude.get(variable.name, 0.0)
+            if score > 1.0:
+                factor = 0.5
+            elif score < 0.05:
+                factor = 1.5
+            else:
+                factor = 1.0
+            span = max(variable.upper - variable.lower, 1e-6)
+            adjusted_step = min(max(variable.step * factor, 1e-3), span)
+            adapted.append(
+                DecisionVariable(
+                    variable.name,
+                    variable.lower,
+                    variable.upper,
+                    adjusted_step,
+                )
+            )
+        return DecisionSpace(space.car_model, tuple(adapted))
 
     def _compute_sensitivities(
         self,
@@ -365,15 +443,39 @@ class SetupPlanner:
         space: DecisionSpace,
         cache: MutableMapping[tuple[tuple[str, float], ...], tuple[float, Sequence[EPIBundle]]],
         score: float,
-    ) -> Mapping[str, Mapping[str, float]]:
+    ) -> tuple[Mapping[str, Mapping[str, float]], Mapping[str, Mapping[str, Mapping[str, float]]]]:
         if not telemetry:
-            return {}
+            return {}, {}
 
         base_mean_si = fmean(bundle.sense_index for bundle in telemetry)
         sensitivities: Dict[str, Dict[str, float]] = {
             "objective_score": {},
             "sense_index": {},
+            "delta_nfr_integral": {},
         }
+        phase_sensitivities: Dict[str, Dict[str, Dict[str, float]]] = {}
+
+        def _integral_metrics(
+            results: Sequence[EPIBundle],
+        ) -> tuple[float, Dict[str, float]]:
+            return _absolute_delta_integral(results), _phase_integrals(results, microsectors)
+
+        def _accumulate_phase_gradients(
+            phase_deltas: Dict[str, Dict[str, Dict[str, float]]],
+            plus_values: Mapping[str, float],
+            minus_values: Mapping[str, float],
+            denom: float,
+            parameter: str,
+        ) -> None:
+            if not plus_values and not minus_values:
+                return
+            for phase in set(plus_values) | set(minus_values):
+                gradient = (plus_values.get(phase, 0.0) - minus_values.get(phase, 0.0)) / denom
+                metrics = phase_deltas.setdefault(phase, {})
+                entry = metrics.setdefault("delta_nfr_integral", {})
+                entry[parameter] = gradient
+
+        base_integral, base_phase = _integral_metrics(telemetry)
 
         def _simulate(clamped_vector: Mapping[str, float]) -> tuple[float, Sequence[EPIBundle]]:
             key = tuple(sorted(clamped_vector.items()))
@@ -402,9 +504,17 @@ class SetupPlanner:
                 minus_score, minus_telemetry = _simulate(minus_clamped)
                 si_plus = fmean(bundle.sense_index for bundle in plus_telemetry)
                 si_minus = fmean(bundle.sense_index for bundle in minus_telemetry)
+                integral_plus, phase_plus = _integral_metrics(plus_telemetry)
+                integral_minus, phase_minus = _integral_metrics(minus_telemetry)
                 denom = 2.0 * central_step
                 sensitivities["objective_score"][variable.name] = (plus_score - minus_score) / denom
                 sensitivities["sense_index"][variable.name] = (si_plus - si_minus) / denom
+                sensitivities["delta_nfr_integral"][variable.name] = (
+                    (integral_plus - integral_minus) / denom
+                )
+                _accumulate_phase_gradients(
+                    phase_sensitivities, phase_plus, phase_minus, denom, variable.name
+                )
                 continue
 
             if forward_room > 1e-9:
@@ -414,8 +524,19 @@ class SetupPlanner:
                 plus_clamped = space.clamp(plus_vector)
                 plus_score, plus_telemetry = _simulate(plus_clamped)
                 si_plus = fmean(bundle.sense_index for bundle in plus_telemetry)
+                integral_plus, phase_plus = _integral_metrics(plus_telemetry)
                 sensitivities["objective_score"][variable.name] = (plus_score - score) / step
                 sensitivities["sense_index"][variable.name] = (si_plus - base_mean_si) / step
+                sensitivities["delta_nfr_integral"][variable.name] = (
+                    (integral_plus - base_integral) / step
+                )
+                _accumulate_phase_gradients(
+                    phase_sensitivities,
+                    phase_plus,
+                    base_phase,
+                    step,
+                    variable.name,
+                )
             elif backward_room > 1e-9:
                 step = min(raw_step, backward_room)
                 minus_vector = dict(vector)
@@ -423,11 +544,23 @@ class SetupPlanner:
                 minus_clamped = space.clamp(minus_vector)
                 minus_score, minus_telemetry = _simulate(minus_clamped)
                 si_minus = fmean(bundle.sense_index for bundle in minus_telemetry)
+                integral_minus, phase_minus = _integral_metrics(minus_telemetry)
                 sensitivities["objective_score"][variable.name] = (score - minus_score) / step
                 sensitivities["sense_index"][variable.name] = (base_mean_si - si_minus) / step
+                sensitivities["delta_nfr_integral"][variable.name] = (
+                    (base_integral - integral_minus) / step
+                )
+                _accumulate_phase_gradients(
+                    phase_sensitivities,
+                    base_phase,
+                    phase_minus,
+                    step,
+                    variable.name,
+                )
             else:
                 sensitivities["objective_score"][variable.name] = 0.0
                 sensitivities["sense_index"][variable.name] = 0.0
+                sensitivities["delta_nfr_integral"][variable.name] = 0.0
 
-        return sensitivities
+        return sensitivities, phase_sensitivities
 

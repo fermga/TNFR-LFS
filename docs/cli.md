@@ -203,13 +203,22 @@ with the rule engine.  The resulting payload follows the
     {"parameter": "rear_wing_angle", "delta": -1.0, "rationale": "Reduce drag", "expected_effect": "Higher top speed"}
   ],
   "rationales": ["Reduce drag"],
-  "expected_effects": ["Higher top speed"]
+  "expected_effects": ["Higher top speed"],
+  "sensitivities": {
+    "sense_index": {"rear_wing_angle": 0.042},
+    "delta_nfr_integral": {"rear_wing_angle": -0.075}
+  },
+  "phase_sensitivities": {
+    "entry": {"delta_nfr_integral": {"rear_wing_angle": -0.052}}
+  }
 }
 ```
 
 Exporters normalise the dataclasses into JSON, CSV, or Markdown depending
 on the ``--export`` flag.  The Markdown exporter deduplicates rationales
-and expected effects to provide a readable handover document.
+and expected effects to provide a readable handover document while also
+surfacing the empirical Jacobian (ΔSi/Δp and Δ∫|ΔNFR|/Δp) gathered during
+the micro-delta experiments.
 ## Configuration
 
 The CLI resolves defaults from a ``tnfr-lfs.toml`` file located in the

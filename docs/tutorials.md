@@ -134,10 +134,15 @@ setup_payload = {
         ],
         rationales=[rec.rationale for rec in recommendations],
         expected_effects=[rec.expected_effect for rec in recommendations],
+        sensitivities=plan.sensitivities,
+        phase_sensitivities=plan.phase_sensitivities,
     )
 }
 ```
 
 The snippet captures telemetry from a CSV file, extracts EPI bundles,
 derives microsectors, and combines optimisation with explainable
-recommendations to build a setup plan ready for export.
+recommendations to build a setup plan ready for export.  The
+``sensitivities`` and ``phase_sensitivities`` mappings expose the
+empirical Jacobian gathered during the optimisation, enabling
+downstream tooling to reuse the ΔSi/Δp and Δ∫|ΔNFR|/Δp gradients.

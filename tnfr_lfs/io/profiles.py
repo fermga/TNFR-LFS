@@ -20,6 +20,9 @@ from ..recommender.rules import (
 )
 
 
+GRADIENT_SMOOTHING = 0.35
+
+
 @dataclass(frozen=True)
 class ProfileObjectives:
     """Target objectives tracked for a car/track profile."""
@@ -58,6 +61,10 @@ class ProfileRecord:
     pending_plan: Dict[str, float] = field(default_factory=dict)
     pending_reference: StintMetrics | None = None
     last_result: StintMetrics | None = None
+    jacobian: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    phase_jacobian: Dict[str, Dict[str, Dict[str, float]]] = field(default_factory=dict)
+    pending_jacobian: Dict[str, Dict[str, float]] | None = None
+    pending_phase_jacobian: Dict[str, Dict[str, Dict[str, float]]] | None = None
 
     @classmethod
     def from_base(
@@ -123,6 +130,44 @@ class ProfileRecord:
             boosted = current * (1.0 + base_boost * weight_factor)
             profile["__default__"] = round(min(boosted, 5.0), 6)
 
+    def update_jacobian_history(
+        self,
+        jacobian: Mapping[str, Mapping[str, float]] | None,
+        phase_jacobian: Mapping[str, Mapping[str, Mapping[str, float]]] | None,
+        *,
+        smoothing: float = GRADIENT_SMOOTHING,
+    ) -> None:
+        if jacobian:
+            for metric, derivatives in jacobian.items():
+                if not isinstance(derivatives, Mapping):
+                    continue
+                store = self.jacobian.setdefault(str(metric), {})
+                for parameter, value in derivatives.items():
+                    try:
+                        numeric = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                    previous = store.get(str(parameter))
+                    store[str(parameter)] = _smooth(previous, numeric, smoothing)
+        if phase_jacobian:
+            for phase, metrics in phase_jacobian.items():
+                if not isinstance(metrics, Mapping):
+                    continue
+                phase_entry = self.phase_jacobian.setdefault(str(phase), {})
+                for metric, derivatives in metrics.items():
+                    if not isinstance(derivatives, Mapping):
+                        continue
+                    metric_entry = phase_entry.setdefault(str(metric), {})
+                    for parameter, value in derivatives.items():
+                        try:
+                            numeric = float(value)
+                        except (TypeError, ValueError):
+                            continue
+                        previous = metric_entry.get(str(parameter))
+                        metric_entry[str(parameter)] = _smooth(
+                            previous, numeric, smoothing
+                        )
+
 
 @dataclass(frozen=True)
 class ProfileSnapshot:
@@ -133,6 +178,8 @@ class ProfileSnapshot:
     pending_plan: Mapping[str, float]
     last_result: StintMetrics | None
     phase_weights: Mapping[str, Mapping[str, float] | float]
+    jacobian: Mapping[str, Mapping[str, float]]
+    phase_jacobian: Mapping[str, Mapping[str, Mapping[str, float]]]
 
 
 class ProfileManager:
@@ -168,12 +215,27 @@ class ProfileManager:
             self._profiles[key] = record
         thresholds = record.to_threshold_profile(reference)
         record.weights = _normalise_phase_weights(thresholds.phase_weights)
+        jacobian_snapshot = {
+            str(metric): MappingProxyType(dict(values))
+            for metric, values in record.jacobian.items()
+        }
+        phase_jacobian_snapshot = {
+            str(phase): MappingProxyType(
+                {
+                    str(metric): MappingProxyType(dict(values))
+                    for metric, values in metrics.items()
+                }
+            )
+            for phase, metrics in record.phase_jacobian.items()
+        }
         return ProfileSnapshot(
             thresholds=thresholds,
             objectives=record.objectives,
             pending_plan=MappingProxyType(dict(record.pending_plan)),
             last_result=record.last_result,
             phase_weights=thresholds.phase_weights,
+            jacobian=MappingProxyType(jacobian_snapshot),
+            phase_jacobian=MappingProxyType(phase_jacobian_snapshot),
         )
 
     def register_plan(
@@ -182,12 +244,19 @@ class ProfileManager:
         track_name: str,
         phases: Mapping[str, float],
         baseline_metrics: Tuple[float, float] | None = None,
+        *,
+        jacobian: Mapping[str, Mapping[str, float]] | None = None,
+        phase_jacobian: Mapping[str, Mapping[str, Mapping[str, float]]] | None = None,
     ) -> None:
         if not phases:
             return
         key = (car_model, track_name)
         record = self._ensure_record(key)
         record.pending_plan = {str(phase): float(value) for phase, value in phases.items() if value}
+        overall = _normalise_overall_jacobian(jacobian)
+        phase_gradients = _normalise_phase_jacobian(phase_jacobian)
+        record.pending_jacobian = overall or None
+        record.pending_phase_jacobian = phase_gradients or None
         if baseline_metrics is not None:
             record.pending_reference = StintMetrics(
                 sense_index=float(baseline_metrics[0]),
@@ -212,10 +281,39 @@ class ProfileManager:
                 and metrics.delta_nfr < record.pending_reference.delta_nfr
             ):
                 record.apply_mutation(record.pending_plan, record.pending_reference, metrics)
+            record.update_jacobian_history(
+                record.pending_jacobian or {},
+                record.pending_phase_jacobian or {},
+            )
             record.pending_plan = {}
             record.pending_reference = None
+            record.pending_jacobian = None
+            record.pending_phase_jacobian = None
         record.last_result = metrics
         self.save()
+
+    def gradient_history(
+        self,
+        car_model: str,
+        track_name: str,
+    ) -> tuple[Mapping[str, Mapping[str, float]], Mapping[str, Mapping[str, Mapping[str, float]]]]:
+        record = self._profiles.get((car_model, track_name))
+        if record is None:
+            return MappingProxyType({}), MappingProxyType({})
+        overall = {
+            str(metric): MappingProxyType(dict(values))
+            for metric, values in record.jacobian.items()
+        }
+        phases = {
+            str(phase): MappingProxyType(
+                {
+                    str(metric): MappingProxyType(dict(values))
+                    for metric, values in metrics.items()
+                }
+            )
+            for phase, metrics in record.phase_jacobian.items()
+        }
+        return MappingProxyType(overall), MappingProxyType(phases)
 
     def update_objectives(
         self,
@@ -357,6 +455,16 @@ def _record_from_mapping(
         tolerances=tolerances,
         weights=weights,
     )
+    jacobian_spec = spec.get("jacobian")
+    if isinstance(jacobian_spec, Mapping):
+        overall_spec = jacobian_spec.get("overall")
+        phase_spec = jacobian_spec.get("phases")
+        overall = _normalise_overall_jacobian(overall_spec)
+        phase = _normalise_phase_jacobian(phase_spec)
+        if overall:
+            record.jacobian = overall
+        if phase:
+            record.phase_jacobian = phase
     pending = spec.get("pending_plan")
     if isinstance(pending, Mapping):
         phases = pending.get("phases")
@@ -373,6 +481,12 @@ def _record_from_mapping(
                 sense_index=float(reference_si),
                 delta_nfr=abs(float(reference_delta)),
             )
+        jacobian_pending = pending.get("jacobian")
+        if isinstance(jacobian_pending, Mapping):
+            overall_pending = _normalise_overall_jacobian(jacobian_pending.get("overall"))
+            phase_pending = _normalise_phase_jacobian(jacobian_pending.get("phases"))
+            record.pending_jacobian = overall_pending or None
+            record.pending_phase_jacobian = phase_pending or None
     last = spec.get("last_result")
     if isinstance(last, Mapping):
         sense_value = last.get("sense_index")
@@ -433,6 +547,52 @@ def _weights_from_spec(payload: object) -> Mapping[str, Mapping[str, float]] | N
     return weights
 
 
+def _normalise_overall_jacobian(
+    payload: Mapping[str, Mapping[str, float]] | None,
+) -> Dict[str, Dict[str, float]]:
+    if not isinstance(payload, Mapping):
+        return {}
+    normalised: Dict[str, Dict[str, float]] = {}
+    for metric, derivatives in payload.items():
+        if not isinstance(derivatives, Mapping):
+            continue
+        normalised[str(metric)] = {
+            str(parameter): float(value)
+            for parameter, value in derivatives.items()
+            if isinstance(value, (int, float))
+        }
+    return normalised
+
+
+def _normalise_phase_jacobian(
+    payload: Mapping[str, Mapping[str, Mapping[str, float]]] | None,
+) -> Dict[str, Dict[str, Dict[str, float]]]:
+    if not isinstance(payload, Mapping):
+        return {}
+    normalised: Dict[str, Dict[str, Dict[str, float]]] = {}
+    for phase, metrics in payload.items():
+        if not isinstance(metrics, Mapping):
+            continue
+        phase_entry: Dict[str, Dict[str, float]] = {}
+        for metric, derivatives in metrics.items():
+            if not isinstance(derivatives, Mapping):
+                continue
+            phase_entry[str(metric)] = {
+                str(parameter): float(value)
+                for parameter, value in derivatives.items()
+                if isinstance(value, (int, float))
+            }
+        if phase_entry:
+            normalised[str(phase)] = phase_entry
+    return normalised
+
+
+def _smooth(previous: float | None, new: float, smoothing: float) -> float:
+    if previous is None:
+        return float(new)
+    return float(previous) * (1.0 - smoothing) + float(new) * smoothing
+
+
 def _serialise_record(car_model: str, track_name: str, record: ProfileRecord) -> list[str]:
     lines: list[str] = []
     base_prefix = ["profiles", car_model, track_name]
@@ -454,6 +614,21 @@ def _serialise_record(car_model: str, track_name: str, record: ProfileRecord) ->
         lines.append(_table_header(base_prefix + ["weights", phase]))
         for node, value in sorted(profile.items()):
             lines.append(f"{_format_key(node)} = {_format_float(value)}")
+    if record.jacobian:
+        for metric, derivatives in sorted(record.jacobian.items()):
+            lines.append("")
+            lines.append(_table_header(base_prefix + ["jacobian", "overall", metric]))
+            for parameter, value in sorted(derivatives.items()):
+                lines.append(f"{_format_key(parameter)} = {_format_float(value)}")
+    if record.phase_jacobian:
+        for phase, metrics in sorted(record.phase_jacobian.items()):
+            for metric, derivatives in sorted(metrics.items()):
+                lines.append("")
+                lines.append(
+                    _table_header(base_prefix + ["jacobian", "phases", phase, metric])
+                )
+                for parameter, value in sorted(derivatives.items()):
+                    lines.append(f"{_format_key(parameter)} = {_format_float(value)}")
     if record.pending_plan:
         lines.append("")
         lines.append(_table_header(base_prefix + ["pending_plan"]))
@@ -464,6 +639,28 @@ def _serialise_record(car_model: str, track_name: str, record: ProfileRecord) ->
             lines.append(
                 f"reference_delta_nfr = {_format_float(record.pending_reference.delta_nfr)}"
             )
+        if record.pending_jacobian:
+            for metric, derivatives in sorted(record.pending_jacobian.items()):
+                lines.append("")
+                lines.append(
+                    _table_header(
+                        base_prefix + ["pending_plan", "jacobian", "overall", metric]
+                    )
+                )
+                for parameter, value in sorted(derivatives.items()):
+                    lines.append(f"{_format_key(parameter)} = {_format_float(value)}")
+        if record.pending_phase_jacobian:
+            for phase, metrics in sorted(record.pending_phase_jacobian.items()):
+                for metric, derivatives in sorted(metrics.items()):
+                    lines.append("")
+                    lines.append(
+                        _table_header(
+                            base_prefix
+                            + ["pending_plan", "jacobian", "phases", phase, metric]
+                        )
+                    )
+                    for parameter, value in sorted(derivatives.items()):
+                        lines.append(f"{_format_key(parameter)} = {_format_float(value)}")
         lines.append("")
         lines.append(_table_header(base_prefix + ["pending_plan", "phases"]))
         for phase, value in sorted(record.pending_plan.items()):
