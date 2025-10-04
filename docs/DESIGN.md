@@ -122,6 +122,19 @@ métricas, junto con los objetivos ΔNFR⊥/∥ y ``ν_f`` fijados por arquetipo
 invertir las sugerencias de barras y amortiguadores cuando la fase medida
 pierde la alineación con el objetivo.
 
+La versión actual refuerza esta lógica con un mapa de acciones específico para
+los parámetros de geometría (caster, camber y toe).  Las plantillas de
+``PhaseActionTemplate`` ahora transforman desviaciones de ``Siφ``, ``θ`` y del
+índice de coherencia ``C(t)`` en ajustes directos sobre los ejes delantero y
+trasero.  El motor de recomendaciones calcula un ``snapshot`` geométrico por
+microsector a partir de los datos agregados en ``Microsector.filtered_measures``
+y de los promedios de ``WindowMetrics``, priorizando los nodos de suspensión y
+neumáticos cuando la transición entre fases pierde coherencia.  Además, el
+optimiser de planes pondera estas desviaciones para que los gradientes de
+geometría formen parte del objetivo prolongado de resonant alignment (RA),
+recompensando configuraciones con mayor ``C(t)`` y penalizando retrasos en la
+respuesta.
+
 ## Artefactos generados
 - `TNFR.pdf` se mantiene como artefacto compilado. Cualquier actualización sustantiva debe reflejarse primero en este `DESIGN.md`; el PDF puede regenerarse a partir del contenido actualizado y debe tratarse como derivado.
 

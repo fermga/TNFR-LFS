@@ -449,6 +449,9 @@ def segment_microsectors(
                 "nu_exc": window_metrics.nu_exc,
                 "rho": window_metrics.rho,
                 "udr": window_metrics.useful_dissonance_ratio,
+                "phase_lag_window": window_metrics.phase_lag,
+                "phase_alignment_window": window_metrics.phase_alignment,
+                "coherence_index": window_metrics.coherence_index,
                 "aero_low_imbalance": window_metrics.aero_coherence.low_speed_imbalance,
                 "aero_high_imbalance": window_metrics.aero_coherence.high_speed_imbalance,
                 "aero_low_samples": float(window_metrics.aero_coherence.low_speed_samples),
@@ -535,6 +538,9 @@ def segment_microsectors(
                 "nu_exc": window_metrics.nu_exc,
                 "rho": window_metrics.rho,
                 "udr": window_metrics.useful_dissonance_ratio,
+                "phase_lag_window": window_metrics.phase_lag,
+                "phase_alignment_window": window_metrics.phase_alignment,
+                "coherence_index": window_metrics.coherence_index,
             }
             defaults.update(wheel_temperatures)
             defaults.update(wheel_pressures)

@@ -52,6 +52,37 @@ MANUAL_REFERENCES = {
 
 _ALIGNMENT_ALIGNMENT_GAP = 0.15
 _ALIGNMENT_LAG_GAP = 0.3
+_ALIGNMENT_THRESHOLD = 0.05
+_LAG_THRESHOLD = 0.05
+_COHERENCE_THRESHOLD = 0.05
+
+
+_GEOMETRY_PARAMETERS = {
+    "front_camber_deg",
+    "rear_camber_deg",
+    "front_toe_deg",
+    "rear_toe_deg",
+    "caster_deg",
+}
+
+
+_GEOMETRY_METRIC_NODES: Mapping[str, Mapping[str, str]] = {
+    "entry": {
+        "phase_alignment": "suspension",
+        "phase_lag": "suspension",
+        "coherence_index": "tyres",
+    },
+    "apex": {
+        "phase_alignment": "suspension",
+        "phase_lag": "suspension",
+        "coherence_index": "tyres",
+    },
+    "exit": {
+        "phase_alignment": "suspension",
+        "phase_lag": "tyres",
+        "coherence_index": "tyres",
+    },
+}
 
 
 _AXIS_FOCUS_MAP: Mapping[tuple[str, str], tuple[str, str, Tuple[str, ...]]] = {
@@ -198,6 +229,39 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             step=0.1,
             priority_offset=3,
         ),
+        PhaseActionTemplate(
+            metric="phase_alignment",
+            parameter="front_camber_deg",
+            scale=-1.1,
+            min_value=-1.5,
+            max_value=1.5,
+            message_pattern="{delta:+.1f}° camber delantero",
+            step=0.1,
+            nodes=("suspension",),
+            priority_offset=-3,
+        ),
+        PhaseActionTemplate(
+            metric="phase_lag",
+            parameter="caster_deg",
+            scale=-3.5,
+            min_value=-3.0,
+            max_value=3.0,
+            message_pattern="{delta:+.1f}° caster",
+            step=0.25,
+            nodes=("suspension",),
+            priority_offset=-4,
+        ),
+        PhaseActionTemplate(
+            metric="coherence_index",
+            parameter="front_toe_deg",
+            scale=-0.45,
+            min_value=-0.5,
+            max_value=0.5,
+            message_pattern="{delta:+.2f}° toe delantero",
+            step=0.05,
+            nodes=("tyres",),
+            priority_offset=-2,
+        ),
     ),
     "apex": (
         PhaseActionTemplate(
@@ -239,6 +303,61 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             step=1.0,
             nodes=("suspension",),
             priority_offset=3,
+        ),
+        PhaseActionTemplate(
+            metric="phase_alignment",
+            parameter="front_camber_deg",
+            scale=-0.9,
+            min_value=-1.2,
+            max_value=1.2,
+            message_pattern="{delta:+.1f}° camber delantero",
+            step=0.1,
+            nodes=("suspension",),
+            priority_offset=-3,
+        ),
+        PhaseActionTemplate(
+            metric="phase_alignment",
+            parameter="rear_camber_deg",
+            scale=-0.8,
+            min_value=-1.2,
+            max_value=1.2,
+            message_pattern="{delta:+.1f}° camber trasero",
+            step=0.1,
+            nodes=("suspension",),
+            priority_offset=-2,
+        ),
+        PhaseActionTemplate(
+            metric="phase_lag",
+            parameter="caster_deg",
+            scale=-2.8,
+            min_value=-2.5,
+            max_value=2.5,
+            message_pattern="{delta:+.1f}° caster",
+            step=0.25,
+            nodes=("suspension",),
+            priority_offset=-4,
+        ),
+        PhaseActionTemplate(
+            metric="coherence_index",
+            parameter="front_toe_deg",
+            scale=-0.4,
+            min_value=-0.5,
+            max_value=0.5,
+            message_pattern="{delta:+.2f}° toe delantero",
+            step=0.05,
+            nodes=("tyres",),
+            priority_offset=-3,
+        ),
+        PhaseActionTemplate(
+            metric="coherence_index",
+            parameter="rear_toe_deg",
+            scale=-0.35,
+            min_value=-0.5,
+            max_value=0.5,
+            message_pattern="{delta:+.2f}° toe trasero",
+            step=0.05,
+            nodes=("tyres",),
+            priority_offset=-2,
         ),
     ),
     "exit": (
@@ -291,6 +410,39 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             message_pattern="{delta:+.1f}° ala trasera",
             step=0.5,
             priority_offset=4,
+        ),
+        PhaseActionTemplate(
+            metric="phase_alignment",
+            parameter="rear_camber_deg",
+            scale=-1.0,
+            min_value=-1.5,
+            max_value=1.5,
+            message_pattern="{delta:+.1f}° camber trasero",
+            step=0.1,
+            nodes=("suspension",),
+            priority_offset=-3,
+        ),
+        PhaseActionTemplate(
+            metric="phase_lag",
+            parameter="rear_toe_deg",
+            scale=-0.5,
+            min_value=-0.5,
+            max_value=0.5,
+            message_pattern="{delta:+.2f}° toe trasero",
+            step=0.05,
+            nodes=("tyres",),
+            priority_offset=-3,
+        ),
+        PhaseActionTemplate(
+            metric="coherence_index",
+            parameter="rear_toe_deg",
+            scale=-0.4,
+            min_value=-0.5,
+            max_value=0.5,
+            message_pattern="{delta:+.2f}° toe trasero",
+            step=0.05,
+            nodes=("tyres",),
+            priority_offset=-2,
         ),
     ),
 }
@@ -927,6 +1079,113 @@ def _phase_action_recommendations(
     return recommendations
 
 
+def _merge_recommendations_by_parameter(
+    existing: Mapping[str, Recommendation] | None,
+    candidates: Sequence[Recommendation],
+) -> Dict[str, Recommendation]:
+    merged: Dict[str, Recommendation] = dict(existing or {})
+    for candidate in candidates:
+        parameter = candidate.parameter
+        if not parameter:
+            continue
+        current = merged.get(parameter)
+        if current is None:
+            merged[parameter] = candidate
+            continue
+        current_delta = abs(current.delta or 0.0)
+        candidate_delta = abs(candidate.delta or 0.0)
+        if candidate.priority < current.priority:
+            merged[parameter] = candidate
+        elif candidate.priority == current.priority and candidate_delta > current_delta:
+            merged[parameter] = candidate
+    return merged
+
+
+def _geometry_snapshot(
+    goal: Goal,
+    microsector: Microsector,
+    samples: Sequence[EPIBundle],
+    context: RuleContext,
+) -> Dict[str, float]:
+    filtered = getattr(microsector, "filtered_measures", {}) or {}
+    measured_alignment = _safe_float(
+        microsector.phase_alignment.get(
+            goal.phase, getattr(goal, "measured_phase_alignment", 1.0)
+        ),
+        _safe_float(getattr(goal, "measured_phase_alignment", 1.0), 1.0),
+    )
+    if not math.isfinite(measured_alignment):
+        measured_alignment = _safe_float(filtered.get("phase_alignment_window"), 1.0)
+    target_alignment = _safe_float(
+        getattr(goal, "target_phase_alignment", measured_alignment), measured_alignment
+    )
+    measured_lag = _safe_float(
+        microsector.phase_lag.get(
+            goal.phase, getattr(goal, "measured_phase_lag", 0.0)
+        ),
+        _safe_float(getattr(goal, "measured_phase_lag", 0.0), 0.0),
+    )
+    if not math.isfinite(measured_lag):
+        measured_lag = _safe_float(filtered.get("phase_lag_window"), 0.0)
+    target_lag = _safe_float(
+        getattr(goal, "target_phase_lag", measured_lag), measured_lag
+    )
+    coherence_values: List[float] = []
+    for bundle in samples:
+        coherence_values.append(_safe_float(getattr(bundle, "coherence_index", 0.0)))
+    if not coherence_values and "coherence_index" in filtered:
+        coherence_values.append(_safe_float(filtered.get("coherence_index"), 0.0))
+    average_coherence = mean(coherence_values) if coherence_values else 0.0
+    target_coherence = _safe_float(
+        getattr(goal, "target_coherence_index", context.objectives.target_sense_index),
+        context.objectives.target_sense_index,
+    )
+    alignment_delta = target_alignment - measured_alignment
+    lag_delta = measured_lag - target_lag
+    coherence_delta = target_coherence - average_coherence
+    return {
+        "measured_alignment": measured_alignment,
+        "target_alignment": target_alignment,
+        "alignment_delta": alignment_delta,
+        "alignment_gap": abs(alignment_delta),
+        "measured_lag": measured_lag,
+        "target_lag": target_lag,
+        "lag_delta": lag_delta,
+        "lag_gap": abs(lag_delta),
+        "average_coherence": average_coherence,
+        "target_coherence": target_coherence,
+        "coherence_delta": coherence_delta,
+        "coherence_gap": abs(coherence_delta),
+    }
+
+
+def _geometry_urgency(snapshot: Mapping[str, float]) -> int:
+    urgency = 0
+    alignment_gap = float(snapshot.get("alignment_gap", 0.0))
+    lag_gap = float(snapshot.get("lag_gap", 0.0))
+    coherence_gap = float(snapshot.get("coherence_gap", 0.0))
+    if alignment_gap > _ALIGNMENT_THRESHOLD:
+        urgency = max(urgency, 3 if alignment_gap > _ALIGNMENT_THRESHOLD * 2 else 2)
+    if lag_gap > _LAG_THRESHOLD:
+        urgency = max(urgency, 3 if lag_gap > _LAG_THRESHOLD * 2 else 2)
+    if coherence_gap > _COHERENCE_THRESHOLD:
+        urgency = max(urgency, 3 if coherence_gap > _COHERENCE_THRESHOLD * 2 else 2)
+    return urgency
+
+
+def _boost_geometry_priority(
+    recommendations: Sequence[Recommendation],
+    base_priority: int,
+    urgency: int,
+) -> None:
+    if urgency <= 0:
+        return
+    target_priority = base_priority - urgency
+    for recommendation in recommendations:
+        if recommendation.parameter in _GEOMETRY_PARAMETERS:
+            recommendation.priority = min(recommendation.priority, target_priority)
+
+
 def _alignment_snapshot(goal: Goal, microsector: Microsector | None) -> Tuple[float, float, float, float]:
     measured_lag = getattr(goal, "measured_phase_lag", 0.0)
     measured_alignment = getattr(goal, "measured_phase_alignment", 1.0)
@@ -1094,40 +1353,129 @@ class PhaseDeltaDeviationRule:
                 axis_bias = "longitudinal"
             elif abs_lat > abs_long * dominance_threshold and abs_lat > axis_delta_threshold:
                 axis_bias = "lateral"
-            lag_value = microsector.phase_lag.get(goal.phase, goal.measured_phase_lag)
-            target_lag = getattr(goal, "target_phase_lag", 0.0)
-            lag_gap = abs(lag_value - target_lag)
+            geometry_snapshot = _geometry_snapshot(goal, microsector, samples, context)
+            phase_key = phase_family(self.phase)
+            geometry_nodes = _GEOMETRY_METRIC_NODES.get(phase_key, {})
+            lag_value = geometry_snapshot["measured_lag"]
+            target_lag = geometry_snapshot["target_lag"]
+            lag_gap = geometry_snapshot["lag_gap"]
             axis_weights = getattr(goal, "delta_axis_weights", {})
             weight_long = float(axis_weights.get("longitudinal", 0.5))
             weight_lat = float(axis_weights.get("lateral", 0.5))
-            if abs(deviation) <= tolerance:
-                continue
             event_summary: str | None = None
             bias_direction: str | None = None
             worst_ratio: float = 0.0
-            if phase_family(self.phase) == "entry":
+            if phase_key == "entry":
                 event_summary, bias_direction, worst_ratio = _brake_event_summary(
                     microsector
                 )
-            base_rationale = (
+            phase_summary = (
                 f"{self.operator_label} aplicado sobre la fase de {self.phase_label} en "
                 f"microsector {microsector.index}. El objetivo ΔNFR era "
                 f"{goal.target_delta_nfr:.2f}, pero la media registrada fue "
-                f"{actual_delta:.2f} ({deviation:+.2f}). La tolerancia definida para "
-                f"{context.profile_label} es ±{tolerance:.2f}."
+                f"{actual_delta:.2f} ({deviation:+.2f})."
             )
             if event_summary:
-                base_rationale = f"{base_rationale} {event_summary}."
-            adjustments = _phase_action_recommendations(
-                phase=self.phase,
-                category=self.category,
-                metric="delta_nfr",
-                raw_value=deviation,
-                base_rationale=base_rationale,
-                priority=self.priority,
-                reference_key=self.reference_key,
-            )
-            if adjustments and phase_family(self.phase) == "entry":
+                phase_summary = f"{phase_summary} {event_summary}."
+
+            geometry_actions_map: Dict[str, Recommendation] = {}
+            geometry_urgency = _geometry_urgency(geometry_snapshot)
+
+            if geometry_snapshot["alignment_gap"] > _ALIGNMENT_THRESHOLD:
+                alignment_rationale = (
+                    f"{phase_summary} Siφ objetivo {geometry_snapshot['target_alignment']:+.2f} "
+                    f"frente al medido {geometry_snapshot['measured_alignment']:+.2f} "
+                    f"({geometry_snapshot['alignment_delta']:+.2f})."
+                )
+                alignment_node = geometry_nodes.get("phase_alignment")
+                if alignment_node:
+                    alignment_actions = _phase_action_recommendations(
+                        phase=self.phase,
+                        category=self.category,
+                        metric="phase_alignment",
+                        raw_value=geometry_snapshot["alignment_delta"],
+                        base_rationale=alignment_rationale,
+                        priority=self.priority - 1,
+                        reference_key=self.reference_key,
+                        node=alignment_node,
+                    )
+                    geometry_actions_map = _merge_recommendations_by_parameter(
+                        geometry_actions_map, alignment_actions
+                    )
+
+            if geometry_snapshot["lag_gap"] > _LAG_THRESHOLD:
+                lag_rationale = (
+                    f"{phase_summary} θ medido {geometry_snapshot['measured_lag']:+.2f}rad "
+                    f"frente al objetivo {geometry_snapshot['target_lag']:+.2f}rad "
+                    f"({geometry_snapshot['lag_delta']:+.2f})."
+                )
+                lag_node = geometry_nodes.get("phase_lag")
+                if lag_node:
+                    lag_actions = _phase_action_recommendations(
+                        phase=self.phase,
+                        category=self.category,
+                        metric="phase_lag",
+                        raw_value=geometry_snapshot["lag_delta"],
+                        base_rationale=lag_rationale,
+                        priority=self.priority - 1,
+                        reference_key=self.reference_key,
+                        node=lag_node,
+                    )
+                    geometry_actions_map = _merge_recommendations_by_parameter(
+                        geometry_actions_map, lag_actions
+                    )
+
+            if geometry_snapshot["coherence_gap"] > _COHERENCE_THRESHOLD:
+                coherence_rationale = (
+                    f"{phase_summary} C(t) medio {geometry_snapshot['average_coherence']:.2f} "
+                    f"(objetivo {geometry_snapshot['target_coherence']:.2f}, Δ "
+                    f"{geometry_snapshot['coherence_delta']:+.2f})."
+                )
+                coherence_node = geometry_nodes.get("coherence_index")
+                if coherence_node:
+                    coherence_actions = _phase_action_recommendations(
+                        phase=self.phase,
+                        category=self.category,
+                        metric="coherence_index",
+                        raw_value=geometry_snapshot["coherence_delta"],
+                        base_rationale=coherence_rationale,
+                        priority=self.priority - 1,
+                        reference_key=self.reference_key,
+                        node=coherence_node,
+                    )
+                    geometry_actions_map = _merge_recommendations_by_parameter(
+                        geometry_actions_map, coherence_actions
+                    )
+
+            geometry_recommendations = list(geometry_actions_map.values())
+            if geometry_recommendations:
+                _boost_geometry_priority(
+                    geometry_recommendations, self.priority, max(geometry_urgency, 1)
+                )
+                recommendations.extend(geometry_recommendations)
+
+            delta_triggered = abs(deviation) > tolerance
+            if not delta_triggered and not geometry_recommendations:
+                continue
+
+            base_rationale = phase_summary
+            if delta_triggered:
+                base_rationale = (
+                    f"{phase_summary} La tolerancia definida para {context.profile_label} "
+                    f"es ±{tolerance:.2f}."
+                )
+            adjustments: List[Recommendation] = []
+            if delta_triggered:
+                adjustments = _phase_action_recommendations(
+                    phase=self.phase,
+                    category=self.category,
+                    metric="delta_nfr",
+                    raw_value=deviation,
+                    base_rationale=base_rationale,
+                    priority=self.priority,
+                    reference_key=self.reference_key,
+                )
+            if adjustments and phase_key == "entry":
                 for recommendation in adjustments:
                     if recommendation.parameter != "brake_bias_pct":
                         continue
@@ -1151,44 +1499,66 @@ class PhaseDeltaDeviationRule:
                         recommendation.priority = min(
                             recommendation.priority, self.priority - 2
                         )
-            recommendations.extend(adjustments)
+            if adjustments:
+                _boost_geometry_priority(adjustments, self.priority, geometry_urgency)
+                recommendations.extend(adjustments)
 
-            direction = "incrementar" if deviation < 0 else "reducir"
-            summary_message = (
-                f"{self.operator_label} · objetivo ΔNFR global: {direction} ΔNFR "
-                f"en microsector {microsector.index} ({MANUAL_REFERENCES[self.reference_key]})"
-            )
-            summary_rationale = (
-                f"{base_rationale} Se recomienda {direction} ΔNFR global y revisar "
-                f"{MANUAL_REFERENCES[self.reference_key]} para la fase de {self.phase_label}."
-            )
-            recommendations.append(
-                Recommendation(
-                    category=self.category,
-                    message=summary_message,
-                    rationale=summary_rationale,
-                    priority=self.priority + 40,
+            if delta_triggered:
+                direction = "incrementar" if deviation < 0 else "reducir"
+                summary_message = (
+                    f"{self.operator_label} · objetivo ΔNFR global: {direction} ΔNFR "
+                    f"en microsector {microsector.index} ({MANUAL_REFERENCES[self.reference_key]})"
                 )
-            )
+                summary_rationale = (
+                    f"{base_rationale} Se recomienda {direction} ΔNFR global y revisar "
+                    f"{MANUAL_REFERENCES[self.reference_key]} para la fase de {self.phase_label}."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category=self.category,
+                        message=summary_message,
+                        rationale=summary_rationale,
+                        priority=self.priority + 40,
+                    )
+                )
 
-            if axis_bias and (lag_gap > 0.05 or (axis_bias == "longitudinal" and abs_long > axis_delta_threshold) or (axis_bias == "lateral" and abs_lat > axis_delta_threshold)):
+            axis_focus_trigger = delta_triggered or geometry_urgency > 0
+            if (
+                axis_focus_trigger
+                and axis_bias
+                and (
+                    lag_gap > 0.05
+                    or (
+                        axis_bias == "longitudinal" and abs_long > axis_delta_threshold
+                    )
+                    or (
+                        axis_bias == "lateral" and abs_lat > axis_delta_threshold
+                    )
+                )
+            ):
                 descriptor = _axis_focus_descriptor(goal.phase, axis_bias)
                 if descriptor is not None:
                     focus_message, focus_reference, parameters = descriptor
                     axis_label = "∥" if axis_bias == "longitudinal" else "⊥"
                     axis_delta = long_dev if axis_bias == "longitudinal" else lat_dev
                     target_value = target_long if axis_bias == "longitudinal" else target_lat
+                    coherence_line = ""
+                    if geometry_snapshot["coherence_gap"] > _COHERENCE_THRESHOLD:
+                        coherence_line = (
+                            f" C(t) medio {geometry_snapshot['average_coherence']:.2f} "
+                            f"(objetivo {geometry_snapshot['target_coherence']:.2f})."
+                        )
                     focus_rationale = (
                         f"{base_rationale} ΔNFR{axis_label} domina ({axis_delta:+.2f} frente al objetivo "
                         f"{target_value:+.2f}). θ medido {lag_value:+.2f}rad (objetivo {target_lag:+.2f}). "
-                        f"Reparto objetivo ∥ {weight_long:.2f} · ⊥ {weight_lat:.2f}."
+                        f"Reparto objetivo ∥ {weight_long:.2f} · ⊥ {weight_lat:.2f}.{coherence_line}"
                     )
                     recommendations.append(
                         Recommendation(
                             category=self.category,
                             message=focus_message,
                             rationale=f"{focus_rationale} Consulta {MANUAL_REFERENCES[focus_reference]}.",
-                            priority=self.priority - 2,
+                            priority=min(self.priority - 2, self.priority - geometry_urgency),
                         )
                     )
                     for rec in recommendations:
@@ -1254,6 +1624,7 @@ class PhaseNodeOperatorRule:
             indices = list(microsector.phase_indices(goal.phase))
             if not indices:
                 continue
+            samples = _phase_samples(results, indices)
             dominant_nodes = goal.dominant_nodes or microsector.dominant_nodes.get(
                 goal.phase, ()
             )
@@ -1263,12 +1634,95 @@ class PhaseNodeOperatorRule:
             target_si = context.objectives.target_sense_index
             tolerance_scale = max(0.5, min(1.5, 1.0 + (0.75 - target_si)))
             tolerance = max(0.05, abs(target_nu_f) * 0.2 * tolerance_scale)
-            measured_lag, measured_alignment, target_lag, target_alignment = _alignment_snapshot(
-                goal, microsector
-            )
+            geometry_snapshot = _geometry_snapshot(goal, microsector, samples, context)
+            phase_key = phase_family(self.phase)
+            geometry_nodes = _GEOMETRY_METRIC_NODES.get(phase_key, {})
+            measured_lag = geometry_snapshot["measured_lag"]
+            measured_alignment = geometry_snapshot["measured_alignment"]
+            target_lag = geometry_snapshot["target_lag"]
+            target_alignment = geometry_snapshot["target_alignment"]
             flip_alignment = _should_flip_alignment(
                 measured_alignment, target_alignment, measured_lag, target_lag
             )
+            geometry_actions_map: Dict[str, Recommendation] = {}
+            geometry_urgency = _geometry_urgency(geometry_snapshot)
+            dominant_list = ", ".join(_node_label(name) for name in goal.dominant_nodes)
+            geometry_context = (
+                f"{self.operator_label} aplicado en microsector {microsector.index} "
+                f"con nodos dominantes {dominant_list or 'de referencia'}."
+            )
+            if (
+                geometry_snapshot["alignment_gap"] > _ALIGNMENT_THRESHOLD
+                and geometry_nodes.get("phase_alignment")
+            ):
+                alignment_rationale = (
+                    f"{geometry_context} Siφ objetivo {geometry_snapshot['target_alignment']:+.2f} "
+                    f"frente al medido {geometry_snapshot['measured_alignment']:+.2f} "
+                    f"({geometry_snapshot['alignment_delta']:+.2f})."
+                )
+                alignment_actions = _phase_action_recommendations(
+                    phase=self.phase,
+                    category=self.category,
+                    metric="phase_alignment",
+                    raw_value=geometry_snapshot["alignment_delta"],
+                    base_rationale=alignment_rationale,
+                    priority=self.priority - 1,
+                    reference_key=self.reference_key,
+                    node=geometry_nodes.get("phase_alignment"),
+                )
+                geometry_actions_map = _merge_recommendations_by_parameter(
+                    geometry_actions_map, alignment_actions
+                )
+            if (
+                geometry_snapshot["lag_gap"] > _LAG_THRESHOLD
+                and geometry_nodes.get("phase_lag")
+            ):
+                lag_rationale = (
+                    f"{geometry_context} θ medido {geometry_snapshot['measured_lag']:+.2f}rad "
+                    f"frente al objetivo {geometry_snapshot['target_lag']:+.2f}rad "
+                    f"({geometry_snapshot['lag_delta']:+.2f})."
+                )
+                lag_actions = _phase_action_recommendations(
+                    phase=self.phase,
+                    category=self.category,
+                    metric="phase_lag",
+                    raw_value=geometry_snapshot["lag_delta"],
+                    base_rationale=lag_rationale,
+                    priority=self.priority - 1,
+                    reference_key=self.reference_key,
+                    node=geometry_nodes.get("phase_lag"),
+                )
+                geometry_actions_map = _merge_recommendations_by_parameter(
+                    geometry_actions_map, lag_actions
+                )
+            if (
+                geometry_snapshot["coherence_gap"] > _COHERENCE_THRESHOLD
+                and geometry_nodes.get("coherence_index")
+            ):
+                coherence_rationale = (
+                    f"{geometry_context} C(t) medio {geometry_snapshot['average_coherence']:.2f} "
+                    f"(objetivo {geometry_snapshot['target_coherence']:.2f}, Δ "
+                    f"{geometry_snapshot['coherence_delta']:+.2f})."
+                )
+                coherence_actions = _phase_action_recommendations(
+                    phase=self.phase,
+                    category=self.category,
+                    metric="coherence_index",
+                    raw_value=geometry_snapshot["coherence_delta"],
+                    base_rationale=coherence_rationale,
+                    priority=self.priority - 1,
+                    reference_key=self.reference_key,
+                    node=geometry_nodes.get("coherence_index"),
+                )
+                geometry_actions_map = _merge_recommendations_by_parameter(
+                    geometry_actions_map, coherence_actions
+                )
+            geometry_recommendations = list(geometry_actions_map.values())
+            if geometry_recommendations:
+                _boost_geometry_priority(
+                    geometry_recommendations, self.priority, max(geometry_urgency, 1)
+                )
+                recommendations.extend(geometry_recommendations)
             for node in dominant_nodes:
                 node_values = _node_nu_f_values(results, indices, node)
                 if not node_values:
@@ -1303,13 +1757,17 @@ class PhaseNodeOperatorRule:
                 sense_summary = (
                     f" Objetivo Si perfil {target_si:.2f} para {context.profile_label}."
                 )
+                coherence_line = (
+                    f" C(t) medio {geometry_snapshot['average_coherence']:.2f} "
+                    f"(objetivo {geometry_snapshot['target_coherence']:.2f})."
+                )
                 base_rationale = (
                     f"{self.operator_label} aplicado al nodo {node_label} en microsector "
                     f"{microsector.index}. La estrategia del objetivo destaca a "
                     f"{dominant_list or 'los nodos dominantes'} y fija ν_f={target_nu_f:.2f}. "
                     f"Se midió ν_f medio {actual_nu_f:.2f} ({deviation:+.2f}), superando la "
                     f"tolerancia ajustada ±{tolerance:.2f} definida para {context.profile_label}. "
-                    f"{alignment_summary}{classification_summary}{sense_summary}"
+                    f"{alignment_summary}{classification_summary}{sense_summary}{coherence_line}"
                 )
                 if flip_alignment:
                     base_rationale += " Se invierte el sentido del ajuste para recuperar la alineación de fase."
@@ -1323,6 +1781,8 @@ class PhaseNodeOperatorRule:
                     reference_key=self.reference_key,
                     node=node,
                 )
+                if geometry_urgency > 0 and actions:
+                    _boost_geometry_priority(actions, self.priority, geometry_urgency)
                 if actions:
                     recommendations.extend(actions)
                     continue
