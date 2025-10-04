@@ -1769,7 +1769,9 @@ def _compute_insights(
     bundles = extractor.extract(records)
     if not bundles:
         return bundles, [], profile, snapshot
-    overrides = profile.phase_weights
+    overrides = (
+        snapshot.phase_weights if snapshot is not None else profile.phase_weights
+    )
     microsectors = segment_microsectors(
         records,
         bundles,

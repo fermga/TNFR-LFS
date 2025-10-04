@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -256,6 +258,49 @@ def test_recommendation_engine_updates_persistent_profile(tmp_path: Path) -> Non
     assert entry_after > entry_before
     assert profiles_path.exists()
 
+
+def test_profile_manager_rehydrates_track_weights(
+    tmp_path: Path, car_track_thresholds
+) -> None:
+    profiles_path = tmp_path / "profiles.toml"
+    profiles_path.write_text(
+        """
+[profiles.generic_gt.valencia.objectives]
+target_delta_nfr = 0.4
+target_sense_index = 0.82
+
+[profiles.generic_gt.valencia.tolerances]
+entry = 0.9
+apex = 0.6
+exit = 1.1
+piano = 1.5
+""".strip()
+        + "\n",
+        encoding="utf8",
+    )
+
+    manager = ProfileManager(
+        profiles_path, threshold_library=car_track_thresholds
+    )
+
+    snapshot = manager.resolve("generic_gt", "valencia")
+    entry_snapshot = snapshot.phase_weights.get("entry", {})
+    assert entry_snapshot.get("tyres") == pytest.approx(1.2)
+
+    manager.save()
+
+    reloaded = ProfileManager(
+        profiles_path, threshold_library=car_track_thresholds
+    )
+    context_engine = RecommendationEngine(
+        car_model="generic_gt",
+        track_name="valencia",
+        threshold_library=car_track_thresholds,
+        profile_manager=reloaded,
+    )._resolve_context("generic_gt", "valencia")
+    entry_weights = context_engine.thresholds.weights_for_phase("entry")
+    assert isinstance(entry_weights, Mapping)
+    assert entry_weights.get("tyres") == pytest.approx(1.2)
 
 def test_threshold_profile_exposes_phase_weights():
     engine = RecommendationEngine(car_model="generic_gt", track_name="valencia")

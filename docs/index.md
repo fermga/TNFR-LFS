@@ -34,3 +34,4 @@ tests to illustrate the workflow.
 - [API Reference](api_reference.md)
 - [Command Line Interface](cli.md)
 - [Tutorials](tutorials.md)
+- [Preset workflow](presets.md)

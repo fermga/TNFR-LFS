@@ -635,6 +635,25 @@ else:
     DEFAULT_THRESHOLD_LIBRARY = {"generic": {"generic": DEFAULT_THRESHOLD_PROFILE}}
 
 
+def lookup_threshold_profile(
+    car_model: str,
+    track_name: str,
+    library: Mapping[str, Mapping[str, ThresholdProfile]] | None = None,
+) -> ThresholdProfile:
+    """Resolve the closest matching threshold profile for a car/track."""
+
+    catalogue = library or DEFAULT_THRESHOLD_LIBRARY
+    for car_key in (car_model, "generic"):
+        car_profiles = catalogue.get(car_key)
+        if not car_profiles:
+            continue
+        for track_key in (track_name, "generic"):
+            profile = car_profiles.get(track_key)
+            if profile is not None:
+                return profile
+    return DEFAULT_THRESHOLD_PROFILE
+
+
 def _goal_for_phase(microsector: Microsector, phase: str) -> Goal | None:
     aliases = list(expand_phase_alias(phase))
     for candidate in reversed(aliases):
@@ -1063,16 +1082,7 @@ class RecommendationEngine:
             self.rules = list(rules)
 
     def _lookup_profile(self, car_model: str, track_name: str) -> ThresholdProfile:
-        library = self.threshold_library
-        for car_key in (car_model, "generic"):
-            car_profiles = library.get(car_key)
-            if not car_profiles:
-                continue
-            for track_key in (track_name, "generic"):
-                profile = car_profiles.get(track_key)
-                if profile is not None:
-                    return profile
-        return DEFAULT_THRESHOLD_PROFILE
+        return lookup_threshold_profile(car_model, track_name, self.threshold_library)
 
     def _resolve_context(
         self,
