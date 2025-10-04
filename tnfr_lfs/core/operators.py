@@ -1016,6 +1016,23 @@ def _microsector_variability(
     return variability
 
 
+def _aggregate_operator_events(
+    microsectors: Sequence["Microsector"] | None,
+) -> Dict[str, List[Mapping[str, object]]]:
+    aggregated: Dict[str, List[Mapping[str, object]]] = {}
+    if not microsectors:
+        return aggregated
+    for microsector in microsectors:
+        events = getattr(microsector, "operator_events", {}) or {}
+        for name, payload in events.items():
+            bucket = aggregated.setdefault(name, [])
+            for entry in payload:
+                event_payload = dict(entry)
+                event_payload.setdefault("microsector", microsector.index)
+                bucket.append(event_payload)
+    return aggregated
+
+
 def orchestrate_delta_metrics(
     telemetry_segments: Sequence[Sequence[TelemetryRecord]],
     target_delta_nfr: float,
@@ -1100,6 +1117,7 @@ def orchestrate_delta_metrics(
             "nodal_metrics": stages["nodal"],
             "epi_evolution": stages["epi"],
             "sense_memory": stages["sense"],
+            "operator_events": _aggregate_operator_events(microsectors),
             "stages": stages,
         }
 
@@ -1156,6 +1174,7 @@ def orchestrate_delta_metrics(
         "nodal_metrics": nodal_stage,
         "epi_evolution": epi_stage,
         "sense_memory": sense_stage,
+        "operator_events": _aggregate_operator_events(microsectors),
         "stages": stages,
     }
 

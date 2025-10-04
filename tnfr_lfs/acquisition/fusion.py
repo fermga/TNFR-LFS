@@ -55,17 +55,20 @@ class TelemetryFusion:
         default_factory=dict, init=False, repr=False
     )
     _vertical_history: List[float] = field(default_factory=list, init=False, repr=False)
+    _line_history: List[Tuple[float, float]] = field(default_factory=list, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._calibration_table = self._load_calibration_table()
         self._calibration_cache = {}
         self._vertical_history = []
+        self._line_history = []
 
     def reset(self) -> None:
         """Clear the internal telemetry history."""
 
         self._records.clear()
         self._vertical_history.clear()
+        self._line_history.clear()
 
     def fuse(self, outsim: OutSimPacket, outgauge: OutGaugePacket) -> TelemetryRecord:
         """Return a :class:`TelemetryRecord` derived from both UDP sources."""
@@ -114,6 +117,7 @@ class TelemetryFusion:
 
         tyre_temps = self._resolve_wheel_temperatures(outgauge, previous)
         tyre_pressures = self._resolve_wheel_pressures(outgauge, previous)
+        line_deviation = self._compute_line_deviation(outsim)
 
         record = TelemetryRecord(
             timestamp=timestamp,
@@ -154,6 +158,8 @@ class TelemetryFusion:
             tyre_pressure_fr=tyre_pressures[1],
             tyre_pressure_rl=tyre_pressures[2],
             tyre_pressure_rr=tyre_pressures[3],
+            rpm=float(outgauge.rpm),
+            line_deviation=line_deviation,
         )
         self._records.append(record)
         return record
@@ -448,6 +454,58 @@ class TelemetryFusion:
             else:
                 resolved.append(float(default))
         return tuple(resolved)  # type: ignore[return-value]
+
+    def _compute_line_deviation(self, outsim: OutSimPacket, window: int = 25) -> float:
+        position = (float(outsim.pos_x), float(outsim.pos_y))
+        self._line_history.append(position)
+        max_length = max(window * 2, 5)
+        if len(self._line_history) > max_length:
+            del self._line_history[: len(self._line_history) - max_length]
+
+        history = self._line_history[-window:]
+        if len(history) < 2:
+            return 0.0
+
+        mean_x = sum(point[0] for point in history) / len(history)
+        mean_y = sum(point[1] for point in history) / len(history)
+        centred = [(x - mean_x, y - mean_y) for x, y in history]
+        var_x = sum(dx * dx for dx, _ in centred)
+        var_y = sum(dy * dy for _, dy in centred)
+        cov_xy = sum(dx * dy for dx, dy in centred)
+
+        if var_x <= 1e-9 and var_y <= 1e-9:
+            return 0.0
+
+        trace = var_x + var_y
+        determinant = (var_x * var_y) - (cov_xy * cov_xy)
+        discriminant = max(0.0, (trace * trace) - (4.0 * determinant))
+        eigenvalue = 0.5 * (trace + math.sqrt(discriminant))
+
+        if eigenvalue <= 1e-12:
+            direction = (1.0, 0.0) if var_x >= var_y else (0.0, 1.0)
+        else:
+            if abs(cov_xy) > 1e-12:
+                vx = cov_xy
+                vy = eigenvalue - var_x
+            else:
+                vx, vy = (1.0, 0.0) if var_x >= var_y else (0.0, 1.0)
+            norm = math.hypot(vx, vy)
+            if norm <= 1e-12:
+                direction = (1.0, 0.0)
+            else:
+                direction = (vx / norm, vy / norm)
+
+        delta_x = position[0] - mean_x
+        delta_y = position[1] - mean_y
+        projection = (delta_x * direction[0]) + (delta_y * direction[1])
+        proj_x = direction[0] * projection
+        proj_y = direction[1] * projection
+        perp_x = delta_x - proj_x
+        perp_y = delta_y - proj_y
+        deviation = math.hypot(perp_x, perp_y)
+        cross = (direction[0] * delta_y) - (direction[1] * delta_x)
+        sign = 1.0 if cross >= 0.0 else -1.0
+        return deviation * sign
 
     def _compute_steer(
         self, yaw_rate: float, speed: float, calibration: FusionCalibration
