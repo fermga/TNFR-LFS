@@ -6,7 +6,17 @@ from dataclasses import dataclass, field
 from importlib import resources
 from statistics import mean
 from types import MappingProxyType
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Protocol, Sequence, Tuple
+from typing import (
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    Protocol,
+    Sequence,
+    Tuple,
+    TYPE_CHECKING,
+)
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -15,6 +25,9 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 from ..core.epi_models import EPIBundle
 from ..core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from ..io.profiles import ProfileManager
 from ..core.segmentation import Goal, Microsector
 
 
@@ -988,10 +1001,12 @@ class RecommendationEngine:
         car_model: str | None = None,
         track_name: str | None = None,
         threshold_library: Mapping[str, Mapping[str, ThresholdProfile]] | None = None,
+        profile_manager: "ProfileManager" | None = None,
     ) -> None:
         self.car_model = car_model or "generic"
         self.track_name = track_name or "generic"
         self.threshold_library = threshold_library or DEFAULT_THRESHOLD_LIBRARY
+        self.profile_manager = profile_manager
         if rules is None:
             self.rules = [
                 PhaseDeltaDeviationRule(
@@ -1066,12 +1081,57 @@ class RecommendationEngine:
     ) -> RuleContext:
         resolved_car = car_model or self.car_model
         resolved_track = track_name or self.track_name
-        profile = self._lookup_profile(resolved_car, resolved_track)
+        base_profile = self._lookup_profile(resolved_car, resolved_track)
+        if self.profile_manager is not None:
+            snapshot = self.profile_manager.resolve(resolved_car, resolved_track, base_profile)
+            profile = snapshot.thresholds
+        else:
+            profile = base_profile
         return RuleContext(
             car_model=resolved_car,
             track_name=resolved_track,
             thresholds=profile,
         )
+
+    def register_plan(
+        self,
+        recommendations: Sequence[Recommendation],
+        *,
+        car_model: str | None = None,
+        track_name: str | None = None,
+        baseline_sense_index: float | None = None,
+        baseline_delta_nfr: float | None = None,
+    ) -> None:
+        if self.profile_manager is None:
+            return
+        phases: Dict[str, float] = {}
+        for recommendation in recommendations:
+            phase = phase_family(recommendation.category)
+            if phase not in {"entry", "apex", "exit"}:
+                continue
+            phases[phase] = phases.get(phase, 0.0) + 1.0
+        if not phases:
+            return
+        resolved_car = car_model or self.car_model
+        resolved_track = track_name or self.track_name
+        baseline: tuple[float, float] | None = None
+        if baseline_sense_index is not None and baseline_delta_nfr is not None:
+            baseline = (float(baseline_sense_index), float(baseline_delta_nfr))
+        self.profile_manager.register_plan(resolved_car, resolved_track, phases, baseline)
+
+    def register_stint_result(
+        self,
+        *,
+        sense_index: float,
+        delta_nfr: float,
+        car_model: str | None = None,
+        track_name: str | None = None,
+    ) -> None:
+        if self.profile_manager is None:
+            return
+        resolved_car = car_model or self.car_model
+        resolved_track = track_name or self.track_name
+        self.profile_manager.register_result(resolved_car, resolved_track, sense_index, delta_nfr)
 
     def generate(
         self,
