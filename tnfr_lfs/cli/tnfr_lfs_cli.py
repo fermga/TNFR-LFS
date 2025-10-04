@@ -1692,6 +1692,7 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         rationales=tuple(aggregated_rationales),
         expected_effects=tuple(aggregated_effects),
         sensitivities=plan.sensitivities,
+        clamped_parameters=tuple(),
     )
 
     payload = {

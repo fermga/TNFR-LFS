@@ -26,6 +26,7 @@ class SetupPlan:
     rationales: Sequence[str] = field(default_factory=tuple)
     expected_effects: Sequence[str] = field(default_factory=tuple)
     sensitivities: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    clamped_parameters: Sequence[str] = field(default_factory=tuple)
     tnfr_rationale_by_node: Mapping[str, Sequence[str]] = field(default_factory=dict)
     tnfr_rationale_by_phase: Mapping[str, Sequence[str]] = field(default_factory=dict)
     expected_effects_by_node: Mapping[str, Sequence[str]] = field(default_factory=dict)
@@ -91,6 +92,7 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
         "expected_effects": expected_effects,
         "sensitivities": sensitivities_payload,
         "dsi_dparam": dsi_payload,
+        "clamped_parameters": list(plan.clamped_parameters),
         "tnfr_rationale_by_node": tnfr_node,
         "tnfr_rationale_by_phase": tnfr_phase,
         "expected_effects_by_node": effects_node,
