@@ -18,8 +18,10 @@ from tnfr_lfs.exporters import (
     CAR_MODEL_PREFIXES,
     csv_exporter,
     json_exporter,
+    lfs_notes_exporter,
     lfs_set_exporter,
     markdown_exporter,
+    normalise_set_output_name,
 )
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan, serialise_setup_plan
 
@@ -162,6 +164,15 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "**Efectos esperados por fase**" in output
 
 
+def test_lfs_notes_exporter_renders_key_instructions():
+    plan = build_setup_plan()
+    output = lfs_notes_exporter({"setup_plan": plan})
+    assert "Instrucciones rápidas TNFR" in output
+    assert "Pulsa F12" in output
+    assert "Pulsa F11" in output
+    assert "Parámetros bloqueados" in output
+
+
 @pytest.mark.parametrize("car_model", SUPPORTED_CAR_MODELS)
 def test_lfs_set_exporter_writes_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, car_model: str
@@ -189,6 +200,13 @@ def test_lfs_set_exporter_validates_name(
     wrong_prefix = "XFG" if prefix != "XFG" else "FXR"
     with pytest.raises(ValueError):
         lfs_set_exporter({"setup_plan": plan, "set_output": f"{wrong_prefix}_invalid"})
+
+
+def test_normalise_set_output_name_requires_prefix() -> None:
+    name = normalise_set_output_name("GEN_race", "generic_gt")
+    assert name == "GEN_race.set"
+    with pytest.raises(ValueError):
+        normalise_set_output_name("XFG_setup", "generic_gt")
 
 
 def test_quickstart_reports_include_new_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
