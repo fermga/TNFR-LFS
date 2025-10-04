@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from math import sqrt
 from statistics import mean, pvariance
 from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
@@ -272,6 +272,14 @@ def resonance_operator(series: Sequence[float]) -> float:
     return sqrt(mean(value * value for value in series))
 
 
+WHEEL_TEMPERATURE_KEYS = (
+    "tyre_temp_fl",
+    "tyre_temp_fr",
+    "tyre_temp_rl",
+    "tyre_temp_rr",
+)
+
+
 def recursivity_operator(
     state: MutableMapping[str, Dict[str, object]],
     microsector_id: str,
@@ -334,21 +342,48 @@ def recursivity_operator(
     if phase is not None:
         micro_state["phase"] = phase
 
+    timestamp_raw = measures.get("timestamp")
+    timestamp = float(timestamp_raw) if isinstance(timestamp_raw, (int, float)) else None
+
     filtered_values: Dict[str, float] = {}
     numeric_keys = [
         key
         for key, value in measures.items()
-        if key != "phase" and isinstance(value, (int, float))
+        if key not in {"phase", "timestamp"} and isinstance(value, (int, float))
     ]
+    previous_filtered_snapshot: Dict[str, float | None] = {}
     for key in numeric_keys:
         value = float(measures[key])
         previous = micro_state["filtered"].get(key)
+        if isinstance(previous, (int, float)):
+            previous_filtered_snapshot[key] = float(previous)
+        else:
+            previous_filtered_snapshot[key] = None
         if previous is None or phase_changed:
             filtered = value
         else:
             filtered = (decay * float(previous)) + ((1.0 - decay) * value)
         micro_state["filtered"][key] = filtered
         filtered_values[key] = filtered
+
+    if timestamp is not None:
+        last_timestamp = micro_state.get("last_timestamp")
+        if isinstance(last_timestamp, (int, float)):
+            dt = timestamp - float(last_timestamp)
+        else:
+            dt = None
+        if dt is not None and dt > 1e-9 and not phase_changed:
+            for key in WHEEL_TEMPERATURE_KEYS:
+                if key not in filtered_values:
+                    continue
+                previous_value = previous_filtered_snapshot.get(key)
+                if previous_value is None:
+                    continue
+                derivative = (filtered_values[key] - previous_value) / dt
+                derivative_key = f"{key}_dt"
+                micro_state["filtered"][derivative_key] = derivative
+                filtered_values[derivative_key] = derivative
+        micro_state["last_timestamp"] = timestamp
 
     micro_state["samples"] = int(micro_state.get("samples", 0)) + 1
     trace_entry = {"phase": micro_state.get("phase"), **filtered_values}
@@ -366,6 +401,109 @@ def recursivity_operator(
         "samples": micro_state["samples"],
         "phase_changed": phase_changed,
     }
+
+
+@dataclass(frozen=True)
+class TyreBalanceControlOutput:
+    """Aggregated ΔP/Δcamber recommendations for a stint."""
+
+    pressure_delta_front: float
+    pressure_delta_rear: float
+    camber_delta_front: float
+    camber_delta_rear: float
+    per_wheel_pressure: Mapping[str, float] = field(default_factory=dict)
+
+
+def tyre_balance_controller(
+    filtered_metrics: Mapping[str, float],
+    *,
+    delta_nfr_flat: float | None = None,
+    target_front: float = 82.0,
+    target_rear: float = 80.0,
+    pressure_gain: float = 0.02,
+    nfr_gain: float = 0.4,
+    pressure_max_step: float = 0.2,
+    camber_gain: float = 0.12,
+    camber_max_step: float = 0.25,
+    offsets: Mapping[str, float] | None = None,
+) -> TyreBalanceControlOutput:
+    """Compute ΔP and camber tweaks from filtered tyre metrics.
+
+    The controller applies a simple proportional relationship against the
+    temperature error and ΔNFR_flat trend, clamping the resulting deltas so
+    that they stay within small, actionable steps that can be executed between
+    stints.
+    """
+
+    def _safe_mean(values: Sequence[float]) -> float:
+        numeric = [value for value in values if isinstance(value, (int, float))]
+        if not numeric:
+            return 0.0
+        return float(mean(numeric))
+
+    def _clamp(value: float, minimum: float, maximum: float) -> float:
+        return max(minimum, min(value, maximum))
+
+    temps = {
+        key: float(filtered_metrics.get(key, 0.0)) for key in WHEEL_TEMPERATURE_KEYS
+    }
+    delta_flat = (
+        float(delta_nfr_flat)
+        if delta_nfr_flat is not None
+        else float(filtered_metrics.get("d_nfr_flat", 0.0))
+    )
+    front_temp = _safe_mean([temps["tyre_temp_fl"], temps["tyre_temp_fr"]])
+    rear_temp = _safe_mean([temps["tyre_temp_rl"], temps["tyre_temp_rr"]])
+
+    pressure_front = pressure_gain * (target_front - front_temp) + nfr_gain * delta_flat
+    pressure_rear = pressure_gain * (target_rear - rear_temp) + nfr_gain * delta_flat
+
+    if offsets:
+        pressure_front += float(offsets.get("pressure_front", 0.0))
+        pressure_rear += float(offsets.get("pressure_rear", 0.0))
+
+    pressure_front = _clamp(pressure_front, -pressure_max_step, pressure_max_step)
+    pressure_rear = _clamp(pressure_rear, -pressure_max_step, pressure_max_step)
+
+    front_gradient = _safe_mean(
+        [
+            float(filtered_metrics.get("tyre_temp_fl_dt", 0.0)),
+            float(filtered_metrics.get("tyre_temp_fr_dt", 0.0)),
+        ]
+    )
+    rear_gradient = _safe_mean(
+        [
+            float(filtered_metrics.get("tyre_temp_rl_dt", 0.0)),
+            float(filtered_metrics.get("tyre_temp_rr_dt", 0.0)),
+        ]
+    )
+
+    camber_front = _clamp(-front_gradient * camber_gain, -camber_max_step, camber_max_step)
+    camber_rear = _clamp(-rear_gradient * camber_gain, -camber_max_step, camber_max_step)
+
+    if offsets:
+        camber_front += float(offsets.get("camber_front", 0.0))
+        camber_rear += float(offsets.get("camber_rear", 0.0))
+
+    def _split_pressure(front_delta: float, rear_delta: float) -> Mapping[str, float]:
+        lateral_bias = _clamp((temps["tyre_temp_fl"] - temps["tyre_temp_fr"]) * 0.01, -0.05, 0.05)
+        longitudinal_bias = _clamp((temps["tyre_temp_rl"] - temps["tyre_temp_rr"]) * 0.01, -0.05, 0.05)
+        return {
+            "fl": _clamp(front_delta + lateral_bias, -pressure_max_step, pressure_max_step),
+            "fr": _clamp(front_delta - lateral_bias, -pressure_max_step, pressure_max_step),
+            "rl": _clamp(rear_delta + longitudinal_bias, -pressure_max_step, pressure_max_step),
+            "rr": _clamp(rear_delta - longitudinal_bias, -pressure_max_step, pressure_max_step),
+        }
+
+    per_wheel = _split_pressure(pressure_front, pressure_rear)
+
+    return TyreBalanceControlOutput(
+        pressure_delta_front=pressure_front,
+        pressure_delta_rear=pressure_rear,
+        camber_delta_front=camber_front,
+        camber_delta_rear=camber_rear,
+        per_wheel_pressure=per_wheel,
+    )
 
 
 def mutation_operator(

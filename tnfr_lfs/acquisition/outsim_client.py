@@ -66,6 +66,14 @@ DEFAULT_SCHEMA = TelemetrySchema(
         "suspension_travel_rear",
         "suspension_velocity_front",
         "suspension_velocity_rear",
+        "tyre_temp_fl",
+        "tyre_temp_fr",
+        "tyre_temp_rl",
+        "tyre_temp_rr",
+        "tyre_pressure_fl",
+        "tyre_pressure_fr",
+        "tyre_pressure_rl",
+        "tyre_pressure_rr",
     ),
 )
 
@@ -103,6 +111,14 @@ LEGACY_DEFAULTS = {
     "suspension_travel_rear": 0.0,
     "suspension_velocity_front": 0.0,
     "suspension_velocity_rear": 0.0,
+    "tyre_temp_fl": 0.0,
+    "tyre_temp_fr": 0.0,
+    "tyre_temp_rl": 0.0,
+    "tyre_temp_rr": 0.0,
+    "tyre_pressure_fl": 0.0,
+    "tyre_pressure_fr": 0.0,
+    "tyre_pressure_rl": 0.0,
+    "tyre_pressure_rr": 0.0,
 }
 
 
@@ -216,6 +232,14 @@ class OutSimClient:
                         suspension_travel_rear=LEGACY_DEFAULTS["suspension_travel_rear"],
                         suspension_velocity_front=LEGACY_DEFAULTS["suspension_velocity_front"],
                         suspension_velocity_rear=LEGACY_DEFAULTS["suspension_velocity_rear"],
+                        tyre_temp_fl=LEGACY_DEFAULTS["tyre_temp_fl"],
+                        tyre_temp_fr=LEGACY_DEFAULTS["tyre_temp_fr"],
+                        tyre_temp_rl=LEGACY_DEFAULTS["tyre_temp_rl"],
+                        tyre_temp_rr=LEGACY_DEFAULTS["tyre_temp_rr"],
+                        tyre_pressure_fl=LEGACY_DEFAULTS["tyre_pressure_fl"],
+                        tyre_pressure_fr=LEGACY_DEFAULTS["tyre_pressure_fr"],
+                        tyre_pressure_rl=LEGACY_DEFAULTS["tyre_pressure_rl"],
+                        tyre_pressure_rr=LEGACY_DEFAULTS["tyre_pressure_rr"],
                         lap=None,
                     )
                 else:
@@ -251,6 +275,14 @@ class OutSimClient:
                         suspension_travel_rear=float(base_values[27]),
                         suspension_velocity_front=float(base_values[28]),
                         suspension_velocity_rear=float(base_values[29]),
+                        tyre_temp_fl=float(base_values[30]),
+                        tyre_temp_fr=float(base_values[31]),
+                        tyre_temp_rl=float(base_values[32]),
+                        tyre_temp_rr=float(base_values[33]),
+                        tyre_pressure_fl=float(base_values[34]),
+                        tyre_pressure_fr=float(base_values[35]),
+                        tyre_pressure_rl=float(base_values[36]),
+                        tyre_pressure_rr=float(base_values[37]),
                         lap=lap_value,
                     )
             except ValueError as exc:  # pragma: no cover - defensive branch

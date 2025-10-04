@@ -42,6 +42,8 @@ from tnfr_lfs.core.operators import (
     recursivity_operator,
     recursividad_operator,
     resonance_operator,
+    TyreBalanceControlOutput,
+    tyre_balance_controller,
 )
 from tnfr_lfs.core.metrics import compute_window_metrics
 
@@ -629,6 +631,84 @@ def test_recursivity_operator_tracks_state_and_phase_changes():
     )
     assert other["filtered"]["thermal_load"] == pytest.approx(300.0)
     assert len(state) == 2
+
+
+def test_recursivity_operator_filters_tyre_temperatures_and_derivatives():
+    state: dict[str, dict[str, object]] = {}
+
+    recursivity_operator(
+        state,
+        "tyre-1",
+        {
+            "thermal_load": 400.0,
+            "style_index": 0.8,
+            "phase": "apex",
+            "tyre_temp_fl": 80.0,
+            "tyre_temp_fr": 81.0,
+            "tyre_temp_rl": 78.0,
+            "tyre_temp_rr": 77.5,
+            "tyre_pressure_fl": 24.0,
+            "tyre_pressure_fr": 24.1,
+            "tyre_pressure_rl": 23.8,
+            "tyre_pressure_rr": 23.7,
+            "timestamp": 10.0,
+        },
+        decay=0.3,
+    )
+
+    second = recursivity_operator(
+        state,
+        "tyre-1",
+        {
+            "thermal_load": 405.0,
+            "style_index": 0.79,
+            "phase": "apex",
+            "tyre_temp_fl": 84.0,
+            "tyre_temp_fr": 85.0,
+            "tyre_temp_rl": 80.5,
+            "tyre_temp_rr": 79.0,
+            "tyre_pressure_fl": 24.2,
+            "tyre_pressure_fr": 24.3,
+            "tyre_pressure_rl": 24.0,
+            "tyre_pressure_rr": 23.9,
+            "timestamp": 10.5,
+        },
+        decay=0.3,
+    )
+
+    assert second["filtered"]["tyre_temp_fl"] == pytest.approx(82.8)
+    assert second["filtered"]["tyre_pressure_rr"] == pytest.approx(23.84)
+    assert "tyre_temp_fl_dt" in second["filtered"]
+    assert second["filtered"]["tyre_temp_fl_dt"] == pytest.approx((82.8 - 80.0) / 0.5)
+
+
+def test_tyre_balance_controller_computes_clamped_deltas():
+    metrics = {
+        "tyre_temp_fl": 85.0,
+        "tyre_temp_fr": 84.0,
+        "tyre_temp_rl": 79.0,
+        "tyre_temp_rr": 78.0,
+        "tyre_temp_fl_dt": 2.0,
+        "tyre_temp_fr_dt": 1.5,
+        "tyre_temp_rl_dt": 0.8,
+        "tyre_temp_rr_dt": 1.0,
+        "d_nfr_flat": -0.4,
+    }
+
+    control = tyre_balance_controller(metrics)
+    assert isinstance(control, TyreBalanceControlOutput)
+    assert control.pressure_delta_front == pytest.approx(-0.2)
+    assert control.pressure_delta_rear == pytest.approx(-0.13, abs=1e-6)
+    assert control.camber_delta_front == pytest.approx(-0.21, abs=1e-6)
+    assert control.camber_delta_rear == pytest.approx(-0.108, abs=1e-6)
+    assert control.per_wheel_pressure["fl"] == pytest.approx(-0.19, abs=1e-6)
+    assert control.per_wheel_pressure["fr"] == pytest.approx(-0.2, abs=1e-6)
+
+    with_offsets = tyre_balance_controller(
+        metrics, offsets={"pressure_front": 0.05, "camber_rear": 0.05}
+    )
+    assert with_offsets.pressure_delta_front == pytest.approx(-0.16, abs=1e-6)
+    assert with_offsets.camber_delta_rear == pytest.approx(-0.058, abs=1e-6)
 
 
 def test_mutation_operator_detects_style_and_entropy_mutations():

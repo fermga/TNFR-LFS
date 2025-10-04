@@ -18,6 +18,8 @@ from .operators import (
     recursivity_operator,
     recursividad_operator,
     resonance_operator,
+    TyreBalanceControlOutput,
+    tyre_balance_controller,
 )
 from .resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
 from .segmentation import Goal, Microsector, segment_microsectors
@@ -45,6 +47,8 @@ __all__ = [
     "recursividad_operator",
     "orchestrate_delta_metrics",
     "evolve_epi",
+    "tyre_balance_controller",
+    "TyreBalanceControlOutput",
     "Goal",
     "Microsector",
     "segment_microsectors",

@@ -61,7 +61,7 @@ ponderaciones empíricas:
 
 | Nodo          | Señales principales                                      |
 | ------------- | -------------------------------------------------------- |
-| ``tyres``     | Δslip ratio, bloqueo ABS/TC, variación de carga vertical |
+| ``tyres``     | Δslip ratio, bloqueo ABS/TC, variación de carga vertical, temperaturas y presiones por rueda |
 | ``suspension``| Δcarga vertical, Δpitch, Δroll                            |
 | ``chassis``   | Δaceleración lateral, Δroll, Δyaw                         |
 | ``brakes``    | Δpresión de freno, indicador de bloqueo, deceleración     |
@@ -83,9 +83,11 @@ dos operadores con estado ubicados en ``tnfr_lfs.core.operators``:
 
 * ``recursivity_operator`` conserva una traza por microsector y filtra de
   forma exponencial las métricas térmicas y de estilo (``thermal_load`` y
-  ``style_index``).  El operador detecta cambios de fase (entrada, vértice,
-  salida) y reinicia la memoria cuando corresponde para que el filtro no
-  contamine transiciones abruptas.
+  ``style_index``) junto con las temperaturas/presiones por rueda
+  (``tyre_temp_*``/``tyre_pressure_*``).  Además calcula derivadas ``dT/dt``
+  para cada rueda y persiste ``ΔNFR_flat`` como referencia.  El operador
+  detecta cambios de fase (entrada, vértice, salida) y reinicia la memoria
+  cuando corresponde para que el filtro no contamine transiciones abruptas.
 * ``mutation_operator`` observa la entropía del reparto ΔNFR y las desviaciones
   de estilo filtradas para decidir si el arquetipo táctico debe mutar hacia un
   candidato alternativo o volver a un modo de recuperación.

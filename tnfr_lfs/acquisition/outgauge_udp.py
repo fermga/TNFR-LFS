@@ -46,6 +46,8 @@ class OutGaugePacket:
     display1: str
     display2: str
     packet_id: int
+    tyre_temps: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    tyre_pressures: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
     @classmethod
     def from_bytes(cls, payload: bytes) -> "OutGaugePacket":
@@ -105,6 +107,8 @@ class OutGaugePacket:
             display1=_decode_string(display1),
             display2=_decode_string(display2),
             packet_id=packet_id,
+            tyre_temps=(0.0, 0.0, 0.0, 0.0),
+            tyre_pressures=(0.0, 0.0, 0.0, 0.0),
         )
 
 

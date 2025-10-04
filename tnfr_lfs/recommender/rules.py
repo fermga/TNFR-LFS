@@ -24,6 +24,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
 from ..core.epi_models import EPIBundle
+from ..core.operators import TyreBalanceControlOutput, tyre_balance_controller
 from ..core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -39,6 +40,7 @@ MANUAL_REFERENCES = {
     "ride_height": "Advanced Setup Guide · Alturas y reparto de carga [ADV-RDH]",
     "aero": "Basic Setup Guide · Balance aerodinámico [BAS-AER]",
     "driver": "Basic Setup Guide · Constancia de pilotaje [BAS-DRV]",
+    "tyre_balance": "Advanced Setup Guide · Presiones y caídas [ADV-TYR]",
 }
 
 
@@ -342,6 +344,7 @@ class RuleContext:
     car_model: str
     track_name: str
     thresholds: ThresholdProfile
+    tyre_offsets: Mapping[str, float] = field(default_factory=dict)
 
     @property
     def profile_label(self) -> str:
@@ -1001,6 +1004,130 @@ class PhaseNodeOperatorRule:
         return recommendations
 
 
+class TyreBalanceRule:
+    """Recommend ΔP and camber tweaks from tyre thermal trends."""
+
+    def __init__(self, priority: int = 18, target_front: float = 82.0, target_rear: float = 80.0) -> None:
+        self.priority = priority
+        self.target_front = target_front
+        self.target_rear = target_rear
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors or context is None:
+            return []
+
+        def _safe_float(value: object) -> float:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return 0.0
+
+        def _average(values: Sequence[float]) -> float:
+            return mean(values) if values else 0.0
+
+        controls: List[TyreBalanceControlOutput] = []
+        front_temps: List[float] = []
+        rear_temps: List[float] = []
+        delta_flat_values: List[float] = []
+        per_wheel: Dict[str, List[float]] = {key: [] for key in ("fl", "fr", "rl", "rr")}
+
+        for microsector in microsectors:
+            metrics = microsector.filtered_measures
+            control = tyre_balance_controller(
+                metrics,
+                target_front=self.target_front,
+                target_rear=self.target_rear,
+                offsets=context.tyre_offsets,
+            )
+            controls.append(control)
+            front_temps.append(
+                _average(
+                    [
+                        _safe_float(metrics.get("tyre_temp_fl")),
+                        _safe_float(metrics.get("tyre_temp_fr")),
+                    ]
+                )
+            )
+            rear_temps.append(
+                _average(
+                    [
+                        _safe_float(metrics.get("tyre_temp_rl")),
+                        _safe_float(metrics.get("tyre_temp_rr")),
+                    ]
+                )
+            )
+            delta_flat_values.append(_safe_float(metrics.get("d_nfr_flat")))
+            for key, value in control.per_wheel_pressure.items():
+                per_wheel.setdefault(key, []).append(float(value))
+
+        if not controls:
+            return []
+
+        front_pressure = _average([control.pressure_delta_front for control in controls])
+        rear_pressure = _average([control.pressure_delta_rear for control in controls])
+        camber_front = _average([control.camber_delta_front for control in controls])
+        camber_rear = _average([control.camber_delta_rear for control in controls])
+        per_wheel_avg = {key: _average(values) for key, values in per_wheel.items()}
+
+        average_front_temp = _average(front_temps)
+        average_rear_temp = _average(rear_temps)
+        avg_delta_flat = _average(delta_flat_values)
+
+        recommendations: List[Recommendation] = []
+
+        if abs(front_pressure) > 0.01 or abs(rear_pressure) > 0.01:
+            pressure_rationale = (
+                f"Temperaturas medias {average_front_temp:.1f}°C / {average_rear_temp:.1f}°C con ΔNFR_flat {avg_delta_flat:+.2f}. "
+                f"Per-wheel ΔP {per_wheel_avg['fl']:+.2f}/{per_wheel_avg['fr']:+.2f}/"
+                f"{per_wheel_avg['rl']:+.2f}/{per_wheel_avg['rr']:+.2f}."
+            )
+            recommendations.append(
+                Recommendation(
+                    category="tyres",
+                    message=(
+                        "Operador térmico: ajustar presiones ΔPfront "
+                        f"{front_pressure:+.2f} / ΔPrear {rear_pressure:+.2f} bar "
+                        f"({MANUAL_REFERENCES['tyre_balance']})"
+                    ),
+                    rationale=(
+                        f"{pressure_rationale} Sigue las pautas de {MANUAL_REFERENCES['tyre_balance']} "
+                        "para implementar los ajustes." 
+                    ),
+                    priority=self.priority,
+                    parameter="tyre_pressure",
+                    delta=front_pressure,
+                )
+            )
+
+        if abs(camber_front) > 0.01 or abs(camber_rear) > 0.01:
+            camber_rationale = (
+                f"Gradiente térmico front {camber_front:+.2f}·dt y rear {camber_rear:+.2f}·dt derivados de dT/dt."
+            )
+            recommendations.append(
+                Recommendation(
+                    category="tyres",
+                    message=(
+                        "Operador térmico: camber Δfront "
+                        f"{camber_front:+.2f}° / Δrear {camber_rear:+.2f}° "
+                        f"({MANUAL_REFERENCES['tyre_balance']})"
+                    ),
+                    rationale=(
+                        f"{camber_rationale} Ajusta las caídas siguiendo {MANUAL_REFERENCES['tyre_balance']}."
+                    ),
+                    priority=self.priority + 1,
+                    parameter="camber",
+                    delta=camber_front,
+                )
+            )
+
+        return recommendations
+
+
 class CurbComplianceRule:
     """Analyses support events (pianos) against the ΔNFR target."""
 
@@ -1254,6 +1381,7 @@ class RecommendationEngine:
                     priority=22,
                     reference_key="antiroll",
                 ),
+                TyreBalanceRule(priority=24),
                 DetuneRatioRule(priority=24),
                 UsefulDissonanceRule(priority=26),
                 CurbComplianceRule(priority=25),
@@ -1293,12 +1421,15 @@ class RecommendationEngine:
         if self.profile_manager is not None:
             snapshot = self.profile_manager.resolve(resolved_car, resolved_track, base_profile)
             profile = snapshot.thresholds
+            offsets = snapshot.tyre_offsets
         else:
             profile = base_profile
+            offsets = {}
         return RuleContext(
             car_model=resolved_car,
             track_name=resolved_track,
             thresholds=profile,
+            tyre_offsets=offsets,
         )
 
     def register_plan(

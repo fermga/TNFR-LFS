@@ -71,6 +71,14 @@ class TelemetryRecord:
     suspension_travel_rear: float
     suspension_velocity_front: float
     suspension_velocity_rear: float
+    tyre_temp_fl: float = 0.0
+    tyre_temp_fr: float = 0.0
+    tyre_temp_rl: float = 0.0
+    tyre_temp_rr: float = 0.0
+    tyre_pressure_fl: float = 0.0
+    tyre_pressure_fr: float = 0.0
+    tyre_pressure_rl: float = 0.0
+    tyre_pressure_rr: float = 0.0
     lap: int | str | None = None
     reference: Optional["TelemetryRecord"] = None
 
@@ -486,6 +494,14 @@ class DeltaCalculator:
                 mu_eff_front_longitudinal=record.mu_eff_front_longitudinal,
                 mu_eff_rear_lateral=record.mu_eff_rear_lateral,
                 mu_eff_rear_longitudinal=record.mu_eff_rear_longitudinal,
+                tyre_temp_fl=record.tyre_temp_fl,
+                tyre_temp_fr=record.tyre_temp_fr,
+                tyre_temp_rl=record.tyre_temp_rl,
+                tyre_temp_rr=record.tyre_temp_rr,
+                tyre_pressure_fl=record.tyre_pressure_fl,
+                tyre_pressure_fr=record.tyre_pressure_fr,
+                tyre_pressure_rl=record.tyre_pressure_rl,
+                tyre_pressure_rr=record.tyre_pressure_rr,
             ),
             "suspension": SuspensionNode(
                 delta_nfr=node_deltas.get("suspension", 0.0),

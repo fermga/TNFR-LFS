@@ -20,10 +20,14 @@ from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.io.profiles import ProfileManager
 from tnfr_lfs.recommender.rules import (
     DetuneRatioRule,
+    MANUAL_REFERENCES,
     PhaseNodeOperatorRule,
     Recommendation,
     RecommendationEngine,
+    RuleContext,
+    TyreBalanceRule,
     UsefulDissonanceRule,
+    ThresholdProfile,
 )
 
 
@@ -121,6 +125,85 @@ def _udr_microsector(goal: Goal, *, udr: float, sample_count: int) -> Microsecto
         last_mutation=None,
         window_occupancy={goal.phase: {}},
     )
+
+
+def test_tyre_balance_rule_generates_guidance():
+    goal = Goal(
+        phase="apex",
+        archetype="equilibrio",
+        description="",
+        target_delta_nfr=0.4,
+        target_sense_index=0.9,
+        nu_f_target=0.25,
+        nu_exc_target=0.25,
+        rho_target=1.0,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.9,
+        measured_phase_lag=0.0,
+        measured_phase_alignment=0.88,
+        slip_lat_window=(-0.4, 0.4),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.5, 0.5),
+        dominant_nodes=("tyres",),
+    )
+    microsector = Microsector(
+        index=5,
+        start_time=0.0,
+        end_time=0.4,
+        curvature=1.2,
+        brake_event=False,
+        support_event=False,
+        delta_nfr_signature=0.5,
+        goals=(goal,),
+        phase_boundaries={"apex": (0, 4)},
+        phase_samples={"apex": (0, 1, 2, 3)},
+        active_phase="apex",
+        dominant_nodes={"apex": ("tyres",)},
+        phase_weights={"apex": {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={"apex": 0.0},
+        phase_alignment={"apex": 0.9},
+        filtered_measures={
+            "thermal_load": 5150.0,
+            "style_index": 0.82,
+            "grip_rel": 1.0,
+            "d_nfr_flat": -0.32,
+            "tyre_temp_fl": 84.0,
+            "tyre_temp_fr": 83.5,
+            "tyre_temp_rl": 79.2,
+            "tyre_temp_rr": 78.8,
+            "tyre_temp_fl_dt": 1.2,
+            "tyre_temp_fr_dt": 1.0,
+            "tyre_temp_rl_dt": 0.7,
+            "tyre_temp_rr_dt": 0.6,
+        },
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"apex": {}},
+    )
+    thresholds = ThresholdProfile(
+        entry_delta_tolerance=0.6,
+        apex_delta_tolerance=0.6,
+        exit_delta_tolerance=0.6,
+        piano_delta_tolerance=0.5,
+        rho_detune_threshold=0.4,
+    )
+    context = RuleContext(
+        car_model="generic_gt",
+        track_name="valencia",
+        thresholds=thresholds,
+        tyre_offsets={"pressure_front": -0.02},
+    )
+    rule = TyreBalanceRule(priority=18)
+
+    recommendations = list(rule.evaluate([], [microsector], context))
+    assert recommendations
+    pressure_rec = next(rec for rec in recommendations if "ΔPfront" in rec.message)
+    camber_rec = next(rec for rec in recommendations if "camber" in rec.message)
+    assert pressure_rec.priority == 18
+    assert pressure_rec.delta is not None and pressure_rec.delta < 0
+    assert camber_rec.priority == 19
+    assert MANUAL_REFERENCES["tyre_balance"].split()[0] in camber_rec.rationale
 
 
 def test_recommendation_engine_detects_anomalies(car_track_thresholds):

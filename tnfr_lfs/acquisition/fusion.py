@@ -112,6 +112,9 @@ class TelemetryFusion:
             outsim.accel_y, outsim.accel_x, rear_share, calibration
         )
 
+        tyre_temps = self._resolve_wheel_temperatures(outgauge, previous)
+        tyre_pressures = self._resolve_wheel_pressures(outgauge, previous)
+
         record = TelemetryRecord(
             timestamp=timestamp,
             vertical_load=vertical_load,
@@ -143,6 +146,14 @@ class TelemetryFusion:
             suspension_travel_rear=travel_rear,
             suspension_velocity_front=vel_front,
             suspension_velocity_rear=vel_rear,
+            tyre_temp_fl=tyre_temps[0],
+            tyre_temp_fr=tyre_temps[1],
+            tyre_temp_rl=tyre_temps[2],
+            tyre_temp_rr=tyre_temps[3],
+            tyre_pressure_fl=tyre_pressures[0],
+            tyre_pressure_fr=tyre_pressures[1],
+            tyre_pressure_rl=tyre_pressures[2],
+            tyre_pressure_rr=tyre_pressures[3],
         )
         self._records.append(record)
         return record
@@ -397,6 +408,46 @@ class TelemetryFusion:
         longitudinal_mu = _clamp((longitudinal_g / share) * calibration.mu_longitudinal_gain, 0.0, 3.0)
         combined = _clamp((lateral_mu + longitudinal_mu) * 0.5, 0.0, 3.0)
         return combined, lateral_mu, longitudinal_mu
+
+    def _resolve_wheel_temperatures(
+        self, outgauge: OutGaugePacket, previous: TelemetryRecord | None
+    ) -> tuple[float, float, float, float]:
+        candidate = getattr(outgauge, "tyre_temps", (0.0, 0.0, 0.0, 0.0))
+        if len(candidate) != 4:
+            candidate = (0.0, 0.0, 0.0, 0.0)
+        fallback = (
+            previous.tyre_temp_fl if previous else 0.0,
+            previous.tyre_temp_fr if previous else 0.0,
+            previous.tyre_temp_rl if previous else 0.0,
+            previous.tyre_temp_rr if previous else 0.0,
+        )
+        resolved = []
+        for value, default in zip(candidate, fallback):
+            if isinstance(value, (int, float)) and math.isfinite(value) and value > 0.0:
+                resolved.append(float(value))
+            else:
+                resolved.append(float(default))
+        return tuple(resolved)  # type: ignore[return-value]
+
+    def _resolve_wheel_pressures(
+        self, outgauge: OutGaugePacket, previous: TelemetryRecord | None
+    ) -> tuple[float, float, float, float]:
+        candidate = getattr(outgauge, "tyre_pressures", (0.0, 0.0, 0.0, 0.0))
+        if len(candidate) != 4:
+            candidate = (0.0, 0.0, 0.0, 0.0)
+        fallback = (
+            previous.tyre_pressure_fl if previous else 0.0,
+            previous.tyre_pressure_fr if previous else 0.0,
+            previous.tyre_pressure_rl if previous else 0.0,
+            previous.tyre_pressure_rr if previous else 0.0,
+        )
+        resolved = []
+        for value, default in zip(candidate, fallback):
+            if isinstance(value, (int, float)) and math.isfinite(value) and value > 0.0:
+                resolved.append(float(value))
+            else:
+                resolved.append(float(default))
+        return tuple(resolved)  # type: ignore[return-value]
 
     def _compute_steer(
         self, yaw_rate: float, speed: float, calibration: FusionCalibration

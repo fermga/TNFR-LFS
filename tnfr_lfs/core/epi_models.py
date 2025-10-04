@@ -23,6 +23,14 @@ class TyresNode:
     mu_eff_front_longitudinal: float = 0.0
     mu_eff_rear_lateral: float = 0.0
     mu_eff_rear_longitudinal: float = 0.0
+    tyre_temp_fl: float = 0.0
+    tyre_temp_fr: float = 0.0
+    tyre_temp_rl: float = 0.0
+    tyre_temp_rr: float = 0.0
+    tyre_pressure_fl: float = 0.0
+    tyre_pressure_fr: float = 0.0
+    tyre_pressure_rl: float = 0.0
+    tyre_pressure_rr: float = 0.0
 
 
 @dataclass(frozen=True)
