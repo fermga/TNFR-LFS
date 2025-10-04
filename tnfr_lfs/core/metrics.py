@@ -92,6 +92,7 @@ class WindowMetrics:
     useful_dissonance_ratio: float
     useful_dissonance_percentage: float
     coherence_index: float
+    ackermann_parallel_index: float
     support_effective: float
     load_support_ratio: float
     structural_expansion_longitudinal: float
@@ -134,31 +135,32 @@ def compute_window_metrics(
 
     if not records:
         return WindowMetrics(
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            "",
-            AeroCoherence(),
-            0.0,
-            0.0,
+            si=0.0,
+            si_variance=0.0,
+            d_nfr_couple=0.0,
+            d_nfr_res=0.0,
+            d_nfr_flat=0.0,
+            nu_f=0.0,
+            nu_exc=0.0,
+            rho=0.0,
+            phase_lag=0.0,
+            phase_alignment=1.0,
+            useful_dissonance_ratio=0.0,
+            useful_dissonance_percentage=0.0,
+            coherence_index=0.0,
+            ackermann_parallel_index=0.0,
+            support_effective=0.0,
+            load_support_ratio=0.0,
+            structural_expansion_longitudinal=0.0,
+            structural_contraction_longitudinal=0.0,
+            structural_expansion_lateral=0.0,
+            structural_contraction_lateral=0.0,
+            bottoming_ratio_front=0.0,
+            bottoming_ratio_rear=0.0,
+            frequency_label="",
+            aero_coherence=AeroCoherence(),
+            aero_mechanical_coherence=0.0,
+            epi_derivative_abs=0.0,
         )
 
     def _objective(name: str, default: float) -> float:
@@ -209,6 +211,7 @@ def compute_window_metrics(
     )
 
     epi_abs_derivative = 0.0
+    ackermann_samples: list[float] = []
 
     if bundles:
         timestamps = resolve_time_axis(
@@ -254,6 +257,17 @@ def compute_window_metrics(
         lateral_series = [
             float(getattr(bundle, "delta_nfr_lateral", 0.0)) for bundle in bundles
         ]
+        if phase_indices:
+            ackermann_samples = [
+                float(bundles[index].ackermann_parallel_index)
+                for index in phase_indices
+                if 0 <= index < len(bundles)
+            ]
+        else:
+            ackermann_samples = [
+                float(getattr(bundle, "ackermann_parallel_index", 0.0))
+                for bundle in bundles
+            ]
     else:
         timestamps = resolve_time_axis(
             records, fallback_to_chronological=fallback_to_chronological
@@ -396,6 +410,7 @@ def compute_window_metrics(
         if bundles:
             frequency_label = str(getattr(bundles[-1], "nu_f_label", ""))
     raw_coherence = mean(coherence_values) if coherence_values else 0.0
+    ackermann_parallel = mean(ackermann_samples) if ackermann_samples else 0.0
     target_si = max(1e-6, min(1.0, _objective("target_sense_index", 0.75)))
     si_factor = si_value / target_si if target_si > 0 else 0.0
     normalised_coherence = max(0.0, min(1.0, raw_coherence * si_factor))
@@ -426,6 +441,7 @@ def compute_window_metrics(
         useful_dissonance_ratio=udr,
         useful_dissonance_percentage=udr * 100.0,
         coherence_index=normalised_coherence,
+        ackermann_parallel_index=ackermann_parallel,
         support_effective=support_effective,
         load_support_ratio=load_support_ratio,
         structural_expansion_longitudinal=long_expansion,

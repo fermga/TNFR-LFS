@@ -29,6 +29,7 @@ from tnfr_lfs.recommender.rules import (
     MANUAL_REFERENCES,
     PhaseDeltaDeviationRule,
     PhaseNodeOperatorRule,
+    ParallelSteerRule,
     Recommendation,
     RecommendationEngine,
     RuleContext,
@@ -289,6 +290,33 @@ def test_tyre_balance_rule_generates_guidance():
     assert pressure_rec.delta is not None and pressure_rec.delta < 0
     assert camber_rec.priority == 19
     assert MANUAL_REFERENCES["tyre_balance"].split()[0] in camber_rec.rationale
+
+
+def test_parallel_steer_rule_recommends_open_toe_on_negative_delta() -> None:
+    rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.2)
+    microsector = SimpleNamespace(
+        index=7,
+        filtered_measures={"ackermann_parallel_index": -0.12},
+    )
+    recommendations = list(rule.evaluate([], [microsector], None))
+    assert recommendations
+    recommendation = recommendations[0]
+    assert "parallel steer" in recommendation.message.lower()
+    assert recommendation.parameter == "front_toe_deg"
+    assert recommendation.delta == pytest.approx(0.2)
+
+
+def test_parallel_steer_rule_recommends_closing_toe_on_positive_delta() -> None:
+    rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.15)
+    microsector = SimpleNamespace(
+        index=5,
+        filtered_measures={"ackermann_parallel_index": 0.11},
+    )
+    recommendations = list(rule.evaluate([], [microsector], None))
+    assert recommendations
+    recommendation = recommendations[0]
+    assert recommendation.delta == pytest.approx(-0.15)
+    assert "parallel steer" in recommendation.message.lower()
 
 
 def test_recommendation_engine_suppresses_when_quiet_sequence():

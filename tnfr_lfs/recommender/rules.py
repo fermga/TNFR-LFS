@@ -2044,6 +2044,61 @@ class PhaseNodeOperatorRule:
         return recommendations
 
 
+class ParallelSteerRule:
+    """React to Ackermann steering deviations using the aggregated index."""
+
+    def __init__(self, priority: int = 20, threshold: float = 0.08, delta_step: float = 0.1) -> None:
+        self.priority = int(priority)
+        self.threshold = float(threshold)
+        self.delta_step = float(delta_step)
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors:
+            return []
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            try:
+                deviation = float(measures.get("ackermann_parallel_index", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(deviation):
+                continue
+            magnitude = abs(deviation)
+            if magnitude <= self.threshold:
+                continue
+            if deviation < 0.0:
+                action = "abrir toe delantero"
+                delta = self.delta_step
+            else:
+                action = "cerrar toe delantero"
+                delta = -self.delta_step
+            message = (
+                f"Operador Ackermann: {action} (parallel steer) en microsector {microsector.index}"
+            )
+            rationale = (
+                f"Desfase Ackermann medio {deviation:+.3f}rad supera el umbral {self.threshold:.3f}. "
+                f"Ajusta toe estático para recuperar el par teórico ({MANUAL_REFERENCES['tyre_balance']})."
+            )
+            recommendations.append(
+                Recommendation(
+                    category="entry",
+                    message=message,
+                    rationale=rationale,
+                    priority=self.priority,
+                    parameter="front_toe_deg",
+                    delta=delta,
+                )
+            )
+        return recommendations
+
+
 class TyreBalanceRule:
     """Recommend ΔP and camber tweaks from tyre thermal trends."""
 
@@ -2430,6 +2485,7 @@ class RecommendationEngine:
                     priority=22,
                     reference_key="antiroll",
                 ),
+                ParallelSteerRule(priority=20),
                 TyreBalanceRule(priority=24),
                 BottomingPriorityRule(priority=18),
                 DetuneRatioRule(priority=24),

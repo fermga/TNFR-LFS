@@ -485,6 +485,7 @@ def segment_microsectors(
                 "phase_lag_window": window_metrics.phase_lag,
                 "phase_alignment_window": window_metrics.phase_alignment,
                 "coherence_index": window_metrics.coherence_index,
+                "ackermann_parallel_index": window_metrics.ackermann_parallel_index,
                 "support_effective": window_metrics.support_effective,
                 "load_support_ratio": window_metrics.load_support_ratio,
                 "structural_expansion_longitudinal": window_metrics.structural_expansion_longitudinal,
