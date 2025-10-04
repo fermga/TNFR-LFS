@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from typing import Sequence
+from dataclasses import replace
 from types import SimpleNamespace
 
 from tnfr_lfs.core.epi_models import (
@@ -1383,3 +1384,133 @@ def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
     ]
     assert sway_recs
     assert all(rec.priority <= rule.priority - 1 for rec in sway_recs)
+
+
+def test_phase_delta_rule_emits_geometry_actions_for_coherence_gap() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="entry",
+        operator_label="Operador de frenado",
+        category="entry",
+        phase_label="entrada",
+        priority=14,
+        reference_key="braking",
+    )
+    goal = Goal(
+        phase="entry",
+        archetype="tight",
+        description="",
+        target_delta_nfr=0.2,
+        target_sense_index=0.9,
+        nu_f_target=0.28,
+        nu_exc_target=0.22,
+        rho_target=1.0,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.9,
+        measured_phase_lag=0.18,
+        measured_phase_alignment=0.62,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.4, 0.4),
+        dominant_nodes=("suspension", "tyres"),
+        target_delta_nfr_long=0.15,
+        target_delta_nfr_lat=0.05,
+    )
+    microsector = Microsector(
+        index=9,
+        start_time=0.0,
+        end_time=0.3,
+        curvature=1.3,
+        brake_event=True,
+        support_event=False,
+        delta_nfr_signature=0.25,
+        goals=(goal,),
+        phase_boundaries={"entry": (0, 3)},
+        phase_samples={"entry": (0, 1, 2)},
+        active_phase="entry",
+        dominant_nodes={"entry": ("suspension", "tyres")},
+        phase_weights={"entry": {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={"entry": 0.18},
+        phase_alignment={"entry": 0.62},
+        filtered_measures={"coherence_index": 0.32},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"entry_a": {}},
+        operator_events={},
+    )
+    results = []
+    for value in (0.46, 0.48, 0.44):
+        bundle = _axis_bundle(value, 0.36, 0.1)
+        results.append(replace(bundle, coherence_index=0.32))
+    thresholds = ThresholdProfile(0.2, 0.5, 0.5, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate(results, [microsector], context))
+    geometry_params = {"front_camber_deg", "front_toe_deg", "caster_deg"}
+    geometry_recs = [rec for rec in recommendations if rec.parameter in geometry_params]
+    assert geometry_recs, "expected geometry recommendations triggered by coherence gap"
+    assert any("camber" in rec.message.lower() or "toe" in rec.message.lower() for rec in geometry_recs)
+    assert all(rec.priority <= rule.priority - 1 for rec in geometry_recs)
+
+
+def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
+    rule = PhaseNodeOperatorRule(
+        phase="apex",
+        operator_label="Operador de vértice",
+        category="apex",
+        priority=24,
+        reference_key="antiroll",
+    )
+    goal = Goal(
+        phase="apex",
+        archetype="hairpin",
+        description="",
+        target_delta_nfr=0.15,
+        target_sense_index=0.88,
+        nu_f_target=0.32,
+        nu_exc_target=0.27,
+        rho_target=0.9,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.92,
+        measured_phase_lag=0.21,
+        measured_phase_alignment=0.66,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.4, 0.4),
+        dominant_nodes=("suspension", "tyres"),
+    )
+    microsector = Microsector(
+        index=6,
+        start_time=0.0,
+        end_time=0.4,
+        curvature=1.5,
+        brake_event=False,
+        support_event=True,
+        delta_nfr_signature=0.3,
+        goals=(goal,),
+        phase_boundaries={"apex": (0, 4)},
+        phase_samples={"apex": (0, 1, 2, 3)},
+        active_phase="apex",
+        dominant_nodes={"apex": ("suspension", "tyres")},
+        phase_weights={"apex": {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={"apex": 0.21},
+        phase_alignment={"apex": 0.66},
+        filtered_measures={"coherence_index": 0.35},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"apex_r": {}},
+        operator_events={},
+    )
+    results = []
+    for value in (0.35, 0.33, 0.36, 0.34):
+        bundle = _axis_bundle(value, 0.14, 0.21)
+        results.append(replace(bundle, coherence_index=0.35))
+    thresholds = ThresholdProfile(0.4, 0.3, 0.4, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate(results, [microsector], context))
+    geometry_params = {"front_camber_deg", "rear_camber_deg", "front_toe_deg", "rear_toe_deg"}
+    geometry_recs = [rec for rec in recommendations if rec.parameter in geometry_params]
+    assert geometry_recs, "expected geometry reinforcement recommendations"
+    assert any("camber" in rec.message.lower() or "toe" in rec.message.lower() for rec in geometry_recs)
+    assert any("C(t)" in rec.rationale for rec in geometry_recs)
+    assert all(rec.priority <= rule.priority - 1 for rec in geometry_recs)

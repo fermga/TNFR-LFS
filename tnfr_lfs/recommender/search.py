@@ -166,13 +166,33 @@ def objective_score(results: Sequence[EPIBundle], microsectors: Sequence[Microse
     if not results:
         return float("-inf")
     mean_si = fmean(bundle.sense_index for bundle in results)
+    coherence_mean = fmean(getattr(bundle, "coherence_index", 0.0) for bundle in results)
+    geometry_penalty = 0.0
+    geometry_samples = 0
     if microsectors:
         integral = sum(_microsector_integral(results, micro) for micro in microsectors)
         duration = max(results[-1].timestamp - results[0].timestamp, 1e-3)
         nfr_penalty = integral / duration
+        for micro in microsectors:
+            for goal in micro.goals:
+                measured_alignment = micro.phase_alignment.get(
+                    goal.phase, getattr(goal, "measured_phase_alignment", 1.0)
+                )
+                target_alignment = getattr(
+                    goal, "target_phase_alignment", measured_alignment
+                )
+                measured_lag = micro.phase_lag.get(
+                    goal.phase, getattr(goal, "measured_phase_lag", 0.0)
+                )
+                target_lag = getattr(goal, "target_phase_lag", measured_lag)
+                geometry_penalty += abs(target_alignment - measured_alignment)
+                geometry_penalty += 0.5 * abs(measured_lag - target_lag)
+                geometry_samples += 1
     else:
         nfr_penalty = fmean(abs(bundle.delta_nfr) for bundle in results)
-    return mean_si - 0.05 * nfr_penalty
+    if geometry_samples:
+        geometry_penalty /= geometry_samples
+    return mean_si + 0.05 * coherence_mean - 0.05 * nfr_penalty - 0.02 * geometry_penalty
 
 
 _ROAD_ALIGNMENT = (
