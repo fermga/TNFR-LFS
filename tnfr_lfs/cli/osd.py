@@ -38,6 +38,14 @@ NODE_AXIS_LABELS = {
     "pitch": "cabeceo",
 }
 
+MODAL_AXIS_SUMMARY_LABELS = {
+    "yaw": "guiñada",
+    "roll": "balanceo",
+    "pitch": "suspensión",
+}
+
+SPARKLINE_BLOCKS = "▁▂▃▄▅▆▇█"
+
 HUD_PHASE_LABELS = {
     "entry1": "Entrada 1",
     "entry2": "Entrada 2",
@@ -244,7 +252,15 @@ class TelemetryHUD:
                     microsectors=self._microsectors,
                     car_model=self.car_model,
                 )
-                self._cached_plan = _build_setup_plan(raw_plan, self.car_model)
+                try:
+                    decision_space = self.setup_planner._space_for_car(self.car_model)
+                except Exception:
+                    decision_space = None
+                self._cached_plan = _build_setup_plan(
+                    raw_plan,
+                    self.car_model,
+                    decision_space,
+                )
             except Exception:
                 self._cached_plan = None
             self._last_plan_time = now
@@ -263,6 +279,7 @@ class TelemetryHUD:
                 bundle,
                 tolerance,
                 window_metrics,
+                self._bundles,
             ),
             _render_page_b(bundle, resonance),
             _render_page_c(
@@ -296,6 +313,7 @@ def _render_page_a(
     bundle,
     tolerance: float,
     window_metrics: WindowMetrics,
+    bundles: Sequence[object] | None = None,
 ) -> str:
     if not active:
         return _ensure_limit(
@@ -307,11 +325,15 @@ def _render_page_a(
     phase_label = HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize())
     current_delta = getattr(bundle, "delta_nfr", 0.0)
     goal_delta = active.goal.target_delta_nfr if active.goal else 0.0
+    spark_delta = _phase_sparkline(active.microsector, bundles, "delta_nfr")
+    spark_si = _phase_sparkline(active.microsector, bundles, "sense_index")
     lines = [
         f"{curve_label} · {phase_label}",
         f"ΔNFR {current_delta:+.2f} obj {goal_delta:+.2f} ±{tolerance:.2f}",
         _gradient_line(window_metrics),
     ]
+    if spark_delta and spark_si:
+        lines.append(_truncate_line(f"Fases Δ{spark_delta} · Si{spark_si}"))
     return _ensure_limit("\n".join(lines))
 
 
@@ -323,22 +345,84 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
     )
 
 
+def _phase_sparkline(
+    microsector: Microsector,
+    bundles: Sequence[object] | None,
+    attribute: str,
+) -> str:
+    if not bundles:
+        return ""
+    values: List[float] = []
+    for phase in PHASE_SEQUENCE:
+        indices = microsector.phase_samples.get(phase, ())
+        samples: List[float] = []
+        for idx in indices:
+            if 0 <= idx < len(bundles):
+                samples.append(float(getattr(bundles[idx], attribute, 0.0)))
+        values.append(sum(samples) / len(samples) if samples else 0.0)
+    if not values:
+        return ""
+    max_abs = max(1e-9, max(abs(value) for value in values))
+    spark_chars: List[str] = []
+    for value in values:
+        ratio = (value / max_abs + 1.0) * 0.5
+        index = max(0, min(len(SPARKLINE_BLOCKS) - 1, int(round(ratio * (len(SPARKLINE_BLOCKS) - 1)))))
+        spark_chars.append(SPARKLINE_BLOCKS[index])
+    return "".join(spark_chars)
+
+
 def _render_page_b(bundle, resonance: Mapping[str, ModalAnalysis]) -> str:
     node_values = _nodal_delta_map(bundle)
     if not node_values:
         return "ΔNFR nodal\nDatos insuficientes"
     ordered = sorted(node_values.items(), key=lambda item: abs(item[1]), reverse=True)[:3]
     max_mag = max(abs(value) for _, value in ordered) or 1.0
-    lines = ["ΔNFR nodal"]
+    leader = ordered[0][0] if ordered else "--"
+    lines = [f"ΔNFR nodal · Líder → {leader}"]
     for name, value in ordered:
         bar = _bar_for_value(value, max_mag)
         lines.append(f"{name:<12}{value:+.2f} {bar}")
-    dominant = _dominant_peak(resonance)
-    if dominant is not None:
-        axis, peak = dominant
-        axis_label = NODE_AXIS_LABELS.get(axis, axis)
-        lines.append(f"Modo {axis_label} {peak.frequency:.1f}Hz {peak.classification}")
+    lines.extend(_modal_axis_lines(resonance))
     return _ensure_limit("\n".join(lines))
+
+
+def _modal_axis_lines(resonance: Mapping[str, ModalAnalysis]) -> List[str]:
+    ordered_axes = sorted(
+        (
+            (axis, analysis)
+            for axis, analysis in resonance.items()
+            if analysis.peaks
+        ),
+        key=lambda item: item[1].total_energy,
+        reverse=True,
+    )
+    lines: List[str] = []
+    for axis, analysis in ordered_axes:
+        peak = max(analysis.peaks, key=lambda p: p.energy, default=None)
+        if peak is None:
+            continue
+        axis_label = MODAL_AXIS_SUMMARY_LABELS.get(axis, NODE_AXIS_LABELS.get(axis, axis))
+        lines.append(
+            f"ν_f {axis_label:<10}{peak.frequency:.1f}Hz {peak.classification}"
+        )
+    return lines
+
+
+def _format_riesgos(parameters: Sequence[str]) -> str:
+    unique = [param for param in dict.fromkeys(parameters) if param]
+    return " · ".join(unique)
+
+
+def _format_sensitivities(derivatives: Mapping[str, float], limit: int = 3) -> str:
+    ordered = sorted(
+        ((param, value) for param, value in derivatives.items()),
+        key=lambda item: abs(item[1]),
+        reverse=True,
+    )
+    parts: List[str] = []
+    for param, value in ordered[:limit]:
+        parts.append(f"{param} {value:+.2f}")
+    return " · ".join(parts)
 
 
 def _render_page_c(
@@ -367,6 +451,14 @@ def _render_page_c(
             lines.append(_truncate_line(f"{change.parameter}: {delta} → {effect}"))
     else:
         lines.append("Plan en preparación…")
+    if plan:
+        if getattr(plan, "clamped_parameters", ()):  # compatibility with older plans
+            riesgos = _format_riesgos(plan.clamped_parameters)
+            if riesgos:
+                lines.append(_truncate_line(f"riesgos: {riesgos}"))
+        dsi_line = _format_sensitivities(plan.sensitivities.get("sense_index", {}))
+        if dsi_line:
+            lines.append(_truncate_line(f"dSi {dsi_line}"))
     return _ensure_limit("\n".join(lines))
 
 
@@ -683,7 +775,7 @@ class OSDController:
             self._menu_open = False
 
 
-def _build_setup_plan(plan, car_model: str) -> SetupPlan:
+def _build_setup_plan(plan, car_model: str, decision_space=None) -> SetupPlan:
     action_recommendations = [
         rec
         for rec in plan.recommendations
@@ -733,6 +825,23 @@ def _build_setup_plan(plan, car_model: str) -> SetupPlan:
     unique_rationales = list(dict.fromkeys(aggregated_rationales or ["Optimización de objetivo Si/ΔNFR"]))
     unique_effects = list(dict.fromkeys(aggregated_effects or ["Mejora equilibrada del coche"]))
 
+    vector = getattr(plan, "decision_vector", {})
+    clamped: List[str] = []
+    if decision_space is not None:
+        for variable in getattr(decision_space, "variables", ()):
+            name = getattr(variable, "name", None)
+            lower = getattr(variable, "lower", None)
+            upper = getattr(variable, "upper", None)
+            if name is None or lower is None or upper is None:
+                continue
+            value = vector.get(name)
+            if value is None:
+                continue
+            if math.isclose(value, lower, abs_tol=1e-6) or math.isclose(
+                value, upper, abs_tol=1e-6
+            ):
+                clamped.append(str(name))
+
     return SetupPlan(
         car_model=car_model,
         session=None,
@@ -740,6 +849,7 @@ def _build_setup_plan(plan, car_model: str) -> SetupPlan:
         rationales=tuple(unique_rationales),
         expected_effects=tuple(unique_effects),
         sensitivities=plan.sensitivities,
+        clamped_parameters=tuple(clamped),
     )
 
 

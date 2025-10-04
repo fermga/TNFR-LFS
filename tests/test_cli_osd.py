@@ -8,6 +8,7 @@ from tnfr_lfs.acquisition import ButtonEvent, ButtonLayout, MacroQueue, OverlayM
 from tnfr_lfs.cli import osd as osd_module
 from tnfr_lfs.cli.osd import HUDPager, MacroStatus, OSDController, TelemetryHUD
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
+from tnfr_lfs.core.metrics import WindowMetrics
 
 
 def _populate_hud(records) -> TelemetryHUD:
@@ -58,9 +59,11 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
         assert len(page.encode("utf8")) <= OverlayManager.MAX_BUTTON_TEXT - 1
 
     page_a, page_b, page_c, page_d = pages
-    assert "ΔNFR" in page_a and "Si" in page_a and "∇Acop" in page_a
-    assert "ΔNFR" in page_b and "Modo" in page_b
-    assert ("Hint" in page_c) or ("Plan" in page_c) or ("bias" in page_c.lower())
+    assert "ΔNFR" in page_a and "∇Acop" in page_a
+    if "Sin microsector activo" not in page_a:
+        assert any(char in page_a for char in "▁▂▃▄▅▆▇█")
+    assert "Líder" in page_b and "ν_f" in page_b
+    assert "dSi" in page_c
     assert "Aplicar" in page_d
 
 
@@ -154,6 +157,7 @@ def test_osd_controller_applies_macro_on_trigger():
         rationales=(),
         expected_effects=(),
         sensitivities={},
+        clamped_parameters=(),
     )
     hud = DummyHUD(plan)
     controller = OSDController(
@@ -206,6 +210,7 @@ def test_osd_controller_blocks_macro_when_preflight_fails():
         rationales=(),
         expected_effects=(),
         sensitivities={},
+        clamped_parameters=(),
     )
     hud = DummyHUD(plan)
     controller = OSDController(
@@ -237,3 +242,48 @@ def test_osd_controller_blocks_macro_when_preflight_fails():
     assert len(commands) == 0
     page_d = controller.hud.pages()[3]
     assert "⚠️" in page_d
+
+
+def test_render_page_c_marks_riesgos(synthetic_records):
+    hud = _populate_hud(synthetic_records[:60])
+    thresholds = hud._thresholds
+    plan = SetupPlan(
+        car_model="generic_gt",
+        session=None,
+        changes=(
+            SetupChange(
+                parameter="front_arb_steps",
+                delta=1.0,
+                rationale="",
+                expected_effect="Mejor apoyo",
+            ),
+        ),
+        rationales=(),
+        expected_effects=(),
+        sensitivities={"sense_index": {"front_arb_steps": 0.12}},
+        clamped_parameters=("front_arb_steps",),
+    )
+    output = osd_module._render_page_c(None, plan, thresholds, None)
+    assert "riesgos" in output
+    assert "front_arb_steps" in output
+    assert "dSi" in output
+
+
+def test_render_page_a_includes_sparkline_when_active_phase():
+    from types import SimpleNamespace
+
+    bundles = [
+        SimpleNamespace(delta_nfr=value, sense_index=0.5 + idx * 0.05)
+        for idx, value in enumerate((-0.3, -0.1, 0.1, 0.3, 0.6))
+    ]
+    phase_samples = {
+        phase: (idx,)
+        for idx, phase in enumerate(osd_module.PHASE_SEQUENCE)
+    }
+    microsector = SimpleNamespace(index=0, phase_samples=phase_samples)
+    goal = SimpleNamespace(target_delta_nfr=0.4, target_sense_index=0.8)
+    active = osd_module.ActivePhase(microsector=microsector, phase="apex3a", goal=goal)
+    window_metrics = WindowMetrics(0.7, 0.1, -0.2, 0.05, 1.2)
+    output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
+    assert "Fases Δ" in output
+    assert any(char in output for char in "▁▂▃▄▅▆▇█")

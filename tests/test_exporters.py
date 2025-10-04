@@ -118,6 +118,7 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
             "sense_index": {"brake_bias_pct": -0.0125, "front_arb_steps": 0.0451},
             "objective_score": {"brake_bias_pct": 0.0312, "front_arb_steps": -0.0148},
         },
+        clamped_parameters=("front_arb_steps",),
         tnfr_rationale_by_node={
             "tyres": ("Ajustar presiones para estabilizar la ventana de agarre",),
             "suspension": ("Elevar soporte lateral en fases medias",),
@@ -147,6 +148,7 @@ def test_serialise_setup_plan_collects_unique_fields():
     assert "entry" in payload["tnfr_rationale_by_phase"]
     assert "tyres" in payload["expected_effects_by_node"]
     assert "entry" in payload["expected_effects_by_phase"]
+    assert "front_arb_steps" in payload["clamped_parameters"]
 
 
 def test_markdown_exporter_renders_table_and_lists():
