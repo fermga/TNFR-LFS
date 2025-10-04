@@ -1225,6 +1225,93 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
     assert all(rec.priority <= rule.priority - 1 for rec in targeted)
 
 
+def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="entry",
+        operator_label="Operador de frenado",
+        category="entry",
+        phase_label="entrada",
+        priority=12,
+        reference_key="braking",
+    )
+    goal = Goal(
+        phase="entry1",
+        archetype="frenada",
+        description="",
+        target_delta_nfr=0.3,
+        target_sense_index=0.85,
+        nu_f_target=0.28,
+        nu_exc_target=0.22,
+        rho_target=1.0,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.9,
+        measured_phase_lag=0.1,
+        measured_phase_alignment=0.82,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.4, 0.4),
+        yaw_rate_window=(-0.5, 0.5),
+        dominant_nodes=("brakes", "tyres"),
+        target_delta_nfr_long=0.18,
+        target_delta_nfr_lat=0.06,
+        delta_axis_weights={"longitudinal": 0.65, "lateral": 0.35},
+    )
+    operator_events = {
+        "OZ": (
+            {
+                "name": "OZ",
+                "start_index": 0,
+                "end_index": 2,
+                "microsector": 4,
+                "delta_nfr_threshold": 0.28,
+                "delta_nfr_peak": 0.35,
+                "delta_nfr_avg": 0.31,
+                "delta_nfr_ratio": 1.25,
+                "surface_label": "low_grip",
+                "surface_factor": 0.94,
+            },
+        ),
+    }
+    microsector = Microsector(
+        index=4,
+        start_time=0.0,
+        end_time=0.4,
+        curvature=1.3,
+        brake_event=True,
+        support_event=True,
+        delta_nfr_signature=0.42,
+        goals=(goal,),
+        phase_boundaries={"entry1": (0, 3)},
+        phase_samples={"entry1": (0, 1, 2)},
+        active_phase="entry1",
+        dominant_nodes={"entry1": ("brakes", "tyres")},
+        phase_weights={"entry1": {"__default__": 1.0}},
+        grip_rel=0.95,
+        phase_lag={"entry1": 0.1},
+        phase_alignment={"entry1": 0.8},
+        filtered_measures={},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"entry1": {}},
+        operator_events=operator_events,
+    )
+    results = [
+        _axis_bundle(-0.32, -0.28, -0.07),
+        _axis_bundle(-0.34, -0.29, -0.06),
+        _axis_bundle(-0.31, -0.3, -0.05),
+    ]
+    thresholds = ThresholdProfile(0.12, 0.12, 0.1, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate(results, [microsector], context))
+    brake_recs = [rec for rec in recommendations if rec.parameter == "brake_bias_pct"]
+    assert brake_recs, "expected brake bias recommendation"
+    assert all(rec.delta is not None and rec.delta > 0 for rec in brake_recs)
+    assert all(rec.priority <= rule.priority - 2 for rec in brake_recs)
+    rationale_blob = " ".join(rec.rationale for rec in brake_recs)
+    assert "OZ×1" in rationale_blob
+    assert "low_grip" in rationale_blob
+    assert "ΔNFR" in rationale_blob
+
+
 def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="apex",

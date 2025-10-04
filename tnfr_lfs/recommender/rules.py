@@ -962,6 +962,83 @@ def _axis_focus_descriptor(phase: str, axis: str) -> tuple[str, str, Tuple[str, 
     return _AXIS_FOCUS_MAP.get(direct)
 
 
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        numeric = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(numeric):
+        return default
+    return numeric
+
+
+def _brake_event_summary(
+    microsector: Microsector,
+) -> tuple[str | None, str | None, float]:
+    operator_events = getattr(microsector, "operator_events", {}) or {}
+    relevant: List[Dict[str, object]] = []
+    for event_type in ("OZ", "IL"):
+        payloads = operator_events.get(event_type, ())
+        for payload in payloads:
+            if not isinstance(payload, Mapping):
+                continue
+            threshold = _safe_float(payload.get("delta_nfr_threshold"))
+            if threshold <= 0.0:
+                continue
+            peak = abs(_safe_float(payload.get("delta_nfr_peak")))
+            ratio = _safe_float(payload.get("delta_nfr_ratio"))
+            if ratio <= 0.0 and peak > 0.0 and threshold > 1e-9:
+                ratio = peak / threshold
+            average = _safe_float(payload.get("delta_nfr_avg"))
+            surface_label: str = ""
+            label_payload = payload.get("surface_label")
+            if isinstance(label_payload, str):
+                surface_label = label_payload
+            elif isinstance(payload.get("surface"), Mapping):
+                label_value = payload["surface"].get("label")  # type: ignore[index]
+                if isinstance(label_value, str):
+                    surface_label = label_value
+            relevant.append(
+                {
+                    "type": event_type,
+                    "ratio": ratio,
+                    "threshold": threshold,
+                    "peak": peak,
+                    "average": average,
+                    "surface": surface_label,
+                }
+            )
+    severe = [entry for entry in relevant if entry["ratio"] >= 1.0]
+    if not severe:
+        return None, None, 0.0
+    bias_score = 0.0
+    max_ratio = 0.0
+    summary_parts: List[str] = []
+    for event_type in ("OZ", "IL"):
+        typed = [entry for entry in severe if entry["type"] == event_type]
+        if not typed:
+            continue
+        count = len(typed)
+        worst = max(typed, key=lambda item: item["ratio"])
+        max_ratio = max(max_ratio, _safe_float(worst["ratio"]))
+        label = worst["surface"] or "superficie"
+        threshold = _safe_float(worst["threshold"])
+        peak = _safe_float(worst["peak"])
+        summary_parts.append(
+            f"{event_type}×{count} ({label}) ΔNFR {peak:.2f}>{threshold:.2f}"
+        )
+        weight = sum(_safe_float(entry["ratio"]) for entry in typed)
+        if event_type == "OZ":
+            bias_score += weight
+        else:
+            bias_score -= weight
+    direction: str | None = None
+    if abs(bias_score) >= 0.5:
+        direction = "forward" if bias_score > 0 else "rearward"
+    summary = " · ".join(summary_parts)
+    return summary, direction, max_ratio
+
+
 class PhaseDeltaDeviationRule:
     """Detects ΔNFR mismatches for a given phase of the corner."""
 
@@ -1025,6 +1102,13 @@ class PhaseDeltaDeviationRule:
             weight_lat = float(axis_weights.get("lateral", 0.5))
             if abs(deviation) <= tolerance:
                 continue
+            event_summary: str | None = None
+            bias_direction: str | None = None
+            worst_ratio: float = 0.0
+            if phase_family(self.phase) == "entry":
+                event_summary, bias_direction, worst_ratio = _brake_event_summary(
+                    microsector
+                )
             base_rationale = (
                 f"{self.operator_label} aplicado sobre la fase de {self.phase_label} en "
                 f"microsector {microsector.index}. El objetivo ΔNFR era "
@@ -1032,17 +1116,42 @@ class PhaseDeltaDeviationRule:
                 f"{actual_delta:.2f} ({deviation:+.2f}). La tolerancia definida para "
                 f"{context.profile_label} es ±{tolerance:.2f}."
             )
-            recommendations.extend(
-                _phase_action_recommendations(
-                    phase=self.phase,
-                    category=self.category,
-                    metric="delta_nfr",
-                    raw_value=deviation,
-                    base_rationale=base_rationale,
-                    priority=self.priority,
-                    reference_key=self.reference_key,
-                )
+            if event_summary:
+                base_rationale = f"{base_rationale} {event_summary}."
+            adjustments = _phase_action_recommendations(
+                phase=self.phase,
+                category=self.category,
+                metric="delta_nfr",
+                raw_value=deviation,
+                base_rationale=base_rationale,
+                priority=self.priority,
+                reference_key=self.reference_key,
             )
+            if adjustments and phase_family(self.phase) == "entry":
+                for recommendation in adjustments:
+                    if recommendation.parameter != "brake_bias_pct":
+                        continue
+                    if recommendation.delta is not None:
+                        if bias_direction == "forward":
+                            recommendation.delta = abs(recommendation.delta)
+                        elif bias_direction == "rearward":
+                            recommendation.delta = -abs(recommendation.delta)
+                        recommendation.message = (
+                            f"{recommendation.delta:+.1f}% bias delante"
+                        )
+                        recommendation.rationale = (
+                            f"{base_rationale} Acción sugerida: {recommendation.message}. "
+                            f"Consulta {MANUAL_REFERENCES[self.reference_key]} para aplicar el ajuste."
+                        )
+                    if worst_ratio >= 1.2:
+                        recommendation.priority = min(
+                            recommendation.priority, self.priority - 3
+                        )
+                    elif worst_ratio >= 1.0:
+                        recommendation.priority = min(
+                            recommendation.priority, self.priority - 2
+                        )
+            recommendations.extend(adjustments)
 
             direction = "incrementar" if deviation < 0 else "reducir"
             summary_message = (

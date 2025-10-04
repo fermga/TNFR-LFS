@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Tuple
+from types import SimpleNamespace
 
 from tnfr_lfs.acquisition import ButtonEvent, ButtonLayout, MacroQueue, OverlayManager
 from tnfr_lfs.cli import osd as osd_module
@@ -366,3 +367,72 @@ def test_render_page_a_includes_sparkline_when_active_phase():
         assert "Δaero" in output
     else:
         assert "Δaero" not in output
+
+
+def test_render_page_a_displays_brake_meter_on_severe_events():
+    bundles = [
+        SimpleNamespace(
+            delta_nfr=-0.2,
+            delta_nfr_longitudinal=-0.18,
+            delta_nfr_lateral=-0.04,
+            sense_index=0.78,
+        )
+    ]
+    phase_samples = {
+        phase: (0,)
+        for phase in osd_module.PHASE_SEQUENCE
+    }
+    operator_events = {
+        "OZ": (
+            {
+                "delta_nfr_threshold": 0.28,
+                "delta_nfr_peak": 0.35,
+                "delta_nfr_avg": 0.3,
+                "delta_nfr_ratio": 1.25,
+                "surface_label": "low_grip",
+            },
+        )
+    }
+    microsector = SimpleNamespace(
+        index=3,
+        phase_samples=phase_samples,
+        operator_events=operator_events,
+    )
+    goal = SimpleNamespace(
+        target_delta_nfr=0.3,
+        target_sense_index=0.82,
+        target_delta_nfr_long=0.1,
+        target_delta_nfr_lat=0.05,
+        delta_axis_weights={"longitudinal": 0.6, "lateral": 0.4},
+    )
+    active = osd_module.ActivePhase(microsector=microsector, phase="entry1", goal=goal)
+    aero = AeroCoherence(
+        low_speed_front=0.12,
+        low_speed_rear=0.18,
+        low_speed_imbalance=-0.06,
+        low_speed_samples=6,
+        high_speed_front=0.22,
+        high_speed_rear=0.08,
+        high_speed_imbalance=0.14,
+        high_speed_samples=9,
+    )
+    window_metrics = WindowMetrics(
+        0.72,
+        0.18,
+        -0.12,
+        0.05,
+        1.3,
+        0.95,
+        0.78,
+        0.05,
+        0.9,
+        0.64,
+        58.0,
+        0.45,
+        "ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
+        aero,
+    )
+    page = osd_module._render_page_a(active, bundles[0], 0.2, window_metrics, bundles)
+    assert "ΔNFR frenada" in page
+    assert "low_grip" in page
+    assert "OZ" in page

@@ -71,6 +71,11 @@ The HUD cycles through three pages (press the button to advance):
   objetivo de Si del perfil actual y la insignia ``ν_f`` (muy baja/óptima/…)
   correspondiente a la categoría del coche.  Debajo se mantiene el indicador
   ``Δaero`` que refleja el desequilibrio ΔNFR entre ejes a alta velocidad.
+  Cuando los eventos de operador ``OZ``/``IL`` superan sus umbrales ΔNFR
+  contextualizados se añade un medidor «ΔNFR frenada» con la superficie
+  dominante (``low_grip``/``neutral``/``high_grip``) y el pico observado frente al
+  umbral calculado para el microsector, facilitando el ajuste inmediato del
+  ``brake_bias_pct`` desde el propio HUD.
 * **Página B** – encabezado con la clasificación ``ν_f`` y ``C(t)`` actuales, las
   top‑3 contribuciones nodales a |ΔNFR↓| con barras ASCII de anchura fija y el
   modo resonante dominante (frecuencia y clasificación).
