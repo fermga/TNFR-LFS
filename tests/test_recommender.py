@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from typing import Sequence
+from typing import Sequence, Tuple
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -141,11 +141,22 @@ def _udr_goal(phase: str = "apex", target_delta: float = 0.2) -> Goal:
     )
 
 
-def _udr_microsector(goal: Goal, *, udr: float, sample_count: int) -> Microsector:
+def _udr_microsector(
+    goal: Goal,
+    *,
+    udr: float,
+    sample_count: int,
+    filtered_measures: Mapping[str, float] | None = None,
+    operator_events: Mapping[str, Tuple[Mapping[str, object], ...]] | None = None,
+    index: int = 7,
+) -> Microsector:
     samples = tuple(range(sample_count))
     boundary = (0, sample_count)
+    measures = {"udr": udr}
+    if filtered_measures:
+        measures.update({k: float(v) for k, v in filtered_measures.items()})
     return Microsector(
-        index=7,
+        index=index,
         start_time=0.0,
         end_time=sample_count * 0.1,
         curvature=1.5,
@@ -161,11 +172,11 @@ def _udr_microsector(goal: Goal, *, udr: float, sample_count: int) -> Microsecto
         grip_rel=1.0,
         phase_lag={goal.phase: goal.measured_phase_lag},
         phase_alignment={goal.phase: goal.measured_phase_alignment},
-        filtered_measures={"udr": udr},
+        filtered_measures=measures,
         recursivity_trace=(),
         last_mutation=None,
         window_occupancy={goal.phase: {}},
-        operator_events={},
+        operator_events=operator_events or {},
     )
 
 
@@ -247,6 +258,40 @@ def test_tyre_balance_rule_generates_guidance():
     assert pressure_rec.delta is not None and pressure_rec.delta < 0
     assert camber_rec.priority == 19
     assert MANUAL_REFERENCES["tyre_balance"].split()[0] in camber_rec.rationale
+
+
+def test_recommendation_engine_suppresses_when_quiet_sequence():
+    goal = _udr_goal()
+    quiet_payload = (
+        {
+            "duration": 0.9,
+            "slack": 0.55,
+            "structural_density_mean": 0.04,
+        },
+    )
+    microsectors = [
+        _udr_microsector(
+            goal,
+            udr=0.05,
+            sample_count=6,
+            filtered_measures={
+                "udr": 0.05,
+                "si_variance": 0.0003,
+                "epi_derivative_abs": 0.04,
+            },
+            operator_events={"SILENCIO": quiet_payload},
+            index=i,
+        )
+        for i in range(3)
+    ]
+    bundles = _udr_bundle_series([0.05, 0.04, 0.03, 0.02, 0.01])
+    engine = RecommendationEngine(rules=[])
+    recommendations = engine.generate(bundles, microsectors)
+    assert len(recommendations) == 1
+    message = recommendations[0].message.lower()
+    rationale = recommendations[0].rationale.lower()
+    assert "no tocar" in message
+    assert "silencio" in rationale
 
 
 def test_aero_coherence_rule_flags_high_speed_bias() -> None:

@@ -3,7 +3,7 @@ import pytest
 import math
 from dataclasses import replace
 from statistics import mean
-from typing import Tuple
+from typing import Mapping, Tuple
 
 from tnfr_lfs.core.archetypes import archetype_phase_targets
 from tnfr_lfs.core.contextual_delta import apply_contextual_delta, load_context_matrix
@@ -17,7 +17,12 @@ from tnfr_lfs.core.epi import (
     resolve_nu_f_by_node,
 )
 from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias, phase_family
-from tnfr_lfs.core.segmentation import Microsector, segment_microsectors
+from tnfr_lfs.core.segmentation import (
+    Microsector,
+    detect_quiet_microsector_streaks,
+    microsector_stability_metrics,
+    segment_microsectors,
+)
 
 
 def test_segment_microsectors_creates_goals_with_stable_assignments(
@@ -40,6 +45,8 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
             "structural_expansion_lateral",
             "structural_contraction_lateral",
         }
+        assert "si_variance" in microsector.filtered_measures
+        assert "epi_derivative_abs" in microsector.filtered_measures
         assert isinstance(microsector.recursivity_trace, tuple)
         assert microsector.last_mutation is None
         phases = [goal.phase for goal in microsector.goals]
@@ -77,6 +84,66 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         assert microsector.phase_alignment
         assert set(microsector.phase_lag) >= set(PHASE_SEQUENCE)
         assert set(microsector.phase_alignment) >= set(PHASE_SEQUENCE)
+        if microsector.operator_events:
+            for payloads in microsector.operator_events.values():
+                for payload in payloads:
+                    if isinstance(payload, Mapping):
+                        assert "si_variance" in payload
+                        assert "epi_derivative_abs" in payload
+
+
+def test_detect_quiet_microsector_streaks_flags_sequences() -> None:
+    def _microsector(index: int, *, quiet: bool) -> Microsector:
+        measures = {
+            "si_variance": 0.0004 if quiet else 0.01,
+            "epi_derivative_abs": 0.05 if quiet else 0.3,
+        }
+        events = (
+            {
+                "duration": 0.8,
+                "slack": 0.5,
+                "structural_density_mean": 0.05,
+            },
+        )
+        operator_events = {"SILENCIO": events} if quiet else {}
+        return Microsector(
+            index=index,
+            start_time=float(index),
+            end_time=float(index) + 1.0,
+            curvature=1.3,
+            brake_event=False,
+            support_event=False,
+            delta_nfr_signature=0.1,
+            goals=(),
+            phase_boundaries={},
+            phase_samples={},
+            active_phase="entry1",
+            dominant_nodes={},
+            phase_weights={},
+            grip_rel=1.0,
+            phase_lag={},
+            phase_alignment={},
+            filtered_measures=measures,
+            recursivity_trace=(),
+            last_mutation=None,
+            window_occupancy={},
+            operator_events=operator_events,
+        )
+
+    microsectors = [
+        _microsector(0, quiet=False),
+        _microsector(1, quiet=True),
+        _microsector(2, quiet=True),
+        _microsector(3, quiet=True),
+        _microsector(4, quiet=False),
+    ]
+    streaks = detect_quiet_microsector_streaks(microsectors)
+    assert streaks == [(1, 2, 3)]
+    coverage, slack, si_variance, epi_abs = microsector_stability_metrics(microsectors[1])
+    assert coverage == pytest.approx(0.8)
+    assert slack == pytest.approx(0.5)
+    assert si_variance == pytest.approx(0.0004)
+    assert epi_abs == pytest.approx(0.05)
 
 
 def test_segment_microsectors_returns_contextual_factors(

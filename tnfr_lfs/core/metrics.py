@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from statistics import mean
+from statistics import mean, pvariance
 from typing import Iterable, Mapping, Sequence
 
 from .contextual_delta import (
@@ -80,6 +80,7 @@ class WindowMetrics:
     """
 
     si: float
+    si_variance: float
     d_nfr_couple: float
     d_nfr_res: float
     d_nfr_flat: float
@@ -100,6 +101,7 @@ class WindowMetrics:
     frequency_label: str
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
     aero_mechanical_coherence: float = 0.0
+    epi_derivative_abs: float = 0.0
 
 
 def compute_window_metrics(
@@ -138,6 +140,7 @@ def compute_window_metrics(
             0.0,
             0.0,
             0.0,
+            0.0,
             1.0,
             0.0,
             0.0,
@@ -150,6 +153,7 @@ def compute_window_metrics(
             0.0,
             "",
             AeroCoherence(),
+            0.0,
             0.0,
         )
 
@@ -168,7 +172,9 @@ def compute_window_metrics(
             return default
         return numeric
 
-    si_value = mean(record.si for record in records)
+    si_samples = [float(record.si) for record in records]
+    si_value = mean(si_samples)
+    si_variance = pvariance(si_samples) if len(si_samples) >= 2 else 0.0
     avg_vertical_load = mean(getattr(record, "vertical_load", 0.0) for record in records)
     support_samples: list[float] = []
     longitudinal_series: list[float] = []
@@ -196,6 +202,8 @@ def compute_window_metrics(
         records, segments=3, fallback_to_chronological=fallback_to_chronological
     )
 
+    epi_abs_derivative = 0.0
+
     if bundles:
         timestamps = resolve_time_axis(
             bundles, fallback_to_chronological=fallback_to_chronological
@@ -216,6 +224,9 @@ def compute_window_metrics(
             for bundle, factors in zip(bundles, bundle_context)
         ]
         yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
+        epi_values = [abs(float(getattr(bundle, "dEPI_dt", 0.0))) for bundle in bundles]
+        if epi_values:
+            epi_abs_derivative = mean(epi_values)
         support_samples = [
             max(0.0, float(bundle.tyres.delta_nfr))
             + max(0.0, float(bundle.suspension.delta_nfr))
@@ -362,6 +373,8 @@ def compute_window_metrics(
         frequency_label=frequency_label,
         aero_coherence=aero,
         aero_mechanical_coherence=aero_mechanical,
+        epi_derivative_abs=epi_abs_derivative,
+        si_variance=si_variance,
     )
 
 

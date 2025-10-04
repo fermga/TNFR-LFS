@@ -324,6 +324,7 @@ def test_render_page_a_includes_wave_when_active_phase():
     )
     window_metrics = WindowMetrics(
         si=0.7,
+        si_variance=0.0012,
         d_nfr_couple=0.1,
         d_nfr_res=-0.2,
         d_nfr_flat=0.05,
@@ -344,6 +345,7 @@ def test_render_page_a_includes_wave_when_active_phase():
         frequency_label="ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
         aero_coherence=aero,
         aero_mechanical_coherence=0.64,
+        epi_derivative_abs=0.12,
     )
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
     curve_label = f"Curva {microsector.index + 1}"
@@ -416,6 +418,7 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
     )
     window_metrics = WindowMetrics(
         si=0.72,
+        si_variance=0.0008,
         d_nfr_couple=0.18,
         d_nfr_res=-0.12,
         d_nfr_flat=0.05,
@@ -436,11 +439,80 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
         frequency_label="ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
         aero_coherence=aero,
         aero_mechanical_coherence=0.58,
+        epi_derivative_abs=0.09,
     )
     page = osd_module._render_page_a(active, bundles[0], 0.2, window_metrics, bundles)
     assert "ΔNFR frenada" in page
     assert "low_grip" in page
     assert "OZ" in page
+
+
+def test_render_page_a_includes_no_tocar_notice():
+    from types import SimpleNamespace
+
+    bundles = [SimpleNamespace(delta_nfr=0.2, sense_index=0.8)] * 5
+    phase_samples = {phase: (0,) for phase in osd_module.PHASE_SEQUENCE}
+    microsector = SimpleNamespace(
+        index=0,
+        phase_samples=phase_samples,
+        filtered_measures={
+            "si_variance": 0.0004,
+            "epi_derivative_abs": 0.05,
+        },
+        operator_events={
+            "SILENCIO": (
+                {
+                    "duration": 0.8,
+                    "slack": 0.5,
+                    "structural_density_mean": 0.04,
+                },
+            )
+        },
+        start_time=0.0,
+        end_time=1.0,
+    )
+    goal = SimpleNamespace(
+        target_delta_nfr=0.2,
+        target_sense_index=0.8,
+        target_delta_nfr_long=0.05,
+        target_delta_nfr_lat=0.03,
+        delta_axis_weights={"longitudinal": 0.6, "lateral": 0.4},
+    )
+    active = osd_module.ActivePhase(microsector=microsector, phase="entry1", goal=goal)
+    window_metrics = WindowMetrics(
+        si=0.8,
+        si_variance=0.0004,
+        d_nfr_couple=0.1,
+        d_nfr_res=0.05,
+        d_nfr_flat=0.02,
+        nu_f=1.2,
+        nu_exc=1.1,
+        rho=0.9,
+        phase_lag=0.0,
+        phase_alignment=0.95,
+        useful_dissonance_ratio=0.2,
+        useful_dissonance_percentage=20.0,
+        coherence_index=0.5,
+        support_effective=0.15,
+        load_support_ratio=0.00003,
+        structural_expansion_longitudinal=0.12,
+        structural_contraction_longitudinal=0.04,
+        structural_expansion_lateral=0.1,
+        structural_contraction_lateral=0.02,
+        frequency_label="",
+        aero_coherence=AeroCoherence(),
+        aero_mechanical_coherence=0.4,
+        epi_derivative_abs=0.05,
+    )
+    page = osd_module._render_page_a(
+        active,
+        bundles[-1],
+        0.2,
+        window_metrics,
+        bundles,
+        quiet_sequences=((0, 1, 2),),
+    )
+    assert "no tocar" in page.lower()
 
 
 def test_silence_event_meter_renders_when_present() -> None:

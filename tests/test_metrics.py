@@ -10,6 +10,7 @@ from tnfr_lfs.core.metrics import (
     resolve_aero_mechanical_coherence,
 )
 from dataclasses import replace
+from statistics import pvariance
 from types import SimpleNamespace
 from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.core.epi_models import (
@@ -89,6 +90,21 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.aero_coherence.high_speed_samples == 0
     assert metrics.aero_coherence.low_speed_samples == 0
     assert metrics.aero_mechanical_coherence == pytest.approx(0.0)
+    expected_variance = pvariance([record.si for record in records])
+    assert metrics.si_variance == pytest.approx(expected_variance, rel=1e-6)
+    assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
+
+
+def test_compute_window_metrics_variance_and_derivative(
+    acceptance_records, acceptance_bundle_series
+) -> None:
+    metrics = compute_window_metrics(acceptance_records, bundles=acceptance_bundle_series)
+    expected_variance = pvariance([record.si for record in acceptance_records])
+    expected_derivative = sum(
+        abs(float(bundle.dEPI_dt)) for bundle in acceptance_bundle_series
+    ) / len(acceptance_bundle_series)
+    assert metrics.si_variance == pytest.approx(expected_variance, rel=1e-6)
+    assert metrics.epi_derivative_abs == pytest.approx(expected_derivative, rel=1e-6)
 
 
 def test_compute_window_metrics_handles_small_windows() -> None:
@@ -109,12 +125,15 @@ def test_compute_window_metrics_handles_small_windows() -> None:
     assert metrics.frequency_label == ""
     assert metrics.aero_coherence.high_speed_samples == 0
     assert metrics.aero_mechanical_coherence == pytest.approx(0.0)
+    assert metrics.si_variance == pytest.approx(0.0, abs=1e-9)
+    assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
 
 
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
     assert metrics == WindowMetrics(
         si=0.0,
+        si_variance=0.0,
         d_nfr_couple=0.0,
         d_nfr_res=0.0,
         d_nfr_flat=0.0,
@@ -135,6 +154,7 @@ def test_compute_window_metrics_empty_window() -> None:
         frequency_label="",
         aero_coherence=AeroCoherence(),
         aero_mechanical_coherence=0.0,
+        epi_derivative_abs=0.0,
     )
 
 

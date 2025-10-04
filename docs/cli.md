@@ -80,6 +80,9 @@ The HUD cycles through three pages (press the button to advance):
   donde la densidad estructural y las cargas permanecen por debajo de los
   umbrales configurados aparece además la línea «Silencio …» indicando el
   porcentaje de cobertura y la densidad media observada para ese estado latente.
+  Si la racha de microsectores silenciosos se extiende durante varios segmentos
+  consecutivos, la cabecera añade un aviso «no tocar» reutilizando el detector
+  ``detect_silencio`` para subrayar que conviene mantener los reglajes actuales.
 * **Página B** – encabezado con la etiqueta de banda ``ν_f`` y su clasificación,
   junto a la barra de coherencia ``C(t)`` y la onda ``ν_f~`` agregada para la
   última vuelta.  Debajo se listan las top‑3 contribuciones nodales a

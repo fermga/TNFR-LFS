@@ -35,7 +35,12 @@ from ..core.archetypes import (
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..io.profiles import AeroProfile, ProfileManager
-from ..core.segmentation import Goal, Microsector
+from ..core.segmentation import (
+    Goal,
+    Microsector,
+    detect_quiet_microsector_streaks,
+    microsector_stability_metrics,
+)
 
 
 MANUAL_REFERENCES = {
@@ -1278,6 +1283,54 @@ def _safe_float(value: object, default: float = 0.0) -> float:
     return numeric
 
 
+def _format_quiet_sequence(sequence: Sequence[int]) -> str:
+    if not sequence:
+        return ""
+    start = sequence[0] + 1
+    end = sequence[-1] + 1
+    if start == end:
+        return f"Curva {start}"
+    return f"Curvas {start}-{end}"
+
+
+def _quiet_recommendation_notice(
+    microsectors: Sequence[Microsector], sequences: Sequence[Sequence[int]]
+) -> tuple[str, str]:
+    descriptors: List[str] = []
+    coverage_values: List[float] = []
+    slack_values: List[float] = []
+    si_values: List[float] = []
+    epi_values: List[float] = []
+    for sequence in sequences:
+        descriptors.append(_format_quiet_sequence(sequence))
+        for index in sequence:
+            if index < 0 or index >= len(microsectors):
+                continue
+            coverage, slack, si_variance, epi_abs = microsector_stability_metrics(
+                microsectors[index]
+            )
+            coverage_values.append(coverage)
+            slack_values.append(slack)
+            si_values.append(si_variance)
+            epi_values.append(epi_abs)
+    message = f"No tocar: {', '.join(descriptors)}"
+    if not coverage_values:
+        rationale = (
+            "Detectamos una secuencia estable sin activación dinámica reseñable."
+        )
+        return message, rationale
+    coverage_avg = sum(coverage_values) / len(coverage_values)
+    slack_avg = sum(slack_values) / len(slack_values) if slack_values else 0.0
+    si_avg = sum(si_values) / len(si_values) if si_values else 0.0
+    epi_avg = sum(epi_values) / len(epi_values) if epi_values else 0.0
+    rationale = (
+        "Detección de silencio estructural prolongado:"
+        f" silencio μ {coverage_avg * 100.0:.0f}%"
+        f", slack μ {slack_avg:.2f}, Siσ μ {si_avg:.4f}, |dEPI| μ {epi_avg:.3f}."
+    )
+    return message, rationale
+
+
 def _brake_event_summary(
     microsector: Microsector,
 ) -> tuple[str | None, str | None, float]:
@@ -2424,6 +2477,20 @@ class RecommendationEngine:
         track_name: str | None = None,
     ) -> List[Recommendation]:
         context = self._resolve_context(car_model, track_name)
+        if microsectors:
+            quiet_sequences = detect_quiet_microsector_streaks(microsectors)
+            if quiet_sequences:
+                message, rationale = _quiet_recommendation_notice(
+                    microsectors, quiet_sequences
+                )
+                return [
+                    Recommendation(
+                        category="driver",
+                        message=message,
+                        rationale=rationale,
+                        priority=-100,
+                    )
+                ]
         recommendations: List[Recommendation] = []
         for rule in self.rules:
             recommendations.extend(list(rule.evaluate(results, microsectors, context)))
