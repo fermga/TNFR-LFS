@@ -21,7 +21,7 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 from statistics import mean, pstdev
-from typing import Dict, List, Mapping, MutableMapping, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple
 
 from .epi import (
     DEFAULT_PHASE_WEIGHTS,
@@ -32,6 +32,7 @@ from .epi import (
 )
 from .epi_models import EPIBundle
 from .operators import mutation_operator, recursivity_operator
+from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias
 
 # Thresholds derived from typical race car dynamics.  They can be tuned in
 # the future without affecting the public API of the segmentation module.
@@ -71,7 +72,7 @@ class Microsector:
     brake_event: bool
     support_event: bool
     delta_nfr_signature: float
-    goals: Tuple[Goal, Goal, Goal]
+    goals: Tuple[Goal, ...]
     phase_boundaries: Mapping[PhaseLiteral, Tuple[int, int]]
     phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]]
     active_phase: PhaseLiteral
@@ -86,7 +87,18 @@ class Microsector:
     def phase_indices(self, phase: PhaseLiteral) -> range:
         """Return the range of sample indices assigned to ``phase``."""
 
-        start, stop = self.phase_boundaries[phase]
+        if phase in self.phase_boundaries:
+            start, stop = self.phase_boundaries[phase]
+        else:
+            ranges = [
+                self.phase_boundaries[candidate]
+                for candidate in expand_phase_alias(phase)
+                if candidate in self.phase_boundaries
+            ]
+            if not ranges:
+                raise KeyError(phase)
+            start = min(entry[0] for entry in ranges)
+            stop = max(entry[1] for entry in ranges)
         return range(start, stop)
 
 
@@ -397,7 +409,7 @@ def _recompute_bundles(
     prev_timestamp = records[0].timestamp if records else 0.0
     for idx, record in enumerate(records):
         dt = 0.0 if idx == 0 else max(0.0, record.timestamp - prev_timestamp)
-        phase = phase_assignments.get(idx, "entry")
+        phase = phase_assignments.get(idx, PHASE_SEQUENCE[0])
         phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
         target_nu_f = goal_nu_f_lookup.get(idx) if goal_nu_f_lookup else None
         nu_f_map = resolve_nu_f_by_node(
@@ -474,31 +486,49 @@ def _compute_phase_boundaries(
     apex_idx = max(start, min(apex_idx, end))
     exit_idx = max(apex_idx, min(exit_idx, end))
 
-    entry_end = max(start, min(entry_idx, apex_idx)) + 1
-    apex_start = entry_end
-    apex_end = max(apex_idx + 1, apex_start + 1 if apex_start <= end else end + 1)
-    exit_start = min(apex_end, end + 1)
-    exit_end = end + 1
-
-    # Guard rails to ensure every phase includes at least one sample and the
-    # spans remain ordered and non-overlapping.
-    entry_span = (start, min(entry_end, end + 1))
-    if entry_span[0] >= entry_span[1]:
-        entry_span = (start, min(start + 1, end + 1))
-
-    apex_span = (max(entry_span[1], apex_start), min(apex_end, end + 1))
-    if apex_span[0] >= apex_span[1]:
-        apex_span = (entry_span[1], min(entry_span[1] + 1, end + 1))
-
-    exit_span = (max(apex_span[1], exit_start), exit_end)
-    if exit_span[0] >= exit_span[1]:
-        exit_span = (apex_span[1], min(apex_span[1] + 1, end + 1))
-
-    return {
-        "entry": entry_span,
-        "apex": apex_span,
-        "exit": exit_span,
+    total_stop = end + 1
+    targets: Dict[str, int] = {
+        "entry1": min(entry_idx + 1, total_stop),
+        "entry2": min(max(entry_idx + 1, apex_idx), total_stop),
+        "apex3a": min(apex_idx + 1, total_stop),
+        "apex3b": min(max(apex_idx + 1, exit_idx), total_stop),
+        "exit4": total_stop,
     }
+
+    spans: Dict[str, Tuple[int, int]] = {}
+    cursor = start
+    total_phases = len(PHASE_SEQUENCE)
+    for index, phase in enumerate(PHASE_SEQUENCE):
+        remaining = total_phases - index
+        available = total_stop - cursor
+        if remaining == 1:
+            stop = total_stop
+        elif available <= remaining - 1:
+            stop = cursor
+        else:
+            max_stop = total_stop - (remaining - 1)
+            target = max(cursor + 1, targets.get(phase, max_stop))
+            stop = min(max_stop, max(cursor + 1, target))
+        spans[phase] = (cursor, stop)
+        cursor = stop
+
+    ordered: Dict[PhaseLiteral, Tuple[int, int]] = {}
+    previous_stop = start
+    for phase in PHASE_SEQUENCE:
+        phase_start, phase_stop = spans[phase]
+        phase_start = max(previous_stop, min(phase_start, total_stop))
+        phase_stop = max(phase_start, min(phase_stop, total_stop))
+        ordered[phase] = (phase_start, phase_stop)
+        previous_stop = phase_stop
+    last_phase = PHASE_SEQUENCE[-1]
+    start_last, _ = ordered[last_phase]
+    ordered[last_phase] = (start_last, total_stop)
+    for legacy, phases in LEGACY_PHASE_MAP.items():
+        relevant = [ordered[phase] for phase in phases if phase in ordered]
+        if not relevant:
+            continue
+        ordered[legacy] = (relevant[0][0], relevant[-1][1])
+    return ordered
 
 
 def _detect_support_event(records: Sequence[TelemetryRecord]) -> bool:
@@ -561,11 +591,11 @@ def _build_goals(
     bundles: Sequence[EPIBundle],
     records: Sequence[TelemetryRecord],
     boundaries: Mapping[PhaseLiteral, Tuple[int, int]],
-) -> Tuple[Tuple[Goal, Goal, Goal], Mapping[PhaseLiteral, Tuple[str, ...]]]:
+) -> Tuple[Tuple[Goal, ...], Mapping[PhaseLiteral, Tuple[str, ...]]]:
     descriptions = _goal_descriptions(archetype)
     goals: List[Goal] = []
     dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = {}
-    for phase in ("entry", "apex", "exit"):
+    for phase in PHASE_SEQUENCE:
         start, stop = boundaries[phase]
         indices = [idx for idx in range(start, min(stop, len(bundles)))]
         segment = [bundles[idx] for idx in indices]
@@ -637,7 +667,16 @@ def _build_goals(
                 dominant_nodes=phase_nodes,
             )
         )
-    return (goals[0], goals[1], goals[2]), dominant_nodes
+    for legacy, phases in LEGACY_PHASE_MAP.items():
+        for candidate in reversed(phases):
+            nodes = dominant_nodes.get(candidate)
+            if nodes:
+                dominant_nodes[legacy] = nodes
+                break
+        else:
+            if phases:
+                dominant_nodes[legacy] = dominant_nodes.get(phases[-1], ())
+    return tuple(goals), dominant_nodes
 
 
 def _initial_phase_weight_map(
@@ -727,10 +766,20 @@ def _blend_phase_weight_map(
     default_override = overrides.get("__default__")
     blended: Dict[PhaseLiteral, Dict[str, float]] = {}
     for phase, profile in baseline.items():
-        override = overrides.get(phase, default_override)
+        override = overrides.get(phase)
+        if override is None:
+            for legacy, phases in LEGACY_PHASE_MAP.items():
+                if phase in phases and legacy in overrides:
+                    override = overrides[legacy]
+                    break
+        if override is None:
+            override = default_override
         blended[phase] = _apply_phase_override(profile, override)
     for phase, override in overrides.items():
-        if phase in blended or phase == "__default__":
+        if phase == "__default__":
+            continue
+        targets = expand_phase_alias(phase)
+        if any(target in blended for target in targets):
             continue
         blended[str(phase)] = _apply_phase_override({"__default__": 1.0}, override)
     return blended
@@ -763,6 +812,15 @@ def _compute_window_occupancy(
             "slip_long": _percentage(slip_values, goal.slip_long_window),
             "yaw_rate": _percentage(yaw_rates, goal.yaw_rate_window),
         }
+    for legacy, phases in LEGACY_PHASE_MAP.items():
+        values = [occupancy.get(phase) for phase in phases if phase in occupancy]
+        if not values:
+            continue
+        aggregated: Dict[str, float] = {}
+        keys = {key for entry in values for key in entry}
+        for key in keys:
+            aggregated[key] = mean(entry.get(key, 0.0) for entry in values)
+        occupancy[legacy] = aggregated
     return occupancy
 
 
@@ -813,32 +871,40 @@ def _adjust_phase_weights_with_dominance(
 
 def _goal_descriptions(archetype: str) -> Mapping[str, str]:
     base = {
-        "entry": "Modular la transferencia para consolidar el arquetipo de {archetype} en entrada.",
-        "apex": "Alinear el vértice con el patrón de {archetype} manteniendo ΔNFR estable.",
-        "exit": "Liberar energía siguiendo el arquetipo de {archetype} hacia la salida.",
+        "entry1": "Modular la transferencia inicial para consolidar el arquetipo de {archetype}.",
+        "entry2": "Profundizar la preparación de frenada siguiendo el arquetipo de {archetype}.",
+        "apex3a": "Alinear la aproximación al vértice con el patrón de {archetype}.",
+        "apex3b": "Sostener el vértice según el arquetipo de {archetype} manteniendo ΔNFR estable.",
+        "exit4": "Liberar energía siguiendo el arquetipo de {archetype} hacia la salida.",
     }
     if archetype == "apoyo":
         base.update(
             {
-                "entry": "Generar deceleración progresiva para preparar el arquetipo de apoyo.",
-                "apex": "Sostener la carga máxima en el vértice para reforzar el apoyo.",
-                "exit": "Transferir carga manteniendo el apoyo en la tracción inicial.",
+                "entry1": "Generar deceleración progresiva para preparar el apoyo.",
+                "entry2": "Consolidar la transferencia previa reforzando el apoyo.",
+                "apex3a": "Sostener la carga máxima al llegar al vértice.",
+                "apex3b": "Mantener el apoyo al pivotar sobre el vértice.",
+                "exit4": "Transferir carga manteniendo el apoyo en la tracción inicial.",
             }
         )
     elif archetype == "liberacion":
         base.update(
             {
-                "entry": "Extender la frenada para inducir liberación controlada.",
-                "apex": "Permitir la rotación asociada al arquetipo de liberación.",
-                "exit": "Reequilibrar al salir para cerrar la fase de liberación.",
+                "entry1": "Extender la frenada inicial para inducir liberación controlada.",
+                "entry2": "Dosificar la liberación antes del vértice.",
+                "apex3a": "Permitir la rotación asociada al arquetipo de liberación.",
+                "apex3b": "Dirigir la liberación hacia la reaplicación de par.",
+                "exit4": "Reequilibrar al salir para cerrar la fase de liberación.",
             }
         )
     elif archetype == "recuperacion":
         base.update(
             {
-                "entry": "Recuperar estabilidad en la aproximación al vértice.",
-                "apex": "Maximizar el índice de sentido para restablecer la recuperación.",
-                "exit": "Asegurar la tracción evitando pérdidas posteriores.",
+                "entry1": "Recuperar estabilidad en la aproximación inicial.",
+                "entry2": "Afirmar la estabilidad antes del vértice.",
+                "apex3a": "Maximizar el índice de sentido al tomar el vértice.",
+                "apex3b": "Garantizar la recuperación durante la transición del vértice.",
+                "exit4": "Asegurar la tracción evitando pérdidas posteriores.",
             }
         )
     return {phase: message.format(archetype=archetype) for phase, message in base.items()}

@@ -6,6 +6,8 @@ from collections.abc import Mapping as MappingABC
 from math import log
 from typing import Dict, Iterable, Mapping
 
+from .phases import expand_phase_alias, phase_family
+
 
 NodeDeltaMap = Dict[str, float]
 
@@ -132,13 +134,25 @@ def sense_index(
     backward compatible with previous heuristics.
     """
 
-    phase_weights = 1.0
+    phase_weights: Mapping[str, float] | float = 1.0
     if isinstance(w_phase, MappingABC):
-        phase_weights = w_phase.get(active_phase, w_phase.get("__default__", 1.0))
+        phase_weights = w_phase.get("__default__", 1.0)
+        for candidate in (*expand_phase_alias(active_phase), phase_family(active_phase), active_phase):
+            if candidate is None:
+                continue
+            if candidate in w_phase:
+                phase_weights = w_phase[candidate]
+                break
 
     phase_targets: Mapping[str, float] | float | None
     if isinstance(nu_f_targets, MappingABC):
-        phase_targets = nu_f_targets.get(active_phase, nu_f_targets.get("__default__"))
+        phase_targets = nu_f_targets.get("__default__")
+        for candidate in (*expand_phase_alias(active_phase), phase_family(active_phase), active_phase):
+            if candidate is None:
+                continue
+            if candidate in nu_f_targets:
+                phase_targets = nu_f_targets[candidate]
+                break
     else:
         phase_targets = nu_f_targets
 

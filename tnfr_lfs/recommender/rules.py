@@ -14,6 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
 from ..core.epi_models import EPIBundle
+from ..core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
 from ..core.segmentation import Goal, Microsector
 
 
@@ -39,7 +40,7 @@ NODE_LABELS = {
 }
 
 
-_OPERATOR_NODE_ACTIONS: Mapping[str, Mapping[str, Mapping[str, str]]] = {
+_BASE_PHASE_ACTIONS: Mapping[str, Mapping[str, Mapping[str, str]]] = {
     "entry": {
         "tyres": {
             "increase": "abrir toe delantero",
@@ -84,6 +85,14 @@ _OPERATOR_NODE_ACTIONS: Mapping[str, Mapping[str, Mapping[str, str]]] = {
     },
 }
 
+_OPERATOR_NODE_ACTIONS: Dict[str, Mapping[str, Mapping[str, str]]] = dict(_BASE_PHASE_ACTIONS)
+for legacy, phases in LEGACY_PHASE_MAP.items():
+    actions = _BASE_PHASE_ACTIONS.get(legacy)
+    if not actions:
+        continue
+    for phase in phases:
+        _OPERATOR_NODE_ACTIONS[phase] = actions
+
 
 @dataclass
 class Recommendation:
@@ -124,13 +133,23 @@ class ThresholdProfile:
             "apex": self.apex_delta_tolerance,
             "exit": self.exit_delta_tolerance,
         }
-        return mapping[phase]
+        key = phase_family(phase)
+        if key in mapping:
+            return mapping[key]
+        return mapping.get("entry", self.entry_delta_tolerance)
 
     def target_for_phase(self, phase: str) -> PhaseTargetWindow | None:
-        return self.phase_targets.get(phase)
+        direct = self.phase_targets.get(phase)
+        if direct is not None:
+            return direct
+        key = phase_family(phase)
+        return self.phase_targets.get(key)
 
     def weights_for_phase(self, phase: str) -> Mapping[str, float] | float:
         profile = self.phase_weights.get(phase)
+        if profile is None:
+            key = phase_family(phase)
+            profile = self.phase_weights.get(key)
         if profile is None:
             profile = self.phase_weights.get("__default__")
         if isinstance(profile, Mapping):
@@ -446,13 +465,19 @@ else:
 
 
 def _goal_for_phase(microsector: Microsector, phase: str) -> Goal | None:
-    for goal in microsector.goals:
-        if goal.phase == phase:
-            return goal
+    aliases = list(expand_phase_alias(phase))
+    for candidate in reversed(aliases):
+        for goal in microsector.goals:
+            if goal.phase == candidate:
+                return goal
+    for candidate in aliases:
+        for goal in microsector.goals:
+            if goal.phase == candidate:
+                return goal
     return None
 
 
-def _phase_samples(results: Sequence[EPIBundle], indices: range) -> List[EPIBundle]:
+def _phase_samples(results: Sequence[EPIBundle], indices: Iterable[int]) -> List[EPIBundle]:
     return [results[i] for i in indices if 0 <= i < len(results)]
 
 
@@ -519,7 +544,8 @@ class PhaseDeltaDeviationRule:
             goal = _goal_for_phase(microsector, self.phase)
             if goal is None:
                 continue
-            samples = _phase_samples(results, microsector.phase_indices(self.phase))
+            indices = list(microsector.phase_indices(goal.phase))
+            samples = _phase_samples(results, indices)
             if not samples:
                 continue
             actual_delta = mean(bundle.delta_nfr for bundle in samples)
@@ -581,11 +607,11 @@ class PhaseNodeOperatorRule:
             goal = _goal_for_phase(microsector, self.phase)
             if goal is None:
                 continue
-            indices = list(microsector.phase_indices(self.phase))
+            indices = list(microsector.phase_indices(goal.phase))
             if not indices:
                 continue
             dominant_nodes = goal.dominant_nodes or microsector.dominant_nodes.get(
-                self.phase, ()
+                goal.phase, ()
             )
             if not dominant_nodes:
                 continue
@@ -651,7 +677,7 @@ class CurbComplianceRule:
             goal = _goal_for_phase(microsector, "apex")
             if goal is None:
                 continue
-            indices = microsector.phase_indices("apex")
+            indices = microsector.phase_indices(goal.phase)
             tyre_samples = [
                 results[i].tyres.delta_nfr
                 for i in indices

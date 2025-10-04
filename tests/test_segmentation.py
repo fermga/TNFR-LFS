@@ -3,6 +3,7 @@ import pytest
 import math
 from dataclasses import replace
 from statistics import mean
+from typing import Tuple
 
 from tnfr_lfs.core.coherence import sense_index
 from tnfr_lfs.core.epi import (
@@ -13,6 +14,7 @@ from tnfr_lfs.core.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
+from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias
 from tnfr_lfs.core.segmentation import Microsector, segment_microsectors
 
 
@@ -29,13 +31,15 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         assert isinstance(microsector.recursivity_trace, tuple)
         assert microsector.last_mutation is None
         phases = [goal.phase for goal in microsector.goals]
-        assert phases == ["entry", "apex", "exit"]
+        assert phases == list(PHASE_SEQUENCE)
         assert microsector.active_phase in phases
         boundaries = [microsector.phase_indices(phase) for phase in phases]
         seen = set()
         for phase_range in boundaries:
-            assert phase_range.stop > phase_range.start
-            seen.update(phase_range)
+            assert phase_range.stop >= phase_range.start
+            if phase_range.stop > phase_range.start:
+                seen.update(phase_range)
+        assert seen
         assert seen == set(range(min(seen), max(seen) + 1))
         assert all(goal.description for goal in microsector.goals)
         assert all(0.0 <= goal.target_sense_index <= 1.0 for goal in microsector.goals)
@@ -46,11 +50,13 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         assert microsector.active_phase == dominant
         for goal in microsector.goals:
             assert goal.nu_f_target >= 0.0
-            assert goal.slip_lat_window[0] < goal.slip_lat_window[1]
-            assert goal.slip_long_window[0] < goal.slip_long_window[1]
+            assert goal.slip_lat_window[0] <= goal.slip_lat_window[1]
+            assert goal.slip_long_window[0] <= goal.slip_long_window[1]
             assert goal.yaw_rate_window[0] <= goal.yaw_rate_window[1]
             assert goal.dominant_nodes == microsector.dominant_nodes[goal.phase]
-            assert goal.dominant_nodes
+            indices = list(microsector.phase_indices(goal.phase))
+            if indices:
+                assert goal.dominant_nodes
 
 
 def test_segment_microsectors_returns_empty_when_no_curvature():
@@ -175,22 +181,35 @@ def test_segment_microsectors_applies_phase_weight_overrides(
         phase_weight_overrides={"entry": {"tyres": 1.8}},
     )
     assert baseline_micro and override_micro
-    base_entry = baseline_micro[0].phase_weights.get("entry", {})
-    override_entry = override_micro[0].phase_weights.get("entry", {})
+    entry_candidates = expand_phase_alias("entry")
+    phase_key = next(
+        (candidate for candidate in entry_candidates if candidate in baseline_micro[0].phase_weights),
+        entry_candidates[0],
+    )
+    base_entry = baseline_micro[0].phase_weights.get(phase_key, {})
+    override_entry = override_micro[0].phase_weights.get(phase_key, {})
     assert isinstance(base_entry, dict) and isinstance(override_entry, dict)
     assert override_entry.get("tyres", 0.0) > base_entry.get("tyres", 0.0)
-    entry_samples = override_micro[0].phase_samples.get("entry", ())
+    entry_samples: Tuple[int, ...] = ()
+    for candidate in entry_candidates:
+        samples = override_micro[0].phase_samples.get(candidate, ())
+        if samples:
+            entry_samples = samples
+            phase_key = candidate
+            break
+    if not entry_samples:
+        entry_samples = baseline_micro[0].phase_samples.get(phase_key, ())
     assert entry_samples
     sample_index = entry_samples[0]
     record = synthetic_records[sample_index]
     base_nu = resolve_nu_f_by_node(
         record,
-        phase="entry",
+        phase=phase_key,
         phase_weights=baseline_micro[0].phase_weights,
     )
     override_nu = resolve_nu_f_by_node(
         record,
-        phase="entry",
+        phase=phase_key,
         phase_weights=override_micro[0].phase_weights,
     )
     assert override_nu["tyres"] > base_nu["tyres"]

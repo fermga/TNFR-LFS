@@ -19,6 +19,7 @@ from .epi_models import (
     TransmissionNode,
     TyresNode,
 )
+from .phases import expand_phase_alias, phase_family
 
 # Natural frequencies for each subsystem (Hz) extracted from the
 # "modelos de activación" tables in the manual.  They provide the base
@@ -243,7 +244,13 @@ def resolve_nu_f_by_node(
     def _phase_weight(node: str) -> float:
         if not phase or not phase_weights or not isinstance(phase_weights, MappingABC):
             return 1.0
-        profile: Mapping[str, float] | float | None = phase_weights.get(phase)
+        profile: Mapping[str, float] | float | None = None
+        for candidate in (*expand_phase_alias(phase), phase_family(phase), phase):
+            if candidate is None:
+                continue
+            profile = phase_weights.get(candidate)
+            if profile is not None:
+                break
         if profile is None:
             profile = phase_weights.get("__default__")
         if profile is None:
