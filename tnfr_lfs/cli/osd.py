@@ -249,6 +249,7 @@ class TelemetryHUD:
             goal_si,
             microsectors=self._microsectors,
             phase_weights=self._thresholds.phase_weights,
+            operator_state=self._operator_state,
         )
         staged_bundles = tuple(metrics_state.get("bundles", ())) if metrics_state else ()
         if staged_bundles:

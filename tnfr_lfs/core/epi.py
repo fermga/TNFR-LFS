@@ -464,6 +464,9 @@ class TelemetryRecord:
     line_deviation: float = 0.0
     lap: int | str | None = None
     reference: Optional["TelemetryRecord"] = None
+    car_model: str | None = None
+    track_name: str | None = None
+    tyre_compound: str | None = None
 
 
 def _angle_difference(value: float, reference: float) -> float:
@@ -879,6 +882,9 @@ class DeltaCalculator:
             suspension_travel_rear=mean(record.suspension_travel_rear for record in records),
             suspension_velocity_front=mean(record.suspension_velocity_front for record in records),
             suspension_velocity_rear=mean(record.suspension_velocity_rear for record in records),
+            car_model=getattr(records[0], "car_model", None),
+            track_name=getattr(records[0], "track_name", None),
+            tyre_compound=getattr(records[0], "tyre_compound", None),
         )
 
     @staticmethod

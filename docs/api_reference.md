@@ -48,7 +48,7 @@ tnfr_lfs.core.operators.dissonance_breakdown_operator(series: Sequence[float], t
 tnfr_lfs.core.operators.acoplamiento_operator(series_a: Sequence[float], series_b: Sequence[float]) -> float
 tnfr_lfs.core.operators.resonance_operator(series: Sequence[float]) -> float
 tnfr_lfs.core.operators.recursividad_operator(series: Sequence[float], *, seed: float = 0.0, decay: float = 0.5) -> List[float]
-tnfr_lfs.core.operators.orchestrate_delta_metrics(telemetry_segments: Sequence[Sequence[TelemetryRecord]], target_delta_nfr: float, target_sense_index: float, *, coherence_window: int = 3, recursion_decay: float = 0.4, microsectors: Optional[Sequence[Microsector]] = None, phase_weights: Optional[Mapping[str, Mapping[str, float] | float]] = None) -> Mapping[str, object]
+tnfr_lfs.core.operators.orchestrate_delta_metrics(telemetry_segments: Sequence[Sequence[TelemetryRecord]], target_delta_nfr: float, target_sense_index: float, *, coherence_window: int = 3, recursion_decay: float = 0.4, microsectors: Optional[Sequence[Microsector]] = None, phase_weights: Optional[Mapping[str, Mapping[str, float] | float]] = None, operator_state: Optional[Mapping[str, Dict[str, object]]] = None) -> Mapping[str, object]
 tnfr_lfs.core.operators.evolve_epi(prev_epi: float, delta_map: Mapping[str, float], dt: float, nu_f_by_node: Mapping[str, float]) -> Tuple[float, float]
 ```
 
@@ -73,6 +73,12 @@ la carga vertical media) y los pares
 ``structural_expansion_lateral``/``structural_contraction_lateral`` que
 describen cómo las componentes longitudinal/lateral de ΔNFR expanden o
 comprimen el eje estructural de la ventana analizada.
+
+Cuando se comparte el ``operator_state`` utilizado por
+``segment_microsectors``, la orquestación añade el campo ``network_memory`` y
+un espejo en ``sense_memory["network"]`` con la memoria de red por sesión
+(``car_model``/``track_name``/``tyre_compound``), incluyendo historiales por
+stint y el estado activo de cada microsector.
 
 ### `tnfr_lfs.core.segmentation`
 

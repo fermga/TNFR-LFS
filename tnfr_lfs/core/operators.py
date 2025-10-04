@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field, replace
 from math import sqrt
 from statistics import mean, pvariance
@@ -312,44 +313,176 @@ WHEEL_TEMPERATURE_KEYS = (
 )
 
 
+def _normalise_session_identifier(session_id: object) -> tuple[str, tuple[str, str, str]]:
+    """Return a canonical session key and the associated components."""
+
+    defaults = ("generic", "unknown", "default")
+
+    def _normalise(value: object, fallback: str) -> str:
+        if value is None:
+            return fallback
+        token = str(value).strip()
+        return token or fallback
+
+    if isinstance(session_id, Mapping):
+        components = (
+            _normalise(session_id.get("car_model") or session_id.get("car"), defaults[0]),
+            _normalise(session_id.get("track_name") or session_id.get("track"), defaults[1]),
+            _normalise(
+                session_id.get("tyre_compound") or session_id.get("compound"),
+                defaults[2],
+            ),
+        )
+        return "|".join(components), components
+
+    if isinstance(session_id, Sequence) and not isinstance(session_id, (str, bytes)):
+        values = list(session_id)[:3]
+        padded = list(defaults)
+        for index, value in enumerate(values):
+            padded[index] = _normalise(value, defaults[index])
+        components = tuple(padded)
+        return "|".join(components), components
+
+    if isinstance(session_id, str):
+        parts = [part.strip() for part in session_id.split("|")]
+        padded = list(defaults)
+        for index, value in enumerate(parts[:3]):
+            padded[index] = _normalise(value, defaults[index])
+        components = tuple(padded)
+        return "|".join(components), components
+
+    components = (
+        _normalise(session_id, defaults[0]),
+        defaults[1],
+        defaults[2],
+    )
+    return "|".join(components), components
+
+
+def _ensure_recursivity_sessions(
+    state: MutableMapping[str, Dict[str, object]]
+) -> MutableMapping[str, Dict[str, object]]:
+    sessions = state.get("sessions")
+    if not isinstance(sessions, MutableMapping):
+        sessions = {}
+        legacy_candidates = [
+            key
+            for key, value in list(state.items())
+            if key not in {"sessions", "active_session"} and isinstance(value, Mapping)
+        ]
+        if legacy_candidates:
+            legacy_active = {
+                key: dict(state[key]) for key in legacy_candidates if isinstance(state[key], Mapping)
+            }
+            for key in legacy_candidates:
+                state.pop(key, None)
+            sessions["legacy|unknown|default"] = {
+                "active": legacy_active,
+                "history": [],
+                "samples": sum(
+                    int(entry.get("samples", 0))
+                    for entry in legacy_active.values()
+                    if isinstance(entry, Mapping)
+                ),
+                "stint_index": 0,
+                "components": ("legacy", "unknown", "default"),
+            }
+            state["active_session"] = "legacy|unknown|default"
+        state["sessions"] = sessions
+    state.setdefault("active_session", None)
+    return sessions
+
+
+def _initialise_session_entry(
+    entry: MutableMapping[str, object],
+    components: tuple[str, str, str],
+) -> MutableMapping[str, object]:
+    entry.setdefault("active", {})
+    entry.setdefault("history", [])
+    entry.setdefault("samples", 0)
+    entry.setdefault("stint_index", 0)
+    entry.setdefault("last_timestamp", None)
+    entry.setdefault("components", components)
+    return entry
+
+
+def _serialise_mapping(mapping: Mapping[str, object]) -> Dict[str, object]:
+    serialised: Dict[str, object] = {}
+    for key, value in mapping.items():
+        if isinstance(value, (int, float)):
+            serialised[key] = float(value)
+        else:
+            serialised[key] = value
+    return serialised
+
+
+def _snapshot_micro_state(micro_state: Mapping[str, object]) -> Dict[str, object]:
+    filtered = micro_state.get("filtered", {}) or {}
+    trace_entries = micro_state.get("trace", []) or []
+    trace_snapshot = []
+    for entry in trace_entries:
+        if isinstance(entry, Mapping):
+            trace_snapshot.append(_serialise_mapping(entry))
+    return {
+        "phase": micro_state.get("phase"),
+        "samples": int(micro_state.get("samples", 0)),
+        "filtered": {
+            key: float(value)
+            for key, value in filtered.items()
+            if isinstance(value, (int, float))
+        },
+        "trace": tuple(trace_snapshot),
+        "converged": bool(micro_state.get("converged", False)),
+        "last_measures": _serialise_mapping(
+            micro_state.get("last_measures", {}) or {}
+        ),
+    }
+
+
+def _finalise_session_state(
+    session_state: MutableMapping[str, object],
+    reason: str,
+    timestamp: float | None,
+) -> None:
+    active = session_state.get("active")
+    if not isinstance(active, Mapping) or not active:
+        session_state["samples"] = 0
+        session_state["last_timestamp"] = timestamp if timestamp is not None else None
+        return
+    history_entry = {
+        "stint": int(session_state.get("stint_index", 0)),
+        "ended_at": float(timestamp) if timestamp is not None else None,
+        "reason": str(reason or ""),
+        "samples": int(session_state.get("samples", 0)),
+        "microsectors": {
+            micro_id: _snapshot_micro_state(micro_state)
+            for micro_id, micro_state in active.items()
+            if isinstance(micro_state, Mapping)
+        },
+    }
+    history = session_state.setdefault("history", [])
+    if isinstance(history, list):
+        history.append(history_entry)
+    session_state["active"] = {}
+    session_state["samples"] = 0
+    session_state["stint_index"] = int(session_state.get("stint_index", 0)) + 1
+    session_state["last_timestamp"] = timestamp if timestamp is not None else None
+
+
 def recursivity_operator(
     state: MutableMapping[str, Dict[str, object]],
+    session_id: Mapping[str, object] | Sequence[object] | str | None,
     microsector_id: str,
     measures: Mapping[str, float | str],
     *,
     decay: float = 0.4,
     history: int = 20,
+    max_samples: int = 600,
+    max_time_gap: float = 60.0,
+    convergence_window: int = 5,
+    convergence_threshold: float = 0.02,
 ) -> Dict[str, object]:
-    """Maintain a recursive state per microsector for thermal/style metrics.
-
-    Parameters
-    ----------
-    state:
-        Mutable mapping that stores the per-microsector internal state.  The
-        mapping is updated in-place.
-    microsector_id:
-        Identifier of the microsector being updated.  Typically the ordinal
-        position in the segmentation output.
-    measures:
-        Mapping with the instantaneous measurements for the microsector.  The
-        canonical keys are ``"thermal_load"`` and ``"style_index"`` together
-        with an optional ``"phase"`` literal describing the active phase
-        (entry/apex/exit).  Additional numeric keys are filtered using the same
-        exponential decay.
-    decay:
-        Exponential decay factor in the ``[0, 1)`` interval.  Values closer to
-        one keep a longer memory while values near zero prioritise the most
-        recent measure.
-    history:
-        Maximum number of filtered samples to retain in the per-microsector
-        history trace.
-
-    Returns
-    -------
-    dict
-        A dictionary containing the filtered metrics, the phase and whether a
-        phase change was detected.
-    """
+    """Maintain recursive thermal/style state per session and microsector."""
 
     if not 0.0 <= decay < 1.0:
         raise ValueError("decay must be in the [0, 1) interval")
@@ -357,25 +490,56 @@ def recursivity_operator(
         raise ValueError("microsector_id must be a non-empty string")
     if history <= 0:
         raise ValueError("history must be a positive integer")
+    if max_samples <= 0:
+        raise ValueError("max_samples must be a positive integer")
+    if convergence_window <= 0:
+        raise ValueError("convergence_window must be a positive integer")
+    if max_time_gap < 0.0:
+        raise ValueError("max_time_gap must be non-negative")
 
-    micro_state = state.setdefault(
+    session_key, components = _normalise_session_identifier(session_id)
+    sessions = _ensure_recursivity_sessions(state)
+    session_state = _initialise_session_entry(
+        sessions.setdefault(session_key, {}),
+        components,
+    )
+    state["active_session"] = session_key
+
+    timestamp_raw = measures.get("timestamp")
+    timestamp = float(timestamp_raw) if isinstance(timestamp_raw, (int, float)) else None
+
+    last_timestamp = session_state.get("last_timestamp")
+    if (
+        timestamp is not None
+        and isinstance(last_timestamp, (int, float))
+        and session_state.get("active")
+        and max_time_gap > 0.0
+    ):
+        gap = timestamp - float(last_timestamp)
+        if gap >= max_time_gap:
+            _finalise_session_state(session_state, "time_gap", float(last_timestamp))
+
+    active_map = session_state.setdefault("active", {})
+    micro_state = active_map.setdefault(
         microsector_id,
         {
             "filtered": {},
             "phase": None,
             "samples": 0,
             "trace": [],
+            "last_measures": {},
+            "_rolling": {},
+            "converged": False,
         },
     )
 
     phase = measures.get("phase") if isinstance(measures.get("phase"), str) else None
     previous_phase = micro_state.get("phase")
-    phase_changed = phase is not None and previous_phase is not None and phase != previous_phase
+    phase_changed = (
+        phase is not None and previous_phase is not None and phase != previous_phase
+    )
     if phase is not None:
         micro_state["phase"] = phase
-
-    timestamp_raw = measures.get("timestamp")
-    timestamp = float(timestamp_raw) if isinstance(timestamp_raw, (int, float)) else None
 
     filtered_values: Dict[str, float] = {}
     numeric_keys = [
@@ -400,10 +564,9 @@ def recursivity_operator(
 
     if timestamp is not None:
         last_timestamp = micro_state.get("last_timestamp")
+        dt = None
         if isinstance(last_timestamp, (int, float)):
             dt = timestamp - float(last_timestamp)
-        else:
-            dt = None
         if dt is not None and dt > 1e-9 and not phase_changed:
             for key in WHEEL_TEMPERATURE_KEYS:
                 if key not in filtered_values:
@@ -424,14 +587,132 @@ def recursivity_operator(
         overflow = len(micro_state["trace"]) - history
         del micro_state["trace"][:overflow]
 
-    micro_state["last_measures"] = dict(measures)
+    rolling_buffers = micro_state.setdefault("_rolling", {})
+    if numeric_keys:
+        for key in numeric_keys:
+            buffer = rolling_buffers.setdefault(key, deque(maxlen=convergence_window))
+            buffer.append(filtered_values[key])
+    candidate_buffers = [
+        buffer for buffer in rolling_buffers.values() if isinstance(buffer, deque)
+    ]
+    micro_converged = False
+    for buffer in candidate_buffers:
+        if len(buffer) >= convergence_window:
+            if max(buffer) - min(buffer) <= convergence_threshold:
+                micro_converged = True
+                break
+    if micro_state["samples"] < convergence_window:
+        micro_converged = False
+    micro_state["converged"] = micro_converged
+
+    micro_state["last_measures"] = _serialise_mapping(dict(measures))
+
+    session_state["samples"] = int(session_state.get("samples", 0)) + 1
+    if timestamp is not None:
+        session_state["last_timestamp"] = timestamp
+
+    state_snapshot = _snapshot_micro_state(micro_state)
+
+    rollover_reason = None
+    if session_state["samples"] >= max_samples:
+        rollover_reason = "max_samples"
+    elif (
+        session_state.get("active")
+        and all(
+            isinstance(entry, Mapping) and entry.get("converged")
+            for entry in session_state["active"].values()
+        )
+    ):
+        rollover_reason = "convergence"
+
+    if rollover_reason:
+        _finalise_session_state(session_state, rollover_reason, timestamp)
 
     return {
+        "session": session_key,
+        "session_components": session_state.get("components", components),
+        "stint": int(session_state.get("stint_index", 0)),
         "microsector_id": microsector_id,
-        "phase": micro_state.get("phase"),
-        "filtered": filtered_values,
-        "samples": micro_state["samples"],
+        "phase": state_snapshot.get("phase"),
+        "filtered": state_snapshot.get("filtered", {}),
+        "samples": state_snapshot.get("samples", 0),
         "phase_changed": phase_changed,
+        "trace": state_snapshot.get("trace", ()),
+        "state": state_snapshot,
+        "converged": bool(state_snapshot.get("converged", False)),
+        "stint_completed": rollover_reason,
+        "timestamp": timestamp,
+    }
+
+
+def _extract_network_memory(
+    operator_state: Mapping[str, Dict[str, object]] | None,
+) -> Dict[str, object]:
+    """Build a serialisable snapshot of the recursivity session memory."""
+
+    if not operator_state:
+        return {}
+    rec_state = operator_state.get("recursivity")
+    if not isinstance(rec_state, Mapping):
+        return {}
+    sessions = rec_state.get("sessions")
+    if not isinstance(sessions, Mapping):
+        return {}
+
+    payload_sessions: Dict[str, Dict[str, object]] = {}
+    for session_key, session_entry in sessions.items():
+        if not isinstance(session_entry, Mapping):
+            continue
+        active_state = session_entry.get("active", {})
+        history_state = session_entry.get("history", [])
+        session_payload: Dict[str, object] = {
+            "components": tuple(session_entry.get("components", ())),
+            "stint": int(session_entry.get("stint_index", 0)),
+            "samples": int(session_entry.get("samples", 0)),
+            "active": {},
+            "history": (),
+        }
+        active_payload: Dict[str, object] = {}
+        if isinstance(active_state, Mapping):
+            for micro_id, micro_state in active_state.items():
+                if not isinstance(micro_state, Mapping):
+                    continue
+                snapshot = _snapshot_micro_state(micro_state)
+                active_payload[str(micro_id)] = snapshot
+        session_payload["active"] = active_payload
+
+        history_payload: List[Dict[str, object]] = []
+        if isinstance(history_state, Sequence):
+            for history_entry in history_state:
+                if not isinstance(history_entry, Mapping):
+                    continue
+                micro_map = history_entry.get("microsectors", {})
+                micro_payload: Dict[str, object] = {}
+                if isinstance(micro_map, Mapping):
+                    for micro_id, micro_state in micro_map.items():
+                        if isinstance(micro_state, Mapping):
+                            micro_payload[str(micro_id)] = {
+                                key: value for key, value in micro_state.items()
+                            }
+                history_payload.append(
+                    {
+                        "stint": int(history_entry.get("stint", 0)),
+                        "ended_at": (
+                            float(history_entry.get("ended_at"))
+                            if isinstance(history_entry.get("ended_at"), (int, float))
+                            else None
+                        ),
+                        "reason": str(history_entry.get("reason", "")),
+                        "samples": int(history_entry.get("samples", 0)),
+                        "microsectors": micro_payload,
+                    }
+                )
+        session_payload["history"] = tuple(history_payload)
+        payload_sessions[str(session_key)] = session_payload
+
+    return {
+        "active_session": rec_state.get("active_session"),
+        "sessions": payload_sessions,
     }
 
 
@@ -1097,6 +1378,7 @@ def orchestrate_delta_metrics(
     recursion_decay: float = 0.4,
     microsectors: Sequence["Microsector"] | None = None,
     phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
+    operator_state: Mapping[str, Dict[str, object]] | None = None,
 ) -> Mapping[str, object]:
     """Pipeline orchestration producing aggregated ΔNFR and Si metrics."""
 
@@ -1105,6 +1387,8 @@ def orchestrate_delta_metrics(
     phase_assignments, weight_lookup = _phase_context_from_microsectors(
         microsectors
     )
+
+    network_memory = _extract_network_memory(operator_state)
 
     if not reception_stage["bundles"]:
         empty_breakdown = DissonanceBreakdown(
@@ -1152,6 +1436,7 @@ def orchestrate_delta_metrics(
                 "memory": [],
                 "average": 0.0,
                 "decay": recursion_decay,
+                "network": network_memory,
             },
         }
         return {
@@ -1180,6 +1465,7 @@ def orchestrate_delta_metrics(
             "sense_memory": stages["sense"],
             "operator_events": _aggregate_operator_events(microsectors),
             "stages": stages,
+            "network_memory": network_memory,
         }
 
     coherence_stage = _stage_coherence(
@@ -1198,6 +1484,7 @@ def orchestrate_delta_metrics(
     sense_stage = _stage_sense(
         coherence_stage["smoothed_sense_index"], recursion_decay=recursion_decay
     )
+    sense_stage["network"] = network_memory
     variability = _microsector_variability(
         microsectors,
         coherence_stage["bundles"],
@@ -1255,6 +1542,7 @@ def orchestrate_delta_metrics(
         "sense_memory": sense_stage,
         "operator_events": _aggregate_operator_events(microsectors),
         "stages": stages,
+        "network_memory": network_memory,
     }
 
 

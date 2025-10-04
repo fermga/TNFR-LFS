@@ -759,9 +759,11 @@ def test_recursividad_operator_requires_decay_in_range():
 
 def test_recursivity_operator_tracks_state_and_phase_changes():
     state: dict[str, dict[str, object]] = {}
+    session = ("gt3", "valencia", "soft")
 
     first = recursivity_operator(
         state,
+        session,
         "ms-1",
         {"thermal_load": 420.0, "style_index": 0.82, "phase": "entry"},
         decay=0.5,
@@ -771,6 +773,7 @@ def test_recursivity_operator_tracks_state_and_phase_changes():
 
     second = recursivity_operator(
         state,
+        session,
         "ms-1",
         {"thermal_load": 520.0, "style_index": 0.72, "phase": "entry"},
         decay=0.5,
@@ -780,29 +783,35 @@ def test_recursivity_operator_tracks_state_and_phase_changes():
 
     third = recursivity_operator(
         state,
+        session,
         "ms-1",
         {"thermal_load": 360.0, "style_index": 0.9, "phase": "apex"},
         decay=0.5,
     )
     assert third["phase_changed"]
     assert third["filtered"]["thermal_load"] == pytest.approx(360.0)
-    assert state["ms-1"]["trace"][-1]["phase"] == "apex"
+    session_key = "|".join(session)
+    active_state = state["sessions"][session_key]["active"]
+    assert active_state["ms-1"]["trace"][-1]["phase"] == "apex"
 
     other = recursivity_operator(
         state,
+        session,
         "ms-2",
         {"thermal_load": 300.0, "style_index": 0.95, "phase": "entry"},
         decay=0.5,
     )
     assert other["filtered"]["thermal_load"] == pytest.approx(300.0)
-    assert len(state) == 2
+    assert len(active_state) == 2
 
 
 def test_recursivity_operator_filters_tyre_temperatures_and_derivatives():
     state: dict[str, dict[str, object]] = {}
+    session = {"car_model": "gt3", "track_name": "kyoto", "tyre_compound": "soft"}
 
     recursivity_operator(
         state,
+        session,
         "tyre-1",
         {
             "thermal_load": 400.0,
@@ -823,6 +832,7 @@ def test_recursivity_operator_filters_tyre_temperatures_and_derivatives():
 
     second = recursivity_operator(
         state,
+        session,
         "tyre-1",
         {
             "thermal_load": 405.0,
@@ -845,6 +855,100 @@ def test_recursivity_operator_filters_tyre_temperatures_and_derivatives():
     assert second["filtered"]["tyre_pressure_rr"] == pytest.approx(23.84)
     assert "tyre_temp_fl_dt" in second["filtered"]
     assert second["filtered"]["tyre_temp_fl_dt"] == pytest.approx((82.8 - 80.0) / 0.5)
+
+
+def test_recursivity_operator_separates_sessions_and_tracks_history():
+    state: dict[str, dict[str, object]] = {}
+    session_a = ("gt3", "aston", "soft")
+    session_b = ("gt4", "aston", "soft")
+
+    recursivity_operator(
+        state,
+        session_a,
+        "ms-1",
+        {"thermal_load": 5000.0, "style_index": 0.65, "phase": "entry", "timestamp": 0.0},
+        decay=0.4,
+    )
+    recursivity_operator(
+        state,
+        session_b,
+        "ms-1",
+        {"thermal_load": 5100.0, "style_index": 0.7, "phase": "entry", "timestamp": 0.0},
+        decay=0.4,
+    )
+
+    assert set(state["sessions"]) == {"|".join(session_a), "|".join(session_b)}
+    for session_key, entry in state["sessions"].items():
+        assert entry["active"]
+        assert not entry.get("history")
+
+
+def test_recursivity_operator_rolls_over_on_limits():
+    state: dict[str, dict[str, object]] = {}
+    session = ("gt3", "aston", "soft")
+
+    for step in range(3):
+        recursivity_operator(
+            state,
+            session,
+            "ms-1",
+            {
+                "thermal_load": 5000.0 + step,
+                "style_index": 0.6 + (step * 0.005),
+                "phase": "entry",
+                "timestamp": float(step),
+            },
+            decay=0.3,
+            max_samples=2,
+            convergence_window=2,
+            convergence_threshold=0.01,
+        )
+
+    session_entry = state["sessions"]["|".join(session)]
+    assert session_entry["history"]
+    last_history = session_entry["history"][0]
+    assert last_history["reason"] in {"max_samples", "convergence"}
+    assert last_history["samples"] >= 2
+    assert "ms-1" in last_history["microsectors"]
+    assert session_entry["active"]["ms-1"]["samples"] == 1
+    assert session_entry["stint_index"] >= 1
+
+
+def test_recursivity_operator_detects_time_gap_rollover():
+    state: dict[str, dict[str, object]] = {}
+    session = ("gt3", "aston", "soft")
+
+    recursivity_operator(
+        state,
+        session,
+        "ms-1",
+        {
+            "thermal_load": 5000.0,
+            "style_index": 0.6,
+            "phase": "entry",
+            "timestamp": 1.0,
+        },
+        decay=0.3,
+        max_time_gap=0.5,
+    )
+    recursivity_operator(
+        state,
+        session,
+        "ms-1",
+        {
+            "thermal_load": 5010.0,
+            "style_index": 0.61,
+            "phase": "entry",
+            "timestamp": 2.0,
+        },
+        decay=0.3,
+        max_time_gap=0.5,
+    )
+
+    session_entry = state["sessions"]["|".join(session)]
+    assert session_entry["history"]
+    history_entry = session_entry["history"][0]
+    assert history_entry["reason"] == "time_gap"
 
 
 def test_tyre_balance_controller_computes_clamped_deltas():

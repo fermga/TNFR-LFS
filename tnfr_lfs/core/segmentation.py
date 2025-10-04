@@ -66,6 +66,37 @@ SUPPORT_THRESHOLD = 350.0  # Newtons of vertical load delta
 PhaseLiteral = str
 
 
+def _resolve_session_components(
+    records: Sequence[TelemetryRecord],
+    baseline: TelemetryRecord,
+) -> tuple[str, str, str]:
+    """Return the (car, track, compound) tuple used to scope recursivity state."""
+
+    candidate = records[0] if records else baseline
+    car = getattr(candidate, "car_model", None) or getattr(baseline, "car_model", None)
+    track = (
+        getattr(candidate, "track_name", None)
+        or getattr(candidate, "track", None)
+        or getattr(baseline, "track_name", None)
+    )
+    compound = (
+        getattr(candidate, "tyre_compound", None)
+        or getattr(baseline, "tyre_compound", None)
+    )
+
+    def _normalise(value: object, fallback: str) -> str:
+        if value is None:
+            return fallback
+        token = str(value).strip()
+        return token or fallback
+
+    return (
+        _normalise(car, "generic"),
+        _normalise(track, "unknown"),
+        _normalise(compound, "default"),
+    )
+
+
 @dataclass(frozen=True)
 class Goal:
     """Operational goal associated with a microsector phase."""
@@ -197,10 +228,10 @@ def segment_microsectors(
     context_matrix = load_context_matrix()
     bundle_list = list(bundles)
     microsectors: List[Microsector] = []
-    rec_state: MutableMapping[str, Dict[str, object]] | None = None
+    rec_state_root: MutableMapping[str, Dict[str, object]] | None = None
     mutation_state: MutableMapping[str, Dict[str, object]] | None = None
     if operator_state is not None:
-        rec_state = operator_state.setdefault("recursivity", {})
+        rec_state_root = operator_state.setdefault("recursivity", {})
         mutation_state = operator_state.setdefault("mutation", {})
     thresholds = mutation_thresholds or {}
     phase_assignments: Dict[int, PhaseLiteral] = {}
@@ -215,6 +246,8 @@ def segment_microsectors(
         )
         for record in records
     ]
+    session_components = _resolve_session_components(records, baseline)
+
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
         phase_samples = {
@@ -466,7 +499,7 @@ def segment_microsectors(
         )
         rec_trace: Tuple[Mapping[str, float | str | None], ...] = ()
         mutation_details: Mapping[str, object] | None = None
-        if rec_state is not None:
+        if rec_state_root is not None:
             measures = {
                 "thermal_load": avg_vertical_load,
                 "style_index": avg_si,
@@ -478,7 +511,8 @@ def segment_microsectors(
             measures.update(wheel_temperatures)
             measures.update(wheel_pressures)
             rec_info = recursivity_operator(
-                rec_state,
+                rec_state_root,
+                session_components,
                 str(index),
                 measures,
                 decay=recursion_decay,
@@ -518,7 +552,8 @@ def segment_microsectors(
                     key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
                 )
                 recursivity_operator(
-                    rec_state,
+                    rec_state_root,
+                    session_components,
                     str(index),
                     {
                         "thermal_load": measures["thermal_load"],
@@ -528,11 +563,13 @@ def segment_microsectors(
                     },
                     decay=recursion_decay,
                 )
-            micro_state_entry = rec_state.get(str(index), {})
-            filtered_measures = {
+            micro_state_entry = rec_info.get("state", {})
+            filtered_snapshot = {
                 key: float(value)
-                for key, value in micro_state_entry.get("filtered", {}).items()
+                for key, value in (micro_state_entry.get("filtered", {}) or {}).items()
+                if isinstance(value, (int, float))
             }
+            filtered_measures.update(filtered_snapshot)
             defaults = {
                 "thermal_load": avg_vertical_load,
                 "style_index": avg_si,
@@ -567,7 +604,7 @@ def segment_microsectors(
                     )
                     for trace_key, trace_value in trace_entry.items()
                 }
-                for trace_entry in micro_state_entry.get("trace", [])
+                for trace_entry in micro_state_entry.get("trace", ())
             )
             mutation_details = {
                 key: (

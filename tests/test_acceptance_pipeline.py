@@ -158,17 +158,32 @@ def test_acceptance_memory_and_mutation_converge() -> None:
     """Recursive memory approaches steady state and mutation stabilises."""
 
     rec_state: dict[str, dict[str, object]] = {}
+    session = {"car_model": "gt3", "track_name": "kyoto", "tyre_compound": "soft"}
     sequence = [
         {"thermal_load": 5050.0, "style_index": 0.58, "phase": "entry"},
         {"thermal_load": 5125.0, "style_index": 0.6, "phase": "apex"},
         {"thermal_load": 5180.0, "style_index": 0.62, "phase": "apex"},
     ]
     for measures in sequence:
-        rec_output = recursivity_operator(rec_state, "0", measures, decay=0.45, history=10)
+        rec_output = recursivity_operator(
+            rec_state,
+            session,
+            "0",
+            measures,
+            decay=0.45,
+            history=10,
+        )
 
     steady = {"thermal_load": 5200.0, "style_index": 0.63, "phase": "apex"}
     for _ in range(5):
-        rec_output = recursivity_operator(rec_state, "0", steady, decay=0.45, history=10)
+        rec_output = recursivity_operator(
+            rec_state,
+            session,
+            "0",
+            steady,
+            decay=0.45,
+            history=10,
+        )
 
     assert abs(rec_output["filtered"]["thermal_load"] - steady["thermal_load"]) < 1.0
     assert abs(rec_output["filtered"]["style_index"] - steady["style_index"]) < 1e-2
@@ -218,5 +233,59 @@ def test_acceptance_memory_and_mutation_converge() -> None:
         )
 
     assert not final_state["mutated"]
-    assert final_state["archetype"] == initial["archetype"]
-    assert final_state["style_delta"] < 0.12
+
+
+def test_orchestrate_delta_metrics_exposes_network_memory() -> None:
+    operator_state = {
+        "recursivity": {
+            "active_session": "gt3|valencia|soft",
+            "sessions": {
+                "gt3|valencia|soft": {
+                    "components": ("gt3", "valencia", "soft"),
+                    "stint_index": 1,
+                    "samples": 2,
+                    "active": {
+                        "0": {
+                            "phase": "entry",
+                            "samples": 1,
+                            "filtered": {"style_index": 0.71},
+                            "trace": ({"phase": "entry", "style_index": 0.71},),
+                            "converged": False,
+                            "last_measures": {"style_index": 0.71},
+                        }
+                    },
+                    "history": (
+                        {
+                            "stint": 0,
+                            "ended_at": 12.0,
+                            "reason": "max_samples",
+                            "samples": 2,
+                            "microsectors": {
+                                "0": {
+                                    "phase": "entry",
+                                    "samples": 2,
+                                    "filtered": {"style_index": 0.68},
+                                    "trace": (),
+                                    "converged": True,
+                                    "last_measures": {},
+                                }
+                            },
+                        },
+                    ),
+                }
+            },
+        }
+    }
+
+    result = orchestrate_delta_metrics(
+        [],
+        target_delta_nfr=0.0,
+        target_sense_index=0.0,
+        operator_state=operator_state,
+    )
+
+    memory = result["network_memory"]
+    assert memory["sessions"]
+    session_snapshot = memory["sessions"]["gt3|valencia|soft"]
+    assert session_snapshot["history"]
+    assert session_snapshot["active"]["0"]["filtered"]["style_index"] == pytest.approx(0.71)

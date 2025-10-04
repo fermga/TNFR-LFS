@@ -92,10 +92,16 @@ dos operadores con estado ubicados en ``tnfr_lfs.core.operators``:
 * ``recursivity_operator`` conserva una traza por microsector y filtra de
   forma exponencial las métricas térmicas y de estilo (``thermal_load`` y
   ``style_index``) junto con las temperaturas/presiones por rueda
-  (``tyre_temp_*``/``tyre_pressure_*``).  Además calcula derivadas ``dT/dt``
-  para cada rueda y persiste ``ΔNFR_flat`` como referencia.  El operador
+  (``tyre_temp_*``/``tyre_pressure_*``).  La memoria queda ahora segmentada por
+  sesión (``car_model``/``track_name``/``tyre_compound``), manteniendo un
+  historial por stint en ``operator_state["recursivity"]``.  Además calcula
+  derivadas ``dT/dt`` para cada rueda, persiste ``ΔNFR_flat`` como referencia y
+  aplica criterios de parada (convergencia, límites de muestras o gaps de
+  tiempo) para iniciar nuevos stints cuando la dinámica cambia.  El operador
   detecta cambios de fase (entrada, vértice, salida) y reinicia la memoria
-  cuando corresponde para que el filtro no contamine transiciones abruptas.
+  cuando corresponde para que el filtro no contamine transiciones abruptas; el
+  historial completo se expone a través de ``orchestrate_delta_metrics`` como
+  ``network_memory`` para que HUD y exportadores accedan a la memoria de red.
 * ``mutation_operator`` observa la entropía del reparto ΔNFR y las desviaciones
   de estilo filtradas para decidir si el arquetipo táctico debe mutar hacia un
   candidato alternativo o volver a un modo de recuperación.
