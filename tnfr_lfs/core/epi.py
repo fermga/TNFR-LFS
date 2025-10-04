@@ -63,6 +63,10 @@ class TelemetryRecord:
     vertical_load_rear: float
     mu_eff_front: float
     mu_eff_rear: float
+    mu_eff_front_lateral: float
+    mu_eff_front_longitudinal: float
+    mu_eff_rear_lateral: float
+    mu_eff_rear_longitudinal: float
     suspension_travel_front: float
     suspension_travel_rear: float
     suspension_velocity_front: float
@@ -360,6 +364,16 @@ class DeltaCalculator:
             vertical_load_rear=mean(record.vertical_load_rear for record in records),
             mu_eff_front=mean(record.mu_eff_front for record in records),
             mu_eff_rear=mean(record.mu_eff_rear for record in records),
+            mu_eff_front_lateral=mean(
+                record.mu_eff_front_lateral for record in records
+            ),
+            mu_eff_front_longitudinal=mean(
+                record.mu_eff_front_longitudinal for record in records
+            ),
+            mu_eff_rear_lateral=mean(record.mu_eff_rear_lateral for record in records),
+            mu_eff_rear_longitudinal=mean(
+                record.mu_eff_rear_longitudinal for record in records
+            ),
             suspension_travel_front=mean(record.suspension_travel_front for record in records),
             suspension_travel_rear=mean(record.suspension_travel_rear for record in records),
             suspension_velocity_front=mean(record.suspension_velocity_front for record in records),
@@ -468,6 +482,10 @@ class DeltaCalculator:
                 slip_ratio=record.slip_ratio,
                 mu_eff_front=record.mu_eff_front,
                 mu_eff_rear=record.mu_eff_rear,
+                mu_eff_front_lateral=record.mu_eff_front_lateral,
+                mu_eff_front_longitudinal=record.mu_eff_front_longitudinal,
+                mu_eff_rear_lateral=record.mu_eff_rear_lateral,
+                mu_eff_rear_longitudinal=record.mu_eff_rear_longitudinal,
             ),
             "suspension": SuspensionNode(
                 delta_nfr=node_deltas.get("suspension", 0.0),

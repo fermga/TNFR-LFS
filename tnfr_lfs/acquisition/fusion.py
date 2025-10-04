@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import List
+from importlib import resources
+from typing import Dict, List, Mapping, Tuple
+
+try:  # Python 3.11+
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+    import tomli as tomllib  # type: ignore
 
 from ..core.epi import EPIExtractor, EPIBundle, TelemetryRecord
 from .outsim_udp import OutSimPacket
@@ -17,6 +23,26 @@ def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(value, maximum))
 
 
+@dataclass(frozen=True)
+class FusionCalibration:
+    """Parameter set describing how telemetry signals should be scaled."""
+
+    load_scale: float = 1000.0
+    load_bias: float = 0.0
+    slip_ratio_gain: float = 1.0
+    slip_ratio_bias: float = 0.0
+    steer_ratio: float = 1.0
+    steer_offset: float = 0.0
+    wheelbase: float = 2.6
+    network_latency: float = 0.06
+    tyre_radius: float = 0.33
+    mu_lateral_gain: float = 1.0
+    mu_longitudinal_gain: float = 1.0
+    axle_weight_front: float = 0.5
+    axle_weight_rear: float = 0.5
+    suspension_window: int = 5
+
+
 @dataclass
 class TelemetryFusion:
     """Combine OutSim and OutGauge packets into :class:`TelemetryRecord` objects."""
@@ -24,11 +50,22 @@ class TelemetryFusion:
     load_scale: float = 1000.0
     extractor: EPIExtractor = field(default_factory=EPIExtractor)
     _records: List[TelemetryRecord] = field(default_factory=list, init=False)
+    _calibration_table: Mapping[str, object] = field(default_factory=dict, init=False, repr=False)
+    _calibration_cache: Dict[Tuple[str, str], FusionCalibration] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    _vertical_history: List[float] = field(default_factory=list, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._calibration_table = self._load_calibration_table()
+        self._calibration_cache = {}
+        self._vertical_history = []
 
     def reset(self) -> None:
         """Clear the internal telemetry history."""
 
         self._records.clear()
+        self._vertical_history.clear()
 
     def fuse(self, outsim: OutSimPacket, outgauge: OutGaugePacket) -> TelemetryRecord:
         """Return a :class:`TelemetryRecord` derived from both UDP sources."""
@@ -37,24 +74,42 @@ class TelemetryFusion:
         previous = self._records[-1] if self._records else None
         dt = timestamp - previous.timestamp if previous else 0.0
 
-        vertical_load = self._compute_vertical_load(outsim)
+        calibration = self._select_calibration(outgauge)
+        self._append_vertical_accel(outsim.accel_z, calibration)
+
+        vertical_load = self._compute_vertical_load(outsim, calibration)
         speed = self._compute_speed(outsim, outgauge)
         yaw = self._normalise_heading(outsim.heading)
         yaw_rate = self._compute_yaw_rate(timestamp, yaw, outsim, previous, dt)
-        slip_angle = self._compute_slip_angle(outsim)
-        slip_ratio = self._compute_slip_ratio(outsim, outgauge)
+        slip_ratio = self._compute_slip_ratio(outsim, outgauge, calibration)
+        slip_angle = self._compute_slip_angle(
+            yaw_rate, speed, slip_ratio, outsim, calibration, previous, dt
+        )
         throttle = _clamp(outgauge.throttle, 0.0, 1.0)
-        steer = self._compute_steer(yaw_rate, speed)
-        front_share, rear_share = self._estimate_axle_distribution(outsim, speed)
+        steer = self._compute_steer(yaw_rate, speed, calibration)
+        front_share, rear_share = self._estimate_axle_distribution(outsim, speed, calibration)
         front_load = vertical_load * front_share
         rear_load = vertical_load * rear_share
-        travel_front = front_share
-        travel_rear = rear_share
-        vel_front = self._compute_suspension_velocity(
-            travel_front, previous.suspension_travel_front if previous else None, dt
+        travel_front, vel_front = self._compute_suspension_velocity(
+            "front",
+            front_share,
+            previous.suspension_travel_front if previous else None,
+            dt,
+            calibration,
         )
-        vel_rear = self._compute_suspension_velocity(
-            travel_rear, previous.suspension_travel_rear if previous else None, dt
+        travel_rear, vel_rear = self._compute_suspension_velocity(
+            "rear",
+            rear_share,
+            previous.suspension_travel_rear if previous else None,
+            dt,
+            calibration,
+        )
+
+        mu_front, mu_front_lat, mu_front_long = self._compute_mu_eff(
+            outsim.accel_y, outsim.accel_x, front_share, calibration
+        )
+        mu_rear, mu_rear_lat, mu_rear_long = self._compute_mu_eff(
+            outsim.accel_y, outsim.accel_x, rear_share, calibration
         )
 
         record = TelemetryRecord(
@@ -78,8 +133,12 @@ class TelemetryFusion:
             gear=int(outgauge.gear),
             vertical_load_front=front_load,
             vertical_load_rear=rear_load,
-            mu_eff_front=self._compute_mu_eff(outsim.accel_y, front_share),
-            mu_eff_rear=self._compute_mu_eff(outsim.accel_y, rear_share),
+            mu_eff_front=mu_front,
+            mu_eff_rear=mu_rear,
+            mu_eff_front_lateral=mu_front_lat,
+            mu_eff_front_longitudinal=mu_front_long,
+            mu_eff_rear_lateral=mu_rear_lat,
+            mu_eff_rear_longitudinal=mu_rear_long,
             suspension_travel_front=travel_front,
             suspension_travel_rear=travel_rear,
             suspension_velocity_front=vel_front,
@@ -98,13 +157,143 @@ class TelemetryFusion:
     # ------------------------------------------------------------------
     # Derived metrics
     # ------------------------------------------------------------------
-    def _compute_vertical_load(self, outsim: OutSimPacket) -> float:
-        g_force = outsim.accel_z + 9.81
-        return max(0.0, g_force * self.load_scale)
+    def _load_calibration_table(self) -> Mapping[str, object]:
+        try:
+            with resources.open_binary("tnfr_lfs.data", "fusion_calibration.toml") as handle:
+                return tomllib.load(handle)
+        except FileNotFoundError:  # pragma: no cover - optional resource
+            return {"defaults": {}}
 
-    def _compute_slip_ratio(self, outsim: OutSimPacket, outgauge: OutGaugePacket) -> float:
+    def _select_calibration(self, outgauge: OutGaugePacket) -> FusionCalibration:
+        car = outgauge.car or "__default__"
+        track = outgauge.track or "__default__"
+        key = (car, track)
+        cached = self._calibration_cache.get(key)
+        if cached is not None:
+            return cached
+
+        merged: Dict[str, object] = {}
+
+        def merge(source: Mapping[str, object] | None) -> None:
+            if not source:
+                return
+            for k, v in source.items():
+                if isinstance(v, Mapping):
+                    existing = merged.get(k)
+                    if isinstance(existing, Mapping):
+                        combined = dict(existing)
+                        combined.update(v)
+                        merged[k] = combined
+                    else:
+                        merged[k] = dict(v)
+                else:
+                    merged[k] = v
+
+        table = self._calibration_table
+        merge(table.get("defaults"))
+
+        tracks_table = table.get("tracks")
+        if isinstance(tracks_table, Mapping):
+            merge(tracks_table.get(track))
+
+        cars_table = table.get("cars")
+        car_table = cars_table.get(car) if isinstance(cars_table, Mapping) else None
+        if isinstance(car_table, Mapping):
+            merge(car_table.get("defaults"))
+            track_overrides = car_table.get("tracks")
+            if isinstance(track_overrides, Mapping):
+                merge(track_overrides.get(track))
+
+        calibration = self._build_calibration(merged)
+        self._calibration_cache[key] = calibration
+        return calibration
+
+    def _build_calibration(self, raw: Mapping[str, object]) -> FusionCalibration:
+        slip = raw.get("slip_ratio") if isinstance(raw.get("slip_ratio"), Mapping) else {}
+        steer = raw.get("steer") if isinstance(raw.get("steer"), Mapping) else {}
+        mu = raw.get("mu") if isinstance(raw.get("mu"), Mapping) else {}
+        suspension = raw.get("suspension") if isinstance(raw.get("suspension"), Mapping) else {}
+        tyre = raw.get("tyre") if isinstance(raw.get("tyre"), Mapping) else {}
+        latency = raw.get("latency") if isinstance(raw.get("latency"), Mapping) else {}
+
+        load_scale = float(raw.get("load_scale", self.load_scale))
+        load_bias = float(raw.get("load_bias", 0.0))
+        slip_gain = float(slip.get("gain", 1.0))
+        slip_bias = float(slip.get("bias", 0.0))
+        steer_ratio = float(steer.get("ratio", 1.0))
+        steer_offset = float(steer.get("offset", 0.0))
+        wheelbase = float(steer.get("wheelbase", raw.get("wheelbase", 2.6)))
+        latency_value = float(latency.get("network", latency.get("value", 0.06)))
+        tyre_radius = float(tyre.get("effective_radius", tyre.get("radius", 0.33)))
+        mu_lat = float(mu.get("lateral_gain", mu.get("lateral", 1.0)))
+        mu_long = float(mu.get("longitudinal_gain", mu.get("longitudinal", 1.0)))
+        front_weight = float(
+            suspension.get(
+                "axle_weighting_front",
+                suspension.get("front_weight", suspension.get("front", 0.5)),
+            )
+        )
+        rear_weight = float(
+            suspension.get(
+                "axle_weighting_rear",
+                suspension.get("rear_weight", suspension.get("rear", 0.5)),
+            )
+        )
+        total_weight = front_weight + rear_weight
+        if total_weight <= 0.0:
+            front_weight = rear_weight = 0.5
+        else:
+            front_weight /= total_weight
+            rear_weight /= total_weight
+        window = int(suspension.get("window", suspension.get("samples", 5)) or 5)
+        window = max(3, window)
+
+        return FusionCalibration(
+            load_scale=load_scale,
+            load_bias=load_bias,
+            slip_ratio_gain=slip_gain,
+            slip_ratio_bias=slip_bias,
+            steer_ratio=steer_ratio,
+            steer_offset=steer_offset,
+            wheelbase=wheelbase,
+            network_latency=latency_value,
+            tyre_radius=tyre_radius,
+            mu_lateral_gain=mu_lat,
+            mu_longitudinal_gain=mu_long,
+            axle_weight_front=front_weight,
+            axle_weight_rear=rear_weight,
+            suspension_window=window,
+        )
+
+    def _append_vertical_accel(self, accel_z: float, calibration: FusionCalibration) -> None:
+        self._vertical_history.append(accel_z)
+        max_samples = max(32, calibration.suspension_window * 4)
+        excess = len(self._vertical_history) - max_samples
+        if excess > 0:
+            del self._vertical_history[0:excess]
+
+    def _filtered_vertical_accel(self, window: int) -> float:
+        if not self._vertical_history:
+            return 0.0
+        window = max(1, min(window, len(self._vertical_history)))
+        samples = self._vertical_history[-window:]
+        if window == 1:
+            return samples[0]
+        weights = [0.5 - 0.5 * math.cos(2.0 * math.pi * i / (window - 1)) for i in range(window)]
+        weight_sum = sum(weights) or float(window)
+        return sum(sample * weight for sample, weight in zip(samples, weights)) / weight_sum
+
+    def _compute_vertical_load(self, outsim: OutSimPacket, calibration: FusionCalibration) -> float:
+        g_force = outsim.accel_z + 9.81
+        load = (g_force * calibration.load_scale) + calibration.load_bias
+        return max(0.0, load)
+
+    def _compute_slip_ratio(
+        self, outsim: OutSimPacket, outgauge: OutGaugePacket, calibration: FusionCalibration
+    ) -> float:
         reference_speed = max(abs(outgauge.speed), 1e-6)
         slip = (outsim.vel_x - outgauge.speed) / reference_speed
+        slip = (slip * calibration.slip_ratio_gain) + calibration.slip_ratio_bias
         return _clamp(slip, -1.0, 1.0)
 
     def _normalise_heading(self, heading: float) -> float:
@@ -118,8 +307,30 @@ class TelemetryFusion:
         gauge_speed = abs(outgauge.speed)
         return max(sim_speed, gauge_speed)
 
-    def _compute_slip_angle(self, outsim: OutSimPacket) -> float:
-        return math.atan2(outsim.vel_y, max(1e-6, abs(outsim.vel_x)))
+    def _compute_slip_angle(
+        self,
+        yaw_rate: float,
+        speed: float,
+        slip_ratio: float,
+        outsim: OutSimPacket,
+        calibration: FusionCalibration,
+        previous: TelemetryRecord | None,
+        dt: float,
+    ) -> float:
+        if speed <= 1e-4:
+            return 0.0
+        yaw_rate_derivative = 0.0
+        if previous and dt > 1e-6:
+            yaw_rate_derivative = (yaw_rate - previous.yaw_rate) / dt
+        compensated_yaw = yaw_rate + yaw_rate_derivative * calibration.network_latency
+        effective_speed = max(speed, 1e-3)
+        tyre_slip_velocity = slip_ratio * effective_speed
+        tyre_slip_velocity += abs(slip_ratio) * calibration.tyre_radius * abs(compensated_yaw)
+        predictive_lateral = compensated_yaw * calibration.wheelbase * 0.5
+        measured_lateral = outsim.vel_y
+        blended_lateral = (0.6 * measured_lateral) + (0.4 * predictive_lateral)
+        longitudinal_correction = effective_speed + tyre_slip_velocity
+        return math.atan2(blended_lateral, max(longitudinal_correction, 1e-3))
 
     def _compute_yaw_rate(
         self,
@@ -138,38 +349,63 @@ class TelemetryFusion:
         return 0.0
 
     def _estimate_axle_distribution(
-        self, outsim: OutSimPacket, speed: float
+        self, outsim: OutSimPacket, speed: float, calibration: FusionCalibration
     ) -> tuple[float, float]:
-        pitch_component = _clamp(-outsim.pitch / 0.15, -0.3, 0.3)
+        front_base = calibration.axle_weight_front
+        rear_base = calibration.axle_weight_rear
+        pitch_component = _clamp(-outsim.pitch / 0.15, -0.25, 0.25)
         accel_component = _clamp(-outsim.accel_x / 9.81 * 0.2, -0.2, 0.2)
         curvature = 0.0
         if speed > 1e-3:
             curvature = _clamp(outsim.accel_y / max(speed * speed, 1e-3) * 0.1, -0.05, 0.05)
-        front_share = _clamp(0.5 + pitch_component + accel_component + curvature, 0.25, 0.75)
+        front_share = _clamp(front_base + pitch_component + accel_component + curvature, 0.1, 0.9)
         rear_share = 1.0 - front_share
         return front_share, rear_share
 
     def _compute_suspension_velocity(
-        self, current: float, previous: float | None, dt: float
-    ) -> float:
+        self,
+        axle: str,
+        share: float,
+        previous: float | None,
+        dt: float,
+        calibration: FusionCalibration,
+    ) -> tuple[float, float]:
+        filtered_accel = self._filtered_vertical_accel(calibration.suspension_window)
+        g_force = filtered_accel + 9.81
+        load_factor = _clamp(g_force / 9.81, 0.0, 2.5)
+        base_weight = calibration.axle_weight_front if axle == "front" else calibration.axle_weight_rear
+        normalised_share = _clamp(share, 0.05, 0.95)
+        travel = _clamp(normalised_share * load_factor + base_weight * 0.1, 0.0, 1.5)
         if previous is None or dt <= 1e-6:
-            return 0.0
-        derivative = (current - previous) / dt
-        return _clamp(derivative, -5.0, 5.0)
+            velocity = 0.0
+        else:
+            velocity = _clamp((travel - previous) / dt, -5.0, 5.0)
+        return travel, velocity
 
-    def _compute_mu_eff(self, lateral_accel: float, share: float) -> float:
+    def _compute_mu_eff(
+        self,
+        lateral_accel: float,
+        longitudinal_accel: float,
+        share: float,
+        calibration: FusionCalibration,
+    ) -> tuple[float, float, float]:
         if share <= 1e-4:
-            return 0.0
+            return 0.0, 0.0, 0.0
         lateral_g = abs(lateral_accel) / 9.81
-        mu = lateral_g / max(share, 1e-4)
-        return _clamp(mu, 0.0, 3.0)
+        longitudinal_g = abs(longitudinal_accel) / 9.81
+        lateral_mu = _clamp((lateral_g / share) * calibration.mu_lateral_gain, 0.0, 3.0)
+        longitudinal_mu = _clamp((longitudinal_g / share) * calibration.mu_longitudinal_gain, 0.0, 3.0)
+        combined = _clamp((lateral_mu + longitudinal_mu) * 0.5, 0.0, 3.0)
+        return combined, lateral_mu, longitudinal_mu
 
-    def _compute_steer(self, yaw_rate: float, speed: float) -> float:
+    def _compute_steer(
+        self, yaw_rate: float, speed: float, calibration: FusionCalibration
+    ) -> float:
         if speed <= 1e-3:
             return 0.0
-        wheelbase = 2.6
         curvature = yaw_rate / speed
-        steer_ratio = curvature * wheelbase
+        steer_ratio = curvature * calibration.wheelbase * calibration.steer_ratio
+        steer_ratio += calibration.steer_offset
         return _clamp(steer_ratio, -1.5, 1.5)
 
     def _angle_delta(self, value: float, reference: float) -> float:

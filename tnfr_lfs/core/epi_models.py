@@ -19,6 +19,10 @@ class TyresNode:
     slip_ratio: float = 0.0
     mu_eff_front: float = 0.0
     mu_eff_rear: float = 0.0
+    mu_eff_front_lateral: float = 0.0
+    mu_eff_front_longitudinal: float = 0.0
+    mu_eff_rear_lateral: float = 0.0
+    mu_eff_rear_longitudinal: float = 0.0
 
 
 @dataclass(frozen=True)

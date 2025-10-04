@@ -1,0 +1,73 @@
+[defaults]
+load_scale = 1005.0
+load_bias = 0.0
+
+[defaults.slip_ratio]
+gain = 1.0
+bias = 0.0
+
+[defaults.steer]
+wheelbase = 2.6
+ratio = 1.0
+offset = 0.0
+
+[defaults.mu]
+lateral_gain = 1.0
+longitudinal_gain = 1.0
+
+[defaults.suspension]
+axle_weighting_front = 0.5
+axle_weighting_rear = 0.5
+window = 7
+
+[defaults.latency]
+network = 0.08
+
+[defaults.tyre]
+effective_radius = 0.315
+
+[cars.XFG.defaults]
+load_scale = 1035.0
+
+[cars.XFG.defaults.slip_ratio]
+gain = 1.08
+bias = -0.01
+
+[cars.XFG.defaults.steer]
+wheelbase = 2.56
+ratio = 1.05
+
+[cars.XFG.defaults.mu]
+lateral_gain = 1.05
+longitudinal_gain = 0.96
+
+[cars.XFG.defaults.suspension]
+axle_weighting_front = 0.53
+axle_weighting_rear = 0.47
+window = 9
+
+[cars.XFG.tracks.BL1]
+slip_ratio = { gain = 1.2, bias = -0.025 }
+mu = { lateral_gain = 1.08, longitudinal_gain = 1.02 }
+latency = { network = 0.07 }
+
+[cars.FXR.defaults]
+load_scale = 1110.0
+
+[cars.FXR.defaults.steer]
+wheelbase = 2.78
+ratio = 1.18
+
+[cars.FXR.defaults.mu]
+lateral_gain = 1.15
+longitudinal_gain = 1.12
+
+[cars.FXR.defaults.suspension]
+axle_weighting_front = 0.46
+axle_weighting_rear = 0.54
+window = 11
+
+[cars.FXR.tracks.ASO4]
+slip_ratio = { gain = 0.95 }
+tyre = { effective_radius = 0.332 }
+latency = { network = 0.09 }

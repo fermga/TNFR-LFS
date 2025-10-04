@@ -83,8 +83,9 @@ def test_ingest_validates_header():
     data = StringIO(
         "timestamp,vertical_load,slip_ratio,lateral_accel,longitudinal_accel,yaw,pitch,roll,brake_pressure,locking,nfr,si,"
         "speed,yaw_rate,slip_angle,steer,throttle,gear,vertical_load_front,vertical_load_rear,mu_eff_front,mu_eff_rear,"
+        "mu_eff_front_lateral,mu_eff_front_longitudinal,mu_eff_rear_lateral,mu_eff_rear_longitudinal,"
         "suspension_travel_front,suspension_travel_rear,suspension_velocity_front,suspension_velocity_rear\n"
-        "0.0,6000,0.05,1.2,0.4,0.1,0.01,0.02,0.5,1,520,0.82,21.0,0.15,0.05,0.2,0.7,3,3200,2800,1.1,1.0,0.52,0.48,0.0,0.0\n"
+        "0.0,6000,0.05,1.2,0.4,0.1,0.01,0.02,0.5,1,520,0.82,21.0,0.15,0.05,0.2,0.7,3,3200,2800,1.1,1.0,1.05,0.95,0.98,1.02,0.52,0.48,0.0,0.0\n"
     )
     records = client.ingest(data)
     assert len(records) == 1
@@ -139,14 +140,17 @@ def test_fusion_generates_record_and_bundle(outsim_payload, outgauge_payload):
     outgauge = OutGaugePacket.from_bytes(outgauge_payload)
     fusion = TelemetryFusion()
     record = fusion.fuse(outsim, outgauge)
-    assert record.vertical_load == pytest.approx(6000.0)
+    calibration = fusion._select_calibration(outgauge)
+    expected_load = max(0.0, (outsim.accel_z + 9.81) * calibration.load_scale + calibration.load_bias)
+    assert record.vertical_load == pytest.approx(expected_load)
     assert record.slip_ratio == pytest.approx(0.05)
     assert record.speed == pytest.approx(math.hypot(outsim.vel_x, outsim.vel_y))
     assert record.yaw_rate == pytest.approx(outsim.ang_vel_z, rel=1e-6)
     assert record.vertical_load_front + record.vertical_load_rear == pytest.approx(record.vertical_load)
-    assert 0.25 <= record.suspension_travel_front <= 0.75
+    assert record.suspension_travel_front >= 0.0
     assert record.suspension_velocity_front == pytest.approx(0.0)
     assert record.mu_eff_front >= 0.0
+    assert record.mu_eff_front_lateral >= record.mu_eff_front
     bundle = fusion.fuse_to_bundle(outsim, outgauge)
     assert isinstance(bundle, EPIBundle)
 
