@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, Protocol, Sequence
+from typing import Any, Dict, Iterable, Mapping, Protocol, Sequence
 
 from ..core.epi_models import EPIBundle
 from .setup_plan import SetupPlan, serialise_setup_plan
@@ -174,6 +174,65 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     return "\n".join(lines)
 
 
+def _format_key_instruction(delta: Any) -> tuple[str, str, str]:
+    try:
+        value = float(delta)
+    except (TypeError, ValueError):
+        return ("Manual", "N/A", "Ajuste manual requerido")
+
+    if abs(value) < 1e-9:
+        return ("N/A", "0", "Sin cambios necesarios")
+
+    key = "F12" if value > 0 else "F11"
+    steps = f"{abs(value):.3f}".rstrip("0").rstrip(".")
+    return (key, steps, f"Pulsa {key} × {steps}")
+
+
+def lfs_notes_exporter(results: Dict[str, Any] | SetupPlan) -> str:
+    """Render TNFR adjustments as F11/F12 instructions for Live for Speed."""
+
+    plan = _extract_setup_plan(results)
+
+    header = "| Cambio | Δ | Acción | Pasos | Racional | Efecto esperado |"
+    separator = "| --- | --- | --- | --- | --- | --- |"
+    lines = ["# Instrucciones rápidas TNFR → LFS", ""]
+    lines.append(header)
+    lines.append(separator)
+
+    for change in plan.get("changes", []):
+        parameter = change.get("parameter", "-") or "-"
+        delta = change.get("delta", 0.0)
+        try:
+            delta_repr = f"{float(delta):+.3f}"
+        except (TypeError, ValueError):
+            delta_repr = str(delta)
+        key, steps, instruction = _format_key_instruction(delta)
+        rationale = change.get("rationale", "-") or "-"
+        expected = change.get("expected_effect", "-") or "-"
+        lines.append(
+            f"| {parameter} | {delta_repr} | {instruction} | {steps} | {rationale} | {expected} |"
+        )
+
+    def _extend_list_section(title: str, items: Iterable[str] | None) -> None:
+        entries = [item for item in items or () if item]
+        if not entries:
+            return
+        lines.append("")
+        lines.append(title)
+        lines.extend(f"- {entry}" for entry in entries)
+
+    _extend_list_section("**Notas agregadas**", plan.get("rationales"))
+    _extend_list_section("**Efectos agregados**", plan.get("expected_effects"))
+
+    clamped = [item for item in plan.get("clamped_parameters", []) if item]
+    if clamped:
+        lines.append("")
+        lines.append("**Parámetros bloqueados**")
+        lines.extend(f"- {item}" for item in clamped)
+
+    return "\n".join(lines)
+
+
 def resolve_car_prefix(car_model: str) -> str:
     key = (car_model or "").strip()
     if not key:
@@ -273,6 +332,7 @@ exporters_registry = {
     "csv": csv_exporter,
     "markdown": markdown_exporter,
     "set": lfs_set_exporter,
+    "lfs-notes": lfs_notes_exporter,
 }
 
 __all__ = [
@@ -281,6 +341,7 @@ __all__ = [
     "json_exporter",
     "csv_exporter",
     "markdown_exporter",
+    "lfs_notes_exporter",
     "lfs_set_exporter",
     "normalise_set_output_name",
     "resolve_car_prefix",

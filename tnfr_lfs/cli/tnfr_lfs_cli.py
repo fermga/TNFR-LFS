@@ -57,6 +57,17 @@ def _validated_export(value: Any, *, fallback: str) -> str:
     return fallback
 
 
+def _add_export_argument(parser: argparse.ArgumentParser, *, default: str, help_text: str) -> None:
+    parser.add_argument(
+        "--export",
+        dest="exports",
+        choices=sorted(exporters_registry.keys()),
+        action="append",
+        help=f"{help_text} Puede repetirse para combinar salidas.",
+    )
+    parser.set_defaults(exports=None, export_default=default)
+
+
 def load_cli_config(path: Path | None = None) -> Dict[str, Any]:
     """Load CLI defaults from ``tnfr-lfs.toml`` style files."""
 
@@ -1004,11 +1015,10 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         "analyze", help="Analyse a telemetry baseline and export ΔNFR/Si insights."
     )
     analyze_parser.add_argument("telemetry", type=Path, help="Path to a baseline file or CSV.")
-    analyze_parser.add_argument(
-        "--export",
-        choices=sorted(exporters_registry.keys()),
+    _add_export_argument(
+        analyze_parser,
         default=_validated_export(analyze_cfg.get("export"), fallback="json"),
-        help="Exporter used to render the analysis results.",
+        help_text="Exporter used to render the analysis results.",
     )
     analyze_parser.add_argument(
         "--target-delta",
@@ -1042,11 +1052,10 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         help="Generate recommendations for a telemetry baseline using the rule engine.",
     )
     suggest_parser.add_argument("telemetry", type=Path, help="Path to a baseline file or CSV.")
-    suggest_parser.add_argument(
-        "--export",
-        choices=sorted(exporters_registry.keys()),
+    _add_export_argument(
+        suggest_parser,
         default=_validated_export(suggest_cfg.get("export"), fallback="json"),
-        help="Exporter used to render the recommendation payload.",
+        help_text="Exporter used to render the recommendation payload.",
     )
     suggest_parser.add_argument(
         "--car-model",
@@ -1066,11 +1075,10 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         help="Generate ΔNFR and sense index reports linked to the exporter registry.",
     )
     report_parser.add_argument("telemetry", type=Path, help="Path to a baseline file or CSV.")
-    report_parser.add_argument(
-        "--export",
-        choices=sorted(exporters_registry.keys()),
+    _add_export_argument(
+        report_parser,
         default=_validated_export(report_cfg.get("export"), fallback="json"),
-        help="Exporter used to render the report payload.",
+        help_text="Exporter used to render the report payload.",
     )
     report_parser.add_argument(
         "--target-delta",
@@ -1106,11 +1114,10 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     write_set_parser.add_argument(
         "telemetry", type=Path, help="Path to a baseline file or CSV containing telemetry."
     )
-    write_set_parser.add_argument(
-        "--export",
-        choices=sorted(exporters_registry.keys()),
+    _add_export_argument(
+        write_set_parser,
         default=_validated_export(write_set_cfg.get("export"), fallback="markdown"),
-        help="Exporter used to render the setup plan (default: markdown).",
+        help_text="Exporter used to render the setup plan (default: markdown).",
     )
     write_set_parser.add_argument(
         "--car-model",
@@ -1425,7 +1432,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     }
     if phase_templates:
         payload["phase_templates"] = phase_templates
-    return _render_payload(payload, namespace.export)
+    return _render_payload(payload, _resolve_exports(namespace))
 
 
 def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
@@ -1506,7 +1513,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
             "pairwise_coupling": metrics.get("pairwise_coupling"),
             "dissonance_breakdown": metrics.get("dissonance_breakdown"),
         }
-    return _render_payload(payload, namespace.export)
+    return _render_payload(payload, _resolve_exports(namespace))
 
 
 def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
@@ -1586,7 +1593,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
     phase_templates = _phase_templates_from_config(config, "report")
     if phase_templates:
         payload["phase_templates"] = phase_templates
-    return _render_payload(payload, namespace.export)
+    return _render_payload(payload, _resolve_exports(namespace))
 
 
 def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
@@ -1703,14 +1710,41 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         "sensitivities": plan.sensitivities,
         "set_output": namespace.set_output,
     }
-    return _render_payload(payload, namespace.export)
+    return _render_payload(payload, _resolve_exports(namespace))
 
 
-def _render_payload(payload: Mapping[str, Any], exporter_name: str) -> str:
-    exporter = exporters_registry[exporter_name]
-    rendered = exporter(dict(payload))
-    print(rendered)
-    return rendered
+def _resolve_exports(namespace: argparse.Namespace) -> List[str]:
+    exports = getattr(namespace, "exports", None)
+    if exports:
+        ordered: List[str] = []
+        for name in exports:
+            if name not in ordered:
+                ordered.append(name)
+        return ordered
+    default = getattr(namespace, "export_default", None)
+    if isinstance(default, str):
+        return [default]
+    raise ValueError("No exporter configured for this command")
+
+
+def _render_payload(payload: Mapping[str, Any], exporters: Sequence[str] | str) -> str:
+    if isinstance(exporters, str):
+        selected = [exporters]
+    else:
+        ordered: List[str] = []
+        for name in exporters:
+            if name not in ordered:
+                ordered.append(name)
+        selected = ordered
+
+    rendered_outputs: List[str] = []
+    for exporter_name in selected:
+        exporter = exporters_registry[exporter_name]
+        rendered = exporter(dict(payload))
+        print(rendered)
+        rendered_outputs.append(rendered)
+
+    return "\n\n".join(rendered_outputs)
 
 
 def _group_records_by_lap(records: Records) -> List[Records]:

@@ -265,6 +265,44 @@ def test_write_set_lfs_export(
     assert "TNFR-LFS setup export" in destination.read_text(encoding="utf8")
 
 
+def test_write_set_combined_export_outputs(
+    tmp_path: Path,
+    capsys,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    baseline_path = tmp_path / "baseline.jsonl"
+    run_cli([
+        "baseline",
+        str(baseline_path),
+        "--simulate",
+        str(synthetic_stint_path),
+    ])
+    capsys.readouterr()
+
+    result = run_cli([
+        "write-set",
+        str(baseline_path),
+        "--export",
+        "set",
+        "--export",
+        "lfs-notes",
+        "--car-model",
+        "generic_gt",
+        "--set-output",
+        "GEN_test",
+    ])
+
+    captured = capsys.readouterr()
+    destination = tmp_path / "LFS/data/setups/GEN_test.set"
+    assert destination.exists()
+    assert "Setup guardado" in result
+    assert "Instrucciones rápidas TNFR" in result
+    assert "| Cambio | Δ | Acción |" in result
+    assert "| Cambio | Δ | Acción |" in captured.out
+
+
 def test_write_set_lfs_rejects_invalid_name(
     tmp_path: Path,
     synthetic_stint_path: Path,
