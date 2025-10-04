@@ -11,7 +11,28 @@ from .setup_plan import SetupPlan, serialise_setup_plan
 
 
 CAR_MODEL_PREFIXES = {
+    "UF1": "UF1",
+    "XFG": "XFG",
+    "XRG": "XRG",
+    "LX4": "LX4",
+    "LX6": "LX6",
+    "RB4": "RB4",
+    "FXO": "FXO",
+    "XRT": "XRT",
+    "RAC": "RAC",
+    "FZ5": "FZ5",
+    "MRT": "MRT",
+    "FBM": "FBM",
+    "FOX": "FOX",
+    "FO8": "FO8",
+    "BF1": "BF1",
+    "XFR": "XFR",
+    "UFR": "UFR",
+    "FXR": "FXR",
+    "XRR": "XRR",
+    "FZR": "FZR",
     "generic_gt": "GEN",
+    "formula": "FOR",
 }
 
 INVALID_NAME_CHARS = set("\\/:*?\"<>|")
@@ -153,11 +174,19 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     return "\n".join(lines)
 
 
-def _resolve_car_prefix(car_model: str) -> str:
-    try:
-        return CAR_MODEL_PREFIXES[car_model]
-    except KeyError as exc:
-        raise ValueError(f"No hay prefijo LFS registrado para '{car_model}'.") from exc
+def resolve_car_prefix(car_model: str) -> str:
+    key = (car_model or "").strip()
+    if not key:
+        raise ValueError("Debe especificarse un 'car_model' para exportar setups.")
+    for candidate in (key, key.upper(), key.lower()):
+        if candidate in CAR_MODEL_PREFIXES:
+            return CAR_MODEL_PREFIXES[candidate]
+    raise ValueError(f"No hay prefijo LFS registrado para '{car_model}'.")
+
+
+def normalise_set_output_name(name: str, car_model: str) -> str:
+    prefix = resolve_car_prefix(car_model)
+    return _normalise_setup_name(name, prefix)
 
 
 def _normalise_delta_value(delta: Any) -> str:
@@ -200,7 +229,7 @@ def lfs_set_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     car_model = str(plan.get("car_model") or "").strip()
     if not car_model:
         raise ValueError("El plan de setup no define 'car_model'.")
-    prefix = _resolve_car_prefix(car_model)
+    prefix = resolve_car_prefix(car_model)
 
     if set_output is None:
         session_label = str(plan.get("session") or "setup").strip().replace(" ", "_") or "setup"
@@ -247,10 +276,13 @@ exporters_registry = {
 }
 
 __all__ = [
+    "CAR_MODEL_PREFIXES",
     "Exporter",
     "json_exporter",
     "csv_exporter",
     "markdown_exporter",
     "lfs_set_exporter",
+    "normalise_set_output_name",
+    "resolve_car_prefix",
     "exporters_registry",
 ]

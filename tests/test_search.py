@@ -18,6 +18,19 @@ from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.recommender.search import DEFAULT_DECISION_LIBRARY, SetupPlanner, objective_score
 
 
+SUPPORTED_CAR_MODELS = [
+    "XFG",
+    "XRG",
+    "RB4",
+    "FXO",
+    "FXR",
+    "XRR",
+    "FZR",
+    "FO8",
+    "BF1",
+]
+
+
 BASE_NU_F = {
     "tyres": 0.18,
     "suspension": 0.14,
@@ -149,7 +162,8 @@ def test_objective_penalises_delta_nfr_integral():
     assert score_with_micro < score_without_micro
 
 
-def test_setup_planner_converges_and_respects_bounds():
+@pytest.mark.parametrize("car_model", SUPPORTED_CAR_MODELS)
+def test_setup_planner_converges_and_respects_bounds(car_model: str):
     baseline = [
         _build_bundle(0.0, delta_nfr=10.0, si=0.55),
         _build_bundle(0.1, delta_nfr=8.0, si=0.56),
@@ -160,15 +174,40 @@ def test_setup_planner_converges_and_respects_bounds():
     ]
     microsector = _microsector()
 
+    space = DEFAULT_DECISION_LIBRARY[car_model]
+    targets = {
+        var.name: var.lower + 0.6 * (var.upper - var.lower)
+        for var in space.variables
+        if var.upper > var.lower
+    }
+
+    def _closeness(vector: Mapping[str, float]) -> float:
+        total = 0.0
+        count = 0
+        for variable in space.variables:
+            span = variable.upper - variable.lower
+            if span <= 0:
+                continue
+            target_value = targets.get(variable.name)
+            if target_value is None:
+                continue
+            distance = abs(vector.get(variable.name, 0.0) - target_value)
+            normaliser = max(span * 0.5, variable.step)
+            closeness = max(0.0, 1.0 - distance / normaliser)
+            total += closeness
+            count += 1
+        return total / max(count, 1)
+
     def simulator(vector: Mapping[str, float], _: Sequence[EPIBundle]) -> Sequence[EPIBundle]:
-        rear = vector["rear_ride_height"]
-        front = vector["front_ride_height"]
-        wing = vector["rear_wing_angle"]
-        scale = 1.0 - 0.05 * abs(rear - front)
-        si_gain = 0.015 * (rear + wing)
+        closeness = _closeness(vector)
+        balance = vector.get("rear_ride_height", 0.0) - vector.get("front_ride_height", 0.0)
+        aero = vector.get("rear_wing_angle", 0.0)
+        diff_bias = vector.get("diff_power_lock", 0.0) * 0.01
+        scale = max(0.2, 1.0 - 0.05 * abs(balance))
+        si_gain = 0.03 * closeness + 0.01 * (aero + diff_bias)
         adjusted: list[EPIBundle] = []
         for bundle in baseline:
-            delta = bundle.delta_nfr - 1.2 * rear - 0.5 * wing
+            delta = bundle.delta_nfr * (1.0 - 0.35 * closeness) - 0.25 * aero
             sense = min(1.0, bundle.sense_index + si_gain)
             adjusted.append(
                 EPIBundle(
@@ -188,12 +227,19 @@ def test_setup_planner_converges_and_respects_bounds():
         return adjusted
 
     planner = SetupPlanner()
-    plan = planner.plan(baseline, [microsector], car_model="generic_gt", simulator=simulator)
+    plan = planner.plan(baseline, [microsector], car_model=car_model, simulator=simulator)
 
-    space = DEFAULT_DECISION_LIBRARY["generic_gt"]
     for variable in space.variables:
         value = plan.decision_vector[variable.name]
         assert variable.lower <= value <= variable.upper
+
+    initial_vector = space.initial_guess()
+    assert any(
+        abs(plan.decision_vector[variable.name] - initial_vector[variable.name])
+        >= variable.step - 1e-9
+        for variable in space.variables
+    )
+    assert _closeness(plan.decision_vector) > _closeness(initial_vector)
 
     baseline_score = objective_score(baseline, [microsector])
     assert plan.objective_value > baseline_score
@@ -295,3 +341,13 @@ def test_setup_planner_reports_consistent_sensitivities():
         reported_objective = plan.sensitivities["objective_score"][variable.name]
         assert reported_si == pytest.approx(expected_si, rel=1e-2, abs=1e-4)
         assert reported_objective == pytest.approx(expected_objective, rel=1e-2, abs=1e-4)
+
+
+def test_setup_planner_rejects_unknown_car_model():
+    baseline = [
+        _build_bundle(0.0, delta_nfr=5.0, si=0.6),
+        _build_bundle(0.1, delta_nfr=4.8, si=0.61),
+    ]
+    planner = SetupPlanner()
+    with pytest.raises(ValueError):
+        planner.plan(baseline, (), car_model="UNKNOWN")

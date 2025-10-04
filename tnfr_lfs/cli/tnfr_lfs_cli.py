@@ -33,7 +33,7 @@ from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
 from ..core.resonance import analyse_modal_resonance
 from ..core.operators import orchestrate_delta_metrics
 from ..core.segmentation import Microsector, segment_microsectors
-from ..exporters import exporters_registry
+from ..exporters import exporters_registry, normalise_set_output_name
 from ..exporters.setup_plan import SetupChange, SetupPlan
 from ..io import logs
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
@@ -114,7 +114,7 @@ def _default_car_model(config: Mapping[str, Any]) -> str:
             candidate = section_cfg.get("car_model")
             if isinstance(candidate, str) and candidate.strip():
                 return candidate
-    return "generic"
+    return "XFG"
 
 
 def _default_track_name(config: Mapping[str, Any]) -> str:
@@ -1114,7 +1114,7 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     )
     write_set_parser.add_argument(
         "--car-model",
-        default=str(write_set_cfg.get("car_model", "generic_gt")),
+        default=str(write_set_cfg.get("car_model", _default_car_model(config))),
         help="Car model used to select the decision space for optimisation.",
     )
     write_set_parser.add_argument(
@@ -1590,6 +1590,12 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
 
 
 def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+    namespace.car_model = str(namespace.car_model or _default_car_model(config)).strip()
+    if not namespace.car_model:
+        raise SystemExit("Debe proporcionar un --car-model válido para generar el setup.")
+    if namespace.set_output:
+        namespace.set_output = normalise_set_output_name(namespace.set_output, namespace.car_model)
+
     records = _load_records(namespace.telemetry)
     profile_manager = ProfileManager(_resolve_profiles_path(config))
     track_name = _default_track_name(config)
