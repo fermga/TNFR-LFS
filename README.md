@@ -35,6 +35,9 @@ La documentación completa se encuentra en el directorio `docs/` y se publica co
 - [`docs/index.md`](docs/index.md): página de inicio de la documentación del toolkit TNFR × LFS.
 - [`docs/api_reference.md`](docs/api_reference.md): referencia de la API.
 - [`docs/cli.md`](docs/cli.md): guía de la interfaz de línea de comandos.
+- [`docs/setup_equivalences.md`](docs/setup_equivalences.md): tabla de
+  correspondencias que enlaza cada métrica TNFR (`ΔNFR_lat`, `ν_f`, `C(t)`) con
+  ajustes concretos de setup para preparar sesiones con coherencia.
 
 ### Plantilla de configuración del CLI
 
