@@ -183,15 +183,15 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     assert {"entry", "apex", "pianos", "exit"} <= categories
 
     entry_messages = [rec.message for rec in recommendations if rec.category == "entry"]
-    assert any("ΔNFR" in message for message in entry_messages)
-    assert any("toe" in message.lower() for message in entry_messages)
-    assert any("nodo objetivo" in message.lower() for message in entry_messages)
+    assert any("bias" in message.lower() for message in entry_messages)
+    assert any("click" in message.lower() or "psi" in message.lower() for message in entry_messages)
 
     apex_messages = [rec.message for rec in recommendations if rec.category == "apex"]
     assert any("barra" in message.lower() for message in apex_messages)
+    assert any("psi" in message.lower() for message in apex_messages)
 
     exit_messages = [rec.message for rec in recommendations if rec.category == "exit"]
-    assert any("diferencial" in message.lower() for message in exit_messages)
+    assert any("lsd" in message.lower() or "%" in message.lower() for message in exit_messages)
 
     entry_rationales = [
         recommendation.rationale for recommendation in recommendations if recommendation.category == "entry"

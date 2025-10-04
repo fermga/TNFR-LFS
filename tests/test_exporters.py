@@ -81,23 +81,23 @@ def build_setup_plan() -> SetupPlan:
         session="FP1",
         changes=(
             SetupChange(
-                parameter="rear_ride_height",
-                delta=-1.5,
-                rationale="Reduce load transfer towards the front axle",
-                expected_effect="Improved rotation mid-corner",
+                parameter="brake_bias_pct",
+                delta=2.0,
+                rationale="Rebalance braking support on entry",
+                expected_effect="+2.0% bias delante",
             ),
             SetupChange(
-                parameter="rear_wing_angle",
-                delta=2.0,
-                rationale="Stabilise the car during high speed sections",
-                expected_effect="Higher rear downforce",
+                parameter="front_arb_steps",
+                delta=-1.0,
+                rationale="Tighten rotation through apex",
+                expected_effect="-1 pasos barra delantera",
             ),
         ),
         rationales=("Telemetry indicates oscillations during entry phases",),
-        expected_effects=("Balanced aero load front to rear",),
+        expected_effects=("Optimised braking and roll balance",),
         sensitivities={
-            "sense_index": {"rear_ride_height": -0.0125, "rear_wing_angle": 0.0451},
-            "objective_score": {"rear_ride_height": 0.0312, "rear_wing_angle": -0.0148},
+            "sense_index": {"brake_bias_pct": -0.0125, "front_arb_steps": 0.0451},
+            "objective_score": {"brake_bias_pct": 0.0312, "front_arb_steps": -0.0148},
         },
         tnfr_rationale_by_node={
             "tyres": ("Ajustar presiones para estabilizar la ventana de agarre",),
@@ -122,8 +122,8 @@ def test_serialise_setup_plan_collects_unique_fields():
     assert payload["car_model"] == "generic_gt"
     assert len(payload["changes"]) == 2
     assert any("Telemetry indicates" in item for item in payload["rationales"])
-    assert any("Improved rotation" in item for item in payload["expected_effects"])
-    assert pytest.approx(payload["dsi_dparam"]["rear_wing_angle"], rel=1e-6) == 0.0451
+    assert any("Optimised braking" in item for item in payload["expected_effects"])
+    assert pytest.approx(payload["dsi_dparam"]["front_arb_steps"], rel=1e-6) == 0.0451
     assert "tyres" in payload["tnfr_rationale_by_node"]
     assert "entry" in payload["tnfr_rationale_by_phase"]
     assert "tyres" in payload["expected_effects_by_node"]
@@ -134,7 +134,7 @@ def test_markdown_exporter_renders_table_and_lists():
     plan = build_setup_plan()
     output = markdown_exporter({"setup_plan": plan})
     assert "| Cambio | Ajuste | Racional |" in output
-    assert "rear_ride_height" in output
+    assert "brake_bias_pct" in output
     assert "Telemetry indicates oscillations" in output
     assert "**dSi/dparam**" in output
     assert "**Racionales TNFR por nodo**" in output
@@ -148,8 +148,8 @@ def test_lfs_set_exporter_writes_file(tmp_path: Path, monkeypatch: pytest.Monkey
     destination = tmp_path / "LFS/data/setups/GEN_custom.set"
     assert destination.exists()
     contents = destination.read_text(encoding="utf8")
-    assert "rear_ride_height" in contents
-    assert "-1.500" in contents
+    assert "brake_bias_pct" in contents
+    assert "=+2.000" in contents
     assert "TNFR-LFS setup export" in contents
     assert str(destination) in message
 

@@ -23,7 +23,7 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
     page_a, page_b, page_c = pages
     assert "ΔNFR" in page_a and "Si" in page_a and "∇Acop" in page_a
     assert "ΔNFR" in page_b and "Modo" in page_b
-    assert ("Hint" in page_c) or ("Plan" in page_c)
+    assert ("Hint" in page_c) or ("Plan" in page_c) or ("bias" in page_c.lower())
 
 
 def test_hud_pager_cycles_on_button_click(synthetic_records):

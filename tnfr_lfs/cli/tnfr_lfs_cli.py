@@ -1492,22 +1492,45 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
     planner = SetupPlanner()
     plan = planner.plan(bundles, microsectors, car_model=namespace.car_model)
 
+    action_recommendations = [
+        rec for rec in plan.recommendations if rec.parameter and rec.delta is not None
+    ]
+
     aggregated_rationales = [rec.rationale for rec in plan.recommendations if rec.rationale]
     aggregated_effects = [rec.message for rec in plan.recommendations if rec.message]
-    if not aggregated_rationales:
-        aggregated_rationales = ["Optimización de objetivo Si/ΔNFR"]
-    if not aggregated_effects:
-        aggregated_effects = ["Mejora equilibrada del coche"]
 
-    changes = [
-        SetupChange(
-            parameter=name,
-            delta=value,
-            rationale="; ".join(aggregated_rationales),
-            expected_effect="; ".join(aggregated_effects),
+    if action_recommendations:
+        ordered_actions = sorted(
+            action_recommendations,
+            key=lambda rec: (rec.priority, -abs(rec.delta or 0.0)),
         )
-        for name, value in sorted(plan.decision_vector.items())
-    ]
+        changes = [
+            SetupChange(
+                parameter=rec.parameter or "",
+                delta=float(rec.delta or 0.0),
+                rationale=rec.rationale or "",
+                expected_effect=rec.message,
+            )
+            for rec in ordered_actions
+        ]
+        if not aggregated_rationales:
+            aggregated_rationales = [rec.rationale for rec in ordered_actions if rec.rationale]
+        if not aggregated_effects:
+            aggregated_effects = [rec.message for rec in ordered_actions if rec.message]
+    else:
+        default_rationales = aggregated_rationales or ["Optimización de objetivo Si/ΔNFR"]
+        default_effects = aggregated_effects or ["Mejora equilibrada del coche"]
+        changes = [
+            SetupChange(
+                parameter=name,
+                delta=value,
+                rationale="; ".join(default_rationales),
+                expected_effect="; ".join(default_effects),
+            )
+            for name, value in sorted(plan.decision_vector.items())
+        ]
+        aggregated_rationales = default_rationales
+        aggregated_effects = default_effects
 
     setup_plan = SetupPlan(
         car_model=namespace.car_model,
