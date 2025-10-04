@@ -5,12 +5,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import socket
+import struct
+import subprocess
+import sys
+import tempfile
 from dataclasses import asdict
 from pathlib import Path
 from statistics import mean, fmean
 from time import monotonic, sleep
-from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -226,27 +231,159 @@ def _coerce_int(value: Any) -> int | None:
         return None
 
 
-def _probe_udp_socket(host: str, port: int, timeout: float) -> Tuple[bool, str]:
-    description = f"{host}:{port}"
+_OUTSIM_PING_SIZE = struct.calcsize("<I15f")
+_OUTGAUGE_PING_SIZE = struct.calcsize("<I4s16s8s6s6sHBBfffffffIIfff16s16sI")
+
+
+def _udp_ping(host: str, port: int, timeout: float, *, expected_size: int, label: str) -> Tuple[bool, str]:
+    description = f"{label} {host}:{port}"
+    payload = bytes(expected_size)
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.settimeout(timeout)
             try:
-                sock.bind((host, port))
-            except OSError:
-                try:
-                    sock.bind(("0.0.0.0", 0))
-                except OSError:
-                    pass
-                try:
-                    sock.connect((host, port))
-                except OSError as connect_error:
-                    return False, f"No se pudo abrir UDP en {description}: {connect_error}"
-                return True, f"Socket UDP conectado a {description}"
-            return True, f"Socket UDP disponible en {description}"
+                sock.sendto(payload, (host, port))
+            except OSError as exc:
+                return False, f"No se pudo enviar ping a {description}: {exc}"
+            try:
+                data, addr = sock.recvfrom(expected_size)
+            except socket.timeout:
+                return False, f"Sin respuesta de {description} tras {timeout:.2f}s"
+            except OSError as exc:
+                return False, f"Error recibiendo respuesta de {description}: {exc}"
+            if len(data) < expected_size:
+                return False, f"Respuesta incompleta de {description}: {len(data)} bytes"
+            return True, f"{label} respondió desde {addr[0]}:{addr[1]} ({len(data)} bytes)"
     except OSError as exc:
         return False, f"No se pudo crear socket UDP para {description}: {exc}"
+
+
+def _outsim_ping(host: str, port: int, timeout: float) -> Tuple[bool, str]:
+    return _udp_ping(host, port, timeout, expected_size=_OUTSIM_PING_SIZE, label="OutSim")
+
+
+def _outgauge_ping(host: str, port: int, timeout: float) -> Tuple[bool, str]:
+    return _udp_ping(host, port, timeout, expected_size=_OUTGAUGE_PING_SIZE, label="OutGauge")
+
+
+def _recv_exact(sock: socket.socket, count: int, *, timeout: float, label: str) -> bytes:
+    deadline = monotonic() + timeout
+    data = bytearray()
+    while len(data) < count:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"Sin respuesta de {label}")
+        sock.settimeout(remaining)
+        chunk = sock.recv(count - len(data))
+        if not chunk:
+            raise ConnectionError(f"Conexión cerrada por {label}")
+        data.extend(chunk)
+    return bytes(data)
+
+
+def _insim_handshake(host: str, port: int, timeout: float) -> Tuple[bool, str]:
+    description = f"InSim {host}:{port}"
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            padded_name = "TNFR Diagnose".encode("utf8").ljust(16, b"\0")
+            keepalive_ms = int(max(0.5, timeout) * 1000)
+            packet = InSimClient.ISI_STRUCT.pack(
+                InSimClient.ISI_STRUCT.size,
+                InSimClient.ISP_ISI,
+                0,
+                0,
+                padded_name,
+                InSimClient.INSIM_VERSION,
+                ord("!"),
+                0,
+                InSimClient.ISF_LOCAL,
+                keepalive_ms,
+            )
+            sock.sendall(packet)
+            header = _recv_exact(sock, 1, timeout=timeout, label=description)
+            size = header[0]
+            payload = _recv_exact(sock, size - 1, timeout=timeout, label=description)
+            data = header + payload
+            unpacked = InSimClient.VER_STRUCT.unpack(data)
+            if unpacked[1] != InSimClient.ISP_VER:
+                return False, f"Respuesta inesperada de {description}"
+            if unpacked[4] != InSimClient.INSIM_VERSION:
+                return False, f"Versión InSim incompatible en {description}"
+            return True, f"InSim respondió con versión {unpacked[4]}"
+    except TimeoutError as exc:
+        return False, f"{exc}"
+    except (OSError, ConnectionError) as exc:
+        return False, f"Error en handshake con {description}: {exc}"
+
+
+def _copy_to_clipboard(commands: Iterable[str]) -> bool:
+    commands_list = [command.strip() for command in commands if command.strip()]
+    if not commands_list:
+        return False
+    payload = "\n".join(commands_list)
+    try:
+        if sys.platform == "darwin" and shutil.which("pbcopy"):
+            subprocess.run(["pbcopy"], input=payload.encode("utf8"), check=True)
+            return True
+        if os.name == "nt":
+            completed = subprocess.run(
+                "clip",
+                input=payload.encode("utf-16le"),
+                check=True,
+                shell=True,
+            )
+            return completed.returncode == 0
+        if shutil.which("wl-copy"):
+            subprocess.run(["wl-copy"], input=payload.encode("utf8"), check=True)
+            return True
+        if shutil.which("xclip"):
+            subprocess.run(
+                ["xclip", "-selection", "clipboard"],
+                input=payload.encode("utf8"),
+                check=True,
+            )
+            return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return False
+
+
+def _share_disabled_commands(commands: Iterable[str]) -> None:
+    command_list = [command for command in commands if command]
+    if not command_list:
+        return
+    print("Comandos recomendados para habilitar la telemetría:")
+    for command in command_list:
+        print(f"  {command}")
+    if _copy_to_clipboard(command_list):
+        print("Los comandos se han copiado al portapapeles.")
+    else:
+        print("Copia manual necesaria: no se pudo acceder al portapapeles.")
+
+
+def _check_setups_directory(cfg_path: Path) -> Tuple[bool, str]:
+    setups_dir = cfg_path.parent.parent / "data" / "setups"
+    if not setups_dir.exists():
+        return False, f"No se encontró el directorio de setups en {setups_dir}"
+    if not setups_dir.is_dir():
+        return False, f"La ruta de setups no es un directorio: {setups_dir}"
+    try:
+        with tempfile.NamedTemporaryFile(dir=setups_dir, delete=False) as handle:
+            test_path = Path(handle.name)
+            handle.write(b"tnfr")
+    except OSError as exc:
+        suggestion = (
+            "Verifica permisos con `chmod u+w` o ejecuta LFS con privilegios de escritura."
+        )
+        return False, f"No hay permisos de escritura en {setups_dir}: {exc}. {suggestion}"
+    else:
+        try:
+            test_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return True, f"Permisos de escritura confirmados en {setups_dir}"
 
 
 def _phase_tolerances(
@@ -1222,48 +1359,78 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
     timeout = float(namespace.timeout)
     errors: List[str] = []
     successes: List[str] = []
+    commands: List[str] = []
 
+    outsim_host = sections["OutSim"].get("IP", "127.0.0.1")
+    outsim_port = _coerce_int(sections["OutSim"].get("Port"))
     outsim_mode = _coerce_int(sections["OutSim"].get("Mode") or sections["OutSim"].get("Enable"))
     if outsim_mode != 1:
-        errors.append("OutSim Mode debe ser 1 para habilitar la telemetría")
-    outsim_port = _coerce_int(sections["OutSim"].get("Port"))
-    outsim_host = sections["OutSim"].get("IP", "127.0.0.1")
-    if outsim_port is None:
+        suggested_port = outsim_port if outsim_port is not None else 4123
+        command = f"/outsim 1 {outsim_host} {suggested_port}"
+        commands.append(command)
+        errors.append(
+            "OutSim Mode debe ser 1 para habilitar la telemetría. "
+            f"Ejecuta `{command}` dentro de LFS."
+        )
+    elif outsim_port is None:
         errors.append("OutSim Port no está definido en cfg.txt")
-    elif outsim_mode == 1:
-        ok, message = _probe_udp_socket(outsim_host, outsim_port, timeout)
+    else:
+        ok, message = _outsim_ping(outsim_host, outsim_port, timeout)
         if ok:
-            successes.append(f"OutSim listo: {message}")
+            successes.append(message)
         else:
-            errors.append(f"OutSim falló: {message}")
+            errors.append(message)
 
+    outgauge_host = sections["OutGauge"].get("IP", outsim_host)
+    outgauge_port = _coerce_int(sections["OutGauge"].get("Port"))
     outgauge_mode = _coerce_int(
         sections["OutGauge"].get("Mode") or sections["OutGauge"].get("Enable")
     )
     if outgauge_mode != 1:
-        errors.append("OutGauge Mode debe ser 1 para habilitar la transmisión")
-    outgauge_port = _coerce_int(sections["OutGauge"].get("Port"))
-    outgauge_host = sections["OutGauge"].get("IP", outsim_host)
-    if outgauge_port is None:
+        suggested_port = outgauge_port if outgauge_port is not None else 3000
+        command = f"/outgauge 1 {outgauge_host} {suggested_port}"
+        commands.append(command)
+        errors.append(
+            "OutGauge Mode debe ser 1 para habilitar la transmisión. "
+            f"Ejecuta `{command}` dentro de LFS."
+        )
+    elif outgauge_port is None:
         errors.append("OutGauge Port no está definido en cfg.txt")
-    elif outgauge_mode == 1:
-        ok, message = _probe_udp_socket(outgauge_host, outgauge_port, timeout)
+    else:
+        ok, message = _outgauge_ping(outgauge_host, outgauge_port, timeout)
         if ok:
-            successes.append(f"OutGauge listo: {message}")
+            successes.append(message)
         else:
-            errors.append(f"OutGauge falló: {message}")
+            errors.append(message)
 
-    insim_port = _coerce_int(sections["InSim"].get("Port"))
     insim_host = sections["InSim"].get("IP", outsim_host)
+    insim_port = _coerce_int(sections["InSim"].get("Port"))
+    insim_command: str | None = None
     if insim_port is not None:
-        ok, message = _probe_udp_socket(insim_host, insim_port, timeout)
+        insim_command = f"/insim {insim_port}"
+        ok, message = _insim_handshake(insim_host, insim_port, timeout)
         if ok:
-            successes.append(f"InSim alcanzable: {message}")
+            successes.append(message)
         else:
-            errors.append(f"InSim falló: {message}")
+            commands.append(insim_command)
+            errors.append(f"{message}. Ejecuta `{insim_command}` en el chat de LFS para reintentar.")
+    else:
+        insim_command = "/insim 29999"
+        commands.append(insim_command)
+        errors.append(
+            "InSim Port no está definido en cfg.txt. "
+            f"Ejecuta `{insim_command}` y verifica que Live for Speed confirme la conexión."
+        )
+
+    setups_ok, setups_message = _check_setups_directory(cfg_path)
+    if setups_ok:
+        successes.append(setups_message)
+    else:
+        errors.append(setups_message)
 
     header = f"Diagnóstico de cfg.txt en {cfg_path}"
     if errors:
+        _share_disabled_commands(commands)
         summary = [header, "Estado: errores detectados"]
         summary.extend(f"- {error}" for error in errors)
         if successes:
@@ -1275,6 +1442,7 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
     summary = [header, "Estado: correcto"]
     summary.extend(f"- {success}" for success in successes)
+    _share_disabled_commands(commands)
     message = "\n".join(summary)
     print(message)
     return message
