@@ -198,6 +198,17 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             step=0.5,
         ),
         PhaseActionTemplate(
+            metric="delta_nfr_lateral",
+            parameter="front_spring_stiffness",
+            scale=-900.0,
+            min_value=-35.0,
+            max_value=35.0,
+            message_pattern="{delta:+.1f} N/mm muelle delantero (νf_susp · ΔNFR⊥)",
+            step=0.5,
+            nodes=("suspension",),
+            priority_offset=-2,
+        ),
+        PhaseActionTemplate(
             metric="nu_f",
             parameter="front_rebound_clicks",
             scale=-0.5,
@@ -272,6 +283,17 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             max_value=5.0,
             message_pattern="{delta:+.0f} pasos barra delantera",
             step=1.0,
+        ),
+        PhaseActionTemplate(
+            metric="delta_nfr_lateral",
+            parameter="front_spring_stiffness",
+            scale=-900.0,
+            min_value=-35.0,
+            max_value=35.0,
+            message_pattern="{delta:+.1f} N/mm muelle delantero (νf_susp · ΔNFR⊥)",
+            step=0.5,
+            nodes=("suspension",),
+            priority_offset=-2,
         ),
         PhaseActionTemplate(
             metric="delta_nfr",
@@ -371,6 +393,17 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             step=5.0,
         ),
         PhaseActionTemplate(
+            metric="delta_nfr_lateral",
+            parameter="rear_spring_stiffness",
+            scale=-900.0,
+            min_value=-35.0,
+            max_value=35.0,
+            message_pattern="{delta:+.1f} N/mm muelle trasero (νf_susp · ΔNFR⊥)",
+            step=0.5,
+            nodes=("suspension",),
+            priority_offset=-2,
+        ),
+        PhaseActionTemplate(
             metric="delta_nfr",
             parameter="rear_ride_height",
             scale=-0.5,
@@ -446,6 +479,8 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
         ),
     ),
 }
+
+_SPRING_PARAMETERS = {"front_spring_stiffness", "rear_spring_stiffness"}
 
 _OPERATOR_NODE_ACTIONS: Dict[str, Mapping[str, Mapping[str, str]]] = dict(_BASE_PHASE_ACTIONS)
 for legacy, phases in LEGACY_PHASE_MAP.items():
@@ -1066,6 +1101,12 @@ def _phase_action_recommendations(
             f"{base_rationale} Acción sugerida: {message}. Consulta "
             f"{MANUAL_REFERENCES[reference_key]} para aplicar el ajuste."
         )
+        if template.parameter in _SPRING_PARAMETERS:
+            rationale = (
+                f"{base_rationale} Acción sugerida: {message}. νf_susp pondera el ajuste "
+                f"para homogeneizar ΔNFR⊥ en la banda de G activa. Consulta "
+                f"{MANUAL_REFERENCES[reference_key]} para aplicar el ajuste."
+            )
         recommendations.append(
             Recommendation(
                 category=category,
@@ -1476,6 +1517,54 @@ class PhaseDeltaDeviationRule:
                     f"{phase_summary} La tolerancia definida para {context.profile_label} "
                     f"es ±{tolerance:.2f}."
                 )
+            spring_recommendations: List[Recommendation] = []
+            if axis_bias == "lateral":
+                suspension_nu_f: List[float] = []
+                for bundle in samples:
+                    suspension = getattr(bundle, "suspension", None)
+                    if suspension is None:
+                        continue
+                    nu_f_value = getattr(suspension, "nu_f", None)
+                    if nu_f_value is None:
+                        continue
+                    try:
+                        suspension_nu_f.append(float(nu_f_value))
+                    except (TypeError, ValueError):
+                        continue
+                if suspension_nu_f:
+                    target_nu_f = float(getattr(goal, "nu_f_target", 0.0))
+                    actual_nu_f = mean(suspension_nu_f)
+                    nu_f_delta = actual_nu_f - target_nu_f
+                    nu_f_tolerance = max(0.03, abs(target_nu_f) * 0.15)
+                    if abs(nu_f_delta) > nu_f_tolerance:
+                        spring_signal = lat_dev * nu_f_delta
+                        if abs(spring_signal) > 1e-6:
+                            spring_rationale = (
+                                f"{base_rationale} νf_susp objetivo {target_nu_f:.2f} frente al medido "
+                                f"{actual_nu_f:.2f} ({nu_f_delta:+.2f}). ΔNFR⊥ medio {avg_lat:.2f} "
+                                f"(objetivo {target_lat:.2f}, Δ {lat_dev:+.2f}). El ajuste del muelle busca "
+                                "homogeneizar ΔNFR⊥ en la banda de G activa."
+                            )
+                            spring_recommendations = _phase_action_recommendations(
+                                phase=self.phase,
+                                category=self.category,
+                                metric="delta_nfr_lateral",
+                                raw_value=spring_signal,
+                                base_rationale=spring_rationale,
+                                priority=self.priority - 2,
+                                reference_key=self.reference_key,
+                                node="suspension",
+                            )
+                            desired_parameter = (
+                                "rear_spring_stiffness" if phase_key == "exit" else "front_spring_stiffness"
+                            )
+                            spring_recommendations = [
+                                rec
+                                for rec in spring_recommendations
+                                if rec.parameter == desired_parameter
+                            ]
+            if spring_recommendations:
+                recommendations.extend(spring_recommendations)
             adjustments: List[Recommendation] = []
             if delta_triggered:
                 adjustments = _phase_action_recommendations(
