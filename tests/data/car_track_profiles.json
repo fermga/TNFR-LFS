@@ -5,6 +5,7 @@
       "apex_delta_tolerance": 0.6,
       "exit_delta_tolerance": 1.2,
       "piano_delta_tolerance": 1.5,
+      "rho_detune_threshold": 0.68,
       "phase_weights": {
         "entry": {"__default__": 1.0, "tyres": 1.2},
         "apex": {"__default__": 1.0},
@@ -17,7 +18,8 @@
       "entry_delta_tolerance": 0.7,
       "apex_delta_tolerance": 0.5,
       "exit_delta_tolerance": 1.0,
-      "piano_delta_tolerance": 1.1
+      "piano_delta_tolerance": 1.1,
+      "rho_detune_threshold": 0.65
     }
   }
 }

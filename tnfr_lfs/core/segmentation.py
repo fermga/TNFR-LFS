@@ -31,8 +31,10 @@ from .epi import (
     resolve_nu_f_by_node,
 )
 from .epi_models import EPIBundle
+from .metrics import compute_window_metrics
 from .operators import mutation_operator, recursivity_operator
 from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias
+from .resonance import estimate_excitation_frequency
 from .spectrum import phase_alignment
 
 # Thresholds derived from typical race car dynamics.  They can be tuned in
@@ -56,6 +58,8 @@ class Goal:
     target_delta_nfr: float
     target_sense_index: float
     nu_f_target: float
+    nu_exc_target: float
+    rho_target: float
     target_phase_lag: float
     target_phase_alignment: float
     measured_phase_lag: float
@@ -285,6 +289,17 @@ def segment_microsectors(
             "style_index": avg_si,
             "grip_rel": grip_rel,
         }
+        window_metrics = compute_window_metrics(records[start : end + 1])
+        filtered_measures.update(
+            {
+                "d_nfr_couple": window_metrics.d_nfr_couple,
+                "d_nfr_res": window_metrics.d_nfr_res,
+                "d_nfr_flat": window_metrics.d_nfr_flat,
+                "nu_f": window_metrics.nu_f,
+                "nu_exc": window_metrics.nu_exc,
+                "rho": window_metrics.rho,
+            }
+        )
         rec_trace: Tuple[Mapping[str, float | str | None], ...] = ()
         mutation_details: Mapping[str, object] | None = None
         if rec_state is not None:
@@ -348,12 +363,19 @@ def segment_microsectors(
                 key: float(value)
                 for key, value in micro_state_entry.get("filtered", {}).items()
             }
-            if "thermal_load" not in filtered_measures:
-                filtered_measures["thermal_load"] = avg_vertical_load
-            if "style_index" not in filtered_measures:
-                filtered_measures["style_index"] = avg_si
-            if "grip_rel" not in filtered_measures:
-                filtered_measures["grip_rel"] = grip_rel
+            defaults = {
+                "thermal_load": avg_vertical_load,
+                "style_index": avg_si,
+                "grip_rel": grip_rel,
+                "d_nfr_couple": window_metrics.d_nfr_couple,
+                "d_nfr_res": window_metrics.d_nfr_res,
+                "d_nfr_flat": window_metrics.d_nfr_flat,
+                "nu_f": window_metrics.nu_f,
+                "nu_exc": window_metrics.nu_exc,
+                "rho": window_metrics.rho,
+            }
+            for key, value in defaults.items():
+                filtered_measures.setdefault(key, value)
             rec_trace = tuple(
                 {
                     trace_key: (
@@ -670,6 +692,9 @@ def _build_goals(
         else:
             nu_f_target = 0.0
 
+        nu_exc_target = estimate_excitation_frequency(phase_records)
+        rho_target = nu_exc_target / nu_f_target if nu_f_target > 1e-9 else 0.0
+
         sample_count = max(1, len(indices))
         dominant_intensity = total_weight / sample_count
         influence_factor = 1.0 + min(2.0, nu_f_target) + min(1.5, dominant_intensity / 5.0)
@@ -695,6 +720,8 @@ def _build_goals(
                 target_delta_nfr=avg_delta,
                 target_sense_index=avg_si,
                 nu_f_target=nu_f_target,
+                nu_exc_target=nu_exc_target,
+                rho_target=rho_target,
                 target_phase_lag=target_lag,
                 target_phase_alignment=target_alignment,
                 measured_phase_lag=measured_lag,

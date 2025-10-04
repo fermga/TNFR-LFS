@@ -95,6 +95,7 @@ class ProfileRecord:
             apex_delta_tolerance=self.tolerances.apex,
             exit_delta_tolerance=self.tolerances.exit,
             piano_delta_tolerance=self.tolerances.piano,
+            rho_detune_threshold=base_profile.rho_detune_threshold,
             phase_targets=base_profile.phase_targets,
             phase_weights=merged_weights,
         )

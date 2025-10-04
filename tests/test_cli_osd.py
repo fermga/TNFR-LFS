@@ -62,7 +62,7 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
     assert "ΔNFR" in page_a and "∇Acop" in page_a
     if "Sin microsector activo" not in page_a:
         assert any(char in page_a for char in "▁▂▃▄▅▆▇█")
-    assert "Líder" in page_b and "ν_f" in page_b
+    assert "Líder" in page_b and "ν_f" in page_b and "ν_exc" in page_b
     assert "dSi" in page_c
     assert "Aplicar" in page_d
 
@@ -283,7 +283,8 @@ def test_render_page_a_includes_sparkline_when_active_phase():
     microsector = SimpleNamespace(index=0, phase_samples=phase_samples)
     goal = SimpleNamespace(target_delta_nfr=0.4, target_sense_index=0.8)
     active = osd_module.ActivePhase(microsector=microsector, phase="apex3a", goal=goal)
-    window_metrics = WindowMetrics(0.7, 0.1, -0.2, 0.05, 1.2, 0.0, 1.0)
+    window_metrics = WindowMetrics(0.7, 0.1, -0.2, 0.05, 1.2, 0.9, 0.75, 0.0, 1.0)
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
     assert "Fases Δ" in output
     assert any(char in output for char in "▁▂▃▄▅▆▇█")
+    assert "ρ" in output

@@ -8,6 +8,7 @@ from typing import Iterable, Sequence
 
 from .epi import TelemetryRecord
 from .spectrum import phase_alignment
+from .resonance import estimate_excitation_frequency
 
 __all__ = ["WindowMetrics", "compute_window_metrics"]
 
@@ -21,6 +22,8 @@ class WindowMetrics:
     d_nfr_res: float
     d_nfr_flat: float
     nu_f: float
+    nu_exc: float
+    rho: float
     phase_lag: float
     phase_alignment: float
 
@@ -39,7 +42,7 @@ def compute_window_metrics(
     """
 
     if not records:
-        return WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+        return WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
 
     si_value = mean(record.si for record in records)
 
@@ -54,6 +57,8 @@ def compute_window_metrics(
     if len(selected) < 4:
         selected = list(records)
     freq, lag, alignment = phase_alignment(selected)
+    nu_exc = estimate_excitation_frequency(records)
+    rho = nu_exc / freq if freq > 1e-9 else 0.0
 
     couple, resonance, flatten = _segment_gradients(records, segments=3)
 
@@ -63,6 +68,8 @@ def compute_window_metrics(
         d_nfr_res=resonance,
         d_nfr_flat=flatten,
         nu_f=freq,
+        nu_exc=nu_exc,
+        rho=rho,
         phase_lag=lag,
         phase_alignment=alignment,
     )
