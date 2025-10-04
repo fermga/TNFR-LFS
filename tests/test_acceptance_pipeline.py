@@ -14,6 +14,7 @@ from tnfr_lfs.core.operators import (
     recursivity_operator,
     resonance_operator,
 )
+from tnfr_lfs.core.phases import expand_phase_alias
 
 
 def _is_monotonic(series: list[float]) -> bool:
@@ -78,7 +79,14 @@ def test_acceptance_pipeline_monotonicity_and_coupling(
     assert variability and variability[0]["overall"]["sense_index"]["variance"] >= 0.0
 
     occupancy = acceptance_microsectors[0].window_occupancy
-    assert pytest.approx(mean(occupancy["apex"].values()), rel=1e-3) == 64.86666666666667
+    apex_aliases = expand_phase_alias("apex")
+    apex_values: list[float] = []
+    for phase in apex_aliases:
+        phase_data = occupancy.get(phase)
+        if phase_data:
+            apex_values.extend(phase_data.values())
+    assert apex_values
+    assert pytest.approx(mean(apex_values), rel=1e-3) == 64.86666666666667
 
 
 def test_acceptance_nu_f_weighting_penalises_fast_nodes(acceptance_microsectors) -> None:

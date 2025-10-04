@@ -26,6 +26,7 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
+from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias
 from tnfr_lfs.core.operators import (
     DissonanceBreakdown,
     acoplamiento_operator,
@@ -104,10 +105,12 @@ def _build_record(
 
 
 def _build_goal(phase: str, target_delta: float, *, archetype: str = "equilibrio") -> Goal:
+    aliases = expand_phase_alias(phase)
+    actual_phase = aliases[-1] if aliases else phase
     return Goal(
-        phase=phase,
+        phase=actual_phase,
         archetype=archetype,
-        description=f"Meta sintética para {phase}",
+        description=f"Meta sintética para {actual_phase}",
         target_delta_nfr=target_delta,
         target_sense_index=0.9,
         nu_f_target=0.0,
@@ -128,32 +131,39 @@ def _build_microsector(
     support_event: bool = True,
     archetype: str = "apoyo",
 ) -> Microsector:
-    goals = (
-        _build_goal("entry", 0.0, archetype=archetype),
-        _build_goal("apex", apex_target, archetype=archetype),
-        _build_goal("exit", 0.0, archetype=archetype),
+    target_map = {
+        "entry1": 0.0,
+        "entry2": 0.0,
+        "apex3a": 0.0,
+        "apex3b": apex_target,
+        "exit4": 0.0,
+    }
+    goals = tuple(
+        _build_goal(phase, target_map.get(phase, 0.0), archetype=archetype)
+        for phase in PHASE_SEQUENCE
     )
+    boundary_start = {
+        "entry1": entry_idx,
+        "entry2": entry_idx + 1,
+        "apex3a": apex_idx,
+        "apex3b": apex_idx + 1,
+        "exit4": exit_idx,
+    }
     phase_boundaries = {
-        "entry": (entry_idx, entry_idx + 1),
-        "apex": (apex_idx, apex_idx + 1),
-        "exit": (exit_idx, exit_idx + 1),
+        phase: (boundary_start.get(phase, entry_idx), boundary_start.get(phase, entry_idx) + 1)
+        for phase in PHASE_SEQUENCE
     }
-    phase_samples = {
-        "entry": (entry_idx,),
-        "apex": (apex_idx,),
-        "exit": (exit_idx,),
-    }
-    dominant_nodes = {phase: ("tyres",) for phase in ("entry", "apex", "exit")}
-    phase_weights = {phase: {} for phase in ("entry", "apex", "exit")}
+    phase_samples = {phase: (phase_boundaries[phase][0],) for phase in PHASE_SEQUENCE}
+    dominant_nodes = {phase: ("tyres",) for phase in PHASE_SEQUENCE}
+    phase_weights = {phase: {} for phase in PHASE_SEQUENCE}
     filtered_measures = {
         "thermal_load": 5000.0,
         "style_index": 0.9,
         "grip_rel": 1.0,
     }
     window_occupancy = {
-        "entry": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
-        "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
-        "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
+        phase: {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0}
+        for phase in PHASE_SEQUENCE
     }
     return Microsector(
         index=index,
@@ -492,10 +502,10 @@ def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
     assert breakdown.total_events == 2
     assert breakdown.useful_events == 1
     assert breakdown.parasitic_events == 1
-    assert breakdown.useful_magnitude == pytest.approx(0.1)
-    assert breakdown.parasitic_magnitude == pytest.approx(0.3)
-    assert breakdown.useful_percentage == pytest.approx(25.0)
-    assert breakdown.parasitic_percentage == pytest.approx(75.0)
+    assert breakdown.useful_magnitude == pytest.approx(0.4)
+    assert breakdown.parasitic_magnitude == pytest.approx(0.25)
+    assert breakdown.useful_percentage == pytest.approx(61.53846153846154)
+    assert breakdown.parasitic_percentage == pytest.approx(38.46153846153846)
 
 
 def test_emission_operator_clamps_sense_index():

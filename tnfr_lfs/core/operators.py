@@ -14,6 +14,7 @@ from .epi import (
     resolve_nu_f_by_node,
 )
 from .epi_models import EPIBundle
+from .phases import expand_phase_alias, phase_family
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
     from .segmentation import Microsector
@@ -133,14 +134,20 @@ def dissonance_breakdown_operator(
         for microsector in microsectors:
             if not microsector.support_event:
                 continue
-            apex_goal = next(
-                (goal for goal in microsector.goals if goal.phase == "apex"),
-                None,
-            )
+            apex_goal = None
+            for apex_phase in expand_phase_alias("apex"):
+                apex_goal = next(
+                    (goal for goal in microsector.goals if goal.phase == apex_phase),
+                    None,
+                )
+                if apex_goal is not None:
+                    break
             if apex_goal is None:
                 continue
-            indices = microsector.phase_samples.get("apex") or ()
-            apex_indices = [idx for idx in indices if 0 <= idx < bundle_count]
+            apex_indices: List[int] = []
+            for apex_phase in expand_phase_alias("apex"):
+                indices = microsector.phase_samples.get(apex_phase) or ()
+                apex_indices.extend(idx for idx in indices if 0 <= idx < bundle_count)
             if not apex_indices:
                 continue
             tyre_delta = [bundles[idx].tyres.delta_nfr for idx in apex_indices]

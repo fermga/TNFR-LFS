@@ -19,6 +19,7 @@ from ..acquisition import (
 )
 from ..core.epi import EPIExtractor, TelemetryRecord
 from ..core.operators import DissonanceBreakdown, orchestrate_delta_metrics
+from ..core.phases import PHASE_SEQUENCE, phase_family
 from ..core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
 from ..core.segmentation import Goal, Microsector, segment_microsectors
 from ..exporters.setup_plan import SetupChange, SetupPlan
@@ -33,6 +34,14 @@ NODE_AXIS_LABELS = {
     "yaw": "guiñada",
     "roll": "balanceo",
     "pitch": "cabeceo",
+}
+
+HUD_PHASE_LABELS = {
+    "entry1": "Entrada 1",
+    "entry2": "Entrada 2",
+    "apex3a": "Vértice 3A",
+    "apex3b": "Vértice 3B",
+    "exit4": "Salida 4",
 }
 
 
@@ -186,8 +195,9 @@ class TelemetryHUD:
         )
         phase_hint = None
         if active:
+            active_family = phase_family(active.phase)
             for recommendation in recommendations:
-                if recommendation.category == active.phase:
+                if phase_family(recommendation.category) == active_family:
                     phase_hint = recommendation.message
                     break
 
@@ -225,7 +235,10 @@ def _resolve_active_phase(
     microsectors: Sequence[Microsector], sample_index: int
 ) -> ActivePhase | None:
     for microsector in reversed(microsectors):
-        for phase, bounds in microsector.phase_boundaries.items():
+        for phase in PHASE_SEQUENCE:
+            bounds = microsector.phase_boundaries.get(phase)
+            if bounds is None:
+                continue
             start, end = bounds
             if start <= sample_index < end:
                 goal = next((goal for goal in microsector.goals if goal.phase == phase), None)
@@ -246,7 +259,7 @@ def _render_page_a(
         )
 
     curve_label = f"Curva {active.microsector.index + 1}"
-    phase_label = active.phase.capitalize()
+    phase_label = HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize())
     current_delta = getattr(bundle, "delta_nfr", 0.0)
     goal_delta = active.goal.target_delta_nfr if active.goal else 0.0
     useful = breakdown.useful_percentage
@@ -288,11 +301,12 @@ def _render_page_c(
         lines.append(_truncate_line(f"Hint {phase_hint}"))
     elif active:
         tolerance = thresholds.tolerance_for_phase(active.phase)
+        phase_label = HUD_PHASE_LABELS.get(active.phase, active.phase)
         lines.append(
             _truncate_line(
-                f"Hint objetivo {active.phase}: {active.goal.target_delta_nfr:+.2f} ±{tolerance:.2f}"
+                f"Hint objetivo {phase_label}: {active.goal.target_delta_nfr:+.2f} ±{tolerance:.2f}"
                 if active.goal
-                else f"Perfil {active.phase} ±{tolerance:.2f}"
+                else f"Perfil {phase_label} ±{tolerance:.2f}"
             )
         )
     if plan and plan.changes:

@@ -1,0 +1,42 @@
+"""Shared definitions for TNFR phase nomenclature."""
+
+from __future__ import annotations
+
+from typing import Tuple
+
+PHASE_SEQUENCE: Tuple[str, ...] = ("entry1", "entry2", "apex3a", "apex3b", "exit4")
+
+LEGACY_PHASE_MAP: dict[str, Tuple[str, ...]] = {
+    "entry": ("entry1", "entry2"),
+    "apex": ("apex3a", "apex3b"),
+    "exit": ("exit4",),
+}
+
+_PHASE_TO_FAMILY: dict[str, str] = {}
+for legacy, phases in LEGACY_PHASE_MAP.items():
+    for phase in phases:
+        _PHASE_TO_FAMILY[phase] = legacy
+for phase in PHASE_SEQUENCE:
+    _PHASE_TO_FAMILY.setdefault(phase, phase)
+
+
+def normalise_phase_key(phase: str) -> str:
+    """Return the canonical lower-case identifier for ``phase``."""
+
+    return str(phase).lower()
+
+
+def expand_phase_alias(phase: str) -> Tuple[str, ...]:
+    """Return all concrete phases associated with ``phase``."""
+
+    key = normalise_phase_key(phase)
+    if key in LEGACY_PHASE_MAP:
+        return LEGACY_PHASE_MAP[key] + (key,)
+    return (key,)
+
+
+def phase_family(phase: str) -> str:
+    """Return the legacy family identifier for ``phase``."""
+
+    key = normalise_phase_key(phase)
+    return _PHASE_TO_FAMILY.get(key, key)
