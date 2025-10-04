@@ -14,7 +14,13 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_lfs.exporters import csv_exporter, json_exporter, lfs_set_exporter, markdown_exporter
+from tnfr_lfs.exporters import (
+    CAR_MODEL_PREFIXES,
+    csv_exporter,
+    json_exporter,
+    lfs_set_exporter,
+    markdown_exporter,
+)
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan, serialise_setup_plan
 
 
@@ -27,6 +33,19 @@ BASE_NU_F = {
     "track": 0.08,
     "driver": 0.05,
 }
+
+
+SUPPORTED_CAR_MODELS = [
+    "XFG",
+    "XRG",
+    "RB4",
+    "FXO",
+    "FXR",
+    "XRR",
+    "FZR",
+    "FO8",
+    "BF1",
+]
 
 
 def build_payload():
@@ -75,9 +94,9 @@ def test_csv_exporter_renders_rows():
     assert len(lines) == 3
 
 
-def build_setup_plan() -> SetupPlan:
+def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
     return SetupPlan(
-        car_model="generic_gt",
+        car_model=car_model,
         session="FP1",
         changes=(
             SetupChange(
@@ -119,7 +138,7 @@ def build_setup_plan() -> SetupPlan:
 def test_serialise_setup_plan_collects_unique_fields():
     plan = build_setup_plan()
     payload = serialise_setup_plan(plan)
-    assert payload["car_model"] == "generic_gt"
+    assert payload["car_model"] == "XFG"
     assert len(payload["changes"]) == 2
     assert any("Telemetry indicates" in item for item in payload["rationales"])
     assert any("Optimised braking" in item for item in payload["expected_effects"])
@@ -141,11 +160,15 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "**Efectos esperados por fase**" in output
 
 
-def test_lfs_set_exporter_writes_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("car_model", SUPPORTED_CAR_MODELS)
+def test_lfs_set_exporter_writes_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, car_model: str
+) -> None:
     monkeypatch.chdir(tmp_path)
-    plan = build_setup_plan()
-    message = lfs_set_exporter({"setup_plan": plan, "set_output": "GEN_custom"})
-    destination = tmp_path / "LFS/data/setups/GEN_custom.set"
+    prefix = CAR_MODEL_PREFIXES[car_model]
+    plan = build_setup_plan(car_model)
+    message = lfs_set_exporter({"setup_plan": plan, "set_output": f"{prefix}_custom"})
+    destination = tmp_path / f"LFS/data/setups/{prefix}_custom.set"
     assert destination.exists()
     contents = destination.read_text(encoding="utf8")
     assert "brake_bias_pct" in contents
@@ -154,11 +177,16 @@ def test_lfs_set_exporter_writes_file(tmp_path: Path, monkeypatch: pytest.Monkey
     assert str(destination) in message
 
 
-def test_lfs_set_exporter_validates_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("car_model", SUPPORTED_CAR_MODELS)
+def test_lfs_set_exporter_validates_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, car_model: str
+) -> None:
     monkeypatch.chdir(tmp_path)
-    plan = build_setup_plan()
+    plan = build_setup_plan(car_model)
+    prefix = CAR_MODEL_PREFIXES[car_model]
+    wrong_prefix = "XFG" if prefix != "XFG" else "FXR"
     with pytest.raises(ValueError):
-        lfs_set_exporter({"setup_plan": plan, "set_output": "invalid"})
+        lfs_set_exporter({"setup_plan": plan, "set_output": f"{wrong_prefix}_invalid"})
 
 
 def test_quickstart_reports_include_new_metrics(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -56,7 +56,7 @@ def test_baseline_generates_timestamped_run(
     runs = list(runs_dir.glob("*.jsonl"))
     assert len(runs) == 1
     run_path = runs[0]
-    assert re.match(r"generic_generic_\d{8}_\d{6}_\d{6}\.jsonl$", run_path.name)
+    assert re.match(r"xfg_generic_\d{8}_\d{6}_\d{6}\.jsonl$", run_path.name)
     assert "Baseline saved" in result
     assert str(run_path.relative_to(tmp_path)) in captured.out
 

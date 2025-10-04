@@ -149,44 +149,139 @@ def objective_score(results: Sequence[EPIBundle], microsectors: Sequence[Microse
     return mean_si - 0.05 * nfr_penalty
 
 
+_ROAD_ALIGNMENT = (
+    ("front_camber_deg", -1.6, 1.6, 0.1),
+    ("rear_camber_deg", -1.4, 1.4, 0.1),
+    ("front_toe_deg", -0.6, 0.6, 0.05),
+    ("rear_toe_deg", -0.6, 0.6, 0.05),
+    ("caster_deg", -1.0, 1.0, 0.25),
+)
+
+_ROAD_SUSPENSION = (
+    ("front_spring_stiffness", -25.0, 25.0, 1.0),
+    ("rear_spring_stiffness", -25.0, 25.0, 1.0),
+    ("front_rebound_clicks", -8.0, 8.0, 1.0),
+    ("rear_rebound_clicks", -8.0, 8.0, 1.0),
+    ("front_compression_clicks", -8.0, 8.0, 1.0),
+    ("rear_compression_clicks", -8.0, 8.0, 1.0),
+    ("front_arb_steps", -6.0, 6.0, 1.0),
+    ("rear_arb_steps", -6.0, 6.0, 1.0),
+    ("front_ride_height", -15.0, 15.0, 0.5),
+    ("rear_ride_height", -15.0, 15.0, 0.5),
+)
+
+_ROAD_MISC = (
+    ("front_tyre_pressure", -0.6, 0.6, 0.05),
+    ("rear_tyre_pressure", -0.6, 0.6, 0.05),
+    ("brake_bias_pct", -6.0, 6.0, 0.25),
+    ("diff_power_lock", -30.0, 30.0, 5.0),
+    ("diff_coast_lock", -30.0, 30.0, 5.0),
+    ("diff_preload_nm", -300.0, 300.0, 20.0),
+)
+
+_GTR_ALIGNMENT = (
+    ("front_camber_deg", -1.4, 1.4, 0.05),
+    ("rear_camber_deg", -1.2, 1.2, 0.05),
+    ("front_toe_deg", -0.3, 0.3, 0.01),
+    ("rear_toe_deg", -0.3, 0.3, 0.01),
+    ("caster_deg", -0.8, 0.8, 0.1),
+)
+
+_GTR_SUSPENSION = (
+    ("front_spring_stiffness", -60.0, 60.0, 2.0),
+    ("rear_spring_stiffness", -60.0, 60.0, 2.0),
+    ("front_rebound_clicks", -12.0, 12.0, 1.0),
+    ("rear_rebound_clicks", -12.0, 12.0, 1.0),
+    ("front_compression_clicks", -12.0, 12.0, 1.0),
+    ("rear_compression_clicks", -12.0, 12.0, 1.0),
+    ("front_arb_steps", -8.0, 8.0, 1.0),
+    ("rear_arb_steps", -8.0, 8.0, 1.0),
+    ("front_ride_height", -12.0, 12.0, 0.5),
+    ("rear_ride_height", -12.0, 12.0, 0.5),
+)
+
+_GTR_MISC = (
+    ("front_tyre_pressure", -0.4, 0.4, 0.05),
+    ("rear_tyre_pressure", -0.4, 0.4, 0.05),
+    ("brake_bias_pct", -4.0, 4.0, 0.25),
+    ("diff_power_lock", -40.0, 40.0, 5.0),
+    ("diff_coast_lock", -40.0, 40.0, 5.0),
+    ("diff_preload_nm", -400.0, 400.0, 25.0),
+    ("rear_wing_angle", -6.0, 6.0, 0.5),
+)
+
+_FORMULA_ALIGNMENT = (
+    ("front_camber_deg", -1.8, 1.8, 0.05),
+    ("rear_camber_deg", -1.6, 1.6, 0.05),
+    ("front_toe_deg", -0.4, 0.4, 0.01),
+    ("rear_toe_deg", -0.4, 0.4, 0.01),
+    ("caster_deg", -0.6, 0.6, 0.05),
+)
+
+_FORMULA_SUSPENSION = (
+    ("front_spring_stiffness", -90.0, 90.0, 2.0),
+    ("rear_spring_stiffness", -90.0, 90.0, 2.0),
+    ("front_rebound_clicks", -16.0, 16.0, 1.0),
+    ("rear_rebound_clicks", -16.0, 16.0, 1.0),
+    ("front_compression_clicks", -16.0, 16.0, 1.0),
+    ("rear_compression_clicks", -16.0, 16.0, 1.0),
+    ("front_arb_steps", -10.0, 10.0, 1.0),
+    ("rear_arb_steps", -10.0, 10.0, 1.0),
+    ("front_ride_height", -10.0, 10.0, 0.5),
+    ("rear_ride_height", -10.0, 10.0, 0.5),
+)
+
+_FORMULA_MISC = (
+    ("front_tyre_pressure", -0.3, 0.3, 0.02),
+    ("rear_tyre_pressure", -0.3, 0.3, 0.02),
+    ("brake_bias_pct", -3.0, 3.0, 0.25),
+    ("diff_power_lock", -50.0, 50.0, 5.0),
+    ("diff_coast_lock", -50.0, 50.0, 5.0),
+    ("diff_preload_nm", -500.0, 500.0, 25.0),
+    ("rear_wing_angle", -10.0, 10.0, 0.5),
+)
+
+
+def _build_space(car_model: str, spec: Sequence[tuple[str, float, float, float]]) -> DecisionSpace:
+    return DecisionSpace(
+        car_model=car_model,
+        variables=tuple(DecisionVariable(name, lower, upper, step) for name, lower, upper, step in spec),
+    )
+
+
+_ROAD_MODELS = ("UF1", "XFG", "XRG", "RB4", "FXO", "LX4", "LX6", "XRT", "RAC", "FZ5")
+_GTR_MODELS = ("FXR", "XRR", "FZR", "XFR", "UFR")
+_FORMULA_MODELS = ("FOX", "FO8", "BF1", "FBM", "MRT")
+
+_LFS_DECISION_LIBRARY: Dict[str, DecisionSpace] = {}
+for model in _ROAD_MODELS:
+    _LFS_DECISION_LIBRARY[model] = _build_space(
+        model, _ROAD_ALIGNMENT + _ROAD_SUSPENSION + _ROAD_MISC
+    )
+for model in _GTR_MODELS:
+    _LFS_DECISION_LIBRARY[model] = _build_space(
+        model, _GTR_ALIGNMENT + _GTR_SUSPENSION + _GTR_MISC
+    )
+for model in _FORMULA_MODELS:
+    _LFS_DECISION_LIBRARY[model] = _build_space(
+        model, _FORMULA_ALIGNMENT + _FORMULA_SUSPENSION + _FORMULA_MISC
+    )
+
+
 DEFAULT_DECISION_LIBRARY: Mapping[str, DecisionSpace] = {
-    "generic_gt": DecisionSpace(
-        car_model="generic_gt",
-        variables=(
-            DecisionVariable("brake_bias_pct", lower=-4.0, upper=4.0, step=0.5),
-            DecisionVariable("front_rebound_clicks", lower=-6.0, upper=6.0, step=1.0),
-            DecisionVariable("rear_rebound_clicks", lower=-6.0, upper=6.0, step=1.0),
-            DecisionVariable("front_compression_clicks", lower=-6.0, upper=6.0, step=1.0),
-            DecisionVariable("rear_compression_clicks", lower=-6.0, upper=6.0, step=1.0),
-            DecisionVariable("front_arb_steps", lower=-5.0, upper=5.0, step=1.0),
-            DecisionVariable("rear_arb_steps", lower=-5.0, upper=5.0, step=1.0),
-            DecisionVariable("diff_power_lock", lower=-20.0, upper=20.0, step=5.0),
-            DecisionVariable("diff_coast_lock", lower=-20.0, upper=20.0, step=5.0),
-            DecisionVariable("front_tyre_pressure", lower=-0.6, upper=0.6, step=0.1),
-            DecisionVariable("rear_tyre_pressure", lower=-0.6, upper=0.6, step=0.1),
-            DecisionVariable("rear_ride_height", lower=-4.0, upper=4.0, step=0.5),
-            DecisionVariable("front_ride_height", lower=-4.0, upper=4.0, step=0.5),
-            DecisionVariable("rear_wing_angle", lower=-3.0, upper=3.0, step=0.5),
-        ),
+    **_LFS_DECISION_LIBRARY,
+    "generic_gt": _build_space(
+        "generic_gt",
+        _ROAD_ALIGNMENT
+        + _ROAD_SUSPENSION
+        + _ROAD_MISC
+        + (("rear_wing_angle", -3.0, 3.0, 0.5),),
     ),
-    "formula": DecisionSpace(
-        car_model="formula",
-        variables=(
-            DecisionVariable("brake_bias_pct", lower=-3.0, upper=3.0, step=0.25),
-            DecisionVariable("front_rebound_clicks", lower=-8.0, upper=8.0, step=1.0),
-            DecisionVariable("rear_rebound_clicks", lower=-8.0, upper=8.0, step=1.0),
-            DecisionVariable("front_compression_clicks", lower=-8.0, upper=8.0, step=1.0),
-            DecisionVariable("rear_compression_clicks", lower=-8.0, upper=8.0, step=1.0),
-            DecisionVariable("front_arb_steps", lower=-6.0, upper=6.0, step=1.0),
-            DecisionVariable("rear_arb_steps", lower=-6.0, upper=6.0, step=1.0),
-            DecisionVariable("diff_power_lock", lower=-25.0, upper=25.0, step=5.0),
-            DecisionVariable("diff_coast_lock", lower=-25.0, upper=25.0, step=5.0),
-            DecisionVariable("front_tyre_pressure", lower=-0.5, upper=0.5, step=0.05),
-            DecisionVariable("rear_tyre_pressure", lower=-0.5, upper=0.5, step=0.05),
-            DecisionVariable("rear_ride_height", lower=-8.0, upper=8.0, step=0.5),
-            DecisionVariable("front_ride_height", lower=-8.0, upper=8.0, step=0.5),
-            DecisionVariable("rear_wing_angle", lower=-5.0, upper=5.0, step=0.5),
-        ),
+    "formula": _build_space(
+        "formula",
+        _FORMULA_ALIGNMENT
+        + _FORMULA_SUSPENSION
+        + _FORMULA_MISC,
     ),
 }
 
@@ -205,17 +300,21 @@ class SetupPlanner:
         self.optimiser = optimiser or CoordinateDescentOptimizer()
 
     def _space_for_car(self, car_model: str) -> DecisionSpace:
-        try:
-            return self.decision_library[car_model]
-        except KeyError as exc:
-            raise KeyError(f"No decision space registered for car model '{car_model}'.") from exc
+        key = (car_model or "").strip()
+        if not key:
+            raise ValueError("Car model must be provided to resolve a decision space.")
+        for candidate in (key, key.upper(), key.lower()):
+            if candidate in self.decision_library:
+                return self.decision_library[candidate]
+        available = ", ".join(sorted(self.decision_library))
+        raise ValueError(f"No decision space registered for car model '{car_model}'. Available: {available}")
 
     def plan(
         self,
         baseline: Sequence[EPIBundle],
         microsectors: Sequence[Microsector] | None = None,
         *,
-        car_model: str = "generic_gt",
+        car_model: str = "XFG",
         simulator: Callable[[Mapping[str, float], Sequence[EPIBundle]], Sequence[EPIBundle]] | None = None,
     ) -> Plan:
         """Generate the final plan that blends search and rule-based guidance."""
