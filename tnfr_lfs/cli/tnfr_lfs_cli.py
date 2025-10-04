@@ -28,6 +28,7 @@ from ..acquisition import (
     OutSimUDPClient,
     TelemetryFusion,
 )
+from .osd import OSDController
 from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
 from ..core.resonance import analyse_modal_resonance
 from ..core.operators import orchestrate_delta_metrics
@@ -765,6 +766,82 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     template_parser.set_defaults(handler=_handle_template)
 
     telemetry_cfg = dict(config.get("telemetry", {}))
+    osd_cfg = dict(config.get("osd", {}))
+    osd_parser = subparsers.add_parser(
+        "osd",
+        help="Render the live ΔNFR HUD inside Live for Speed via InSim buttons.",
+    )
+    osd_parser.add_argument(
+        "--host",
+        default=str(osd_cfg.get("host", telemetry_cfg.get("host", "127.0.0.1"))),
+        help="Host where the OutSim/OutGauge broadcasters are running.",
+    )
+    osd_parser.add_argument(
+        "--outsim-port",
+        type=int,
+        default=int(osd_cfg.get("outsim_port", telemetry_cfg.get("outsim_port", 4123))),
+        help="Port used by the OutSim UDP stream.",
+    )
+    osd_parser.add_argument(
+        "--outgauge-port",
+        type=int,
+        default=int(osd_cfg.get("outgauge_port", telemetry_cfg.get("outgauge_port", 3000))),
+        help="Port used by the OutGauge UDP stream.",
+    )
+    osd_parser.add_argument(
+        "--insim-port",
+        type=int,
+        default=int(osd_cfg.get("insim_port", telemetry_cfg.get("insim_port", 29999))),
+        help="Port used by the InSim TCP control channel.",
+    )
+    osd_parser.add_argument(
+        "--insim-keepalive",
+        type=float,
+        default=float(osd_cfg.get("insim_keepalive", 5.0)),
+        help="Interval in seconds between InSim keepalive packets (default: 5s).",
+    )
+    osd_parser.add_argument(
+        "--update-rate",
+        type=float,
+        default=float(osd_cfg.get("update_rate", 6.0)),
+        help="HUD refresh rate in Hz (default: 6).",
+    )
+    osd_parser.add_argument(
+        "--car-model",
+        default=str(osd_cfg.get("car_model", _default_car_model(config))),
+        help="Car model used to resolve recommendation thresholds.",
+    )
+    osd_parser.add_argument(
+        "--track",
+        default=str(osd_cfg.get("track", _default_track_name(config))),
+        help="Track identifier used to resolve recommendation thresholds.",
+    )
+    osd_parser.add_argument(
+        "--layout-left",
+        type=int,
+        default=osd_cfg.get("layout_left"),
+        help="Override the IS_BTN left coordinate (0-200).",
+    )
+    osd_parser.add_argument(
+        "--layout-top",
+        type=int,
+        default=osd_cfg.get("layout_top"),
+        help="Override the IS_BTN top coordinate (0-200).",
+    )
+    osd_parser.add_argument(
+        "--layout-width",
+        type=int,
+        default=osd_cfg.get("layout_width"),
+        help="Override the IS_BTN width (0-200).",
+    )
+    osd_parser.add_argument(
+        "--layout-height",
+        type=int,
+        default=osd_cfg.get("layout_height"),
+        help="Override the IS_BTN height (0-200).",
+    )
+    osd_parser.set_defaults(handler=_handle_osd)
+
     diagnose_parser = subparsers.add_parser(
         "diagnose",
         help="Validate cfg.txt telemetry configuration and UDP availability.",
@@ -1068,6 +1145,33 @@ def _handle_template(namespace: argparse.Namespace, *, config: Mapping[str, Any]
     result = "\n".join(lines).rstrip() + "\n"
     print(result)
     return result
+
+
+def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+    layout_defaults = ButtonLayout().clamp()
+    layout = ButtonLayout(
+        left=layout_defaults.left if namespace.layout_left is None else int(namespace.layout_left),
+        top=layout_defaults.top if namespace.layout_top is None else int(namespace.layout_top),
+        width=layout_defaults.width if namespace.layout_width is None else int(namespace.layout_width),
+        height=layout_defaults.height if namespace.layout_height is None else int(namespace.layout_height),
+        ucid=layout_defaults.ucid,
+        inst=layout_defaults.inst,
+        click_id=layout_defaults.click_id,
+        style=layout_defaults.style,
+        type_in=layout_defaults.type_in,
+    )
+    controller = OSDController(
+        host=str(namespace.host),
+        outsim_port=int(namespace.outsim_port),
+        outgauge_port=int(namespace.outgauge_port),
+        insim_port=int(namespace.insim_port),
+        insim_keepalive=float(namespace.insim_keepalive),
+        update_rate=float(namespace.update_rate),
+        car_model=str(namespace.car_model or _default_car_model(config)),
+        track_name=str(namespace.track or _default_track_name(config)),
+        layout=layout,
+    )
+    return controller.run()
 
 
 def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:

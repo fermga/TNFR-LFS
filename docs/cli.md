@@ -12,7 +12,7 @@ selected export format to stdout.
 
 ## Subcommands
 
-The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into seven subcommands:
+The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into eight subcommands:
 
 ### ``template``
 
@@ -32,6 +32,41 @@ windows for each phase of the corner.  It also mirrors the
 ``limits.delta_nfr`` tolerances used by ``phase_messages`` so that
 ``analyze`` and ``report`` include the preset alongside the usual
 metrics.
+
+### ``osd``
+
+Renders the live ΔNFR HUD inside Live for Speed using an ``IS_BTN`` overlay.
+Before launching the command ensure the simulator exposes the three
+telemetry interfaces:
+
+* ``/outsim 1 127.0.0.1 4123`` – activates the OutSim UDP stream.
+* ``/outgauge 1 127.0.0.1 3000`` – exposes the OutGauge dashboard data.
+* ``/insim 29999`` – opens the InSim TCP control port required by the HUD.
+
+The HUD cycles through three pages (press the button to advance):
+
+* **Página A** – curva y fase actuales, ΔNFR↓ frente al objetivo y su
+  tolerancia, acoplamiento global y porcentaje de disonancia útil/parásita.
+* **Página B** – top‑3 contribuciones nodales a |ΔNFR↓| con barras ASCII de
+  anchura fija y el modo resonante dominante (frecuencia y clasificación).
+* **Página C** – pista rápida para el operador activo y las 2–3 acciones
+  de setup priorizadas por ``SetupPlanner`` junto a su efecto esperado.
+
+The overlay uses the default layout ``left=80, top=20, width=40, height=16``
+and every page is trimmed to 239 bytes so it fits within the
+``OverlayManager.MAX_BUTTON_TEXT`` limit.  Override the layout with
+``--layout-left``/``--layout-top``/``--layout-width``/``--layout-height`` if
+another mod already occupies that region.
+
+```bash
+tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
+```
+
+``--update-rate`` controls the HUD refresh (5–10 Hz recommended) while
+``--insim-keepalive`` defines how often keepalive packets are sent.  The
+recommendation engine resolves the thresholds and phase hints using the
+``--car-model`` and ``--track`` options, matching the behaviour of
+``template``/``suggest``.
 
 ### ``diagnose``
 
