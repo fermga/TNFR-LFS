@@ -97,6 +97,7 @@ def segment_microsectors(
     operator_state: MutableMapping[str, Dict[str, Dict[str, object]]] | None = None,
     recursion_decay: float = 0.4,
     mutation_thresholds: Mapping[str, float] | None = None,
+    phase_weight_overrides: Mapping[str, Mapping[str, float] | float] | None = None,
 ) -> List[Microsector]:
     """Derive microsectors from telemetry and ΔNFR signatures.
 
@@ -111,7 +112,10 @@ def segment_microsectors(
     Returns
     -------
     list of :class:`Microsector`
-        Each microsector contains phase objectives bound to an archetype.
+        Each microsector contains phase objectives bound to an archetype. When
+        ``phase_weight_overrides`` is provided the heuristically derived
+        weighting profiles for every phase are blended with the supplied
+        multipliers before recomputing ΔNFR/Sense Index bundles.
     """
 
     if len(records) != len(bundles):
@@ -150,6 +154,10 @@ def segment_microsectors(
             avg_vertical_load / baseline_vertical if baseline_vertical > 1e-9 else 0.0
         )
         phase_weight_map = _initial_phase_weight_map(records, phase_samples)
+        if phase_weight_overrides:
+            phase_weight_map = _blend_phase_weight_map(
+                phase_weight_map, phase_weight_overrides
+            )
         specs.append(
             {
                 "index": index,
@@ -670,6 +678,62 @@ def _initial_phase_weight_map(
         weights[phase] = profile
 
     return weights
+
+
+def _apply_phase_override(
+    base: Mapping[str, float],
+    override: Mapping[str, float] | float | None,
+) -> Dict[str, float]:
+    profile = {str(node): float(value) for node, value in base.items()}
+    if override is None:
+        return profile
+    if isinstance(override, Mapping):
+        default_scale = override.get("__default__")
+        for node, value in list(profile.items()):
+            scale = override.get(node, default_scale)
+            if scale is None:
+                continue
+            try:
+                profile[node] = float(value) * float(scale)
+            except (TypeError, ValueError):
+                continue
+        for node, scale in override.items():
+            if node in {"__default__"}:
+                continue
+            if node in profile:
+                continue
+            try:
+                numeric = float(scale)
+            except (TypeError, ValueError):
+                continue
+            base_default = (
+                float(default_scale)
+                if isinstance(default_scale, (int, float))
+                else 1.0
+            )
+            profile[str(node)] = base_default * numeric
+        return profile
+    try:
+        factor = float(override)
+    except (TypeError, ValueError):
+        return profile
+    return {node: float(value) * factor for node, value in profile.items()}
+
+
+def _blend_phase_weight_map(
+    baseline: Mapping[PhaseLiteral, Mapping[str, float]],
+    overrides: Mapping[str, Mapping[str, float] | float],
+) -> Dict[PhaseLiteral, Dict[str, float]]:
+    default_override = overrides.get("__default__")
+    blended: Dict[PhaseLiteral, Dict[str, float]] = {}
+    for phase, profile in baseline.items():
+        override = overrides.get(phase, default_override)
+        blended[phase] = _apply_phase_override(profile, override)
+    for phase, override in overrides.items():
+        if phase in blended or phase == "__default__":
+            continue
+        blended[str(phase)] = _apply_phase_override({"__default__": 1.0}, override)
+    return blended
 
 
 def _compute_window_occupancy(

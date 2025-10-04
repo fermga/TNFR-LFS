@@ -4,7 +4,12 @@
       "entry_delta_tolerance": 0.9,
       "apex_delta_tolerance": 0.6,
       "exit_delta_tolerance": 1.2,
-      "piano_delta_tolerance": 1.5
+      "piano_delta_tolerance": 1.5,
+      "phase_weights": {
+        "entry": {"__default__": 1.0, "tyres": 1.2},
+        "apex": {"__default__": 1.0},
+        "exit": {"__default__": 1.0}
+      }
     }
   },
   "formula": {

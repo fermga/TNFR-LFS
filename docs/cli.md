@@ -33,6 +33,25 @@ windows for each phase of the corner.  It also mirrors the
 ``analyze`` and ``report`` include the preset alongside the usual
 metrics.
 
+The threshold library also accepts optional ``[car.track.phase_weights.<phase>]``
+tables inside ``data/threshold_profiles.toml``.  Each table defines
+multipliers applied to the heuristic phase weighting map derived during
+segmentation; values greater than ``1.0`` emphasise the corresponding
+node when computing ν_f and Sense Index penalties, while numbers below
+``1.0`` soften its influence.  For example, favouring tyres and suspension
+in Valencia looks like:
+
+```toml
+[generic_gt.valencia.phase_weights.entry]
+__default__ = 1.1
+tyres = 1.35
+suspension = 1.2
+```
+
+When the CLI resolves a profile it forwards these weights to
+``segment_microsectors`` and the orchestration pipeline so ΔSi/ΔNFR
+calculations honour the tuned nodal emphasis.
+
 ### ``osd``
 
 Renders the live ΔNFR HUD inside Live for Speed using an ``IS_BTN`` overlay.

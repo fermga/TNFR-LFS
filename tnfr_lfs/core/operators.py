@@ -593,7 +593,13 @@ def _stage_nodal_metrics(bundles: Sequence[EPIBundle]) -> Dict[str, object]:
     }
 
 
-def _stage_epi_evolution(records: Sequence[TelemetryRecord]) -> Dict[str, object]:
+def _stage_epi_evolution(
+    records: Sequence[TelemetryRecord],
+    *,
+    phase_assignments: Mapping[int, str] | None = None,
+    phase_weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]] | None = None,
+    global_phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
+) -> Dict[str, object]:
     if not records:
         return {
             "integrated": [],
@@ -613,7 +619,17 @@ def _stage_epi_evolution(records: Sequence[TelemetryRecord]) -> Dict[str, object
 
     for index, record in enumerate(records):
         delta_map = delta_nfr_by_node(record)
-        nu_map = resolve_nu_f_by_node(record)
+        phase = phase_assignments.get(index) if phase_assignments else None
+        weights = None
+        if phase_weight_lookup and index in phase_weight_lookup:
+            weights = phase_weight_lookup[index]
+        elif global_phase_weights:
+            weights = global_phase_weights
+        nu_map = resolve_nu_f_by_node(
+            record,
+            phase=phase,
+            phase_weights=weights,
+        )
         dt = 0.0 if index == 0 else max(0.0, record.timestamp - prev_timestamp)
         new_epi, derivative, nodal = evolve_epi(prev_epi, delta_map, dt, nu_map)
         integrated_series.append(new_epi)
@@ -689,6 +705,33 @@ def _microsector_sample_indices(microsector: "Microsector") -> List[int]:
     return sorted(indices)
 
 
+def _phase_context_from_microsectors(
+    microsectors: Sequence["Microsector"] | None,
+) -> tuple[Dict[int, str], Dict[int, Mapping[str, Mapping[str, float] | float]]]:
+    assignments: Dict[int, str] = {}
+    weight_lookup: Dict[int, Mapping[str, Mapping[str, float] | float]] = {}
+    if not microsectors:
+        return assignments, weight_lookup
+    for microsector in microsectors:
+        raw_weights = getattr(microsector, "phase_weights", {}) or {}
+        weight_profile: Dict[str, Mapping[str, float] | float] = {}
+        for phase, profile in raw_weights.items():
+            if isinstance(profile, Mapping):
+                weight_profile[str(phase)] = dict(profile)
+            else:
+                weight_profile[str(phase)] = float(profile)
+        for phase, samples in getattr(microsector, "phase_samples", {}).items():
+            if not samples:
+                continue
+            for sample in samples:
+                index = int(sample)
+                if index < 0:
+                    continue
+                assignments[index] = str(phase)
+                weight_lookup[index] = weight_profile
+    return assignments, weight_lookup
+
+
 def _variance_payload(values: Sequence[float]) -> Dict[str, float]:
     if not values:
         return {"variance": 0.0, "stdev": 0.0}
@@ -760,11 +803,15 @@ def orchestrate_delta_metrics(
     coherence_window: int = 3,
     recursion_decay: float = 0.4,
     microsectors: Sequence["Microsector"] | None = None,
+    phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
 ) -> Mapping[str, object]:
     """Pipeline orchestration producing aggregated ΔNFR and Si metrics."""
 
     objectives = emission_operator(target_delta_nfr, target_sense_index)
     reception_stage, flattened_records = _stage_recepcion(telemetry_segments)
+    phase_assignments, weight_lookup = _phase_context_from_microsectors(
+        microsectors
+    )
 
     if not reception_stage["bundles"]:
         empty_breakdown = DissonanceBreakdown(
@@ -838,7 +885,12 @@ def orchestrate_delta_metrics(
         microsectors=microsectors,
     )
     nodal_stage = _stage_nodal_metrics(coherence_stage["bundles"])
-    epi_stage = _stage_epi_evolution(flattened_records)
+    epi_stage = _stage_epi_evolution(
+        flattened_records,
+        phase_assignments=phase_assignments,
+        phase_weight_lookup=weight_lookup,
+        global_phase_weights=phase_weights,
+    )
     sense_stage = _stage_sense(
         coherence_stage["smoothed_sense_index"], recursion_decay=recursion_decay
     )
