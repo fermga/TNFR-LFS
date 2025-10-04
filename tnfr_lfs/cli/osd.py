@@ -370,12 +370,28 @@ def _render_page_a(
     lines = [
         f"{curve_label} · {phase_label}",
         f"ΔNFR {current_delta:+.2f} obj {goal_delta:+.2f} ±{tolerance:.2f}",
-        f"Δ∥ {long_component:+.2f} obj {goal_long:+.2f} · Δ⊥ {lat_component:+.2f} obj {goal_lat:+.2f}",
-        f"w∥ {weight_long:.2f} · w⊥ {weight_lat:.2f}",
-        _gradient_line(window_metrics),
+        f"Δ∥ {long_component:+.2f} obj {goal_long:+.2f} · Δ⊥ {lat_component:+.2f} obj {goal_lat:+.2f}"
+        f" · w∥ {weight_long:.2f} · w⊥ {weight_lat:.2f}",
     ]
+    gradient_line = _gradient_line(window_metrics)
     if spark_delta and spark_si:
-        lines.append(_truncate_line(f"Fases Δ{spark_delta} · Si{spark_si}"))
+        spark_line = _truncate_line(f"Fases Δ{spark_delta} · Si{spark_si}")
+        candidate = "\n".join((*lines, spark_line, gradient_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(spark_line)
+    lines.append(gradient_line)
+    if (
+        window_metrics.aero_coherence.high_speed_samples
+        or window_metrics.aero_coherence.low_speed_samples
+    ):
+        aero_line = _truncate_line(
+            "Δaero alta "
+            f"{window_metrics.aero_coherence.high_speed_imbalance:+.2f}"
+            f" · baja {window_metrics.aero_coherence.low_speed_imbalance:+.2f}"
+        )
+        candidate = "\n".join((*lines, aero_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(aero_line)
     return _ensure_limit("\n".join(lines))
 
 
@@ -508,6 +524,18 @@ def _render_page_c(
         dsi_line = _format_sensitivities(plan.sensitivities.get("sense_index", {}))
         if dsi_line:
             lines.append(_truncate_line(f"dSi {dsi_line}"))
+        aero_guidance = getattr(plan, "aero_guidance", "")
+        if aero_guidance:
+            lines.append(_truncate_line(f"Aero {aero_guidance}"))
+        aero_metrics = getattr(plan, "aero_metrics", {}) or {}
+        high_imbalance = aero_metrics.get("high_speed_imbalance")
+        low_imbalance = aero_metrics.get("low_speed_imbalance")
+        if high_imbalance is not None and low_imbalance is not None:
+            lines.append(
+                _truncate_line(
+                    f"Δaero alta {high_imbalance:+.2f} · baja {low_imbalance:+.2f}"
+                )
+            )
     return _ensure_limit("\n".join(lines))
 
 

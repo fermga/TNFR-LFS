@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from typing import Sequence
+from types import SimpleNamespace
 
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
@@ -17,8 +18,9 @@ from tnfr_lfs.core.epi_models import (
 from collections.abc import Mapping
 
 from tnfr_lfs.core.segmentation import Goal, Microsector
-from tnfr_lfs.io.profiles import ProfileManager
+from tnfr_lfs.io.profiles import AeroProfile, ProfileManager
 from tnfr_lfs.recommender.rules import (
+    AeroCoherenceRule,
     DetuneRatioRule,
     MANUAL_REFERENCES,
     PhaseDeltaDeviationRule,
@@ -242,6 +244,73 @@ def test_tyre_balance_rule_generates_guidance():
     assert pressure_rec.delta is not None and pressure_rec.delta < 0
     assert camber_rec.priority == 19
     assert MANUAL_REFERENCES["tyre_balance"].split()[0] in camber_rec.rationale
+
+
+def test_aero_coherence_rule_flags_high_speed_bias() -> None:
+    thresholds = ThresholdProfile(
+        entry_delta_tolerance=0.6,
+        apex_delta_tolerance=0.6,
+        exit_delta_tolerance=0.6,
+        piano_delta_tolerance=0.5,
+        rho_detune_threshold=0.4,
+    )
+    context = RuleContext(
+        car_model="generic_gt",
+        track_name="valencia",
+        thresholds=thresholds,
+        tyre_offsets={},
+        aero_profiles={"race": AeroProfile(low_speed_target=0.0, high_speed_target=0.0)},
+    )
+    microsector = SimpleNamespace(
+        index=3,
+        filtered_measures={
+            "aero_high_imbalance": 0.28,
+            "aero_low_imbalance": 0.0,
+            "aero_high_samples": 6,
+            "aero_low_samples": 6,
+        },
+    )
+    rule = AeroCoherenceRule(high_speed_threshold=0.1, low_speed_tolerance=0.05, min_high_samples=2, delta_step=0.75)
+
+    recommendations = list(rule.evaluate([], [microsector], context))
+
+    assert recommendations
+    rec = recommendations[0]
+    assert rec.parameter == "rear_wing_angle"
+    assert rec.delta and rec.delta > 0
+    assert "Alta velocidad" in rec.message
+    assert "carga trasera" in rec.rationale
+
+
+def test_aero_coherence_rule_respects_low_speed_window() -> None:
+    thresholds = ThresholdProfile(
+        entry_delta_tolerance=0.6,
+        apex_delta_tolerance=0.6,
+        exit_delta_tolerance=0.6,
+        piano_delta_tolerance=0.5,
+        rho_detune_threshold=0.4,
+    )
+    context = RuleContext(
+        car_model="generic_gt",
+        track_name="valencia",
+        thresholds=thresholds,
+        tyre_offsets={},
+        aero_profiles={"race": AeroProfile(low_speed_target=0.0, high_speed_target=0.0)},
+    )
+    microsector = SimpleNamespace(
+        index=5,
+        filtered_measures={
+            "aero_high_imbalance": -0.3,
+            "aero_low_imbalance": 0.2,
+            "aero_high_samples": 8,
+            "aero_low_samples": 8,
+        },
+    )
+    rule = AeroCoherenceRule(high_speed_threshold=0.1, low_speed_tolerance=0.05, min_high_samples=2)
+
+    recommendations = list(rule.evaluate([], [microsector], context))
+
+    assert not recommendations
 
 
 def test_recommendation_engine_detects_anomalies(car_track_thresholds):

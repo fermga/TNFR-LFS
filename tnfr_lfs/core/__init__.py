@@ -3,7 +3,7 @@
 from .coherence import compute_node_delta_nfr, sense_index
 from .epi import DeltaCalculator, EPIExtractor, TelemetryRecord, delta_nfr_by_node
 from .epi_models import EPIBundle
-from .metrics import WindowMetrics, compute_window_metrics
+from .metrics import AeroCoherence, WindowMetrics, compute_aero_coherence, compute_window_metrics
 from .operators import (
     DissonanceBreakdown,
     acoplamiento_operator,
@@ -33,6 +33,8 @@ __all__ = [
     "compute_node_delta_nfr",
     "sense_index",
     "compute_window_metrics",
+    "compute_aero_coherence",
+    "AeroCoherence",
     "WindowMetrics",
     "emission_operator",
     "recepcion_operator",

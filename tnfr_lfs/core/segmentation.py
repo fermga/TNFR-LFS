@@ -366,6 +366,10 @@ def segment_microsectors(
                 "nu_exc": window_metrics.nu_exc,
                 "rho": window_metrics.rho,
                 "udr": window_metrics.useful_dissonance_ratio,
+                "aero_low_imbalance": window_metrics.aero_coherence.low_speed_imbalance,
+                "aero_high_imbalance": window_metrics.aero_coherence.high_speed_imbalance,
+                "aero_low_samples": float(window_metrics.aero_coherence.low_speed_samples),
+                "aero_high_samples": float(window_metrics.aero_coherence.high_speed_samples),
             }
         )
         rec_trace: Tuple[Mapping[str, float | str | None], ...] = ()

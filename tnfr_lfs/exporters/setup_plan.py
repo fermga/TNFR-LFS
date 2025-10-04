@@ -36,6 +36,8 @@ class SetupPlan:
     expected_effects_by_phase: Mapping[str, Sequence[str]] = field(default_factory=dict)
     phase_axis_targets: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     phase_axis_weights: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    aero_guidance: str = ""
+    aero_metrics: Mapping[str, float] = field(default_factory=dict)
 
 
 def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
@@ -143,6 +145,8 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
         "expected_effects_by_phase": effects_phase,
         "phase_axis_targets": axis_targets,
         "phase_axis_weights": axis_weights,
+        "aero_guidance": plan.aero_guidance,
+        "aero_metrics": {str(key): float(value) for key, value in plan.aero_metrics.items()},
     }
 
 

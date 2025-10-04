@@ -67,11 +67,15 @@ The HUD cycles through three pages (press the button to advance):
 * **Página A** – curva y fase actuales, ΔNFR↓ frente al objetivo y su
   tolerancia, arquetipo activo (``hairpin``, ``medium``, ``fast`` o ``chicane``)
   con sus referencias ΔNFR∥/⊥ y pesos de detune, acoplamiento global, fase θ/Siφ
-  del microsector activo y porcentaje de disonancia útil/parásita.
+  del microsector activo, porcentaje de disonancia útil/parásita y el nuevo
+  indicador ``Δaero`` que refleja el desequilibrio ΔNFR entre ejes a alta
+  velocidad.
 * **Página B** – top‑3 contribuciones nodales a |ΔNFR↓| con barras ASCII de
   anchura fija y el modo resonante dominante (frecuencia y clasificación).
-* **Página C** – pista rápida para el operador activo y las 2–3 acciones
-  de setup priorizadas por ``SetupPlanner`` junto a su efecto esperado.
+* **Página C** – pista rápida para el operador activo, las 2–3 acciones
+  de setup priorizadas por ``SetupPlanner`` junto a su efecto esperado y una
+  guía aero (“Aero …”) que resume si conviene reforzar el alerón delantero o
+  trasero en la recta.
 
 The overlay uses the default layout ``left=80, top=20, width=40, height=16``
 and every page is trimmed to 239 bytes so it fits within the
@@ -94,7 +98,9 @@ measured phase alignment when the archetype drifts away from its target and
 highlights the longitudinal/lateral focus defined by the detune weights. The
 gradient line reports the dominant frequency extracted from the
 steer-versus-yaw/lateral cross-spectrum together with the measured phase
-offset ``θ`` and its cosine ``Siφ``.
+offset ``θ`` y su coseno ``Siφ``.  Justo debajo se imprime ``Δaero`` para que el
+ingeniero visualice cuánto difiere la carga delantera respecto a la trasera a
+alta y baja velocidad.
 
 ### ``diagnose``
 
@@ -212,7 +218,9 @@ with the rule engine.  The resulting payload follows the
   },
   "phase_sensitivities": {
     "entry": {"delta_nfr_integral": {"rear_wing_angle": -0.052}}
-  }
+  },
+  "aero_guidance": "Alta velocidad → libera alerón trasero/refuerza delantero",
+  "aero_metrics": {"low_speed_imbalance": 0.03, "high_speed_imbalance": -0.35}
 }
 ```
 
@@ -221,6 +229,12 @@ on the ``--export`` flag.  The Markdown exporter deduplicates rationales
 and expected effects to provide a readable handover document while also
 surfacing the empirical Jacobian (ΔSi/Δp and Δ∫|ΔNFR|/Δp) gathered during
 the micro-delta experiments.
+
+Use :meth:`tnfr_lfs.io.profiles.ProfileManager.update_aero_profile` to persist
+the ``race`` and ``stint_save`` aero targets mentioned in the HUD.  The rule
+engine reads them back via the profile snapshot so the new aero coherence
+operator only raises wing tweaks when the stored baseline (baja velocidad)
+permanece dentro de tolerancia.
 ## Configuration
 
 The CLI resolves defaults from a ``tnfr-lfs.toml`` file located in the
