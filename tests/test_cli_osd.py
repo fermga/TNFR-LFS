@@ -21,7 +21,7 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
         assert len(page.encode("utf8")) <= OverlayManager.MAX_BUTTON_TEXT - 1
 
     page_a, page_b, page_c = pages
-    assert "ΔNFR" in page_a and "Acop" in page_a
+    assert "ΔNFR" in page_a and "Si" in page_a and "∇Acop" in page_a
     assert "ΔNFR" in page_b and "Modo" in page_b
     assert ("Hint" in page_c) or ("Plan" in page_c)
 
