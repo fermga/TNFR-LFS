@@ -129,6 +129,7 @@ class Goal:
     detune_ratio_weights: Mapping[str, float] = field(
         default_factory=lambda: {"longitudinal": 0.5, "lateral": 0.5}
     )
+    track_gradient: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -433,6 +434,28 @@ def segment_microsectors(
             spec.get("speed_drop", 0.0),
             spec.get("direction_changes", 0),
         )
+        phase_gradient_map: Dict[PhaseLiteral, float] = {}
+        gradient_samples: List[float] = []
+        for phase, (phase_start, phase_stop) in phase_boundaries.items():
+            phase_values: List[float] = []
+            for idx in range(phase_start, min(phase_stop, len(recomputed_bundles))):
+                if not (0 <= idx < len(recomputed_bundles)):
+                    continue
+                bundle = recomputed_bundles[idx]
+                track = getattr(bundle, "track", None)
+                if track is None:
+                    continue
+                try:
+                    gradient_value = float(getattr(track, "gradient", 0.0))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(gradient_value):
+                    continue
+                phase_values.append(gradient_value)
+                gradient_samples.append(gradient_value)
+            phase_gradient_map[phase] = mean(phase_values) if phase_values else 0.0
+        microsector_gradient = mean(gradient_samples) if gradient_samples else 0.0
+
         goals, dominant_nodes, axis_targets, axis_weights = _build_goals(
             archetype,
             recomputed_bundles,
@@ -440,6 +463,7 @@ def segment_microsectors(
             phase_boundaries,
             context_matrix=context_matrix,
             sample_context=sample_context,
+            phase_gradients=phase_gradient_map,
         )
         active_goal = max(
             goals,
@@ -459,6 +483,7 @@ def segment_microsectors(
             "style_index": avg_si,
             "grip_rel": grip_rel,
         }
+        filtered_measures["gradient"] = microsector_gradient
         wheel_temperatures = {
             key: float(value)
             for key, value in spec.get("wheel_temperatures", {}).items()
@@ -1010,6 +1035,7 @@ def _build_goals(
     *,
     context_matrix: ContextMatrix | None = None,
     sample_context: Sequence[ContextFactors] | None = None,
+    phase_gradients: Mapping[PhaseLiteral, float] | None = None,
 ) -> Tuple[
     Tuple[Goal, ...],
     Mapping[PhaseLiteral, Tuple[str, ...]],
@@ -1162,6 +1188,13 @@ def _build_goals(
             dict(phase_target.detune_weights) if phase_target is not None else weight_map
         )
 
+        gradient_value = 0.0
+        if phase_gradients and phase in phase_gradients:
+            try:
+                gradient_value = float(phase_gradients[phase])
+            except (TypeError, ValueError):
+                gradient_value = 0.0
+
         goals.append(
             Goal(
                 phase=phase,
@@ -1196,6 +1229,7 @@ def _build_goals(
                     phase_target.si_phi if phase_target is not None else target_alignment
                 ),
                 detune_ratio_weights=detune_weights,
+                track_gradient=gradient_value,
             )
         )
     for legacy, phases in LEGACY_PHASE_MAP.items():
