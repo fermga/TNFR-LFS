@@ -202,6 +202,7 @@ def test_insim_client_handshake_and_keepalive():
     assert handshake[1] == InSimClient.ISP_ISI
     assert handshake[2] == 7
     assert handshake[5] == InSimClient.INSIM_VERSION
+    assert handshake[8] == InSimClient.ISF_LOCAL
     assert handshake[9] == pytest.approx(1000)
     keepalive = InSimClient.TINY_STRUCT.unpack(captured["keepalive"])
     assert keepalive[1] == InSimClient.ISP_TINY
