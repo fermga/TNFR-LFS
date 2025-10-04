@@ -60,7 +60,18 @@ class AeroCoherence:
 
 @dataclass(frozen=True)
 class WindowMetrics:
-    """Aggregated metrics derived from a telemetry window."""
+    """Aggregated metrics derived from a telemetry window.
+
+    The payload captures the usual ΔNFR gradients and phase alignment values
+    while also exposing support efficiency information derived from the average
+    vertical load and nodal ΔNFR contributions.  ``support_effective`` reflects
+    the structurally-weighted ΔNFR absorbed by tyres and suspension, whereas
+    ``load_support_ratio`` normalises that magnitude against the window's mean
+    vertical load.  The structural expansion/contraction fields quantify how
+    longitudinal and lateral ΔNFR components expand (positive) or contract
+    (negative) the structural timeline when weighted by structural occupancy
+    windows.
+    """
 
     si: float
     d_nfr_couple: float
@@ -74,6 +85,12 @@ class WindowMetrics:
     useful_dissonance_ratio: float
     useful_dissonance_percentage: float
     coherence_index: float
+    support_effective: float
+    load_support_ratio: float
+    structural_expansion_longitudinal: float
+    structural_contraction_longitudinal: float
+    structural_expansion_lateral: float
+    structural_contraction_lateral: float
     frequency_label: str
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
 
@@ -118,6 +135,12 @@ def compute_window_metrics(
             0.0,
             0.0,
             0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             "",
             AeroCoherence(),
         )
@@ -138,6 +161,10 @@ def compute_window_metrics(
         return numeric
 
     si_value = mean(record.si for record in records)
+    avg_vertical_load = mean(getattr(record, "vertical_load", 0.0) for record in records)
+    support_samples: list[float] = []
+    longitudinal_series: list[float] = []
+    lateral_series: list[float] = []
 
     context_matrix = load_context_matrix()
 
@@ -164,7 +191,9 @@ def compute_window_metrics(
             bundles, fallback_to_chronological=fallback_to_chronological
         )
         if timestamps is None:
-            raise ValueError("Structural timeline unavailable and fallback disabled")
+            if not fallback_to_chronological:
+                raise ValueError("Structural timeline unavailable and fallback disabled")
+            timestamps = [float(index) for index in range(len(bundles))]
         bundle_context = [
             resolve_context_from_bundle(context_matrix, bundle) for bundle in bundles
         ]
@@ -177,12 +206,25 @@ def compute_window_metrics(
             for bundle, factors in zip(bundles, bundle_context)
         ]
         yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
+        support_samples = [
+            max(0.0, float(bundle.tyres.delta_nfr))
+            + max(0.0, float(bundle.suspension.delta_nfr))
+            for bundle in bundles
+        ]
+        longitudinal_series = [
+            float(getattr(bundle, "delta_nfr_longitudinal", 0.0)) for bundle in bundles
+        ]
+        lateral_series = [
+            float(getattr(bundle, "delta_nfr_lateral", 0.0)) for bundle in bundles
+        ]
     else:
         timestamps = resolve_time_axis(
             records, fallback_to_chronological=fallback_to_chronological
         )
         if timestamps is None:
-            raise ValueError("Structural timeline unavailable and fallback disabled")
+            if not fallback_to_chronological:
+                raise ValueError("Structural timeline unavailable and fallback disabled")
+            timestamps = [float(index) for index in range(len(records))]
         record_context = [
             resolve_context_from_record(context_matrix, record) for record in records
         ]
@@ -195,11 +237,69 @@ def compute_window_metrics(
             for record, factors in zip(records, record_context)
         ]
         yaw_rates = [record.yaw_rate for record in records]
+        longitudinal_series = [
+            float(getattr(record, "delta_nfr_longitudinal", 0.0)) for record in records
+        ]
+        lateral_series = [
+            float(getattr(record, "delta_nfr_lateral", 0.0)) for record in records
+        ]
     _useful_samples, _high_yaw_samples, udr = compute_useful_dissonance_stats(
         timestamps,
         delta_series,
         yaw_rates,
     )
+
+    windows: list[float] = []
+    if timestamps:
+        windows = [
+            max(0.0, float(timestamps[index] - timestamps[index - 1]))
+            for index in range(1, len(timestamps))
+        ]
+
+    def _weighted_average(values: Sequence[float], weights: Sequence[float]) -> float:
+        if not values:
+            return 0.0
+        if not weights or len(values) <= 1 or len(values) - 1 != len(weights):
+            return mean(values)
+        total_weight = sum(weights)
+        if total_weight <= 0.0:
+            return mean(values)
+        accumulator = 0.0
+        for index, value in enumerate(values[1:], start=1):
+            accumulator += float(value) * weights[index - 1]
+        return accumulator / total_weight
+
+    def _expansion_payload(
+        series: Sequence[float], weights: Sequence[float]
+    ) -> tuple[float, float]:
+        if len(series) < 2:
+            return 0.0, 0.0
+        if not weights or len(series) - 1 != len(weights):
+            expansion = sum(max(0.0, float(value)) for value in series[1:])
+            contraction = sum(max(0.0, float(-value)) for value in series[1:])
+            count = max(1, len(series) - 1)
+            return expansion / count, contraction / count
+        total_weight = sum(weights)
+        if total_weight <= 0.0:
+            total_weight = float(len(weights))
+        expansion = 0.0
+        contraction = 0.0
+        for value, weight in zip(series[1:], weights):
+            magnitude = abs(float(value)) * weight
+            if value >= 0.0:
+                expansion += magnitude
+            else:
+                contraction += magnitude
+        if total_weight <= 0.0:
+            return 0.0, 0.0
+        return expansion / total_weight, contraction / total_weight
+
+    support_effective = _weighted_average(support_samples, windows)
+    load_support_ratio = (
+        support_effective / avg_vertical_load if avg_vertical_load > 1e-6 else 0.0
+    )
+    long_expansion, long_contraction = _expansion_payload(longitudinal_series, windows)
+    lat_expansion, lat_contraction = _expansion_payload(lateral_series, windows)
 
     aero = compute_aero_coherence(records, bundles)
     coherence_values: list[float] = []
@@ -226,6 +326,12 @@ def compute_window_metrics(
         useful_dissonance_ratio=udr,
         useful_dissonance_percentage=udr * 100.0,
         coherence_index=normalised_coherence,
+        support_effective=support_effective,
+        load_support_ratio=load_support_ratio,
+        structural_expansion_longitudinal=long_expansion,
+        structural_contraction_longitudinal=long_contraction,
+        structural_expansion_lateral=lat_expansion,
+        structural_contraction_lateral=lat_contraction,
         frequency_label=frequency_label,
         aero_coherence=aero,
     )

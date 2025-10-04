@@ -530,6 +530,8 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · ρ {window_metrics.rho:.2f} · θ {window_metrics.phase_lag:+.2f}rad"
         f" · Siφ {window_metrics.phase_alignment:+.2f}"
         f" · UDR {window_metrics.useful_dissonance_ratio:.2f}"
+        f" · Soporte {window_metrics.support_effective:+.2f}"
+        f" · Carga {window_metrics.load_support_ratio:.4f}"
     )
 
 

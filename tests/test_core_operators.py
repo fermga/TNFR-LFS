@@ -406,6 +406,12 @@ def test_orchestrator_pipeline_builds_consistent_metrics():
     assert set(results["pairwise_coupling"]) == {"delta_nfr", "sense_index"}
     for metrics in results["pairwise_coupling"].values():
         assert {"tyres↔suspension", "tyres↔chassis", "suspension↔chassis"} <= set(metrics)
+    assert results["support_effective"] >= 0.0
+    assert results["load_support_ratio"] >= 0.0
+    assert results["structural_expansion_longitudinal"] >= 0.0
+    assert results["structural_contraction_longitudinal"] >= 0.0
+    assert results["structural_expansion_lateral"] >= 0.0
+    assert results["structural_contraction_lateral"] >= 0.0
     stages = results["stages"]
     assert set(stages) == {"recepcion", "coherence", "nodal", "epi", "sense"}
     reception_stage = stages["recepcion"]

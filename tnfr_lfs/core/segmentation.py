@@ -452,6 +452,12 @@ def segment_microsectors(
                 "phase_lag_window": window_metrics.phase_lag,
                 "phase_alignment_window": window_metrics.phase_alignment,
                 "coherence_index": window_metrics.coherence_index,
+                "support_effective": window_metrics.support_effective,
+                "load_support_ratio": window_metrics.load_support_ratio,
+                "structural_expansion_longitudinal": window_metrics.structural_expansion_longitudinal,
+                "structural_contraction_longitudinal": window_metrics.structural_contraction_longitudinal,
+                "structural_expansion_lateral": window_metrics.structural_expansion_lateral,
+                "structural_contraction_lateral": window_metrics.structural_contraction_lateral,
                 "aero_low_imbalance": window_metrics.aero_coherence.low_speed_imbalance,
                 "aero_high_imbalance": window_metrics.aero_coherence.high_speed_imbalance,
                 "aero_low_samples": float(window_metrics.aero_coherence.low_speed_samples),
@@ -541,6 +547,12 @@ def segment_microsectors(
                 "phase_lag_window": window_metrics.phase_lag,
                 "phase_alignment_window": window_metrics.phase_alignment,
                 "coherence_index": window_metrics.coherence_index,
+                "support_effective": window_metrics.support_effective,
+                "load_support_ratio": window_metrics.load_support_ratio,
+                "structural_expansion_longitudinal": window_metrics.structural_expansion_longitudinal,
+                "structural_contraction_longitudinal": window_metrics.structural_contraction_longitudinal,
+                "structural_expansion_lateral": window_metrics.structural_expansion_lateral,
+                "structural_contraction_lateral": window_metrics.structural_contraction_lateral,
             }
             defaults.update(wheel_temperatures)
             defaults.update(wheel_pressures)
