@@ -1,0 +1,34 @@
+[meta]
+category = "road"
+segment = "medium"
+drivetrain = "FWD"
+description = "Guidance tuned for heavier front-drive sedans."
+
+[targets.balance]
+delta_nfr = 0.34
+nu_f = 0.30
+yaw_rate_deg_s = 0.58
+
+[targets.stability]
+slip_lat_window = [-0.48, 0.48]
+slip_long_window = [-0.38, 0.38]
+
+[policy.steering]
+aggressiveness = 0.56
+limit_deg = 600.0
+smoothing = 0.40
+
+[policy.throttle]
+aggressiveness = 0.50
+lift_margin = 0.09
+blip_compensation = 0.12
+
+[recommender.steering]
+kp = 1.22
+ki = 0.05
+kd = 0.13
+
+[recommender.throttle]
+kp = 0.84
+ki = 0.03
+kd = 0.07

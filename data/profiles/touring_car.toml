@@ -1,0 +1,34 @@
+[meta]
+category = "touring"
+class = "super"
+drivetrain = "FWD"
+description = "High downforce touring car bias to stability under power."
+
+[targets.balance]
+delta_nfr = 0.36
+nu_f = 0.26
+yaw_rate_deg_s = 0.70
+
+[targets.stability]
+slip_lat_window = [-0.36, 0.36]
+slip_long_window = [-0.26, 0.26]
+
+[policy.steering]
+aggressiveness = 0.68
+limit_deg = 480.0
+smoothing = 0.24
+
+[policy.throttle]
+aggressiveness = 0.66
+lift_margin = 0.06
+blip_compensation = 0.09
+
+[recommender.steering]
+kp = 1.44
+ki = 0.05
+kd = 0.09
+
+[recommender.throttle]
+kp = 1.02
+ki = 0.03
+kd = 0.05

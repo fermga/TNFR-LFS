@@ -1,0 +1,34 @@
+[meta]
+category = "road"
+segment = "large"
+drivetrain = "AWD"
+description = "Comfort and stability tune for all-wheel-drive luxury sedans."
+
+[targets.balance]
+delta_nfr = 0.36
+nu_f = 0.30
+yaw_rate_deg_s = 0.52
+
+[targets.stability]
+slip_lat_window = [-0.48, 0.48]
+slip_long_window = [-0.38, 0.38]
+
+[policy.steering]
+aggressiveness = 0.50
+limit_deg = 640.0
+smoothing = 0.44
+
+[policy.throttle]
+aggressiveness = 0.54
+lift_margin = 0.08
+blip_compensation = 0.12
+
+[recommender.steering]
+kp = 1.08
+ki = 0.04
+kd = 0.14
+
+[recommender.throttle]
+kp = 0.86
+ki = 0.03
+kd = 0.08

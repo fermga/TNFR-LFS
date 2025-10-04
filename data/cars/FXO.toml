@@ -1,0 +1,8 @@
+abbrev = "FXO"
+name = "FXO Turbo"
+license = "s1"
+engine_layout = "front_transverse"
+drive = "FWD"
+weight_kg = 1180
+wheel_rotation_group_deg = 30
+profile = "road_medium_fwd"

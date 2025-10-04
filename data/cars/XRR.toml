@@ -1,0 +1,8 @@
+abbrev = "XRR"
+name = "XR GTR"
+license = "s2"
+engine_layout = "front_longitudinal"
+drive = "RWD"
+weight_kg = 1100
+wheel_rotation_group_deg = 24
+profile = "gt_pro"

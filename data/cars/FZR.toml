@@ -1,0 +1,8 @@
+abbrev = "FZR"
+name = "FZ50 GTR"
+license = "s2"
+engine_layout = "rear_longitudinal"
+drive = "RWD"
+weight_kg = 1180
+wheel_rotation_group_deg = 24
+profile = "gt_pro"

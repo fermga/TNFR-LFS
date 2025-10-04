@@ -1,0 +1,8 @@
+abbrev = "RB4"
+name = "RB4 GT"
+license = "s1"
+engine_layout = "front_longitudinal"
+drive = "AWD"
+weight_kg = 1320
+wheel_rotation_group_deg = 30
+profile = "road_medium_awd"

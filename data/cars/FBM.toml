@@ -1,0 +1,8 @@
+abbrev = "FBM"
+name = "Formula BMW FB02"
+license = "demo"
+engine_layout = "rear_longitudinal"
+drive = "RWD"
+weight_kg = 465
+wheel_rotation_group_deg = 20
+profile = "formula_entry"
