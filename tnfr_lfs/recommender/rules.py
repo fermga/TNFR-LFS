@@ -1112,6 +1112,100 @@ class DetuneRatioRule:
         return recommendations
 
 
+class UsefulDissonanceRule:
+    """Adjust axle balance when the Useful Dissonance Ratio drifts."""
+
+    def __init__(
+        self,
+        priority: int = 26,
+        *,
+        high_threshold: float = 0.6,
+        low_threshold: float = 0.25,
+    ) -> None:
+        self.priority = priority
+        self.high_threshold = high_threshold
+        self.low_threshold = low_threshold
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors or context is None or not results:
+            return []
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            udr = float(microsector.filtered_measures.get("udr", 0.0))
+            if udr <= 0.0:
+                continue
+            goal = _goal_for_phase(microsector, microsector.active_phase)
+            if goal is None:
+                continue
+            indices = microsector.phase_indices(goal.phase)
+            delta_samples = [
+                results[i].delta_nfr for i in indices if 0 <= i < len(results)
+            ]
+            if not delta_samples:
+                continue
+            avg_delta = mean(delta_samples)
+            tolerance = context.thresholds.tolerance_for_phase(goal.phase)
+            deviation = avg_delta - goal.target_delta_nfr
+
+            if udr >= self.high_threshold and deviation > tolerance:
+                category = phase_family(goal.phase)
+                message = (
+                    f"Operador UDR: reforzar eje trasero/LSD en microsector "
+                    f"{microsector.index}"
+                )
+                rationale = (
+                    f"UDR {udr:.2f} indica que dΔNFR/dt es negativo bajo alta guiñada, "
+                    f"pero el ΔNFR medio {avg_delta:.2f} supera el objetivo "
+                    f"{goal.target_delta_nfr:.2f} ({deviation:+.2f}). Refuerza la barra "
+                    f"trasera o incrementa el bloqueo del diferencial "
+                    f"({MANUAL_REFERENCES['antiroll']} / {MANUAL_REFERENCES['differential']})."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category=category,
+                        message=message,
+                        rationale=rationale,
+                        priority=self.priority,
+                    )
+                )
+                continue
+
+            if udr <= self.low_threshold and abs(deviation) > tolerance:
+                if deviation > 0:
+                    axle = "delantero"
+                    reference = MANUAL_REFERENCES["antiroll"]
+                    action = "ablandar barra/amortiguación delantera"
+                    category = "entry"
+                else:
+                    axle = "trasero"
+                    reference = MANUAL_REFERENCES["differential"]
+                    action = "ablandar barra trasera o abrir LSD"
+                    category = "exit"
+                message = (
+                    f"Operador UDR: {action} en microsector {microsector.index}"
+                )
+                rationale = (
+                    f"UDR {udr:.2f} sugiere que la guiñada no reduce ΔNFR. El promedio "
+                    f"{avg_delta:.2f} frente al objetivo {goal.target_delta_nfr:.2f} genera "
+                    f"un desvío {deviation:+.2f}; libera el eje {axle} ({reference})."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category=category,
+                        message=message,
+                        rationale=rationale,
+                        priority=self.priority + 1,
+                    )
+                )
+        return recommendations
+
+
 class RecommendationEngine:
     """Aggregate a list of rules and produce recommendations."""
 
@@ -1161,6 +1255,7 @@ class RecommendationEngine:
                     reference_key="antiroll",
                 ),
                 DetuneRatioRule(priority=24),
+                UsefulDissonanceRule(priority=26),
                 CurbComplianceRule(priority=25),
                 PhaseDeltaDeviationRule(
                     phase="exit",

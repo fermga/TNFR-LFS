@@ -283,8 +283,9 @@ def test_render_page_a_includes_sparkline_when_active_phase():
     microsector = SimpleNamespace(index=0, phase_samples=phase_samples)
     goal = SimpleNamespace(target_delta_nfr=0.4, target_sense_index=0.8)
     active = osd_module.ActivePhase(microsector=microsector, phase="apex3a", goal=goal)
-    window_metrics = WindowMetrics(0.7, 0.1, -0.2, 0.05, 1.2, 0.9, 0.75, 0.0, 1.0)
+    window_metrics = WindowMetrics(0.7, 0.1, -0.2, 0.05, 1.2, 0.9, 0.75, 0.0, 1.0, 0.6, 60.0)
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
     assert "Fases Δ" in output
     assert any(char in output for char in "▁▂▃▄▅▆▇█")
     assert "ρ" in output
+    assert "UDR" in output

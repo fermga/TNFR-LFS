@@ -289,7 +289,10 @@ def segment_microsectors(
             "style_index": avg_si,
             "grip_rel": grip_rel,
         }
-        window_metrics = compute_window_metrics(records[start : end + 1])
+        window_metrics = compute_window_metrics(
+            records[start : end + 1],
+            bundles=recomputed_bundles[start : end + 1],
+        )
         filtered_measures.update(
             {
                 "d_nfr_couple": window_metrics.d_nfr_couple,
@@ -298,6 +301,7 @@ def segment_microsectors(
                 "nu_f": window_metrics.nu_f,
                 "nu_exc": window_metrics.nu_exc,
                 "rho": window_metrics.rho,
+                "udr": window_metrics.useful_dissonance_ratio,
             }
         )
         rec_trace: Tuple[Mapping[str, float | str | None], ...] = ()
@@ -373,6 +377,7 @@ def segment_microsectors(
                 "nu_f": window_metrics.nu_f,
                 "nu_exc": window_metrics.nu_exc,
                 "rho": window_metrics.rho,
+                "udr": window_metrics.useful_dissonance_ratio,
             }
             for key, value in defaults.items():
                 filtered_measures.setdefault(key, value)

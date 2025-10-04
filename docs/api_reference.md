@@ -57,6 +57,10 @@ and orchestration over segmented telemetry streams. The orchestrator exposes
 ``microsector_variability`` entries summarising ΔNFR↓ and Sense Index variance
 plus population-standard deviation for each microsector, alongside a
 ``lap_sequence`` describing the lap labels detected in the incoming segments.
+The :class:`DissonanceBreakdown` payload now includes the Useful Dissonance
+Ratio (UDR) through the ``useful_dissonance_ratio``/``useful_dissonance_samples``
+fields, quantifying the fraction of high yaw-acceleration samples where
+ΔNFR is already decaying.
 
 ### `tnfr_lfs.core.segmentation`
 
@@ -94,7 +98,10 @@ Sense Index averages but also:
 Applies load balance, stability index, and coherence rules to produce a
 list of :class:`tnfr_lfs.recommender.rules.Recommendation` objects.
 Custom rules can be added by implementing the
-:class:`tnfr_lfs.recommender.rules.RecommendationRule` protocol.
+:class:`tnfr_lfs.recommender.rules.RecommendationRule` protocol. The default
+rule-set now evaluates the Useful Dissonance Ratio (UDR) to suggest stiffening
+rear support/LSD when yaw impulses fail to tame ΔNFR, or to soften the
+offending axle when UDR collapses.
 
 ### `tnfr_lfs.recommender.search`
 

@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from typing import Sequence
+
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -21,6 +23,7 @@ from tnfr_lfs.recommender.rules import (
     PhaseNodeOperatorRule,
     Recommendation,
     RecommendationEngine,
+    UsefulDissonanceRule,
 )
 
 
@@ -33,6 +36,91 @@ BASE_NU_F = {
     "track": 0.08,
     "driver": 0.05,
 }
+
+
+def _udr_bundle_series(values: Sequence[float], *, si: float = 0.8) -> Sequence[EPIBundle]:
+    bundles: list[EPIBundle] = []
+    for index, value in enumerate(values):
+        nodes = dict(
+            tyres=TyresNode(delta_nfr=value, sense_index=si, nu_f=BASE_NU_F["tyres"]),
+            suspension=SuspensionNode(
+                delta_nfr=value,
+                sense_index=si,
+                nu_f=BASE_NU_F["suspension"],
+            ),
+            chassis=ChassisNode(
+                delta_nfr=value,
+                sense_index=si,
+                nu_f=BASE_NU_F["chassis"],
+                yaw_rate=0.0,
+            ),
+            brakes=BrakesNode(delta_nfr=value, sense_index=si, nu_f=BASE_NU_F["brakes"]),
+            transmission=TransmissionNode(
+                delta_nfr=value,
+                sense_index=si,
+                nu_f=BASE_NU_F["transmission"],
+            ),
+            track=TrackNode(delta_nfr=value, sense_index=si, nu_f=BASE_NU_F["track"]),
+            driver=DriverNode(delta_nfr=value, sense_index=si, nu_f=BASE_NU_F["driver"]),
+        )
+        bundles.append(
+            EPIBundle(
+                timestamp=index * 0.1,
+                epi=0.0,
+                delta_nfr=value,
+                sense_index=si,
+                **nodes,
+            )
+        )
+    return bundles
+
+
+def _udr_goal(phase: str = "apex", target_delta: float = 0.2) -> Goal:
+    return Goal(
+        phase=phase,
+        archetype="apoyo",
+        description="",
+        target_delta_nfr=target_delta,
+        target_sense_index=0.85,
+        nu_f_target=0.3,
+        nu_exc_target=0.25,
+        rho_target=0.8,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.9,
+        measured_phase_lag=0.0,
+        measured_phase_alignment=0.9,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.3, 0.3),
+        dominant_nodes=("suspension", "chassis"),
+    )
+
+
+def _udr_microsector(goal: Goal, *, udr: float, sample_count: int) -> Microsector:
+    samples = tuple(range(sample_count))
+    boundary = (0, sample_count)
+    return Microsector(
+        index=7,
+        start_time=0.0,
+        end_time=sample_count * 0.1,
+        curvature=1.5,
+        brake_event=False,
+        support_event=True,
+        delta_nfr_signature=goal.target_delta_nfr + 0.4,
+        goals=(goal,),
+        phase_boundaries={goal.phase: boundary},
+        phase_samples={goal.phase: samples},
+        active_phase=goal.phase,
+        dominant_nodes={goal.phase: goal.dominant_nodes},
+        phase_weights={goal.phase: {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={goal.phase: goal.measured_phase_lag},
+        phase_alignment={goal.phase: goal.measured_phase_alignment},
+        filtered_measures={"udr": udr},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={goal.phase: {}},
+    )
 
 
 def test_recommendation_engine_detects_anomalies(car_track_thresholds):
@@ -811,3 +899,60 @@ def test_detune_ratio_rule_emits_modal_guidance() -> None:
     rationale = recommendations[0].rationale.lower()
     assert "ρ=" in recommendations[0].rationale
     assert "barras" in rationale
+
+
+def test_useful_dissonance_rule_reinforces_rear_when_udr_high(car_track_thresholds):
+    values = [1.4, 1.5, 1.3]
+    results = _udr_bundle_series(values)
+    goal = _udr_goal("apex", target_delta=0.2)
+    microsector = _udr_microsector(goal, udr=0.8, sample_count=len(results))
+
+    engine = RecommendationEngine(
+        rules=[UsefulDissonanceRule(priority=40)],
+        car_model="generic_gt",
+        track_name="valencia",
+        threshold_library=car_track_thresholds,
+    )
+
+    recommendations = engine.generate(results, [microsector])
+
+    assert recommendations, "expected UDR escalation recommendation"
+    messages = [rec.message.lower() for rec in recommendations]
+    assert any("reforzar" in message for message in messages)
+    rationales = " ".join(rec.rationale.lower() for rec in recommendations)
+    assert "udr" in rationales
+
+
+def test_useful_dissonance_rule_softens_axle_when_udr_low(car_track_thresholds):
+    values = [1.1, 1.2, 1.05]
+    results = _udr_bundle_series(values)
+    goal = _udr_goal("apex", target_delta=0.2)
+    microsector = _udr_microsector(goal, udr=0.1, sample_count=len(results))
+
+    engine = RecommendationEngine(
+        rules=[UsefulDissonanceRule(priority=38)],
+        car_model="generic_gt",
+        track_name="valencia",
+        threshold_library=car_track_thresholds,
+    )
+
+    recommendations = engine.generate(results, [microsector])
+
+    assert recommendations, "expected UDR softening recommendation"
+    messages = [rec.message.lower() for rec in recommendations]
+    assert any("ablandar" in message and "delanter" in message for message in messages)
+
+    # Oversteer scenario should target the rear axle.
+    oversteer_results = _udr_bundle_series([-1.2, -1.3, -1.1])
+    oversteer_goal = _udr_goal("apex", target_delta=0.0)
+    oversteer_microsector = _udr_microsector(
+        oversteer_goal,
+        udr=0.15,
+        sample_count=len(oversteer_results),
+    )
+
+    oversteer_recs = engine.generate(oversteer_results, [oversteer_microsector])
+
+    assert oversteer_recs, "expected UDR rear softening recommendation"
+    oversteer_messages = [rec.message.lower() for rec in oversteer_recs]
+    assert any("traser" in message for message in oversteer_messages)
