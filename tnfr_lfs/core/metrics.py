@@ -98,6 +98,8 @@ class WindowMetrics:
     structural_contraction_longitudinal: float
     structural_expansion_lateral: float
     structural_contraction_lateral: float
+    bottoming_ratio_front: float
+    bottoming_ratio_rear: float
     frequency_label: str
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
     aero_mechanical_coherence: float = 0.0
@@ -151,6 +153,8 @@ def compute_window_metrics(
             0.0,
             0.0,
             0.0,
+            0.0,
+            0.0,
             "",
             AeroCoherence(),
             0.0,
@@ -181,6 +185,8 @@ def compute_window_metrics(
     lateral_series: list[float] = []
     suspension_series: list[float] = []
     tyre_series: list[float] = []
+    front_travel_series: list[float] = []
+    rear_travel_series: list[float] = []
 
     context_matrix = load_context_matrix()
 
@@ -236,6 +242,12 @@ def compute_window_metrics(
             float(getattr(bundle.suspension, "delta_nfr", 0.0)) for bundle in bundles
         ]
         tyre_series = [float(getattr(bundle.tyres, "delta_nfr", 0.0)) for bundle in bundles]
+        front_travel_series = [
+            float(getattr(bundle.suspension, "travel_front", 0.0)) for bundle in bundles
+        ]
+        rear_travel_series = [
+            float(getattr(bundle.suspension, "travel_rear", 0.0)) for bundle in bundles
+        ]
         longitudinal_series = [
             float(getattr(bundle, "delta_nfr_longitudinal", 0.0)) for bundle in bundles
         ]
@@ -267,6 +279,12 @@ def compute_window_metrics(
         ]
         lateral_series = [
             float(getattr(record, "delta_nfr_lateral", 0.0)) for record in records
+        ]
+        front_travel_series = [
+            float(getattr(record, "suspension_travel_front", 0.0)) for record in records
+        ]
+        rear_travel_series = [
+            float(getattr(record, "suspension_travel_rear", 0.0)) for record in records
         ]
     _useful_samples, _high_yaw_samples, udr = compute_useful_dissonance_stats(
         timestamps,
@@ -319,12 +337,56 @@ def compute_window_metrics(
             return 0.0, 0.0
         return expansion / total_weight, contraction / total_weight
 
+    bottoming_threshold_front = max(
+        0.0, _objective("bottoming_travel_threshold_front", 0.015)
+    )
+    bottoming_threshold_rear = max(
+        0.0, _objective("bottoming_travel_threshold_rear", 0.015)
+    )
+    delta_peak_threshold = abs(_objective("bottoming_delta_nfr_threshold", 0.4))
+
+    def _bottoming_ratio(
+        travel_series: Sequence[float], threshold: float
+    ) -> float:
+        if not travel_series or not longitudinal_series:
+            return 0.0
+        bottoming_indices = [
+            index for index, travel in enumerate(travel_series) if travel <= threshold
+        ]
+        if not bottoming_indices:
+            return 0.0
+        overlap = 0
+        for index in bottoming_indices:
+            if index >= len(longitudinal_series):
+                continue
+            magnitude = abs(float(longitudinal_series[index]))
+            if delta_peak_threshold <= 0.0 or magnitude >= delta_peak_threshold:
+                overlap += 1
+        if delta_peak_threshold <= 0.0:
+            denominator = len(bottoming_indices)
+        else:
+            peak_count = sum(
+                1 for value in longitudinal_series if abs(float(value)) >= delta_peak_threshold
+            )
+            denominator = peak_count if peak_count > 0 else len(longitudinal_series)
+        if denominator <= 0:
+            return 0.0
+        ratio = overlap / float(denominator)
+        if ratio < 0.0:
+            return 0.0
+        if ratio > 1.0:
+            return 1.0
+        return ratio
+
     support_effective = _weighted_average(support_samples, windows)
     load_support_ratio = (
         support_effective / avg_vertical_load if avg_vertical_load > 1e-6 else 0.0
     )
     long_expansion, long_contraction = _expansion_payload(longitudinal_series, windows)
     lat_expansion, lat_contraction = _expansion_payload(lateral_series, windows)
+
+    bottoming_ratio_front = _bottoming_ratio(front_travel_series, bottoming_threshold_front)
+    bottoming_ratio_rear = _bottoming_ratio(rear_travel_series, bottoming_threshold_rear)
 
     aero = compute_aero_coherence(records, bundles)
     coherence_values: list[float] = []
@@ -370,6 +432,8 @@ def compute_window_metrics(
         structural_contraction_longitudinal=long_contraction,
         structural_expansion_lateral=lat_expansion,
         structural_contraction_lateral=lat_contraction,
+        bottoming_ratio_front=bottoming_ratio_front,
+        bottoming_ratio_rear=bottoming_ratio_rear,
         frequency_label=frequency_label,
         aero_coherence=aero,
         aero_mechanical_coherence=aero_mechanical,

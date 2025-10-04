@@ -491,6 +491,8 @@ def segment_microsectors(
                 "structural_contraction_longitudinal": window_metrics.structural_contraction_longitudinal,
                 "structural_expansion_lateral": window_metrics.structural_expansion_lateral,
                 "structural_contraction_lateral": window_metrics.structural_contraction_lateral,
+                "bottoming_ratio_front": window_metrics.bottoming_ratio_front,
+                "bottoming_ratio_rear": window_metrics.bottoming_ratio_rear,
                 "aero_low_imbalance": window_metrics.aero_coherence.low_speed_imbalance,
                 "aero_high_imbalance": window_metrics.aero_coherence.high_speed_imbalance,
                 "aero_low_samples": float(window_metrics.aero_coherence.low_speed_samples),

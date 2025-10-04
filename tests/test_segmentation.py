@@ -6,7 +6,12 @@ from statistics import mean
 from typing import Mapping, Tuple
 
 from tnfr_lfs.core.archetypes import archetype_phase_targets
-from tnfr_lfs.core.contextual_delta import apply_contextual_delta, load_context_matrix
+from tnfr_lfs.core import segmentation as segmentation_module
+from tnfr_lfs.core.contextual_delta import (
+    ContextFactors,
+    apply_contextual_delta,
+    load_context_matrix,
+)
 from tnfr_lfs.core.coherence import sense_index
 from tnfr_lfs.core.epi import (
     DEFAULT_PHASE_WEIGHTS,
@@ -17,6 +22,7 @@ from tnfr_lfs.core.epi import (
     resolve_nu_f_by_node,
 )
 from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias, phase_family
+from tnfr_lfs.core.metrics import AeroCoherence, WindowMetrics
 from tnfr_lfs.core.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
@@ -237,6 +243,97 @@ def _dynamic_record(timestamp: float, lateral: float, speed: float) -> Telemetry
     )
 
 
+@pytest.fixture
+def bottoming_segments(monkeypatch):
+    high_lateral = 1.35
+    low_lateral = 0.2
+    samples = [
+        (high_lateral, 0.012, 0.03),
+        (high_lateral, 0.013, 0.03),
+        (high_lateral, 0.011, 0.03),
+        (high_lateral, 0.02, 0.03),
+        (low_lateral, 0.02, 0.03),
+        (low_lateral, 0.02, 0.03),
+        (high_lateral, 0.025, 0.011),
+        (high_lateral, 0.024, 0.012),
+        (high_lateral, 0.023, 0.013),
+        (high_lateral, 0.022, 0.012),
+    ]
+    records = [
+        replace(
+            _dynamic_record(index * 0.2, lat, 40.0 - index),
+            suspension_travel_front=front,
+            suspension_travel_rear=rear,
+        )
+        for index, (lat, front, rear) in enumerate(samples)
+    ]
+    bundles = EPIExtractor().extract(records)
+
+    aero = AeroCoherence()
+    smooth_metrics = WindowMetrics(
+        si=0.8,
+        si_variance=0.0004,
+        d_nfr_couple=0.1,
+        d_nfr_res=0.05,
+        d_nfr_flat=0.02,
+        nu_f=1.2,
+        nu_exc=0.9,
+        rho=0.85,
+        phase_lag=0.0,
+        phase_alignment=0.95,
+        useful_dissonance_ratio=0.4,
+        useful_dissonance_percentage=40.0,
+        coherence_index=0.5,
+        support_effective=0.12,
+        load_support_ratio=0.00003,
+        structural_expansion_longitudinal=0.1,
+        structural_contraction_longitudinal=0.03,
+        structural_expansion_lateral=0.05,
+        structural_contraction_lateral=0.02,
+        bottoming_ratio_front=0.6,
+        bottoming_ratio_rear=0.12,
+        frequency_label="",
+        aero_coherence=aero,
+        aero_mechanical_coherence=0.5,
+        epi_derivative_abs=0.05,
+    )
+    rough_metrics = replace(
+        smooth_metrics,
+        bottoming_ratio_front=0.18,
+        bottoming_ratio_rear=0.68,
+        useful_dissonance_ratio=0.46,
+        useful_dissonance_percentage=46.0,
+    )
+    metric_sequence = iter([smooth_metrics, rough_metrics])
+
+    def _fake_window_metrics(*args, **kwargs):
+        try:
+            return next(metric_sequence)
+        except StopIteration:
+            return rough_metrics
+
+    monkeypatch.setattr(segmentation_module, "compute_window_metrics", _fake_window_metrics)
+
+    surface_sequence = iter(
+        [
+            ContextFactors(1.0, 0.95, 1.0),
+            ContextFactors(1.0, 1.25, 1.0),
+        ]
+    )
+
+    def _fake_context(*args, **kwargs):
+        try:
+            return next(surface_sequence)
+        except StopIteration:
+            return ContextFactors()
+
+    monkeypatch.setattr(
+        segmentation_module, "resolve_microsector_context", _fake_context
+    )
+
+    return records, bundles
+
+
 def _classify_from_series(lateral: list[float], speeds: list[float], dt: float) -> str:
     records = [_dynamic_record(index * dt, lat, speeds[index]) for index, lat in enumerate(lateral)]
     bundles = EPIExtractor().extract(records)
@@ -306,6 +403,17 @@ def test_segment_microsectors_emits_structural_silence_events() -> None:
     event = silence_events[0]
     assert event["duration"] > 0.5
     assert event["load_span"] < 200.0
+
+
+def test_segment_microsectors_exposes_bottoming_ratios(bottoming_segments) -> None:
+    records, bundles = bottoming_segments
+    microsectors = segment_microsectors(records, bundles)
+    assert len(microsectors) >= 2
+    smooth, rough = microsectors[:2]
+    assert smooth.filtered_measures["bottoming_ratio_front"] == pytest.approx(0.6)
+    assert smooth.context_factors.get("surface") == pytest.approx(0.95)
+    assert rough.filtered_measures["bottoming_ratio_rear"] == pytest.approx(0.68)
+    assert rough.context_factors.get("surface") == pytest.approx(1.25)
 
 
 def _yaw_rate(records: list[TelemetryRecord], index: int) -> float:
