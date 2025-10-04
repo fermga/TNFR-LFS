@@ -1,6 +1,16 @@
+import math
+
 import pytest
 
-from tnfr_lfs.core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord, delta_nfr_by_node
+from tnfr_lfs.core.epi import (
+    DeltaCalculator,
+    EPIExtractor,
+    NaturalFrequencyAnalyzer,
+    NaturalFrequencySettings,
+    TelemetryRecord,
+    delta_nfr_by_node,
+    resolve_nu_f_by_node,
+)
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -11,6 +21,85 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
+
+
+def _frequency_record(
+    timestamp: float,
+    *,
+    steer: float,
+    throttle: float,
+    brake: float,
+    suspension: float,
+) -> TelemetryRecord:
+    base = {
+        "timestamp": timestamp,
+        "vertical_load": 5200.0 + suspension * 150.0,
+        "slip_ratio": 0.02,
+        "lateral_accel": 0.6 + steer * 0.1,
+        "longitudinal_accel": 0.2 + (throttle - brake) * 0.05,
+        "yaw": 0.0,
+        "pitch": 0.0,
+        "roll": 0.0,
+        "brake_pressure": max(0.0, brake),
+        "locking": 0.0,
+        "nfr": 500.0,
+        "si": 0.82,
+        "speed": 45.0,
+        "yaw_rate": steer * 0.15,
+        "slip_angle": 0.01,
+        "steer": steer,
+        "throttle": max(0.0, min(1.0, throttle)),
+        "gear": 3,
+        "vertical_load_front": 2600.0 + suspension * 40.0,
+        "vertical_load_rear": 2600.0 - suspension * 40.0,
+        "mu_eff_front": 1.05,
+        "mu_eff_rear": 1.05,
+        "mu_eff_front_lateral": 1.05,
+        "mu_eff_front_longitudinal": 1.0,
+        "mu_eff_rear_lateral": 1.05,
+        "mu_eff_rear_longitudinal": 1.0,
+        "suspension_travel_front": 0.02 + suspension * 0.01,
+        "suspension_travel_rear": 0.02 + suspension * 0.01,
+        "suspension_velocity_front": suspension,
+        "suspension_velocity_rear": suspension * 0.92,
+    }
+    return TelemetryRecord(**base)
+
+
+def _synthetic_frequency_series(
+    frequency: float,
+    *,
+    sample_rate: float,
+    duration: float,
+    noise_level: float,
+) -> list[TelemetryRecord]:
+    total_samples = int(duration * sample_rate)
+    records: list[TelemetryRecord] = []
+    for index in range(total_samples):
+        timestamp = index / sample_rate
+        base_wave = math.sin(2.0 * math.pi * frequency * timestamp)
+        noise_wave = noise_level * math.sin(
+            2.0 * math.pi * (frequency * 0.5) * timestamp + math.pi / 4.0
+        )
+        steer = 0.3 * base_wave + noise_wave
+        throttle = 0.55 + 0.25 * base_wave + noise_level * math.sin(
+            2.0 * math.pi * (frequency * 1.2) * timestamp + math.pi / 6.0
+        )
+        brake = 0.25 + 0.15 * math.sin(2.0 * math.pi * frequency * timestamp + math.pi / 3.0)
+        brake += noise_level * 0.5 * math.sin(2.0 * math.pi * (frequency * 0.7) * timestamp)
+        suspension = 0.08 * base_wave + 0.03 * math.sin(
+            2.0 * math.pi * (frequency * 1.3) * timestamp + math.pi / 8.0
+        )
+        records.append(
+            _frequency_record(
+                timestamp,
+                steer=steer,
+                throttle=throttle,
+                brake=brake,
+                suspension=suspension,
+            )
+        )
+    return records
 
 
 def test_delta_calculation_against_baseline(synthetic_records):
@@ -304,3 +393,59 @@ def test_epi_weights_shift_balance_between_load_and_slip(synthetic_records):
     assert default_results[0].epi != pytest.approx(slip_focused[0].epi)
     assert default_results[-1].epi != pytest.approx(slip_focused[-1].epi)
     assert all(0.0 <= bundle.sense_index <= 1.0 for bundle in slip_focused)
+
+
+def test_natural_frequency_analysis_converges_to_dominant_signal():
+    frequency = 2.4  # Hz
+    sample_rate = 40.0
+    duration = 6.0
+    settings = NaturalFrequencySettings(
+        min_window_seconds=2.0,
+        max_window_seconds=5.0,
+        bandpass_low_hz=0.5,
+        bandpass_high_hz=5.0,
+        smoothing_alpha=0.35,
+        vehicle_frequency={"__default__": 1.5, "test_proto": 2.1},
+        min_multiplier=0.5,
+        max_multiplier=2.5,
+    )
+    analyzer = NaturalFrequencyAnalyzer(settings)
+    car_model = "test_proto"
+
+    records = _synthetic_frequency_series(
+        frequency,
+        sample_rate=sample_rate,
+        duration=duration,
+        noise_level=0.05,
+    )
+
+    base_reference = resolve_nu_f_by_node(records[-1])
+    driver_history: list[float] = []
+    last_map: dict[str, float] = {}
+    warmup_samples = int(settings.min_window_seconds * sample_rate)
+    for index, record in enumerate(records):
+        last_map = resolve_nu_f_by_node(
+            record,
+            analyzer=analyzer,
+            car_model=car_model,
+        )
+        if index >= warmup_samples:
+            driver_history.append(last_map["driver"])
+
+    assert last_map  # Analyzer produced an updated map.
+    vehicle_frequency = settings.resolve_vehicle_frequency(car_model)
+    expected_ratio = frequency / vehicle_frequency
+    expected_ratio = max(settings.min_multiplier, min(settings.max_multiplier, expected_ratio))
+
+    base_final = resolve_nu_f_by_node(records[-1])
+    for node in ("driver", "suspension", "transmission", "brakes", "tyres"):
+        measured_ratio = last_map[node] / base_final[node]
+        assert measured_ratio == pytest.approx(expected_ratio, rel=0.25)
+
+    assert driver_history, "warm-up period should yield samples for smoothing analysis"
+    driver_steps = [
+        abs(curr - prev) for prev, curr in zip(driver_history[:-1], driver_history[1:])
+    ]
+    if driver_steps:
+        max_step = max(driver_steps)
+        assert max_step < base_reference["driver"] * 0.6

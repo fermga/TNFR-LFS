@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 from statistics import mean
 from collections.abc import Mapping as MappingABC
-from typing import Dict, List, Mapping, Optional, Sequence, TYPE_CHECKING
+from typing import Deque, Dict, List, Mapping, Optional, Sequence, TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
     from .coherence_calibration import CoherenceCalibrationStore
@@ -38,6 +39,206 @@ NU_F_NODE_DEFAULTS: Mapping[str, float] = {
 }
 
 DEFAULT_PHASE_WEIGHTS: Mapping[str, float] = {"__default__": 1.0}
+
+_AVERAGE_NU_F = sum(NU_F_NODE_DEFAULTS.values()) / float(len(NU_F_NODE_DEFAULTS))
+
+
+@dataclass(frozen=True)
+class NaturalFrequencySettings:
+    """Configuration options for the natural frequency estimator."""
+
+    min_window_seconds: float = 2.0
+    max_window_seconds: float = 5.0
+    bandpass_low_hz: float = 0.1
+    bandpass_high_hz: float = 6.0
+    min_multiplier: float = 0.5
+    max_multiplier: float = 2.5
+    smoothing_alpha: float = 0.25
+    vehicle_frequency: Mapping[str, float] = field(
+        default_factory=lambda: {"__default__": _AVERAGE_NU_F}
+    )
+
+    def resolve_vehicle_frequency(self, car_model: str | None) -> float:
+        if car_model and car_model in self.vehicle_frequency:
+            return max(1e-6, float(self.vehicle_frequency[car_model]))
+        if "__default__" in self.vehicle_frequency:
+            return max(1e-6, float(self.vehicle_frequency["__default__"]))
+        return max(1e-6, _AVERAGE_NU_F)
+
+
+class NaturalFrequencyAnalyzer:
+    """Track dominant frequencies over a sliding telemetry window."""
+
+    def __init__(self, settings: NaturalFrequencySettings | None = None) -> None:
+        self.settings = settings or NaturalFrequencySettings()
+        self._history: Deque[TelemetryRecord] = deque()
+        self._smoothed: Dict[str, float] = {}
+        self._last_car: str | None = None
+
+    def reset(self) -> None:
+        self._history.clear()
+        self._smoothed.clear()
+        self._last_car = None
+
+    def update(
+        self,
+        record: TelemetryRecord,
+        base_map: Mapping[str, float],
+        *,
+        car_model: str | None = None,
+    ) -> Dict[str, float]:
+        self._append_record(record)
+        return self._resolve(base_map, car_model)
+
+    def compute_from_history(
+        self,
+        history: Sequence[TelemetryRecord],
+        base_map: Mapping[str, float],
+        *,
+        record: TelemetryRecord | None = None,
+        car_model: str | None = None,
+    ) -> Dict[str, float]:
+        self._history.clear()
+        for sample in history:
+            self._append_record(sample)
+        if record is not None and (not self._history or self._history[-1] is not record):
+            self._append_record(record)
+        return self._resolve(base_map, car_model)
+
+    def _append_record(self, record: TelemetryRecord) -> None:
+        self._history.append(record)
+        max_window = max(self.settings.max_window_seconds, self.settings.min_window_seconds)
+        while (
+            len(self._history) >= 2
+            and (self._history[-1].timestamp - self._history[0].timestamp) > max_window
+        ):
+            self._history.popleft()
+
+    def _resolve(
+        self, base_map: Mapping[str, float], car_model: str | None
+    ) -> Dict[str, float]:
+        if car_model != self._last_car:
+            self._smoothed.clear()
+            self._last_car = car_model
+
+        dynamic = self._dynamic_multipliers(car_model)
+        if not dynamic:
+            # No dynamic adjustment available, fall back to smoothing defaults.
+            return self._apply_smoothing(dict(base_map))
+
+        adjusted = {}
+        for node, value in base_map.items():
+            multiplier = dynamic.get(node, 1.0)
+            adjusted[node] = value * multiplier
+        return self._apply_smoothing(adjusted)
+
+    def _dynamic_multipliers(self, car_model: str | None) -> Dict[str, float]:
+        history = list(self._history)
+        if len(history) < 2:
+            return {}
+
+        duration = history[-1].timestamp - history[0].timestamp
+        if duration < max(0.0, self.settings.min_window_seconds - 1e-6):
+            return {}
+
+        from .spectrum import cross_spectrum, power_spectrum, estimate_sample_rate
+
+        sample_rate = estimate_sample_rate(history)
+        if sample_rate <= 0.0:
+            return {}
+
+        min_samples = max(4, int(self.settings.min_window_seconds * sample_rate))
+        if len(history) < min_samples:
+            return {}
+
+        steer_series = [float(record.steer) for record in history]
+        throttle_series = [float(record.throttle) for record in history]
+        brake_series = [float(record.brake_pressure) for record in history]
+        suspension_front = [float(record.suspension_velocity_front) for record in history]
+        suspension_rear = [float(record.suspension_velocity_rear) for record in history]
+        suspension_combined = [
+            (front + rear) * 0.5 for front, rear in zip(suspension_front, suspension_rear)
+        ]
+
+        low = max(0.0, self.settings.bandpass_low_hz)
+        high = max(low, self.settings.bandpass_high_hz)
+
+        def _dominant_frequency(series: Sequence[float]) -> float:
+            spectrum = power_spectrum(series, sample_rate)
+            band = [entry for entry in spectrum if low <= entry[0] <= high]
+            if not band:
+                return 0.0
+            frequency, energy = max(band, key=lambda entry: entry[1])
+            if energy <= 1e-9:
+                return 0.0
+            return frequency
+
+        def _dominant_cross(x_series: Sequence[float], y_series: Sequence[float]) -> float:
+            spectrum = cross_spectrum(x_series, y_series, sample_rate)
+            band = [entry for entry in spectrum if low <= entry[0] <= high]
+            if not band:
+                return 0.0
+            frequency, real, imag = max(
+                band, key=lambda entry: math.hypot(entry[1], entry[2])
+            )
+            magnitude = math.hypot(real, imag)
+            if magnitude <= 1e-9:
+                return 0.0
+            return frequency
+
+        steer_freq = _dominant_frequency(steer_series)
+        throttle_freq = _dominant_frequency(throttle_series)
+        brake_freq = _dominant_frequency(brake_series)
+        suspension_freq = _dominant_frequency(suspension_combined)
+        tyre_freq = _dominant_cross(steer_series, suspension_combined)
+
+        vehicle_frequency = self.settings.resolve_vehicle_frequency(car_model)
+
+        def _normalise(frequency: float) -> float:
+            if frequency <= 0.0:
+                return 1.0
+            ratio = frequency / vehicle_frequency
+            ratio = max(self.settings.min_multiplier, min(self.settings.max_multiplier, ratio))
+            return ratio
+
+        multipliers: Dict[str, float] = {}
+        if steer_freq > 0.0:
+            multipliers["driver"] = _normalise(steer_freq)
+        if throttle_freq > 0.0:
+            multipliers["transmission"] = _normalise(throttle_freq)
+        if brake_freq > 0.0:
+            multipliers["brakes"] = _normalise(brake_freq)
+        if suspension_freq > 0.0:
+            value = _normalise(suspension_freq)
+            multipliers["suspension"] = value
+            multipliers.setdefault("chassis", value)
+        if tyre_freq > 0.0:
+            value = _normalise(tyre_freq)
+            multipliers["tyres"] = value
+            multipliers["chassis"] = value
+        elif suspension_freq > 0.0 and steer_freq > 0.0:
+            blended = (multipliers["suspension"] + multipliers["driver"]) * 0.5
+            multipliers["tyres"] = blended
+
+        return multipliers
+
+    def _apply_smoothing(self, mapping: Dict[str, float]) -> Dict[str, float]:
+        alpha = self.settings.smoothing_alpha
+        if not (0.0 < alpha < 1.0):
+            # Smoothing disabled, return mapping as-is.
+            for node, value in mapping.items():
+                self._smoothed[node] = value
+            return mapping
+
+        for node, value in mapping.items():
+            previous = self._smoothed.get(node)
+            if previous is None:
+                smoothed = value
+            else:
+                smoothed = (alpha * value) + ((1.0 - alpha) * previous)
+            self._smoothed[node] = smoothed
+            mapping[node] = smoothed
+        return mapping
 
 AXIS_FEATURE_MAP: Mapping[str, Mapping[str, str]] = {
     "tyres": {
@@ -329,48 +530,41 @@ def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
     return _distribute_node_delta(delta_nfr, node_signals)
 
 
-def resolve_nu_f_by_node(
+def _phase_weight(
+    node: str,
+    phase: str | None,
+    phase_weights: Mapping[str, Mapping[str, float] | float] | None,
+) -> float:
+    if not phase or not phase_weights or not isinstance(phase_weights, MappingABC):
+        return 1.0
+    profile: Mapping[str, float] | float | None = None
+    for candidate in (*expand_phase_alias(phase), phase_family(phase), phase):
+        if candidate is None:
+            continue
+        profile = phase_weights.get(candidate)
+        if profile is not None:
+            break
+    if profile is None:
+        profile = phase_weights.get("__default__")
+    if profile is None:
+        return 1.0
+    if isinstance(profile, MappingABC):
+        if node in profile:
+            return float(profile[node])
+        if "__default__" in profile:
+            return float(profile["__default__"])
+        return 1.0
+    if isinstance(profile, (int, float)):
+        return float(profile)
+    return 1.0
+
+
+def _base_nu_f_map(
     record: TelemetryRecord,
     *,
     phase: str | None = None,
     phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
 ) -> Dict[str, float]:
-    """Return the natural frequency per node for a telemetry sample.
-
-    The base natural frequencies documented in ``NU_F_NODE_DEFAULTS`` are
-    modulated by the instantaneous telemetry readings and optionally by the
-    phase-aware weighting profiles derived from the segmentation layer.  This
-    allows phases that emphasise a subsystem to increase its natural frequency
-    which in turn penalises the global sense index more aggressively.
-    """
-
-    def _phase_weight(node: str) -> float:
-        if not phase or not phase_weights or not isinstance(phase_weights, MappingABC):
-            return 1.0
-        profile: Mapping[str, float] | float | None = None
-        for candidate in (*expand_phase_alias(phase), phase_family(phase), phase):
-            if candidate is None:
-                continue
-            profile = phase_weights.get(candidate)
-            if profile is not None:
-                break
-        if profile is None:
-            profile = phase_weights.get("__default__")
-        if profile is None:
-            return 1.0
-        if isinstance(profile, MappingABC):
-            if node in profile:
-                return float(profile[node])
-            if "__default__" in profile:
-                return float(profile["__default__"])
-            return 1.0
-        if isinstance(profile, (int, float)):
-            return float(profile)
-        return 1.0
-
-    # Slip excursions modulate the tyre's natural frequency, while the
-    # suspension node reacts to sustained load deviations.  Other
-    # subsystems retain their documented defaults.
     slip_modifier = 1.0 + min(abs(record.slip_ratio), 1.0) * 0.2
     load_deviation = (record.vertical_load - 5000.0) / 4000.0
     load_modifier = 1.0 + max(-0.5, min(0.5, load_deviation))
@@ -385,21 +579,69 @@ def resolve_nu_f_by_node(
             value = base_value * sense_modifier
         else:
             value = base_value
-        phase_modifier = max(0.5, min(3.0, _phase_weight(node)))
+        phase_modifier = max(0.5, min(3.0, _phase_weight(node, phase, phase_weights)))
         mapping[node] = value * phase_modifier
     return mapping
+
+
+def resolve_nu_f_by_node(
+    record: TelemetryRecord,
+    *,
+    phase: str | None = None,
+    phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
+    history: Sequence[TelemetryRecord] | None = None,
+    car_model: str | None = None,
+    analyzer: NaturalFrequencyAnalyzer | None = None,
+    settings: NaturalFrequencySettings | None = None,
+) -> Dict[str, float]:
+    """Return the natural frequency per node for a telemetry sample.
+
+    When the optional ``analyzer`` or ``history`` arguments are provided the
+    result incorporates sliding-window spectral analysis to align the
+    instantaneous ν_f values with the dominant excitation frequencies observed
+    in the steering, pedal and suspension signals.
+    """
+
+    base_map = _base_nu_f_map(record, phase=phase, phase_weights=phase_weights)
+
+    if analyzer is None:
+        if settings is not None:
+            analyzer = NaturalFrequencyAnalyzer(settings)
+        elif history is not None:
+            analyzer = NaturalFrequencyAnalyzer()
+        else:
+            return dict(base_map)
+
+    if history is not None:
+        return analyzer.compute_from_history(
+            history,
+            base_map,
+            record=record,
+            car_model=car_model,
+        )
+    return analyzer.update(record, base_map, car_model=car_model)
 
 
 class EPIExtractor:
     """Compute EPI bundles for a stream of telemetry records."""
 
-    def __init__(self, load_weight: float = 0.6, slip_weight: float = 0.4) -> None:
+    def __init__(
+        self,
+        load_weight: float = 0.6,
+        slip_weight: float = 0.4,
+        *,
+        natural_frequency_settings: NaturalFrequencySettings | None = None,
+    ) -> None:
         if not 0 <= load_weight <= 1:
             raise ValueError("load_weight must be in the 0..1 range")
         if not 0 <= slip_weight <= 1:
             raise ValueError("slip_weight must be in the 0..1 range")
         self.load_weight = load_weight
         self.slip_weight = slip_weight
+        self.natural_frequency_settings = (
+            natural_frequency_settings or NaturalFrequencySettings()
+        )
+        self._nu_f_analyzer = NaturalFrequencyAnalyzer(self.natural_frequency_settings)
 
     def extract(
         self,
@@ -411,6 +653,7 @@ class EPIExtractor:
     ) -> List[EPIBundle]:
         if not records:
             return []
+        self._nu_f_analyzer.reset()
         baseline = DeltaCalculator.resolve_baseline(
             records,
             calibration=calibration,
@@ -436,7 +679,11 @@ class EPIExtractor:
                     dt = max(0.0, structural_ts - prev_structural)
                 else:
                     dt = max(0.0, record.timestamp - prev_timestamp)
-            nu_f_map = resolve_nu_f_by_node(record)
+            nu_f_map = resolve_nu_f_by_node(
+                record,
+                analyzer=self._nu_f_analyzer,
+                car_model=car_model,
+            )
             bundle = DeltaCalculator.compute_bundle(
                 record,
                 baseline,
