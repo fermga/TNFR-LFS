@@ -17,6 +17,16 @@ make quickstart
 
 El objetivo invoca `examples/quickstart.sh`, que genera artefactos en `examples/out/` a partir del dataset y produce informes JSON y Markdown listos para inspeccionar.
 
+### HUD en directo
+
+Para mostrar el HUD ΔNFR dentro de Live for Speed habilita los broadcasters en el simulador (`/outsim 1 127.0.0.1 4123`, `/outgauge 1 127.0.0.1 3000` y `/insim 29999`) y ejecuta:
+
+```bash
+tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
+```
+
+El panel alterna tres páginas (estado de curva/fase, contribuciones nodales y plan de setup) que caben en un botón `IS_BTN` de 40×16. Puedes moverlo con `--layout-left/--layout-top` si otro mod ocupa la misma zona.
+
 ## Documentación
 
 La documentación completa se encuentra en el directorio `docs/` y se publica con MkDocs.

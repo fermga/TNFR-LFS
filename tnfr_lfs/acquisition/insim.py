@@ -314,6 +314,8 @@ class InSimClient:
 class OverlayManager:
     """Helper that keeps a button overlay alive via InSim."""
 
+    MAX_BUTTON_TEXT = InSimClient.MAX_BUTTON_TEXT
+
     def __init__(
         self,
         client: InSimClient,
@@ -356,6 +358,11 @@ class OverlayManager:
         self.client.clear_button(self.layout)
         self._visible = False
         self._schedule_keepalive()
+
+    def clear(self) -> None:
+        """Public alias for :meth:`hide` used by long-running loops."""
+
+        self.hide()
 
     def tick(self) -> None:
         if not self.client.connected:

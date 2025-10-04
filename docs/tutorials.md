@@ -33,6 +33,21 @@ tnfr-lfs diagnose /ruta/a/LFS/cfg.txt
 to validate that OutSim/OutGauge are enabled and that the UDP ports are available before
 capturing telemetry.
 
+## 0 bis. Visualise the live HUD
+
+With the telemetry broadcasters active you can display the ΔNFR HUD directly
+inside Live for Speed:
+
+```bash
+tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
+```
+
+Click on the overlay button to rotate through the three pages: (A) active
+corner and dissonance breakdown, (B) nodal |ΔNFR↓| contributions and modal
+resonance, (C) setup hints aligned with the current phase.  Use the
+``--layout-*`` overrides if you need to move the 40×16 button to a different
+area of the HUD.
+
 ## 1. Capture a baseline
 
 ```bash
