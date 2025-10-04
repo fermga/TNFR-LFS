@@ -7,6 +7,12 @@ from math import sqrt
 from statistics import mean, pvariance
 from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
 
+from .contextual_delta import (
+    apply_contextual_delta,
+    load_context_matrix,
+    resolve_context_from_bundle,
+    resolve_series_context,
+)
 from .dissonance import compute_useful_dissonance_stats
 from .epi import (
     EPIExtractor,
@@ -137,6 +143,11 @@ def dissonance_breakdown_operator(
     useful_dissonance_samples = 0
     high_yaw_acc_samples = 0
 
+    context_matrix = load_context_matrix()
+    bundle_context = (
+        resolve_series_context(bundles, matrix=context_matrix) if bundles else []
+    )
+
     if microsectors and bundles:
         bundle_count = len(bundles)
         for microsector in microsectors:
@@ -158,7 +169,18 @@ def dissonance_breakdown_operator(
                 apex_indices.extend(idx for idx in indices if 0 <= idx < bundle_count)
             if not apex_indices:
                 continue
-            tyre_delta = [bundles[idx].tyres.delta_nfr for idx in apex_indices]
+            tyre_delta = []
+            for idx in apex_indices:
+                multiplier = 1.0
+                if 0 <= idx < len(bundle_context):
+                    multiplier = max(
+                        context_matrix.min_multiplier,
+                        min(
+                            context_matrix.max_multiplier,
+                            bundle_context[idx].multiplier,
+                        ),
+                    )
+                tyre_delta.append(bundles[idx].tyres.delta_nfr * multiplier)
             if not tyre_delta:
                 continue
             deviation = mean(tyre_delta) - apex_goal.target_delta_nfr
@@ -175,7 +197,14 @@ def dissonance_breakdown_operator(
     useful_dissonance_ratio = 0.0
     if bundles:
         timestamps = [bundle.timestamp for bundle in bundles]
-        delta_series = [bundle.delta_nfr for bundle in bundles]
+        delta_series = [
+            apply_contextual_delta(
+                bundle.delta_nfr,
+                bundle_context[idx],
+                context_matrix=context_matrix,
+            )
+            for idx, bundle in enumerate(bundles)
+        ]
         yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
         (
             useful_dissonance_samples,
@@ -708,7 +737,18 @@ def _stage_coherence(
             "resonance": 0.0,
         }
 
-    delta_series = [bundle.delta_nfr for bundle in bundles]
+    context_matrix = load_context_matrix()
+    bundle_context = [
+        resolve_context_from_bundle(context_matrix, bundle) for bundle in bundles
+    ]
+    delta_series = [
+        apply_contextual_delta(
+            bundle.delta_nfr,
+            factors,
+            context_matrix=context_matrix,
+        )
+        for bundle, factors in zip(bundles, bundle_context)
+    ]
     si_series = [bundle.sense_index for bundle in bundles]
     smoothed_delta = coherence_operator(delta_series, window=coherence_window)
     smoothed_si = coherence_operator(si_series, window=coherence_window)
@@ -743,11 +783,17 @@ def _stage_nodal_metrics(bundles: Sequence[EPIBundle]) -> Dict[str, object]:
         ("tyres", "chassis"),
         ("suspension", "chassis"),
     )
-    delta_by_node = {
-        "tyres": [bundle.tyres.delta_nfr for bundle in bundles],
-        "suspension": [bundle.suspension.delta_nfr for bundle in bundles],
-        "chassis": [bundle.chassis.delta_nfr for bundle in bundles],
-    }
+    context_matrix = load_context_matrix()
+    bundle_context = resolve_series_context(bundles, matrix=context_matrix)
+    delta_by_node = {"tyres": [], "suspension": [], "chassis": []}
+    for bundle, factors in zip(bundles, bundle_context):
+        multiplier = max(
+            context_matrix.min_multiplier,
+            min(context_matrix.max_multiplier, factors.multiplier),
+        )
+        delta_by_node["tyres"].append(bundle.tyres.delta_nfr * multiplier)
+        delta_by_node["suspension"].append(bundle.suspension.delta_nfr * multiplier)
+        delta_by_node["chassis"].append(bundle.chassis.delta_nfr * multiplier)
     si_by_node = {
         "tyres": [bundle.tyres.sense_index for bundle in bundles],
         "suspension": [bundle.suspension.sense_index for bundle in bundles],

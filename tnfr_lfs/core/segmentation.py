@@ -31,6 +31,15 @@ from .epi import (
     resolve_nu_f_by_node,
 )
 from .epi_models import EPIBundle
+from .contextual_delta import (
+    ContextFactors,
+    ContextMatrix,
+    apply_contextual_delta,
+    load_context_matrix,
+    resolve_context_from_record,
+    resolve_microsector_context,
+    resolve_series_context,
+)
 from .metrics import compute_window_metrics
 from .operators import mutation_operator, recursivity_operator
 from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias, phase_family
@@ -119,6 +128,10 @@ class Microsector:
     phase_axis_weights: Mapping[PhaseLiteral, Mapping[str, float]] = field(
         default_factory=dict
     )
+    context_factors: Mapping[str, float] = field(default_factory=dict)
+    sample_context_factors: Mapping[int, Mapping[str, float]] = field(
+        default_factory=dict
+    )
 
     def phase_indices(self, phase: PhaseLiteral) -> range:
         """Return the range of sample indices assigned to ``phase``."""
@@ -176,6 +189,7 @@ def segment_microsectors(
         return []
 
     baseline = DeltaCalculator.derive_baseline(records)
+    context_matrix = load_context_matrix()
     bundle_list = list(bundles)
     microsectors: List[Microsector] = []
     rec_state: MutableMapping[str, Dict[str, object]] | None = None
@@ -187,6 +201,15 @@ def segment_microsectors(
     phase_assignments: Dict[int, PhaseLiteral] = {}
     weight_lookup: Dict[int, Mapping[str, Mapping[str, float] | float]] = {}
     specs: List[Dict[str, object]] = []
+    baseline_vertical = float(getattr(baseline, "vertical_load", 0.0))
+    sample_context = [
+        resolve_context_from_record(
+            context_matrix,
+            record,
+            baseline_vertical_load=baseline_vertical,
+        )
+        for record in records
+    ]
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
         phase_samples = {
@@ -224,6 +247,18 @@ def segment_microsectors(
             phase_weight_map = _blend_phase_weight_map(
                 phase_weight_map, phase_weight_overrides
             )
+        context_factors = resolve_microsector_context(
+            context_matrix,
+            curvature=curvature,
+            grip_rel=grip_rel if grip_rel > 0.0 else 1.0,
+            speed_drop=speed_drop,
+            direction_changes=float(direction_changes),
+        )
+        sample_context_map = {
+            sample_index: sample_context[sample_index]
+            for sample_index in range(start, end + 1)
+            if 0 <= sample_index < len(sample_context)
+        }
         specs.append(
             {
                 "index": index,
@@ -243,6 +278,8 @@ def segment_microsectors(
                 "speed_drop": speed_drop,
                 "direction_changes": direction_changes,
                 "end_timestamp": float(records[end].timestamp),
+                "context_factors": context_factors,
+                "sample_context": sample_context_map,
             }
         )
         for phase, indices in phase_samples.items():
@@ -262,6 +299,8 @@ def segment_microsectors(
         specs,
         recomputed_bundles,
         records,
+        context_matrix=context_matrix,
+        sample_context=sample_context,
     )
 
     if weights_adjusted:
@@ -277,7 +316,20 @@ def segment_microsectors(
     for spec in specs:
         start = spec["start"]
         end = spec["end"]
-        delta_signature = mean(b.delta_nfr for b in recomputed_bundles[start : end + 1])
+        sample_context_map = spec.get("sample_context", {})
+        adjusted_deltas = []
+        for offset, bundle in enumerate(recomputed_bundles[start : end + 1], start):
+            factors = sample_context_map.get(offset)
+            if factors is None and 0 <= offset < len(sample_context):
+                factors = sample_context[offset]
+            adjusted_deltas.append(
+                apply_contextual_delta(
+                    bundle.delta_nfr,
+                    factors or {},
+                    context_matrix=context_matrix,
+                )
+            )
+        delta_signature = mean(adjusted_deltas)
         avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
         archetype = _classify_archetype(
             spec["curvature"],
@@ -290,6 +342,8 @@ def segment_microsectors(
             recomputed_bundles,
             records,
             spec["phase_boundaries"],
+            context_matrix=context_matrix,
+            sample_context=sample_context,
         )
         for goal in goals:
             indices = spec["phase_samples"].get(goal.phase, ())
@@ -320,7 +374,20 @@ def segment_microsectors(
         support_event = spec["support_event"]
         avg_vertical_load = float(spec.get("avg_vertical_load", 0.0))
         grip_rel = float(spec.get("grip_rel", 0.0))
-        delta_signature = mean(b.delta_nfr for b in recomputed_bundles[start : end + 1])
+        sample_context_map = spec.get("sample_context", {})
+        adjusted_deltas = []
+        for offset, bundle in enumerate(recomputed_bundles[start : end + 1], start):
+            factors = sample_context_map.get(offset)
+            if factors is None and 0 <= offset < len(sample_context):
+                factors = sample_context[offset]
+            adjusted_deltas.append(
+                apply_contextual_delta(
+                    bundle.delta_nfr,
+                    factors or {},
+                    context_matrix=context_matrix,
+                )
+            )
+        delta_signature = mean(adjusted_deltas)
         avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
         archetype = _classify_archetype(
             curvature,
@@ -333,6 +400,8 @@ def segment_microsectors(
             recomputed_bundles,
             records,
             phase_boundaries,
+            context_matrix=context_matrix,
+            sample_context=sample_context,
         )
         active_goal = max(
             goals,
@@ -418,6 +487,8 @@ def segment_microsectors(
                     bundles,
                     records,
                     phase_boundaries,
+                    context_matrix=context_matrix,
+                    sample_context=sample_context,
                 )
                 active_goal = max(
                     goals,
@@ -518,6 +589,19 @@ def segment_microsectors(
                 window_occupancy=occupancy,
                 phase_axis_targets=dict(axis_targets),
                 phase_axis_weights=dict(axis_weights),
+                context_factors=(
+                    spec.get("context_factors").as_mapping()
+                    if spec.get("context_factors")
+                    else {}
+                ),
+                sample_context_factors={
+                    idx: (
+                        factors.as_mapping()
+                        if hasattr(factors, "as_mapping")
+                        else dict(factors)
+                    )
+                    for idx, factors in spec.get("sample_context", {}).items()
+                },
             )
         )
 
@@ -753,6 +837,9 @@ def _build_goals(
     bundles: Sequence[EPIBundle],
     records: Sequence[TelemetryRecord],
     boundaries: Mapping[PhaseLiteral, Tuple[int, int]],
+    *,
+    context_matrix: ContextMatrix | None = None,
+    sample_context: Sequence[ContextFactors] | None = None,
 ) -> Tuple[
     Tuple[Goal, ...],
     Mapping[PhaseLiteral, Tuple[str, ...]],
@@ -767,18 +854,57 @@ def _build_goals(
     dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = {}
     axis_targets: Dict[PhaseLiteral, Dict[str, float]] = {}
     axis_weights: Dict[PhaseLiteral, Dict[str, float]] = {}
+    context_matrix = context_matrix or load_context_matrix()
+
     for phase in PHASE_SEQUENCE:
         start, stop = boundaries[phase]
         indices = [idx for idx in range(start, min(stop, len(bundles)))]
         segment = [bundles[idx] for idx in indices]
         phase_records = [records[idx] for idx in indices]
         if segment:
-            avg_delta = mean(bundle.delta_nfr for bundle in segment)
+            if sample_context:
+                resolved_context: List[ContextFactors] = []
+                fallback_context = resolve_series_context(
+                    segment, matrix=context_matrix
+                )
+                for local_index, idx in enumerate(indices):
+                    if 0 <= idx < len(sample_context):
+                        resolved_context.append(sample_context[idx])
+                    else:
+                        resolved_context.append(fallback_context[local_index])
+            else:
+                resolved_context = resolve_series_context(
+                    segment, matrix=context_matrix
+                )
+            multipliers = [
+                max(
+                    context_matrix.min_multiplier,
+                    min(context_matrix.max_multiplier, ctx.multiplier),
+                )
+                for ctx in resolved_context
+            ]
+            adjusted_delta = [
+                bundle.delta_nfr * multipliers[idx]
+                for idx, bundle in enumerate(segment)
+            ]
+            avg_delta = mean(adjusted_delta)
             avg_si = mean(bundle.sense_index for bundle in segment)
-            avg_long = mean(bundle.delta_nfr_longitudinal for bundle in segment)
-            avg_lat = mean(bundle.delta_nfr_lateral for bundle in segment)
-            abs_long = mean(abs(bundle.delta_nfr_longitudinal) for bundle in segment)
-            abs_lat = mean(abs(bundle.delta_nfr_lateral) for bundle in segment)
+            avg_long = mean(
+                bundle.delta_nfr_longitudinal * multipliers[idx]
+                for idx, bundle in enumerate(segment)
+            )
+            avg_lat = mean(
+                bundle.delta_nfr_lateral * multipliers[idx]
+                for idx, bundle in enumerate(segment)
+            )
+            abs_long = mean(
+                abs(bundle.delta_nfr_longitudinal) * multipliers[idx]
+                for idx, bundle in enumerate(segment)
+            )
+            abs_lat = mean(
+                abs(bundle.delta_nfr_lateral) * multipliers[idx]
+                for idx, bundle in enumerate(segment)
+            )
         else:
             avg_delta = 0.0
             avg_si = 1.0
@@ -1083,6 +1209,9 @@ def _adjust_phase_weights_with_dominance(
     specs: Sequence[Dict[str, object]],
     bundles: Sequence[EPIBundle],
     records: Sequence[TelemetryRecord],
+    *,
+    context_matrix: ContextMatrix,
+    sample_context: Sequence[ContextFactors],
 ) -> bool:
     adjusted = False
     for spec in specs:
@@ -1098,6 +1227,8 @@ def _adjust_phase_weights_with_dominance(
             bundles,
             records,
             phase_boundaries,
+            context_matrix=context_matrix,
+            sample_context=sample_context,
         )
         spec["goals"] = goals
         spec["dominant_nodes"] = dominant_nodes

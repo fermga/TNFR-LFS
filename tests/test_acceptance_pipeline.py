@@ -5,6 +5,11 @@ from statistics import mean
 import pytest
 
 from tnfr_lfs.core.coherence import sense_index
+from tnfr_lfs.core.contextual_delta import (
+    apply_contextual_delta,
+    load_context_matrix,
+    resolve_context_from_bundle,
+)
 from tnfr_lfs.core.operators import (
     acoplamiento_operator,
     coherence_operator,
@@ -51,7 +56,19 @@ def test_acceptance_pipeline_monotonicity_and_coupling(
     smoothed_delta = coherence_stage["smoothed_delta"]
     assert _is_monotonic(smoothed_si)
 
-    expected_delta = coherence_operator([bundle.delta_nfr for bundle in expected_bundles], window=3)
+    context_matrix = load_context_matrix()
+    bundle_context = [
+        resolve_context_from_bundle(context_matrix, bundle) for bundle in expected_bundles
+    ]
+    adjusted_series = [
+        apply_contextual_delta(
+            bundle.delta_nfr,
+            factors,
+            context_matrix=context_matrix,
+        )
+        for bundle, factors in zip(expected_bundles, bundle_context)
+    ]
+    expected_delta = coherence_operator(adjusted_series, window=3)
     assert smoothed_delta == pytest.approx(expected_delta)
 
     expected_coupling = acoplamiento_operator(smoothed_delta, smoothed_si)
@@ -61,9 +78,25 @@ def test_acceptance_pipeline_monotonicity_and_coupling(
     assert result["resonance"] == pytest.approx(expected_resonance)
 
     nodal_metrics = result["nodal_metrics"]
-    tyres_delta = [bundle.tyres.delta_nfr for bundle in expected_bundles]
-    suspension_delta = [bundle.suspension.delta_nfr for bundle in expected_bundles]
-    chassis_delta = [bundle.chassis.delta_nfr for bundle in expected_bundles]
+    multipliers = [
+        max(
+            context_matrix.min_multiplier,
+            min(context_matrix.max_multiplier, factors.multiplier),
+        )
+        for factors in bundle_context
+    ]
+    tyres_delta = [
+        bundle.tyres.delta_nfr * multipliers[idx]
+        for idx, bundle in enumerate(expected_bundles)
+    ]
+    suspension_delta = [
+        bundle.suspension.delta_nfr * multipliers[idx]
+        for idx, bundle in enumerate(expected_bundles)
+    ]
+    chassis_delta = [
+        bundle.chassis.delta_nfr * multipliers[idx]
+        for idx, bundle in enumerate(expected_bundles)
+    ]
 
     assert nodal_metrics["delta_by_node"]["tyres"] == pytest.approx(tyres_delta)
 

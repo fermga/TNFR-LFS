@@ -6,6 +6,13 @@ from dataclasses import dataclass, field
 from statistics import mean
 from typing import Iterable, Mapping, Sequence
 
+from .contextual_delta import (
+    ContextMatrix,
+    apply_contextual_delta,
+    load_context_matrix,
+    resolve_context_from_bundle,
+    resolve_context_from_record,
+)
 from .dissonance import compute_useful_dissonance_stats
 from .epi import TelemetryRecord
 from .epi_models import EPIBundle
@@ -98,6 +105,8 @@ def compute_window_metrics(
 
     si_value = mean(record.si for record in records)
 
+    context_matrix = load_context_matrix()
+
     if phase_indices:
         selected = [
             records[index]
@@ -122,7 +131,17 @@ def compute_window_metrics(
         )
         if timestamps is None:
             raise ValueError("Structural timeline unavailable and fallback disabled")
-        delta_series = [bundle.delta_nfr for bundle in bundles]
+        bundle_context = [
+            resolve_context_from_bundle(context_matrix, bundle) for bundle in bundles
+        ]
+        delta_series = [
+            apply_contextual_delta(
+                bundle.delta_nfr,
+                factors,
+                context_matrix=context_matrix,
+            )
+            for bundle, factors in zip(bundles, bundle_context)
+        ]
         yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
     else:
         timestamps = resolve_time_axis(
@@ -130,7 +149,17 @@ def compute_window_metrics(
         )
         if timestamps is None:
             raise ValueError("Structural timeline unavailable and fallback disabled")
-        delta_series = [getattr(record, "delta_nfr", record.nfr) for record in records]
+        record_context = [
+            resolve_context_from_record(context_matrix, record) for record in records
+        ]
+        delta_series = [
+            apply_contextual_delta(
+                getattr(record, "delta_nfr", record.nfr),
+                factors,
+                context_matrix=context_matrix,
+            )
+            for record, factors in zip(records, record_context)
+        ]
         yaw_rates = [record.yaw_rate for record in records]
     _useful_samples, _high_yaw_samples, udr = compute_useful_dissonance_stats(
         timestamps,
@@ -279,8 +308,13 @@ def _segment_gradients(
     records: Sequence[TelemetryRecord], *, segments: int, fallback_to_chronological: bool = True
 ) -> tuple[float, ...]:
     parts = _split_records(records, segments)
+    context_matrix = load_context_matrix()
     return tuple(
-        _gradient(part, fallback_to_chronological=fallback_to_chronological)
+        _gradient(
+            part,
+            fallback_to_chronological=fallback_to_chronological,
+            context_matrix=context_matrix,
+        )
         for part in parts
     )
 
@@ -307,7 +341,10 @@ def _split_records(
 
 
 def _gradient(
-    records: Iterable[TelemetryRecord], *, fallback_to_chronological: bool = True
+    records: Iterable[TelemetryRecord],
+    *,
+    fallback_to_chronological: bool = True,
+    context_matrix: ContextMatrix,
 ) -> float:
     iterator = list(records)
     if len(iterator) < 2:
@@ -322,5 +359,15 @@ def _gradient(
     dt = axis[-1] - axis[0]
     if dt <= 0.0:
         return 0.0
-    return (end.nfr - start.nfr) / dt
+    start_delta = getattr(start, "delta_nfr", start.nfr)
+    end_delta = getattr(end, "delta_nfr", end.nfr)
+    start_factors = resolve_context_from_record(context_matrix, start)
+    end_factors = resolve_context_from_record(context_matrix, end)
+    start_value = apply_contextual_delta(
+        start_delta, start_factors, context_matrix=context_matrix
+    )
+    end_value = apply_contextual_delta(
+        end_delta, end_factors, context_matrix=context_matrix
+    )
+    return (end_value - start_value) / dt
 
