@@ -412,6 +412,15 @@ def segment_microsectors(
             goals,
             key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
         )
+        surface_band = context_matrix.surface_band(max(grip_rel, 1e-9))
+        surface_label = surface_band[3] or "neutral"
+        surface_factor = float(context_factors.surface)
+        entry_goals = [goal for goal in goals if phase_family(goal.phase) == "entry"]
+        if entry_goals:
+            base_delta_threshold = mean(abs(goal.target_delta_nfr) for goal in entry_goals)
+        else:
+            base_delta_threshold = abs(delta_signature)
+        delta_threshold = max(0.05, base_delta_threshold * surface_factor)
         filtered_measures: Dict[str, float] = {
             "thermal_load": avg_vertical_load,
             "style_index": avg_si,
@@ -572,10 +581,45 @@ def segment_microsectors(
                 )
         operator_events: Dict[str, Tuple[Mapping[str, object], ...]] = {}
         for name, detector in (("AL", detect_al), ("OZ", detect_oz), ("IL", detect_il)):
-            events = [
-                {**event, "microsector": spec["index"]}
-                for event in detector(record_window)
-            ]
+            events: List[Mapping[str, object]] = []
+            for event in detector(record_window):
+                payload: Dict[str, object] = {**event, "microsector": spec["index"]}
+                local_start = int(event.get("start_index", 0))
+                local_end = int(event.get("end_index", local_start))
+                global_start = max(start, min(end, start + max(0, local_start)))
+                global_end = max(global_start, min(end, start + max(0, local_end)))
+                if name in {"OZ", "IL"}:
+                    delta_values: List[float] = []
+                    for idx in range(global_start, global_end + 1):
+                        if 0 <= idx < len(recomputed_bundles):
+                            delta_values.append(float(recomputed_bundles[idx].delta_nfr))
+                    if delta_values:
+                        avg_delta = mean(delta_values)
+                        peak_delta = max(abs(value) for value in delta_values)
+                    else:
+                        avg_delta = 0.0
+                        peak_delta = 0.0
+                    ratio = peak_delta / delta_threshold if delta_threshold > 1e-9 else 0.0
+                    surface_payload = {
+                        "label": surface_label,
+                        "factor": surface_factor,
+                        "lower": surface_band[0],
+                        "upper": surface_band[1],
+                    }
+                    payload.update(
+                        {
+                            "global_start_index": global_start,
+                            "global_end_index": global_end,
+                            "delta_nfr_avg": avg_delta,
+                            "delta_nfr_peak": peak_delta,
+                            "delta_nfr_threshold": delta_threshold,
+                            "delta_nfr_ratio": ratio,
+                            "surface": surface_payload,
+                            "surface_label": surface_label,
+                            "surface_factor": surface_factor,
+                        }
+                    )
+                events.append(payload)
             if events:
                 operator_events[name] = tuple(events)
         microsectors.append(

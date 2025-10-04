@@ -52,9 +52,9 @@ class ContextFactors:
 class ContextMatrix:
     """Calibration payload loaded from ``context_factors.toml``."""
 
-    curve_bands: tuple[tuple[float | None, float], ...]
-    surface_bands: tuple[tuple[float | None, float | None, float], ...]
-    traffic_bands: tuple[tuple[float | None, float], ...]
+    curve_bands: tuple[tuple[float | None, float, str | None], ...]
+    surface_bands: tuple[tuple[float | None, float | None, float, str | None], ...]
+    traffic_bands: tuple[tuple[float | None, float, str | None], ...]
     min_multiplier: float
     max_multiplier: float
     surface_reference_load: float
@@ -63,57 +63,95 @@ class ContextMatrix:
     traffic_longitudinal_reference: float
 
     def curve_factor(self, value: float) -> float:
-        for limit, factor in self.curve_bands:
+        for limit, factor, _ in self.curve_bands:
             if limit is None or value <= limit:
                 return factor
         return self.curve_bands[-1][1]
 
+    def curve_band(self, value: float) -> tuple[float | None, float, str | None]:
+        for band in self.curve_bands:
+            limit, _, _ = band
+            if limit is None or value <= limit:
+                return band
+        return self.curve_bands[-1]
+
     def surface_factor(self, ratio: float) -> float:
-        for lower, upper, factor in self.surface_bands:
+        for lower, upper, factor, _ in self.surface_bands:
             lower_ok = lower is None or ratio >= lower
             upper_ok = upper is None or ratio <= upper
             if lower_ok and upper_ok:
                 return factor
         return self.surface_bands[-1][2]
 
+    def surface_band(
+        self, ratio: float
+    ) -> tuple[float | None, float | None, float, str | None]:
+        for band in self.surface_bands:
+            lower, upper, _, _ = band
+            lower_ok = lower is None or ratio >= lower
+            upper_ok = upper is None or ratio <= upper
+            if lower_ok and upper_ok:
+                return band
+        return self.surface_bands[-1]
+
     def traffic_factor(self, load: float) -> float:
-        for limit, factor in self.traffic_bands:
+        for limit, factor, _ in self.traffic_bands:
             if limit is None or load <= limit:
                 return factor
         return self.traffic_bands[-1][1]
 
+    def traffic_band(self, load: float) -> tuple[float | None, float, str | None]:
+        for band in self.traffic_bands:
+            limit, _, _ = band
+            if limit is None or load <= limit:
+                return band
+        return self.traffic_bands[-1]
 
-def _parse_curve_bands(payload: Mapping[str, object]) -> tuple[tuple[float | None, float], ...]:
-    bands: list[tuple[float | None, float]] = []
+
+def _parse_curve_bands(
+    payload: Mapping[str, object]
+) -> tuple[tuple[float | None, float, str | None], ...]:
+    bands: list[tuple[float | None, float, str | None]] = []
     for entry in payload.get("bands", []) or []:
         limit = entry.get("max") if isinstance(entry, Mapping) else None
         factor = entry.get("factor") if isinstance(entry, Mapping) else None
+        label = entry.get("label") if isinstance(entry, Mapping) else None
         if factor is None:
             continue
-        bands.append((float(limit) if limit is not None else None, float(factor)))
+        bands.append(
+            (
+                float(limit) if limit is not None else None,
+                float(factor),
+                str(label) if label is not None else None,
+            )
+        )
     if not bands:
-        bands.append((None, 1.0))
+        bands.append((None, 1.0, None))
     bands.sort(key=lambda item: float("inf") if item[0] is None else item[0])
     return tuple(bands)
 
 
-def _parse_surface_bands(payload: Mapping[str, object]) -> tuple[tuple[float | None, float | None, float], ...]:
-    bands: list[tuple[float | None, float | None, float]] = []
+def _parse_surface_bands(
+    payload: Mapping[str, object]
+) -> tuple[tuple[float | None, float | None, float, str | None], ...]:
+    bands: list[tuple[float | None, float | None, float, str | None]] = []
     for entry in payload.get("bands", []) or []:
         if not isinstance(entry, Mapping):
             continue
         lower = entry.get("min")
         upper = entry.get("max")
         factor = entry.get("factor", 1.0)
+        label = entry.get("label")
         bands.append(
             (
                 float(lower) if lower is not None else None,
                 float(upper) if upper is not None else None,
                 float(factor),
+                str(label) if label is not None else None,
             )
         )
     if not bands:
-        bands.append((None, None, 1.0))
+        bands.append((None, None, 1.0, None))
     bands.sort(
         key=lambda item: (
             float("-inf") if item[0] is None else item[0],
@@ -123,16 +161,25 @@ def _parse_surface_bands(payload: Mapping[str, object]) -> tuple[tuple[float | N
     return tuple(bands)
 
 
-def _parse_traffic_bands(payload: Mapping[str, object]) -> tuple[tuple[float | None, float], ...]:
-    bands: list[tuple[float | None, float]] = []
+def _parse_traffic_bands(
+    payload: Mapping[str, object]
+) -> tuple[tuple[float | None, float, str | None], ...]:
+    bands: list[tuple[float | None, float, str | None]] = []
     for entry in payload.get("bands", []) or []:
         if not isinstance(entry, Mapping):
             continue
         limit = entry.get("max")
         factor = entry.get("factor", 1.0)
-        bands.append((float(limit) if limit is not None else None, float(factor)))
+        label = entry.get("label")
+        bands.append(
+            (
+                float(limit) if limit is not None else None,
+                float(factor),
+                str(label) if label is not None else None,
+            )
+        )
     if not bands:
-        bands.append((None, 1.0))
+        bands.append((None, 1.0, None))
     bands.sort(key=lambda item: float("inf") if item[0] is None else item[0])
     return tuple(bands)
 

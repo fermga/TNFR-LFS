@@ -386,6 +386,9 @@ def _render_page_a(
         candidate = "\n".join((*lines, spark_line, gradient_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(spark_line)
+    brake_line = _brake_event_meter(active.microsector)
+    if brake_line:
+        lines.append(brake_line)
     lines.append(gradient_line)
     if (
         window_metrics.aero_coherence.high_speed_samples
@@ -445,6 +448,54 @@ def _phase_sparkline(
         index = max(0, min(len(SPARKLINE_BLOCKS) - 1, int(round(ratio * (len(SPARKLINE_BLOCKS) - 1)))))
         spark_chars.append(SPARKLINE_BLOCKS[index])
     return "".join(spark_chars)
+
+
+def _brake_event_meter(microsector: Microsector) -> str | None:
+    events = getattr(microsector, "operator_events", {}) or {}
+    payloads: List[Dict[str, float | str]] = []
+    for event_type in ("OZ", "IL"):
+        for payload in events.get(event_type, ()):  # type: ignore[assignment]
+            if not isinstance(payload, Mapping):
+                continue
+            threshold = float(payload.get("delta_nfr_threshold", 0.0) or 0.0)
+            if threshold <= 0.0:
+                continue
+            peak = abs(float(payload.get("delta_nfr_peak", 0.0) or 0.0))
+            ratio = float(payload.get("delta_nfr_ratio", 0.0) or 0.0)
+            if ratio <= 0.0 and threshold > 1e-9 and peak > 0.0:
+                ratio = peak / threshold
+            if ratio < 1.0:
+                continue
+            surface_label = payload.get("surface_label")
+            if not isinstance(surface_label, str) or not surface_label:
+                surface = payload.get("surface")
+                if isinstance(surface, Mapping):
+                    label_value = surface.get("label")
+                    if isinstance(label_value, str):
+                        surface_label = label_value
+            payloads.append(
+                {
+                    "type": event_type,
+                    "ratio": ratio,
+                    "peak": peak,
+                    "threshold": threshold,
+                    "surface": surface_label or "superficie",
+                }
+            )
+    if not payloads:
+        return None
+    payloads.sort(key=lambda item: float(item["ratio"]), reverse=True)
+    segments: List[str] = []
+    for entry in payloads[:3]:
+        label = entry["type"]
+        peak = float(entry["peak"])
+        threshold = float(entry["threshold"])
+        surface = entry["surface"]
+        segments.append(f"{label} {peak:.2f}>{threshold:.2f} {surface}")
+    remaining = len(payloads) - len(segments)
+    if remaining > 0:
+        segments.append(f"+{remaining}")
+    return _ensure_limit("ΔNFR frenada ⚠️ " + " · ".join(segments))
 
 
 def _render_page_b(bundle, resonance: Mapping[str, ModalAnalysis]) -> str:
