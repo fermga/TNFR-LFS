@@ -72,6 +72,8 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.phase_alignment == pytest.approx(1.0)
     assert metrics.useful_dissonance_ratio == pytest.approx(0.0)
     assert metrics.useful_dissonance_percentage == pytest.approx(0.0)
+    assert metrics.coherence_index == pytest.approx(0.0)
+    assert metrics.frequency_label == ""
     assert isinstance(metrics.aero_coherence, AeroCoherence)
     assert metrics.aero_coherence.high_speed_samples == 0
     assert metrics.aero_coherence.low_speed_samples == 0
@@ -91,12 +93,29 @@ def test_compute_window_metrics_handles_small_windows() -> None:
     assert metrics.phase_alignment == pytest.approx(1.0)
     assert metrics.useful_dissonance_ratio == pytest.approx(0.0)
     assert metrics.useful_dissonance_percentage == pytest.approx(0.0)
+    assert metrics.coherence_index == pytest.approx(0.0)
+    assert metrics.frequency_label == ""
     assert metrics.aero_coherence.high_speed_samples == 0
 
 
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
-    assert metrics == WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    assert metrics == WindowMetrics(
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        "",
+        AeroCoherence(),
+    )
 
 
 def test_compute_aero_coherence_splits_bins() -> None:

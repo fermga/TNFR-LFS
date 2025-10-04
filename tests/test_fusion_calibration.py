@@ -94,7 +94,7 @@ def test_fusion_calibration_nu_f_converges_for_fxr():
         outsim = _outsim_sample(index * 0.2, 28.0, slip, lateral=6.5 - index * 0.8)
         outgauge = _outgauge_sample("FXR", "ASO4", 28.0, rpm=6000.0 - index * 150.0)
         record = fusion.fuse(outsim, outgauge)
-        nu_map = resolve_nu_f_by_node(record)
+        nu_map = resolve_nu_f_by_node(record).by_node
         nu_f_history.append(nu_map["tyres"])
 
     assert nu_f_history[0] > nu_f_history[-1]

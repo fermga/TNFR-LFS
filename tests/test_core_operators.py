@@ -340,8 +340,8 @@ def test_sense_index_penalises_active_phase_weights():
         "apex": {"__default__": 1.0, "tyres": 2.0, "chassis": 1.6},
         "exit": {"__default__": 1.0},
     }
-    nu_entry = resolve_nu_f_by_node(sample, phase="entry", phase_weights=weights)
-    nu_apex = resolve_nu_f_by_node(sample, phase="apex", phase_weights=weights)
+    nu_entry = resolve_nu_f_by_node(sample, phase="entry", phase_weights=weights).by_node
+    nu_apex = resolve_nu_f_by_node(sample, phase="apex", phase_weights=weights).by_node
 
     assert nu_apex["tyres"] > nu_entry["tyres"]
     assert nu_apex["chassis"] > nu_entry["chassis"]
@@ -367,7 +367,7 @@ def test_sense_index_penalises_active_phase_weights():
         sample.nfr - baseline.nfr,
         node_deltas,
         baseline.nfr,
-        nu_f_by_node=resolve_nu_f_by_node(sample),
+        nu_f_by_node=resolve_nu_f_by_node(sample).by_node,
         active_phase="apex",
         w_phase=DEFAULT_PHASE_WEIGHTS,
     )

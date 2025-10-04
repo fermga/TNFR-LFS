@@ -26,7 +26,7 @@ from ..core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
 from ..core.segmentation import Goal, Microsector, segment_microsectors
 from ..exporters.setup_plan import SetupChange, SetupPlan
 from ..recommender import RecommendationEngine, SetupPlanner
-from ..recommender.rules import NODE_LABELS, ThresholdProfile
+from ..recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObjectives
 
 PAYLOAD_LIMIT = OverlayManager.MAX_BUTTON_TEXT - 1
 DEFAULT_UPDATE_RATE = 6.0
@@ -161,11 +161,11 @@ class TelemetryHUD:
         self._last_plan_time = -math.inf
         self._cached_plan: SetupPlan | None = None
         self._macro_status = MacroStatus()
-        self._thresholds: ThresholdProfile = (
-            self.recommendation_engine._resolve_context(  # type: ignore[attr-defined]
-                car_model, track_name
-            ).thresholds
+        context = self.recommendation_engine._resolve_context(  # type: ignore[attr-defined]
+            car_model, track_name
         )
+        self._thresholds: ThresholdProfile = context.thresholds
+        self._profile_objectives: RuleProfileObjectives = context.objectives
 
     def append(self, record: TelemetryRecord) -> None:
         self._records.append(record)
@@ -191,6 +191,12 @@ class TelemetryHUD:
     # Internal helpers
     # ------------------------------------------------------------------
     def _recompute(self) -> None:
+        context = self.recommendation_engine._resolve_context(  # type: ignore[attr-defined]
+            self.car_model, self.track_name
+        )
+        self._thresholds = context.thresholds
+        self._profile_objectives = context.objectives
+
         records = list(self._records)
         if len(records) < 8:
             self._pages = (
@@ -235,6 +241,7 @@ class TelemetryHUD:
             records,
             phase_indices=phase_indices,
             bundles=bundles,
+            objectives=self._profile_objectives,
         )
         resonance = analyse_modal_resonance(records)
         recommendations = self.recommendation_engine.generate(
@@ -396,10 +403,18 @@ def _render_page_a(
 
 
 def _gradient_line(window_metrics: WindowMetrics) -> str:
+    if window_metrics.frequency_label:
+        frequency_segment = (
+            f"{window_metrics.frequency_label} · ν_exc {window_metrics.nu_exc:.2f}Hz"
+        )
+    else:
+        frequency_segment = (
+            f"ν_f {window_metrics.nu_f:.2f}Hz/ν_exc {window_metrics.nu_exc:.2f}Hz"
+        )
     return (
         f"Si {window_metrics.si:.2f} · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
         f" · ∇Res {window_metrics.d_nfr_res:+.2f} · ∇Flat {window_metrics.d_nfr_flat:+.2f}"
-        f" · ν_f {window_metrics.nu_f:.2f}Hz/ν_exc {window_metrics.nu_exc:.2f}Hz"
+        f" · C(t) {window_metrics.coherence_index:.2f} · {frequency_segment}"
         f" · ρ {window_metrics.rho:.2f} · θ {window_metrics.phase_lag:+.2f}rad"
         f" · Siφ {window_metrics.phase_alignment:+.2f}"
         f" · UDR {window_metrics.useful_dissonance_ratio:.2f}"
@@ -439,7 +454,14 @@ def _render_page_b(bundle, resonance: Mapping[str, ModalAnalysis]) -> str:
     ordered = sorted(node_values.items(), key=lambda item: abs(item[1]), reverse=True)[:3]
     max_mag = max(abs(value) for _, value in ordered) or 1.0
     leader = ordered[0][0] if ordered else "--"
-    lines = [f"ΔNFR nodal · Líder → {leader}"]
+    lines: List[str] = []
+    frequency_label = getattr(bundle, "nu_f_label", "")
+    coherence_index = getattr(bundle, "coherence_index", 0.0)
+    if frequency_label:
+        lines.append(_truncate_line(f"{frequency_label} · C(t) {coherence_index:.2f}"))
+    elif coherence_index > 0.0:
+        lines.append(f"C(t) {coherence_index:.2f}")
+    lines.append(f"ΔNFR nodal · Líder → {leader}")
     for name, value in ordered:
         bar = _bar_for_value(value, max_mag)
         lines.append(f"{name:<12}{value:+.2f} {bar}")

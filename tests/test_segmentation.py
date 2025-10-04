@@ -322,12 +322,12 @@ def test_segment_microsectors_applies_phase_weight_overrides(
         record,
         phase=phase_key,
         phase_weights=baseline_micro[0].phase_weights,
-    )
+    ).by_node
     override_nu = resolve_nu_f_by_node(
         record,
         phase=phase_key,
         phase_weights=override_micro[0].phase_weights,
-    )
+    ).by_node
     assert override_nu["tyres"] > base_nu["tyres"]
 
 
@@ -345,8 +345,10 @@ def test_phase_weighting_penalises_sense_index(
                 record = synthetic_records[idx]
                 node_record = replace(record, reference=baseline)
                 node_deltas = delta_nfr_by_node(node_record)
-                nu_phase = resolve_nu_f_by_node(record, phase=phase, phase_weights=weights)
-                nu_default = resolve_nu_f_by_node(record)
+                nu_phase = resolve_nu_f_by_node(
+                    record, phase=phase, phase_weights=weights
+                ).by_node
+                nu_default = resolve_nu_f_by_node(record).by_node
                 weighted_index = sense_index(
                     record.nfr - baseline.nfr,
                     node_deltas,

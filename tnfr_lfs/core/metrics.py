@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from statistics import mean
 from typing import Iterable, Mapping, Sequence
@@ -72,6 +73,8 @@ class WindowMetrics:
     phase_alignment: float
     useful_dissonance_ratio: float
     useful_dissonance_percentage: float
+    coherence_index: float
+    frequency_label: str
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
 
 
@@ -81,6 +84,7 @@ def compute_window_metrics(
     phase_indices: Sequence[int] | None = None,
     bundles: Sequence[EPIBundle] | None = None,
     fallback_to_chronological: bool = True,
+    objectives: object | None = None,
 ) -> WindowMetrics:
     """Return averaged plan metrics for a telemetry window.
 
@@ -101,7 +105,37 @@ def compute_window_metrics(
     """
 
     if not records:
-        return WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, AeroCoherence())
+        return WindowMetrics(
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            "",
+            AeroCoherence(),
+        )
+
+    def _objective(name: str, default: float) -> float:
+        if objectives is None:
+            return default
+        if isinstance(objectives, Mapping):
+            candidate = objectives.get(name)
+        else:
+            candidate = getattr(objectives, name, None)
+        try:
+            numeric = float(candidate)
+        except (TypeError, ValueError):
+            return default
+        if not math.isfinite(numeric):
+            return default
+        return numeric
 
     si_value = mean(record.si for record in records)
 
@@ -168,6 +202,16 @@ def compute_window_metrics(
     )
 
     aero = compute_aero_coherence(records, bundles)
+    coherence_values: list[float] = []
+    frequency_label = ""
+    if bundles:
+        coherence_values = [float(getattr(bundle, "coherence_index", 0.0)) for bundle in bundles]
+        if bundles:
+            frequency_label = str(getattr(bundles[-1], "nu_f_label", ""))
+    raw_coherence = mean(coherence_values) if coherence_values else 0.0
+    target_si = max(1e-6, min(1.0, _objective("target_sense_index", 0.75)))
+    si_factor = si_value / target_si if target_si > 0 else 0.0
+    normalised_coherence = max(0.0, min(1.0, raw_coherence * si_factor))
 
     return WindowMetrics(
         si=si_value,
@@ -181,6 +225,8 @@ def compute_window_metrics(
         phase_alignment=alignment,
         useful_dissonance_ratio=udr,
         useful_dissonance_percentage=udr * 100.0,
+        coherence_index=normalised_coherence,
+        frequency_label=frequency_label,
         aero_coherence=aero,
     )
 

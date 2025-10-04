@@ -60,9 +60,11 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
 
     page_a, page_b, page_c, page_d = pages
     assert "ΔNFR" in page_a and "∇Acop" in page_a
+    assert "C(t)" in page_a
     if "Sin microsector activo" not in page_a:
         assert any(char in page_a for char in "▁▂▃▄▅▆▇█")
     assert "Líder" in page_b and "ν_f" in page_b and "ν_exc" in page_b
+    assert "C(t)" in page_b
     assert "dSi" in page_c
     assert "Aplicar" in page_d
 
@@ -323,6 +325,8 @@ def test_render_page_a_includes_sparkline_when_active_phase():
         1.0,
         0.6,
         60.0,
+        0.4,
+        "ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
         aero,
     )
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
@@ -349,8 +353,9 @@ def test_render_page_a_includes_sparkline_when_active_phase():
     else:
         assert "Fases Δ" not in output
     lines.append(gradient_line)
-    assert "ρ" in output
     assert "∇Acop" in output
+    assert "C(t) 0.40" in output
+    assert "ν_f óptima" in output
     aero_line = osd_module._truncate_line(
         "Δaero alta "
         f"{window_metrics.aero_coherence.high_speed_imbalance:+.2f}"
