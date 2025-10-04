@@ -76,6 +76,10 @@ Sense Index averages but also:
 
 * ``nu_f_target`` – the weighted natural frequency of the fastest nodes in the
   phase.
+* ``nu_exc_target`` – the dominant excitation frequency derived from steer and
+  suspension inputs inside the phase window.
+* ``rho_target`` – the detune ratio ``ν_exc/ν_f`` observed for the archetype,
+  used to flag chassis setups that fall out of tune under load.
 * ``slip_lat_window`` / ``slip_long_window`` – allowable slip bands derived
   from the telemetry means under lateral/longitudinal load.
 * ``yaw_rate_window`` – the expected yaw-rate envelope for the phase.

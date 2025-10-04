@@ -363,7 +363,8 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
     return (
         f"Si {window_metrics.si:.2f} · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
         f" · ∇Res {window_metrics.d_nfr_res:+.2f} · ∇Flat {window_metrics.d_nfr_flat:+.2f}"
-        f" · ν_f {window_metrics.nu_f:.2f}Hz · θ {window_metrics.phase_lag:+.2f}rad"
+        f" · ν_f {window_metrics.nu_f:.2f}Hz/ν_exc {window_metrics.nu_exc:.2f}Hz"
+        f" · ρ {window_metrics.rho:.2f} · θ {window_metrics.phase_lag:+.2f}rad"
         f" · Siφ {window_metrics.phase_alignment:+.2f}"
     )
 
@@ -425,8 +426,12 @@ def _modal_axis_lines(resonance: Mapping[str, ModalAnalysis]) -> List[str]:
         if peak is None:
             continue
         axis_label = MODAL_AXIS_SUMMARY_LABELS.get(axis, NODE_AXIS_LABELS.get(axis, axis))
+        ratio_label = f"{analysis.rho:.2f}"
+        if analysis.rho > 0.0 and analysis.rho < 0.7:
+            ratio_label += "⚠️"
         lines.append(
-            f"ν_f {axis_label:<10}{peak.frequency:.1f}Hz {peak.classification}"
+            f"ν_f {axis_label:<10}{peak.frequency:.1f}Hz ν_exc {analysis.nu_exc:.1f}Hz"
+            f" ρ {ratio_label} {peak.classification}"
         )
     return lines
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence
 
@@ -25,6 +26,8 @@ class ModalAnalysis:
     sample_rate: float
     total_energy: float
     peaks: List[ModalPeak]
+    nu_exc: float
+    rho: float
 
 
 AxisSeries = Dict[str, List[float]]
@@ -37,6 +40,61 @@ def _extract_axis_series(records: Sequence[TelemetryRecord]) -> AxisSeries:
         series["roll"].append(float(record.roll))
         series["pitch"].append(float(record.pitch))
     return series
+
+
+def _normalise(values: Sequence[float]) -> List[float]:
+    detrended = detrend(values)
+    if not detrended:
+        return []
+    variance = sum(value * value for value in detrended) / len(detrended)
+    if variance <= 1e-12:
+        return [0.0] * len(detrended)
+    scale = math.sqrt(variance)
+    return [value / scale for value in detrended]
+
+
+def _excitation_series(records: Sequence[TelemetryRecord]) -> List[float]:
+    steer = _normalise([float(record.steer) for record in records])
+    front = _normalise(
+        [float(record.suspension_velocity_front) for record in records]
+    )
+    rear = _normalise(
+        [float(record.suspension_velocity_rear) for record in records]
+    )
+    length = max(len(steer), len(front), len(rear))
+    if length == 0:
+        return []
+    series: List[float] = []
+    for index in range(length):
+        steer_value = steer[index] if index < len(steer) else 0.0
+        front_value = front[index] if index < len(front) else 0.0
+        rear_value = rear[index] if index < len(rear) else 0.0
+        combined = 0.5 * steer_value + 0.25 * front_value + 0.25 * rear_value
+        series.append(combined)
+    return series
+
+
+def estimate_excitation_frequency(
+    records: Sequence[TelemetryRecord], sample_rate: float | None = None
+) -> float:
+    """Return the dominant excitation frequency extracted from steer/suspension."""
+
+    if not records:
+        return 0.0
+    if sample_rate is None:
+        sample_rate = estimate_sample_rate(records)
+    if sample_rate <= 0.0:
+        return 0.0
+    excitation = _excitation_series(records)
+    if len(excitation) < 2:
+        return 0.0
+    spectrum = power_spectrum(excitation, sample_rate)
+    if not spectrum:
+        return 0.0
+    frequency, energy = max(spectrum, key=lambda item: item[1])
+    if energy <= 0.0:
+        return 0.0
+    return float(frequency)
 def _extract_peaks(
     spectrum: Iterable[tuple[float, float]],
     max_peaks: int = 3,
@@ -74,16 +132,21 @@ def analyse_modal_resonance(
 
     sample_rate = estimate_sample_rate(records)
     axis_series = _extract_axis_series(records)
+    nu_exc = estimate_excitation_frequency(records, sample_rate)
     analysis: Dict[str, ModalAnalysis] = {}
     for axis, values in axis_series.items():
         detrended = detrend(values)
         total_energy = sum(value * value for value in detrended)
         spectrum = power_spectrum(detrended, sample_rate)
         peaks = _extract_peaks(spectrum, max_peaks=max_peaks)
+        dominant_frequency = peaks[0].frequency if peaks else 0.0
+        rho = nu_exc / dominant_frequency if dominant_frequency > 1e-9 else 0.0
         analysis[axis] = ModalAnalysis(
             sample_rate=float(sample_rate),
             total_energy=float(total_energy),
             peaks=peaks,
+            nu_exc=float(nu_exc),
+            rho=float(rho),
         )
     return analysis
 

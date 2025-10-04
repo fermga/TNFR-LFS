@@ -297,6 +297,7 @@ class ThresholdProfile:
     apex_delta_tolerance: float
     exit_delta_tolerance: float
     piano_delta_tolerance: float
+    rho_detune_threshold: float
     phase_targets: Mapping[str, PhaseTargetWindow] = field(default_factory=dict)
     phase_weights: Mapping[str, Mapping[str, float] | float] = field(
         default_factory=dict
@@ -482,6 +483,7 @@ def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
         "apex_delta_tolerance": 1.0,
         "exit_delta_tolerance": 2.0,
         "piano_delta_tolerance": 2.5,
+        "rho_detune_threshold": 0.7,
     }
     phase_targets = _build_phase_targets(
         payload.get("targets"), defaults=_BASELINE_PHASE_TARGETS
@@ -494,6 +496,7 @@ def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
         apex_delta_tolerance=float(payload.get("apex_delta_tolerance", defaults["apex_delta_tolerance"])),
         exit_delta_tolerance=float(payload.get("exit_delta_tolerance", defaults["exit_delta_tolerance"])),
         piano_delta_tolerance=float(payload.get("piano_delta_tolerance", defaults["piano_delta_tolerance"])),
+        rho_detune_threshold=float(payload.get("rho_detune_threshold", defaults["rho_detune_threshold"])),
         phase_targets=phase_targets,
         phase_weights=phase_weights,
     )
@@ -619,6 +622,7 @@ DEFAULT_THRESHOLD_PROFILE = ThresholdProfile(
     apex_delta_tolerance=1.0,
     exit_delta_tolerance=2.0,
     piano_delta_tolerance=2.5,
+    rho_detune_threshold=0.7,
     phase_targets=_BASELINE_PHASE_TARGETS,
     phase_weights=_BASELINE_PHASE_WEIGHTS,
 )
@@ -1053,6 +1057,61 @@ class CurbComplianceRule:
         return recommendations
 
 
+class DetuneRatioRule:
+    """Escalate bar/damper guidance when detune ratio collapses under load."""
+
+    def __init__(self, priority: int = 24, resonance_threshold: float = 0.5) -> None:
+        self.priority = priority
+        self.resonance_threshold = resonance_threshold
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors or context is None:
+            return []
+
+        threshold = context.thresholds.rho_detune_threshold
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            rho = float(microsector.filtered_measures.get("rho", 1.0))
+            d_nfr_res = float(microsector.filtered_measures.get("d_nfr_res", 0.0))
+            if rho <= 0.0 or rho >= threshold:
+                continue
+            if abs(d_nfr_res) <= self.resonance_threshold:
+                continue
+            goal = _goal_for_phase(microsector, microsector.active_phase)
+            target_rho = getattr(goal, "rho_target", None) if goal else None
+            target_exc = getattr(goal, "nu_exc_target", None) if goal else None
+            category = phase_family(microsector.active_phase)
+            target_text = ""
+            if target_rho:
+                target_text += f" Objetivo ρ≈{target_rho:.2f}."
+            if target_exc:
+                target_text += f" ν_exc ref {target_exc:.2f}Hz."
+            rationale = (
+                f"Detune ratio ρ={rho:.2f} en microsector {microsector.index}"
+                f" cae por debajo del umbral {threshold:.2f} con ∇Res {d_nfr_res:+.2f}."
+                f"{target_text} Revisa barras estabilizadoras y amortiguadores"
+                f" ({MANUAL_REFERENCES['antiroll']})."
+            )
+            message = (
+                f"Operador modal · microsector {microsector.index}:"
+                " ajustar barras/amortiguadores para elevar ρ"
+            )
+            recommendations.append(
+                Recommendation(
+                    category=category,
+                    message=message,
+                    rationale=rationale,
+                    priority=self.priority,
+                )
+            )
+        return recommendations
+
+
 class RecommendationEngine:
     """Aggregate a list of rules and produce recommendations."""
 
@@ -1101,6 +1160,7 @@ class RecommendationEngine:
                     priority=22,
                     reference_key="antiroll",
                 ),
+                DetuneRatioRule(priority=24),
                 CurbComplianceRule(priority=25),
                 PhaseDeltaDeviationRule(
                     phase="exit",

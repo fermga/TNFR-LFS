@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.io.profiles import ProfileManager
 from tnfr_lfs.recommender.rules import (
+    DetuneRatioRule,
     PhaseNodeOperatorRule,
     Recommendation,
     RecommendationEngine,
@@ -123,6 +124,8 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 target_delta_nfr=entry_target,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                nu_exc_target=0.25,
+                rho_target=1.0,
                 target_phase_lag=0.0,
                 target_phase_alignment=0.9,
                 measured_phase_lag=0.0,
@@ -139,6 +142,8 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 target_delta_nfr=apex_target,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                nu_exc_target=0.25,
+                rho_target=1.0,
                 target_phase_lag=0.0,
                 target_phase_alignment=0.9,
                 measured_phase_lag=0.0,
@@ -155,6 +160,8 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
                 target_delta_nfr=exit_target,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                nu_exc_target=0.25,
+                rho_target=1.0,
                 target_phase_lag=0.0,
                 target_phase_alignment=0.9,
                 measured_phase_lag=0.0,
@@ -405,6 +412,8 @@ def test_track_specific_profile_tightens_entry_threshold():
                 target_delta_nfr=0.0,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                nu_exc_target=0.25,
+                rho_target=1.0,
                 target_phase_lag=0.0,
                 target_phase_alignment=0.9,
                 measured_phase_lag=0.0,
@@ -421,6 +430,8 @@ def test_track_specific_profile_tightens_entry_threshold():
                 target_delta_nfr=0.2,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                nu_exc_target=0.25,
+                rho_target=1.0,
                 target_phase_lag=0.0,
                 target_phase_alignment=0.9,
                 measured_phase_lag=0.0,
@@ -437,6 +448,8 @@ def test_track_specific_profile_tightens_entry_threshold():
                 target_delta_nfr=-0.1,
                 target_sense_index=0.9,
                 nu_f_target=0.25,
+                nu_exc_target=0.25,
+                rho_target=1.0,
                 target_phase_lag=0.0,
                 target_phase_alignment=0.9,
                 measured_phase_lag=0.0,
@@ -543,6 +556,8 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
                 target_delta_nfr=0.0,
                 target_sense_index=0.9,
                 nu_f_target=0.1,
+                nu_exc_target=0.1,
+                rho_target=1.0,
                 target_phase_lag=0.0,
                 target_phase_alignment=0.9,
                 measured_phase_lag=0.0,
@@ -559,6 +574,8 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
                 target_delta_nfr=0.1,
                 target_sense_index=0.9,
                 nu_f_target=0.15,
+                nu_exc_target=0.15,
+                rho_target=1.0,
                 target_phase_lag=0.0,
                 target_phase_alignment=0.9,
                 measured_phase_lag=0.0,
@@ -575,6 +592,8 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
                 target_delta_nfr=-0.05,
                 target_sense_index=0.9,
                 nu_f_target=0.2,
+                nu_exc_target=0.2,
+                rho_target=1.0,
                 target_phase_lag=0.0,
                 target_phase_alignment=0.9,
                 measured_phase_lag=0.0,
@@ -691,6 +710,8 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
         target_delta_nfr=0.2,
         target_sense_index=0.88,
         nu_f_target=0.25,
+                nu_exc_target=0.25,
+                rho_target=1.0,
         target_phase_lag=0.0,
         target_phase_alignment=0.9,
         measured_phase_lag=0.6,
@@ -731,3 +752,62 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
     assert "θ" in rebound_actions[0].rationale
     assert "Siφ" in rebound_actions[0].rationale
     assert "invierte el sentido" in rebound_actions[0].rationale.lower()
+
+
+def test_detune_ratio_rule_emits_modal_guidance() -> None:
+    goal = Goal(
+        phase="apex",
+        archetype="apoyo",
+        description="",
+        target_delta_nfr=0.3,
+        target_sense_index=0.85,
+        nu_f_target=0.28,
+        nu_exc_target=0.22,
+        rho_target=0.78,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.9,
+        measured_phase_lag=0.0,
+        measured_phase_alignment=0.9,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.3, 0.3),
+        dominant_nodes=("suspension", "chassis"),
+    )
+    microsector = Microsector(
+        index=4,
+        start_time=0.0,
+        end_time=0.4,
+        curvature=1.6,
+        brake_event=False,
+        support_event=True,
+        delta_nfr_signature=0.4,
+        goals=(goal,),
+        phase_boundaries={"apex": (0, 3)},
+        phase_samples={"apex": (0, 1, 2)},
+        active_phase="apex",
+        dominant_nodes={"apex": ("suspension",)},
+        phase_weights={"apex": {"__default__": 1.0}},
+        grip_rel=1.1,
+        phase_lag={"apex": 0.0},
+        phase_alignment={"apex": 0.9},
+        filtered_measures={
+            "thermal_load": 5200.0,
+            "style_index": 0.82,
+            "grip_rel": 1.1,
+            "nu_f": 0.9,
+            "nu_exc": 0.5,
+            "rho": 0.55,
+            "d_nfr_res": 0.9,
+        },
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"apex": {"slip_lat": 80.0, "slip_long": 78.0, "yaw_rate": 72.0}},
+    )
+
+    engine = RecommendationEngine(rules=[DetuneRatioRule(priority=42)])
+    recommendations = engine.generate([], [microsector])
+
+    assert recommendations, "expected detune ratio warning"
+    rationale = recommendations[0].rationale.lower()
+    assert "ρ=" in recommendations[0].rationale
+    assert "barras" in rationale
