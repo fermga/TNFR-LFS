@@ -1,6 +1,10 @@
 """Core computation utilities for TNFR × LFS."""
 
 from .coherence import compute_node_delta_nfr, sense_index
+from .coherence_calibration import (
+    CalibrationSnapshot,
+    CoherenceCalibrationStore,
+)
 from .epi import DeltaCalculator, EPIExtractor, TelemetryRecord, delta_nfr_by_node
 from .epi_models import EPIBundle
 from .metrics import AeroCoherence, WindowMetrics, compute_aero_coherence, compute_window_metrics
@@ -33,6 +37,8 @@ __all__ = [
     "delta_nfr_by_node",
     "compute_node_delta_nfr",
     "sense_index",
+    "CoherenceCalibrationStore",
+    "CalibrationSnapshot",
     "compute_window_metrics",
     "compute_aero_coherence",
     "compute_structural_timestamps",

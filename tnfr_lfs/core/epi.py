@@ -6,7 +6,10 @@ import math
 from dataclasses import dataclass
 from statistics import mean
 from collections.abc import Mapping as MappingABC
-from typing import Dict, List, Mapping, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence, TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - import for type checking only
+    from .coherence_calibration import CoherenceCalibrationStore
 
 from .coherence import compute_node_delta_nfr, sense_index
 from .epi_models import (
@@ -398,10 +401,22 @@ class EPIExtractor:
         self.load_weight = load_weight
         self.slip_weight = slip_weight
 
-    def extract(self, records: Sequence[TelemetryRecord]) -> List[EPIBundle]:
+    def extract(
+        self,
+        records: Sequence[TelemetryRecord],
+        *,
+        calibration: "CoherenceCalibrationStore" | None = None,
+        player_name: str | None = None,
+        car_model: str | None = None,
+    ) -> List[EPIBundle]:
         if not records:
             return []
-        baseline = DeltaCalculator.derive_baseline(records)
+        baseline = DeltaCalculator.resolve_baseline(
+            records,
+            calibration=calibration,
+            player_name=player_name,
+            car_model=car_model,
+        )
         results: List[EPIBundle] = []
         prev_integrated_epi: Optional[float] = None
         prev_timestamp = records[0].timestamp
@@ -495,6 +510,21 @@ class DeltaCalculator:
             suspension_velocity_front=mean(record.suspension_velocity_front for record in records),
             suspension_velocity_rear=mean(record.suspension_velocity_rear for record in records),
         )
+
+    @staticmethod
+    def resolve_baseline(
+        records: Sequence[TelemetryRecord],
+        *,
+        calibration: "CoherenceCalibrationStore" | None = None,
+        player_name: str | None = None,
+        car_model: str | None = None,
+    ) -> TelemetryRecord:
+        baseline = DeltaCalculator.derive_baseline(records)
+        if calibration is None or not player_name or not car_model:
+            return baseline
+        resolved = calibration.baseline_for(player_name, car_model, baseline)
+        calibration.observe_baseline(player_name, car_model, baseline)
+        return resolved
 
     @staticmethod
     def compute_bundle(
