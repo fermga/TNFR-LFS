@@ -133,7 +133,19 @@ neumáticos cuando la transición entre fases pierde coherencia.  Además, el
 optimiser de planes pondera estas desviaciones para que los gradientes de
 geometría formen parte del objetivo prolongado de resonant alignment (RA),
 recompensando configuraciones con mayor ``C(t)`` y penalizando retrasos en la
-respuesta.
+respuesta.  Además se exponen indicadores agregados del apoyo estructural en
+``WindowMetrics``:
+
+* ``support_effective`` captura el ΔNFR absorbido por neumáticos y suspensión
+  ponderado por las ventanas estructurales del tramo analizado.
+* ``load_support_ratio`` normaliza dicho valor frente a la carga vertical media
+  para contextualizar el esfuerzo requerido al chasis.
+* ``structural_expansion_longitudinal``/``structural_contraction_longitudinal``
+  cuantifican la expansión o contracción del eje estructural inducida por las
+  componentes longitudinales de ΔNFR.
+* ``structural_expansion_lateral``/``structural_contraction_lateral`` replican
+  la métrica para la componente lateral, revelando apoyos que abren o cierran
+  el eje estructural en la ventana.
 
 ## Artefactos generados
 

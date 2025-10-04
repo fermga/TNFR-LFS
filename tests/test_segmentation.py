@@ -29,7 +29,17 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         assert microsector.brake_event is True
         assert microsector.support_event is True
         assert microsector.grip_rel >= 0.0
-        assert set(microsector.filtered_measures) >= {"thermal_load", "style_index", "grip_rel"}
+        assert set(microsector.filtered_measures) >= {
+            "thermal_load",
+            "style_index",
+            "grip_rel",
+            "support_effective",
+            "load_support_ratio",
+            "structural_expansion_longitudinal",
+            "structural_contraction_longitudinal",
+            "structural_expansion_lateral",
+            "structural_contraction_lateral",
+        }
         assert isinstance(microsector.recursivity_trace, tuple)
         assert microsector.last_mutation is None
         phases = [goal.phase for goal in microsector.goals]

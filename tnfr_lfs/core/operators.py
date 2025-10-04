@@ -13,6 +13,7 @@ from .contextual_delta import (
     resolve_context_from_bundle,
     resolve_series_context,
 )
+from .metrics import compute_window_metrics
 from .dissonance import compute_useful_dissonance_stats
 from .epi import (
     EPIExtractor,
@@ -1164,6 +1165,12 @@ def orchestrate_delta_metrics(
             "dissonance_breakdown": empty_breakdown,
             "coupling": 0.0,
             "resonance": 0.0,
+            "support_effective": 0.0,
+            "load_support_ratio": 0.0,
+            "structural_expansion_longitudinal": 0.0,
+            "structural_contraction_longitudinal": 0.0,
+            "structural_expansion_lateral": 0.0,
+            "structural_contraction_lateral": 0.0,
             "recursive_trace": [],
             "lap_sequence": reception_stage["lap_sequence"],
             "microsector_variability": [],
@@ -1206,6 +1213,13 @@ def orchestrate_delta_metrics(
         "sense": sense_stage,
     }
 
+    window_metrics = compute_window_metrics(
+        flattened_records,
+        bundles=coherence_stage["bundles"],
+        fallback_to_chronological=True,
+        objectives=objectives,
+    )
+
     return {
         "objectives": objectives,
         "bundles": coherence_stage["bundles"],
@@ -1226,6 +1240,12 @@ def orchestrate_delta_metrics(
         "raw_coherence_index": coherence_stage["raw_coherence_index"],
         "frequency_label": coherence_stage["frequency_label"],
         "frequency_classification": coherence_stage["frequency_classification"],
+        "support_effective": window_metrics.support_effective,
+        "load_support_ratio": window_metrics.load_support_ratio,
+        "structural_expansion_longitudinal": window_metrics.structural_expansion_longitudinal,
+        "structural_contraction_longitudinal": window_metrics.structural_contraction_longitudinal,
+        "structural_expansion_lateral": window_metrics.structural_expansion_lateral,
+        "structural_contraction_lateral": window_metrics.structural_contraction_lateral,
         "recursive_trace": sense_stage["memory"],
         "lap_sequence": reception_stage["lap_sequence"],
         "microsector_variability": variability,
