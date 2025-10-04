@@ -5,9 +5,10 @@ from __future__ import annotations
 import select
 import socket
 import struct
+from collections import deque
 from dataclasses import dataclass
 from time import monotonic
-from typing import Optional, Sequence
+from typing import Callable, Deque, Optional, Sequence
 
 
 @dataclass(slots=True)
@@ -63,6 +64,7 @@ class InSimClient:
     ISP_TINY = 3
     ISP_BTN = 18
     ISP_BTC = 19
+    ISP_MST = 21
 
     TINY_NONE = 0
     TINY_ALIVE = 1
@@ -79,6 +81,7 @@ class InSimClient:
     TINY_STRUCT = struct.Struct("<BBBB")
     BTN_HEADER_STRUCT = struct.Struct("<BBBBBBBBBBBB")
     BTC_STRUCT = struct.Struct("<BBBBBBBBHH")
+    MST_STRUCT = struct.Struct("<BBBB64s")
 
     def __init__(
         self,
@@ -246,6 +249,24 @@ class InSimClient:
         packet = header + packet_text
         self._socket.sendall(packet)  # type: ignore[union-attr]
 
+    def send_command(self, command: str) -> None:
+        """Send a chat command (e.g. ``/press``) to Live for Speed."""
+
+        self._ensure_connected()
+        message = (command or "").strip()
+        if not message:
+            return
+        encoded = message.encode("latin1", "ignore")[:63]
+        payload = encoded + b"\0" * (64 - len(encoded))
+        packet = self.MST_STRUCT.pack(
+            self.MST_STRUCT.size,
+            self.ISP_MST,
+            self.request_id,
+            0,
+            payload,
+        )
+        self._socket.sendall(packet)  # type: ignore[union-attr]
+
     def clear_button(self, layout: ButtonLayout | None = None) -> None:
         """Remove an overlay button using the ``BTN_STYLE_CLEAR`` flag."""
 
@@ -388,4 +409,78 @@ class OverlayManager:
         self._next_keepalive = reference + self.client.keepalive_interval
 
 
-__all__ = ["ButtonLayout", "ButtonEvent", "InSimClient", "OverlayManager"]
+@dataclass(slots=True)
+class MacroStep:
+    """Single command scheduled for future execution."""
+
+    ready_at: float
+    command: str
+
+
+class MacroQueue:
+    """Schedule ``/press`` command sequences with spacing safeguards."""
+
+    def __init__(
+        self,
+        sender: Callable[[str], None],
+        *,
+        min_interval: float = 0.35,
+        time_fn=monotonic,
+    ) -> None:
+        self._sender = sender
+        self._min_interval = max(0.05, float(min_interval))
+        self._time_fn = time_fn
+        self._steps: Deque[MacroStep] = deque()
+        self._last_scheduled = 0.0
+
+    def __len__(self) -> int:
+        return len(self._steps)
+
+    def clear(self) -> None:
+        self._steps.clear()
+        self._last_scheduled = 0.0
+
+    def enqueue_press(self, key: str, *, spacing: float | None = None) -> None:
+        self.enqueue_press_sequence([key], spacing=spacing)
+
+    def enqueue_press_sequence(
+        self, keys: Sequence[str], *, spacing: float | None = None
+    ) -> None:
+        if not keys:
+            return
+        base_spacing = max(self._min_interval, float(spacing) if spacing else self._min_interval)
+        now = self._time_fn()
+        base_time = max(now, self._last_scheduled)
+        for index, key in enumerate(keys):
+            command = f"/press {key.strip()}"
+            ready_at = base_time + index * base_spacing
+            self._steps.append(MacroStep(ready_at=ready_at, command=command))
+        self._last_scheduled = base_time + (len(keys) * base_spacing)
+
+    def tick(self) -> int:
+        """Dispatch ready commands.
+
+        Returns the number of commands sent during the tick.
+        """
+
+        dispatched = 0
+        now = self._time_fn()
+        while self._steps and self._steps[0].ready_at <= now:
+            step = self._steps.popleft()
+            self._sender(step.command)
+            dispatched += 1
+        if not self._steps:
+            self._last_scheduled = now
+        return dispatched
+
+    def pending(self) -> Sequence[str]:
+        return tuple(step.command for step in self._steps)
+
+
+__all__ = [
+    "ButtonLayout",
+    "ButtonEvent",
+    "InSimClient",
+    "MacroQueue",
+    "OverlayManager",
+]
