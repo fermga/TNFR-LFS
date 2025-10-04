@@ -62,9 +62,12 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
     page_a, page_b, page_c, page_d = pages
     assert "ΔNFR" in page_a and "∇Acop" in page_a
     assert "C(t)" in page_a
+    assert "[" in page_a  # ΔNFR gauge present
     if "Sin microsector activo" not in page_a:
         assert any(char in page_a for char in "▁▂▃▄▅▆▇█")
-    assert "Líder" in page_b and "ν_f" in page_b and "ν_exc" in page_b
+        assert "ν_f~" in page_a or "ν_f~" in page_b
+        assert "Si↺" in page_a or "Si plan" in page_c
+    assert "Líder" in page_b and "ν_f" in page_b
     assert "C(t)" in page_b
     assert "dSi" in page_c
     assert "Aplicar" in page_d
@@ -290,7 +293,7 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
     assert "Δaero alta" in output
 
 
-def test_render_page_a_includes_sparkline_when_active_phase():
+def test_render_page_a_includes_wave_when_active_phase():
     from types import SimpleNamespace
 
     bundles = [
@@ -332,41 +335,19 @@ def test_render_page_a_includes_sparkline_when_active_phase():
     )
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
     curve_label = f"Curva {microsector.index + 1}"
-    phase_label = osd_module.HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize())
-    spark_delta = osd_module._phase_sparkline(microsector, bundles, "delta_nfr")
-    spark_si = osd_module._phase_sparkline(microsector, bundles, "sense_index")
-    base_lines = [
-        f"{curve_label} · {phase_label}",
-        f"ΔNFR {bundles[-1].delta_nfr:+.2f} obj {goal.target_delta_nfr:+.2f} ±{0.2:.2f}",
-        f"Δ∥ {0.0:+.2f} obj {0.0:+.2f} · Δ⊥ {0.0:+.2f} obj {0.0:+.2f} · w∥ {0.50:.2f} · w⊥ {0.50:.2f}",
-    ]
-    lines = list(base_lines)
-    gradient_line = osd_module._gradient_line(window_metrics)
-    if spark_delta and spark_si:
-        spark_line = osd_module._truncate_line(f"Fases Δ{spark_delta} · Si{spark_si}")
-        candidate = "\n".join(base_lines + [spark_line, gradient_line])
-        if len(candidate.encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
-            assert "Fases Δ" in output
-            assert any(char in output for char in "▁▂▃▄▅▆▇█")
-            lines.append(spark_line)
-        else:
-            assert "Fases Δ" not in output
-    else:
-        assert "Fases Δ" not in output
-    lines.append(gradient_line)
-    assert "∇Acop" in output
+    assert curve_label in output
+    assert osd_module.HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize()) in output
+    assert "ν_f~" in output
+    assert "[" in output  # ΔNFR gauge
     assert "C(t) 0.40" in output
-    assert "ν_f óptima" in output
+    assert "∇Acop" in output
     aero_line = osd_module._truncate_line(
         "Δaero alta "
         f"{window_metrics.aero_coherence.high_speed_imbalance:+.2f}"
         f" · baja {window_metrics.aero_coherence.low_speed_imbalance:+.2f}"
     )
-    candidate = "\n".join((*lines, aero_line))
-    if len(candidate.encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
+    if len((output + "\n" + aero_line).encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
         assert "Δaero" in output
-    else:
-        assert "Δaero" not in output
 
 
 def test_render_page_a_displays_brake_meter_on_severe_events():

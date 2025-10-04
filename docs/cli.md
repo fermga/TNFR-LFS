@@ -64,25 +64,29 @@ telemetry interfaces:
 
 The HUD cycles through three pages (press the button to advance):
 
-* **Página A** – curva y fase actuales, ΔNFR↓ frente al objetivo y su
-  tolerancia, arquetipo activo (``hairpin``, ``medium``, ``fast`` o ``chicane``)
-  con sus referencias ΔNFR∥/⊥ y pesos de detune, acoplamiento global, fase θ/Siφ
-  del microsector activo, el índice estructural ``C(t)`` normalizado con el
-  objetivo de Si del perfil actual y la insignia ``ν_f`` (muy baja/óptima/…)
-  correspondiente a la categoría del coche.  Debajo se mantiene el indicador
-  ``Δaero`` que refleja el desequilibrio ΔNFR entre ejes a alta velocidad.
-  Cuando los eventos de operador ``OZ``/``IL`` superan sus umbrales ΔNFR
-  contextualizados se añade un medidor «ΔNFR frenada» con la superficie
-  dominante (``low_grip``/``neutral``/``high_grip``) y el pico observado frente al
-  umbral calculado para el microsector, facilitando el ajuste inmediato del
-  ``brake_bias_pct`` desde el propio HUD.
-* **Página B** – encabezado con la clasificación ``ν_f`` y ``C(t)`` actuales, las
-  top‑3 contribuciones nodales a |ΔNFR↓| con barras ASCII de anchura fija y el
-  modo resonante dominante (frecuencia y clasificación).
-* **Página C** – pista rápida para el operador activo, las 2–3 acciones
-  de setup priorizadas por ``SetupPlanner`` junto a su efecto esperado y una
-  guía aero (“Aero …”) que resume si conviene reforzar el alerón delantero o
-  trasero en la recta.
+* **Página A** – curva y fase actuales con la insignia ``ν_f`` (muy
+  baja/óptima/…), un medidor ΔNFR con tolerancias ``[--^--]`` integrado en la
+  línea de objetivos, el arquetipo activo (``hairpin``, ``medium``, ``fast`` o
+  ``chicane``) con sus referencias ΔNFR∥/⊥ y pesos de detune, el resumen dinámico
+  ``Si↺`` de la memoria sensorial y la banda ``ν_f~▁▃▆`` que muestra la evolución
+  reciente de la frecuencia natural.  Debajo se representa la barra de
+  coherencia ``C(t) ███░`` normalizada con el objetivo de Si del perfil actual y
+  se mantiene el indicador ``Δaero`` que refleja el desequilibrio ΔNFR entre
+  ejes a alta velocidad.  Cuando los eventos de operador ``OZ``/``IL`` superan
+  sus umbrales ΔNFR contextualizados se añade un medidor «ΔNFR frenada» con la
+  superficie dominante (``low_grip``/``neutral``/``high_grip``) y el pico observado
+  frente al umbral calculado para el microsector, facilitando el ajuste
+  inmediato del ``brake_bias_pct`` desde el propio HUD.
+* **Página B** – encabezado con la etiqueta de banda ``ν_f`` y su clasificación,
+  junto a la barra de coherencia ``C(t)`` y la onda ``ν_f~`` agregada para la
+  última vuelta.  Debajo se listan las top‑3 contribuciones nodales a
+  |ΔNFR↓| con barras ASCII de anchura fija y el modo resonante dominante
+  (frecuencia, ratio ``ρ`` y clasificación).
+* **Página C** – arranca con ``Si plan`` para exponer el estado de memoria del
+  piloto y a continuación ofrece la pista rápida para el operador activo: las
+  2–3 acciones de setup priorizadas por ``SetupPlanner`` junto a su efecto
+  esperado y una guía aero (“Aero …”) que resume si conviene reforzar el alerón
+  delantero o trasero en la recta.
 
 The overlay uses the default layout ``left=80, top=20, width=40, height=16``
 and every page is trimmed to 239 bytes so it fits within the
@@ -102,13 +106,15 @@ recommendation engine resolves the thresholds and phase hints using the
 
 The phase hint appended to page A now blends operator messages with the
 measured phase alignment when the archetype drifts away from its target and
-highlights the longitudinal/lateral focus defined by the detune weights. The
-gradient line reports the dominant frequency extracted from the
-steer-versus-yaw/lateral cross-spectrum together with the measured phase
-offset ``θ`` y su coseno ``Siφ``, the structural coherence index ``C(t)`` and the
-frequency badge derived from the vehicle category (e.g. GT ``1.9–2.2 Hz``).
-Justo debajo se imprime ``Δaero`` para que el ingeniero visualice cuánto difiere
-la carga delantera respecto a la trasera a alta y baja velocidad.
+highlights the longitudinal/lateral focus defined by the detune weights. The new
+ΔNFR gauge (``[--^--]``) and the ``ν_f~`` sparkline quantify how far the current
+stint deviates from the target envelope before the gradient line reports the
+dominant frequency extracted from the steer-versus-yaw/lateral cross-spectrum
+together with the measured phase offset ``θ`` y su coseno ``Siφ``, the structural
+coherence index ``C(t)`` and the frequency badge derived from the vehicle
+category (e.g. GT ``1.9–2.2 Hz``). Justo debajo se imprime ``Δaero`` para que el
+ingeniero visualice cuánto difiere la carga delantera respecto a la trasera a
+alta y baja velocidad.
 
 Natural frequency bands can be customised through
 ``NaturalFrequencySettings.frequency_bands`` and per-car categories handled by

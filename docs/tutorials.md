@@ -43,10 +43,11 @@ tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-po
 ```
 
 Click on the overlay button to rotate through the three pages: (A) active
-corner and dissonance breakdown, (B) nodal |ΔNFR↓| contributions and modal
-resonance, (C) setup hints aligned with the current phase.  Use the
-``--layout-*`` overrides if you need to move the 40×16 button to a different
-area of the HUD.
+corner and dissonance breakdown with the ΔNFR gauge, ``ν_f~`` waveform and
+coherence bar, (B) nodal |ΔNFR↓| contributions and modal resonance enriched with
+the same coherence widgets, (C) setup hints aligned with the current phase and
+the ``Si plan`` trace.  Use the ``--layout-*`` overrides if you need to move the
+40×16 button to a different area of the HUD.
 
 ## 1. Capture a baseline
 

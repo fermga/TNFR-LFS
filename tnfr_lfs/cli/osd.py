@@ -155,6 +155,14 @@ class TelemetryHUD:
             "Plan en preparación…",
             "Aplicar en espera…",
         )
+        self._coherence_series: Tuple[float, ...] = ()
+        self._coherence_index: float = 0.0
+        self._frequency_classification: str = "sin datos"
+        self._sense_state: Dict[str, object] = {
+            "series": (),
+            "memory": (),
+            "average": 0.0,
+        }
         self._dirty = True
         self._plan_interval = max(0.0, float(plan_interval))
         self._time_fn = time_fn
@@ -205,11 +213,19 @@ class TelemetryHUD:
                 "Plan en preparación…",
                 "Aplicar en espera…",
             )
+            self._coherence_series = ()
+            self._coherence_index = 0.0
+            self._frequency_classification = "sin datos"
+            self._sense_state = {"series": (), "memory": (), "average": 0.0}
             self._dirty = False
             return
 
         bundles = self.extractor.extract(records)
         if not bundles:
+            self._coherence_series = ()
+            self._coherence_index = 0.0
+            self._frequency_classification = "sin datos"
+            self._sense_state = {"series": (), "memory": (), "average": 0.0}
             self._dirty = False
             return
 
@@ -227,13 +243,37 @@ class TelemetryHUD:
         bundle = bundles[-1]
         goal_delta = active.goal.target_delta_nfr if active and active.goal else 0.0
         goal_si = active.goal.target_sense_index if active and active.goal else 0.75
-        orchestrate_delta_metrics(
+        metrics_state = orchestrate_delta_metrics(
             [records],
             goal_delta,
             goal_si,
             microsectors=self._microsectors,
             phase_weights=self._thresholds.phase_weights,
         )
+        staged_bundles = tuple(metrics_state.get("bundles", ())) if metrics_state else ()
+        if staged_bundles:
+            bundles = staged_bundles
+        self._bundles = bundles
+        coherence_series = metrics_state.get("coherence_index_series", ()) if metrics_state else ()
+        self._coherence_series = tuple(float(value) for value in coherence_series)
+        self._coherence_index = float(metrics_state.get("coherence_index", 0.0)) if metrics_state else 0.0
+        frequency_classification = "sin datos"
+        if metrics_state:
+            frequency_classification = str(
+                metrics_state.get(
+                    "frequency_classification",
+                    getattr(bundles[-1], "nu_f_classification", "sin datos") if bundles else "sin datos",
+                )
+            )
+        self._frequency_classification = frequency_classification or "sin datos"
+        sense_memory = metrics_state.get("sense_memory", {}) if metrics_state else {}
+        if isinstance(sense_memory, Mapping):
+            series = tuple(float(value) for value in sense_memory.get("series", ()))
+            memory = tuple(float(value) for value in sense_memory.get("memory", ()))
+            average = float(sense_memory.get("average", 0.0))
+            self._sense_state = {"series": series, "memory": memory, "average": average}
+        else:
+            self._sense_state = {"series": (), "memory": (), "average": 0.0}
         phase_indices: Sequence[int] | None = None
         if active:
             phase_indices = active.microsector.phase_samples.get(active.phase)
@@ -243,6 +283,8 @@ class TelemetryHUD:
             bundles=bundles,
             objectives=self._profile_objectives,
         )
+        if not self._coherence_index:
+            self._coherence_index = float(window_metrics.coherence_index)
         resonance = analyse_modal_resonance(records)
         recommendations = self.recommendation_engine.generate(
             bundles,
@@ -315,13 +357,25 @@ class TelemetryHUD:
                 tolerance,
                 window_metrics,
                 self._bundles,
+                coherence_series=self._coherence_series,
+                coherence_index=self._coherence_index,
+                frequency_classification=self._frequency_classification,
+                sense_state=self._sense_state,
             ),
-            _render_page_b(bundle, resonance),
+            _render_page_b(
+                bundle,
+                resonance,
+                self._bundles,
+                self._coherence_series,
+                self._frequency_classification,
+                self._coherence_index,
+            ),
             _render_page_c(
                 phase_hint,
                 self._cached_plan,
                 self._thresholds,
                 active,
+                sense_state=self._sense_state,
             ),
             _render_page_d(top_changes, self._macro_status),
         )
@@ -349,12 +403,47 @@ def _render_page_a(
     tolerance: float,
     window_metrics: WindowMetrics,
     bundles: Sequence[object] | None = None,
+    *,
+    coherence_series: Sequence[float] | None = None,
+    coherence_index: float | None = None,
+    frequency_classification: str = "",
+    sense_state: Mapping[str, object] | None = None,
 ) -> str:
+    coherence_value = (
+        float(coherence_index)
+        if coherence_index is not None
+        else float(window_metrics.coherence_index)
+    )
+    coherence_line = _coherence_meter_line(coherence_value, coherence_series)
+    nu_wave = _nu_wave_line(bundles)
+    sense_line = _sense_state_line(sense_state)
+    classification_segment = (
+        f" · ν_f {frequency_classification}" if frequency_classification else ""
+    )
     if not active:
-        return _ensure_limit(
-            "Sin microsector activo\nΔNFR -- obj -- ±0.00\n"
-            + _gradient_line(window_metrics)
-        )
+        lines = [
+            _truncate_line(f"Sin microsector activo{classification_segment}"),
+            _truncate_line(
+                "ΔNFR -- obj -- ±0.00 "
+                + _delta_threshold_meter(
+                    getattr(bundle, "delta_nfr", 0.0), 0.0, tolerance
+                )
+            ),
+        ]
+        if sense_line:
+            candidate = "\n".join((*lines, sense_line))
+            if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+                lines.append(sense_line)
+        if coherence_line:
+            candidate = "\n".join((*lines, coherence_line))
+            if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+                lines.append(coherence_line)
+        if nu_wave:
+            candidate = "\n".join((*lines, nu_wave))
+            if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+                lines.append(nu_wave)
+        lines.append(_gradient_line(window_metrics))
+        return _ensure_limit("\n".join(lines))
 
     curve_label = f"Curva {active.microsector.index + 1}"
     phase_label = HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize())
@@ -374,9 +463,12 @@ def _render_page_a(
         axis_weights = {}
     weight_long = float(axis_weights.get("longitudinal", 0.5))
     weight_lat = float(axis_weights.get("lateral", 0.5))
+    gauge = _delta_threshold_meter(current_delta, goal_delta, tolerance)
     lines = [
-        f"{curve_label} · {phase_label}",
-        f"ΔNFR {current_delta:+.2f} obj {goal_delta:+.2f} ±{tolerance:.2f}",
+        _truncate_line(f"{curve_label} · {phase_label}{classification_segment}"),
+        _truncate_line(
+            f"ΔNFR {current_delta:+.2f} obj {goal_delta:+.2f} ±{tolerance:.2f} {gauge}"
+        ),
         f"Δ∥ {long_component:+.2f} obj {goal_long:+.2f} · Δ⊥ {lat_component:+.2f} obj {goal_lat:+.2f}"
         f" · w∥ {weight_long:.2f} · w⊥ {weight_lat:.2f}",
     ]
@@ -389,6 +481,18 @@ def _render_page_a(
     brake_line = _brake_event_meter(active.microsector)
     if brake_line:
         lines.append(brake_line)
+    if sense_line:
+        candidate = "\n".join((*lines, sense_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(sense_line)
+    if coherence_line:
+        candidate = "\n".join((*lines, coherence_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(coherence_line)
+    if nu_wave:
+        candidate = "\n".join((*lines, nu_wave))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(nu_wave)
     lines.append(gradient_line)
     if (
         window_metrics.aero_coherence.high_speed_samples
@@ -450,6 +554,112 @@ def _phase_sparkline(
     return "".join(spark_chars)
 
 
+def _delta_threshold_meter(
+    current: float, target: float, tolerance: float, width: int = 9
+) -> str:
+    width = max(5, int(width))
+    diff = float(current) - float(target)
+    limit = float(tolerance)
+    if not math.isfinite(limit) or limit <= 0.0:
+        limit = max(0.05, abs(target) * 0.1, 0.05)
+    ratio = max(-1.0, min(1.0, diff / max(limit, 1e-6)))
+    pointer = int(round((ratio + 1.0) * 0.5 * (width - 1)))
+    pointer = max(0, min(width - 1, pointer))
+    gauge = ["-"] * width
+    mid = width // 2
+    if 0 <= mid < width:
+        gauge[mid] = "|"
+    if 0 <= pointer < width:
+        gauge[pointer] = "^"
+    if pointer == mid:
+        gauge[mid] = "^"
+    return "[" + "".join(gauge) + f"] {diff:+.2f}"
+
+
+def _coherence_bar(value: float, width: int = 10) -> str:
+    value = max(0.0, min(1.0, float(value)))
+    width = max(4, int(width))
+    filled = max(0, min(width, int(round(value * width))))
+    return "█" * filled + "░" * (width - filled)
+
+
+def _series_sparkline(values: Sequence[float], width: int = 12) -> str:
+    if not values:
+        return ""
+    trimmed = list(values)[-width:]
+    if not trimmed:
+        return ""
+    min_value = min(trimmed)
+    max_value = max(trimmed)
+    if math.isclose(max_value, min_value):
+        index = len(SPARKLINE_BLOCKS) // 2
+        return SPARKLINE_BLOCKS[index] * len(trimmed)
+    span = max_value - min_value
+    if span <= 0.0:
+        span = 1.0
+    blocks = []
+    for value in trimmed:
+        ratio = (value - min_value) / span
+        block_index = int(round(ratio * (len(SPARKLINE_BLOCKS) - 1)))
+        block_index = max(0, min(len(SPARKLINE_BLOCKS) - 1, block_index))
+        blocks.append(SPARKLINE_BLOCKS[block_index])
+    return "".join(blocks)
+
+
+def _nu_wave_line(
+    bundles: Sequence[object] | None, width: int = 12
+) -> str:
+    if not bundles:
+        return ""
+    values: List[float] = []
+    for bundle in bundles[-width:]:
+        nu_value = getattr(bundle, "nu_f_dominant", None)
+        if nu_value is None or not math.isfinite(float(nu_value)):
+            nu_value = getattr(bundle, "nu_f", 0.0)
+        values.append(float(nu_value))
+    if not values:
+        return ""
+    spark = _series_sparkline(values, width=len(values))
+    return _truncate_line(f"ν_f~{spark} {values[-1]:.2f}Hz")
+
+
+def _coherence_meter_line(
+    value: float,
+    series: Sequence[float] | None,
+    classification: str | None = None,
+) -> str:
+    reference = value
+    if series:
+        reference = float(series[-1])
+    bar = _coherence_bar(reference)
+    suffix = f" · ν_f {classification}" if classification else ""
+    return _truncate_line(f"C(t) {value:.2f} {bar}{suffix}")
+
+
+def _sense_state_line(
+    sense_state: Mapping[str, object] | None,
+    *,
+    prefix: str = "Si↺",
+    width: int = 12,
+) -> str:
+    if not sense_state:
+        return ""
+    series = sense_state.get("memory") or sense_state.get("series") or ()
+    try:
+        values = [float(value) for value in series][-width:]
+    except TypeError:
+        values = []
+    if not values:
+        return ""
+    spark = _series_sparkline(values, width=len(values))
+    average = sense_state.get("average", sum(values) / len(values))
+    try:
+        avg_value = float(average)
+    except (TypeError, ValueError):
+        avg_value = sum(values) / len(values)
+    return _truncate_line(f"{prefix}{spark} μ {avg_value:.2f}")
+
+
 def _brake_event_meter(microsector: Microsector) -> str | None:
     events = getattr(microsector, "operator_events", {}) or {}
     payloads: List[Dict[str, float | str]] = []
@@ -498,20 +708,45 @@ def _brake_event_meter(microsector: Microsector) -> str | None:
     return _ensure_limit("ΔNFR frenada ⚠️ " + " · ".join(segments))
 
 
-def _render_page_b(bundle, resonance: Mapping[str, ModalAnalysis]) -> str:
+def _render_page_b(
+    bundle,
+    resonance: Mapping[str, ModalAnalysis],
+    bundles: Sequence[object] | None = None,
+    coherence_series: Sequence[float] | None = None,
+    frequency_classification: str = "",
+    coherence_index: float | None = None,
+) -> str:
     node_values = _nodal_delta_map(bundle)
+    lines: List[str] = []
+    frequency_label = getattr(bundle, "nu_f_label", "")
+    classification = frequency_classification or getattr(
+        bundle, "nu_f_classification", ""
+    )
+    if frequency_label or classification:
+        header_parts = []
+        if frequency_label:
+            header_parts.append(frequency_label)
+        if classification:
+            header_parts.append(f"ν_f {classification}")
+        lines.append(_truncate_line(" · ".join(header_parts)))
+    value = (
+        float(coherence_index)
+        if coherence_index is not None
+        else float(getattr(bundle, "coherence_index", 0.0))
+    )
+    coherence_line = _coherence_meter_line(value, coherence_series)
+    if coherence_line:
+        lines.append(coherence_line)
+    nu_wave = _nu_wave_line(bundles)
+    if nu_wave:
+        lines.append(nu_wave)
     if not node_values:
-        return "ΔNFR nodal\nDatos insuficientes"
+        lines.append("ΔNFR nodal")
+        lines.append("Datos insuficientes")
+        return _ensure_limit("\n".join(lines))
     ordered = sorted(node_values.items(), key=lambda item: abs(item[1]), reverse=True)[:3]
     max_mag = max(abs(value) for _, value in ordered) or 1.0
     leader = ordered[0][0] if ordered else "--"
-    lines: List[str] = []
-    frequency_label = getattr(bundle, "nu_f_label", "")
-    coherence_index = getattr(bundle, "coherence_index", 0.0)
-    if frequency_label:
-        lines.append(_truncate_line(f"{frequency_label} · C(t) {coherence_index:.2f}"))
-    elif coherence_index > 0.0:
-        lines.append(f"C(t) {coherence_index:.2f}")
     lines.append(f"ΔNFR nodal · Líder → {leader}")
     for name, value in ordered:
         bar = _bar_for_value(value, max_mag)
@@ -568,8 +803,13 @@ def _render_page_c(
     plan: SetupPlan | None,
     thresholds: ThresholdProfile,
     active: ActivePhase | None,
+    *,
+    sense_state: Mapping[str, object] | None = None,
 ) -> str:
     lines: List[str] = []
+    sense_line = _sense_state_line(sense_state, prefix="Si plan ")
+    if sense_line:
+        lines.append(sense_line)
     if active and phase_hint:
         lines.append(_truncate_line(f"Hint {phase_hint}"))
     elif active:
