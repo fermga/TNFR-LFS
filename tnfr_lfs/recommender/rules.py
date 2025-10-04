@@ -33,7 +33,7 @@ from ..core.archetypes import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from ..io.profiles import ProfileManager
+    from ..io.profiles import AeroProfile, ProfileManager
 from ..core.segmentation import Goal, Microsector
 
 
@@ -390,6 +390,7 @@ class RuleContext:
     track_name: str
     thresholds: ThresholdProfile
     tyre_offsets: Mapping[str, float] = field(default_factory=dict)
+    aero_profiles: Mapping[str, "AeroProfile"] = field(default_factory=dict)
 
     @property
     def profile_label(self) -> str:
@@ -645,6 +646,81 @@ class StabilityIndexRule:
                     ),
                     priority=110,
                 )
+
+
+class AeroCoherenceRule:
+    """React to aero imbalance at high speed when low speed remains stable."""
+
+    def __init__(
+        self,
+        *,
+        high_speed_threshold: float = 0.25,
+        low_speed_tolerance: float = 0.1,
+        min_high_samples: int = 5,
+        priority: int = 108,
+        profile_name: str = "race",
+        delta_step: float = 0.5,
+    ) -> None:
+        self.high_speed_threshold = float(high_speed_threshold)
+        self.low_speed_tolerance = float(low_speed_tolerance)
+        self.min_high_samples = int(min_high_samples)
+        self.priority = int(priority)
+        self.profile_name = profile_name
+        self.delta_step = float(delta_step)
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors or context is None:
+            return []
+
+        profiles = getattr(context, "aero_profiles", {}) or {}
+        profile = profiles.get(self.profile_name) or next(iter(profiles.values()), None)
+        target_high = getattr(profile, "high_speed_target", 0.0)
+        target_low = getattr(profile, "low_speed_target", 0.0)
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            high_samples = float(measures.get("aero_high_samples", 0.0))
+            if high_samples < self.min_high_samples:
+                continue
+            high_imbalance = float(measures.get("aero_high_imbalance", 0.0))
+            low_imbalance = float(measures.get("aero_low_imbalance", 0.0))
+            high_deviation = high_imbalance - target_high
+            low_deviation = low_imbalance - target_low
+            if abs(low_deviation) > self.low_speed_tolerance:
+                continue
+            if abs(high_deviation) < self.high_speed_threshold:
+                continue
+
+            if high_deviation > 0:
+                delta = self.delta_step
+                action = "Incrementa el ángulo del alerón trasero"
+                direction = "trasera"
+            else:
+                delta = -self.delta_step
+                action = "Reduce el ángulo del alerón trasero/refuerza la carga delantera"
+                direction = "delantera"
+
+            recommendations.append(
+                Recommendation(
+                    category="aero",
+                    message=f"Alta velocidad microsector {microsector.index}: {action}",
+                    rationale=(
+                        f"ΔNFR aero alta velocidad {high_imbalance:+.2f} frente al objetivo {target_high:+.2f} "
+                        f"con baja velocidad estable ({low_imbalance:+.2f}). Refuerza carga {direction} "
+                        f"({MANUAL_REFERENCES['aero']})."
+                    ),
+                    priority=self.priority,
+                    parameter="rear_wing_angle",
+                    delta=delta,
+                )
+            )
+        return recommendations
 
 
 class CoherenceRule:
@@ -1525,6 +1601,7 @@ class RecommendationEngine:
                     reference_key="differential",
                 ),
                 LoadBalanceRule(),
+                AeroCoherenceRule(),
                 StabilityIndexRule(),
                 CoherenceRule(),
             ]
@@ -1546,14 +1623,17 @@ class RecommendationEngine:
             snapshot = self.profile_manager.resolve(resolved_car, resolved_track, base_profile)
             profile = snapshot.thresholds
             offsets = snapshot.tyre_offsets
+            aero_profiles = snapshot.aero_profiles
         else:
             profile = base_profile
             offsets = {}
+            aero_profiles = {}
         return RuleContext(
             car_model=resolved_car,
             track_name=resolved_track,
             thresholds=profile,
             tyre_offsets=offsets,
+            aero_profiles=MappingProxyType(dict(aero_profiles)),
         )
 
     def register_plan(

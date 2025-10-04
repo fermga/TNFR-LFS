@@ -2,6 +2,7 @@
 
 from .logs import DeterministicReplayer, iter_run, write_run
 from .profiles import (
+    AeroProfile,
     ProfileManager,
     ProfileObjectives,
     ProfileSnapshot,
@@ -18,4 +19,5 @@ __all__ = [
     "ProfileSnapshot",
     "ProfileTolerances",
     "StintMetrics",
+    "AeroProfile",
 ]

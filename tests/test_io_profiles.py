@@ -1,4 +1,5 @@
 from pathlib import Path
+from pathlib import Path
 
 import pytest
 
@@ -49,3 +50,27 @@ def test_profile_manager_updates_tyre_offsets(tmp_path: Path) -> None:
     assert snapshot.tyre_offsets["camber_rear"] == pytest.approx(0.08)
     assert "hairpin" in snapshot.archetype_targets
     assert "entry" in snapshot.archetype_targets["hairpin"]
+
+
+def test_profile_manager_updates_aero_profiles(tmp_path: Path) -> None:
+    profiles_path = tmp_path / "profiles.toml"
+    manager = ProfileManager(profiles_path)
+    car_model = "generic_gt"
+    track = "generic"
+    manager.resolve(car_model, track)
+
+    manager.update_aero_profile(car_model, track, "race", high_speed_target=0.32)
+    manager.update_aero_profile(car_model, track, "stint_save", low_speed_target=-0.12, high_speed_target=0.08)
+
+    snapshot = manager.resolve(car_model, track)
+    assert snapshot.aero_profiles["race"].high_speed_target == pytest.approx(0.32)
+    assert snapshot.aero_profiles["stint_save"].low_speed_target == pytest.approx(-0.12)
+
+    manager.save()
+    persisted = profiles_path.read_text(encoding="utf8")
+    assert "[profiles.generic_gt.generic.aero_profiles.race]" in persisted
+    assert "high_speed_target = 0.32" in persisted
+
+    reloaded = ProfileManager(profiles_path)
+    re_snapshot = reloaded.resolve(car_model, track)
+    assert re_snapshot.aero_profiles["stint_save"].high_speed_target == pytest.approx(0.08)

@@ -35,6 +35,7 @@ from ..acquisition import (
 )
 from .osd import OSDController
 from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
+from ..core.metrics import compute_aero_coherence
 from ..core.resonance import analyse_modal_resonance
 from ..core.operators import orchestrate_delta_metrics
 from ..core.segmentation import Microsector, segment_microsectors
@@ -1867,6 +1868,14 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         aggregated_rationales = default_rationales
         aggregated_effects = default_effects
 
+    aero = compute_aero_coherence((), plan.telemetry)
+    aero_metrics = {
+        "low_speed_imbalance": aero.low_speed_imbalance,
+        "high_speed_imbalance": aero.high_speed_imbalance,
+        "low_speed_samples": float(aero.low_speed_samples),
+        "high_speed_samples": float(aero.high_speed_samples),
+    }
+
     setup_plan = SetupPlan(
         car_model=namespace.car_model,
         session=namespace.session,
@@ -1877,6 +1886,8 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         clamped_parameters=tuple(),
         phase_axis_targets={},
         phase_axis_weights={},
+        aero_guidance=aero.guidance,
+        aero_metrics=aero_metrics,
     )
 
     payload = {

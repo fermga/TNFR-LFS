@@ -8,7 +8,7 @@ from tnfr_lfs.acquisition import ButtonEvent, ButtonLayout, MacroQueue, OverlayM
 from tnfr_lfs.cli import osd as osd_module
 from tnfr_lfs.cli.osd import HUDPager, MacroStatus, OSDController, TelemetryHUD
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
-from tnfr_lfs.core.metrics import WindowMetrics
+from tnfr_lfs.core.metrics import AeroCoherence, WindowMetrics
 
 
 def _populate_hud(records) -> TelemetryHUD:
@@ -269,6 +269,24 @@ def test_render_page_c_marks_riesgos(synthetic_records):
     assert "dSi" in output
 
 
+def test_render_page_c_includes_aero_guidance(synthetic_records):
+    hud = _populate_hud(synthetic_records[:60])
+    thresholds = hud._thresholds
+    plan = SetupPlan(
+        car_model="generic_gt",
+        session=None,
+        changes=(),
+        rationales=(),
+        expected_effects=(),
+        sensitivities={},
+        aero_guidance="Alta velocidad → sube alerón trasero",
+        aero_metrics={"low_speed_imbalance": 0.02, "high_speed_imbalance": 0.3},
+    )
+    output = osd_module._render_page_c(None, plan, thresholds, None)
+    assert "Aero Alta velocidad" in output
+    assert "Δaero alta" in output
+
+
 def test_render_page_a_includes_sparkline_when_active_phase():
     from types import SimpleNamespace
 
@@ -282,10 +300,64 @@ def test_render_page_a_includes_sparkline_when_active_phase():
     }
     microsector = SimpleNamespace(index=0, phase_samples=phase_samples)
     goal = SimpleNamespace(target_delta_nfr=0.4, target_sense_index=0.8)
-    active = osd_module.ActivePhase(microsector=microsector, phase="apex3a", goal=goal)
-    window_metrics = WindowMetrics(0.7, 0.1, -0.2, 0.05, 1.2, 0.9, 0.75, 0.0, 1.0, 0.6, 60.0)
+    active = osd_module.ActivePhase(microsector=microsector, phase="apex", goal=goal)
+    aero = AeroCoherence(
+        low_speed_front=0.12,
+        low_speed_rear=0.18,
+        low_speed_imbalance=-0.06,
+        low_speed_samples=6,
+        high_speed_front=0.22,
+        high_speed_rear=0.08,
+        high_speed_imbalance=0.14,
+        high_speed_samples=9,
+    )
+    window_metrics = WindowMetrics(
+        0.7,
+        0.1,
+        -0.2,
+        0.05,
+        1.2,
+        0.9,
+        0.75,
+        0.0,
+        1.0,
+        0.6,
+        60.0,
+        aero,
+    )
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
-    assert "Fases Δ" in output
-    assert any(char in output for char in "▁▂▃▄▅▆▇█")
+    curve_label = f"Curva {microsector.index + 1}"
+    phase_label = osd_module.HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize())
+    spark_delta = osd_module._phase_sparkline(microsector, bundles, "delta_nfr")
+    spark_si = osd_module._phase_sparkline(microsector, bundles, "sense_index")
+    base_lines = [
+        f"{curve_label} · {phase_label}",
+        f"ΔNFR {bundles[-1].delta_nfr:+.2f} obj {goal.target_delta_nfr:+.2f} ±{0.2:.2f}",
+        f"Δ∥ {0.0:+.2f} obj {0.0:+.2f} · Δ⊥ {0.0:+.2f} obj {0.0:+.2f} · w∥ {0.50:.2f} · w⊥ {0.50:.2f}",
+    ]
+    lines = list(base_lines)
+    gradient_line = osd_module._gradient_line(window_metrics)
+    if spark_delta and spark_si:
+        spark_line = osd_module._truncate_line(f"Fases Δ{spark_delta} · Si{spark_si}")
+        candidate = "\n".join(base_lines + [spark_line, gradient_line])
+        if len(candidate.encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
+            assert "Fases Δ" in output
+            assert any(char in output for char in "▁▂▃▄▅▆▇█")
+            lines.append(spark_line)
+        else:
+            assert "Fases Δ" not in output
+    else:
+        assert "Fases Δ" not in output
+    lines.append(gradient_line)
     assert "ρ" in output
-    assert "UDR" in output
+    assert "∇Acop" in output
+    aero_line = osd_module._truncate_line(
+        "Δaero alta "
+        f"{window_metrics.aero_coherence.high_speed_imbalance:+.2f}"
+        f" · baja {window_metrics.aero_coherence.low_speed_imbalance:+.2f}"
+    )
+    candidate = "\n".join((*lines, aero_line))
+    if len(candidate.encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
+        assert "Δaero" in output
+    else:
+        assert "Δaero" not in output

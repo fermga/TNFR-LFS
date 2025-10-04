@@ -24,6 +24,10 @@ from ..recommender.rules import (
 GRADIENT_SMOOTHING = 0.35
 
 
+def _default_aero_profiles() -> Dict[str, AeroProfile]:
+    return {"race": AeroProfile(), "stint_save": AeroProfile()}
+
+
 @dataclass(frozen=True)
 class ProfileObjectives:
     """Target objectives tracked for a car/track profile."""
@@ -50,6 +54,14 @@ class StintMetrics:
     delta_nfr: float
 
 
+@dataclass(frozen=True)
+class AeroProfile:
+    """Persistent aero balance targets for specific strategies."""
+
+    low_speed_target: float = 0.0
+    high_speed_target: float = 0.0
+
+
 @dataclass
 class ProfileRecord:
     """Mutable representation of a persistent profile entry."""
@@ -67,6 +79,7 @@ class ProfileRecord:
     pending_jacobian: Dict[str, Dict[str, float]] | None = None
     pending_phase_jacobian: Dict[str, Dict[str, Dict[str, float]]] | None = None
     tyre_offsets: Dict[str, float] = field(default_factory=dict)
+    aero_profiles: Dict[str, AeroProfile] = field(default_factory=lambda: dict(_default_aero_profiles()))
 
     @classmethod
     def from_base(
@@ -78,6 +91,7 @@ class ProfileRecord:
         objectives: ProfileObjectives | None = None,
         tolerances: ProfileTolerances | None = None,
         weights: Mapping[str, Mapping[str, float]] | None = None,
+        aero_profiles: Mapping[str, AeroProfile] | Mapping[str, Mapping[str, float]] | None = None,
     ) -> "ProfileRecord":
         payload_weights = _normalise_phase_weights(
             weights if weights is not None else base_profile.phase_weights
@@ -89,12 +103,16 @@ class ProfileRecord:
             exit=base_profile.exit_delta_tolerance,
             piano=base_profile.piano_delta_tolerance,
         )
+        payload_aero = _normalise_aero_profiles(aero_profiles)
+        if not payload_aero:
+            payload_aero = _default_aero_profiles()
         return cls(
             car_model=car_model,
             track_name=track_name,
             objectives=payload_objectives,
             tolerances=payload_tolerances,
             weights=payload_weights,
+            aero_profiles=dict(payload_aero),
         )
 
     def to_threshold_profile(self, base_profile: ThresholdProfile) -> ThresholdProfile:
@@ -185,6 +203,7 @@ class ProfileSnapshot:
     phase_jacobian: Mapping[str, Mapping[str, Mapping[str, float]]]
     tyre_offsets: Mapping[str, float]
     archetype_targets: Mapping[str, Mapping[str, PhaseArchetypeTargets]]
+    aero_profiles: Mapping[str, AeroProfile]
 
 
 class ProfileManager:
@@ -220,6 +239,11 @@ class ProfileManager:
             self._profiles[key] = record
         thresholds = record.to_threshold_profile(reference)
         record.weights = _normalise_phase_weights(thresholds.phase_weights)
+        aero_payload = _normalise_aero_profiles(record.aero_profiles)
+        if aero_payload:
+            record.aero_profiles = dict(aero_payload)
+        else:
+            record.aero_profiles = dict(_default_aero_profiles())
         jacobian_snapshot = {
             str(metric): MappingProxyType(dict(values))
             for metric, values in record.jacobian.items()
@@ -236,6 +260,7 @@ class ProfileManager:
         offsets_snapshot = MappingProxyType(
             {str(key): float(value) for key, value in record.tyre_offsets.items()}
         )
+        aero_snapshot = MappingProxyType({str(mode): profile for mode, profile in record.aero_profiles.items()})
         return ProfileSnapshot(
             thresholds=thresholds,
             objectives=record.objectives,
@@ -246,6 +271,7 @@ class ProfileManager:
             phase_jacobian=MappingProxyType(phase_jacobian_snapshot),
             tyre_offsets=offsets_snapshot,
             archetype_targets=thresholds.archetype_phase_targets,
+            aero_profiles=aero_snapshot,
         )
 
     def register_plan(
@@ -317,6 +343,34 @@ class ProfileManager:
             for axis, value in offsets.items()
             if isinstance(value, (int, float))
         }
+        self.save()
+
+    def update_aero_profile(
+        self,
+        car_model: str,
+        track_name: str,
+        mode: str,
+        *,
+        low_speed_target: float | None = None,
+        high_speed_target: float | None = None,
+    ) -> None:
+        mode_key = str(mode or "").strip()
+        if not mode_key:
+            return
+        key = (car_model, track_name)
+        record = self._ensure_record(key)
+        baseline = record.aero_profiles.get(mode_key, AeroProfile())
+        new_profile = AeroProfile(
+            low_speed_target=
+            float(low_speed_target)
+            if isinstance(low_speed_target, (int, float))
+            else baseline.low_speed_target,
+            high_speed_target=
+            float(high_speed_target)
+            if isinstance(high_speed_target, (int, float))
+            else baseline.high_speed_target,
+        )
+        record.aero_profiles[mode_key] = new_profile
         self.save()
 
     def gradient_history(
@@ -474,6 +528,7 @@ def _record_from_mapping(
     objectives = _objectives_from_spec(spec.get("objectives"))
     tolerances = _tolerances_from_spec(spec.get("tolerances"))
     weights = _weights_from_spec(spec.get("weights"))
+    aero_profiles = _normalise_aero_profiles(spec.get("aero_profiles"))
     record = ProfileRecord.from_base(
         car_model,
         track_name,
@@ -481,6 +536,7 @@ def _record_from_mapping(
         objectives=objectives,
         tolerances=tolerances,
         weights=weights,
+        aero_profiles=aero_profiles,
     )
     jacobian_spec = spec.get("jacobian")
     if isinstance(jacobian_spec, Mapping):
@@ -581,6 +637,27 @@ def _weights_from_spec(payload: object) -> Mapping[str, Mapping[str, float]] | N
     return weights
 
 
+def _normalise_aero_profiles(
+    payload: Mapping[str, AeroProfile] | Mapping[str, Mapping[str, float]] | None,
+) -> Dict[str, AeroProfile]:
+    if not isinstance(payload, Mapping):
+        return {}
+    profiles: Dict[str, AeroProfile] = {}
+    for mode, spec in payload.items():
+        if isinstance(spec, AeroProfile):
+            profiles[str(mode)] = spec
+            continue
+        if not isinstance(spec, Mapping):
+            continue
+        low = spec.get("low_speed_target")
+        high = spec.get("high_speed_target")
+        profiles[str(mode)] = AeroProfile(
+            low_speed_target=float(low) if isinstance(low, (int, float)) else 0.0,
+            high_speed_target=float(high) if isinstance(high, (int, float)) else 0.0,
+        )
+    return profiles
+
+
 def _normalise_overall_jacobian(
     payload: Mapping[str, Mapping[str, float]] | None,
 ) -> Dict[str, Dict[str, float]]:
@@ -653,6 +730,14 @@ def _serialise_record(car_model: str, track_name: str, record: ProfileRecord) ->
         lines.append(_table_header(base_prefix + ["tyre_offsets"]))
         for axis, value in sorted(record.tyre_offsets.items()):
             lines.append(f"{_format_key(axis)} = {_format_float(value)}")
+    if record.aero_profiles:
+        for mode, profile in sorted(record.aero_profiles.items()):
+            if abs(profile.low_speed_target) <= 1e-9 and abs(profile.high_speed_target) <= 1e-9:
+                continue
+            lines.append("")
+            lines.append(_table_header(base_prefix + ["aero_profiles", mode]))
+            lines.append(f"low_speed_target = {_format_float(profile.low_speed_target)}")
+            lines.append(f"high_speed_target = {_format_float(profile.high_speed_target)}")
     if record.jacobian:
         for metric, derivatives in sorted(record.jacobian.items()):
             lines.append("")

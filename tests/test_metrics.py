@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
+from tnfr_lfs.core.metrics import (
+    AeroCoherence,
+    WindowMetrics,
+    compute_aero_coherence,
+    compute_window_metrics,
+)
+from dataclasses import replace
+from types import SimpleNamespace
 from tnfr_lfs.core.epi import TelemetryRecord
 
 
@@ -65,6 +72,9 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.phase_alignment == pytest.approx(1.0)
     assert metrics.useful_dissonance_ratio == pytest.approx(0.0)
     assert metrics.useful_dissonance_percentage == pytest.approx(0.0)
+    assert isinstance(metrics.aero_coherence, AeroCoherence)
+    assert metrics.aero_coherence.high_speed_samples == 0
+    assert metrics.aero_coherence.low_speed_samples == 0
 
 
 def test_compute_window_metrics_handles_small_windows() -> None:
@@ -81,8 +91,34 @@ def test_compute_window_metrics_handles_small_windows() -> None:
     assert metrics.phase_alignment == pytest.approx(1.0)
     assert metrics.useful_dissonance_ratio == pytest.approx(0.0)
     assert metrics.useful_dissonance_percentage == pytest.approx(0.0)
+    assert metrics.aero_coherence.high_speed_samples == 0
 
 
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
     assert metrics == WindowMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+
+def test_compute_aero_coherence_splits_bins() -> None:
+    records = [
+        replace(_record(0.0, 100.0, si=0.8), speed=25.0),
+        replace(_record(1.0, 102.0, si=0.81), speed=60.0),
+    ]
+    bundles = [
+        SimpleNamespace(
+            delta_breakdown={"tyres": {"mu_eff_front": 0.4, "mu_eff_rear": 0.2}},
+            transmission=SimpleNamespace(speed=25.0),
+        ),
+        SimpleNamespace(
+            delta_breakdown={"tyres": {"mu_eff_front": 0.1, "mu_eff_rear": 0.6}},
+            transmission=SimpleNamespace(speed=60.0),
+        ),
+    ]
+
+    aero = compute_aero_coherence(records, bundles, low_speed_threshold=30.0, high_speed_threshold=40.0)
+
+    assert aero.low_speed_samples == 1
+    assert aero.high_speed_samples == 1
+    assert aero.low_speed_imbalance == pytest.approx(0.2)
+    assert aero.high_speed_imbalance == pytest.approx(-0.5)
+    assert "Aero" in aero.guidance or "Alta velocidad" in aero.guidance
