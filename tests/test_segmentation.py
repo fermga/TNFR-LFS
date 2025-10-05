@@ -54,6 +54,8 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         }
         assert "si_variance" in microsector.filtered_measures
         assert "epi_derivative_abs" in microsector.filtered_measures
+        assert "aero_medium_imbalance" in microsector.filtered_measures
+        assert "aero_high_front_total" in microsector.filtered_measures
         assert isinstance(microsector.recursivity_trace, tuple)
         assert microsector.last_mutation is None
         phases = [goal.phase for goal in microsector.goals]

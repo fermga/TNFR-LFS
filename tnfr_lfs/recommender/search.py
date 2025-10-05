@@ -12,6 +12,7 @@ the optimised setup deltas.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from statistics import fmean
 from typing import Any, Callable, Dict, Mapping, MutableMapping, Sequence
 
@@ -262,7 +263,7 @@ _GTR_SUSPENSION = (
     ("rear_ride_height", -12.0, 12.0, 0.5),
 )
 
-_GTR_MISC = (
+_GTR_MISC_BASE = (
     ("front_tyre_pressure", -0.4, 0.4, 0.05),
     ("rear_tyre_pressure", -0.4, 0.4, 0.05),
     ("brake_bias_pct", -4.0, 4.0, 0.25),
@@ -296,7 +297,7 @@ _FORMULA_SUSPENSION = (
     ("rear_ride_height", -10.0, 10.0, 0.5),
 )
 
-_FORMULA_MISC = (
+_FORMULA_MISC_BASE = (
     ("front_tyre_pressure", -0.3, 0.3, 0.02),
     ("rear_tyre_pressure", -0.3, 0.3, 0.02),
     ("brake_bias_pct", -3.0, 3.0, 0.25),
@@ -306,6 +307,26 @@ _FORMULA_MISC = (
     ("diff_preload_nm", -500.0, 500.0, 25.0),
     ("rear_wing_angle", -10.0, 10.0, 0.5),
 ) + _TRANSMISSION_RATIOS
+
+_GTR_FRONT_WING_LIMITS: Mapping[str, tuple[float, float, float]] = MappingProxyType(
+    {
+        "FXR": (-5.0, 5.0, 0.5),
+        "XRR": (-5.0, 5.0, 0.5),
+        "FZR": (-6.0, 6.0, 0.5),
+        "XFR": (-4.0, 4.0, 0.5),
+        "UFR": (-4.0, 4.0, 0.5),
+    }
+)
+
+_FORMULA_FRONT_WING_LIMITS: Mapping[str, tuple[float, float, float]] = MappingProxyType(
+    {
+        "FOX": (-7.0, 7.0, 0.5),
+        "FO8": (-8.0, 8.0, 0.5),
+        "BF1": (-12.0, 12.0, 0.5),
+        "FBM": (-6.0, 6.0, 0.5),
+        "MRT": (-5.0, 5.0, 0.5),
+    }
+)
 
 
 def _build_space(car_model: str, spec: Sequence[tuple[str, float, float, float]]) -> DecisionSpace:
@@ -325,13 +346,19 @@ for model in _ROAD_MODELS:
         model, _ROAD_ALIGNMENT + _ROAD_SUSPENSION + _ROAD_MISC
     )
 for model in _GTR_MODELS:
-    _LFS_DECISION_LIBRARY[model] = _build_space(
-        model, _GTR_ALIGNMENT + _GTR_SUSPENSION + _GTR_MISC
-    )
+    spec = list(_GTR_ALIGNMENT + _GTR_SUSPENSION + _GTR_MISC_BASE)
+    limits = _GTR_FRONT_WING_LIMITS.get(model)
+    if limits:
+        lower, upper, step = limits
+        spec.append(("front_wing_angle", lower, upper, step))
+    _LFS_DECISION_LIBRARY[model] = _build_space(model, tuple(spec))
 for model in _FORMULA_MODELS:
-    _LFS_DECISION_LIBRARY[model] = _build_space(
-        model, _FORMULA_ALIGNMENT + _FORMULA_SUSPENSION + _FORMULA_MISC
-    )
+    spec = list(_FORMULA_ALIGNMENT + _FORMULA_SUSPENSION + _FORMULA_MISC_BASE)
+    limits = _FORMULA_FRONT_WING_LIMITS.get(model)
+    if limits:
+        lower, upper, step = limits
+        spec.append(("front_wing_angle", lower, upper, step))
+    _LFS_DECISION_LIBRARY[model] = _build_space(model, tuple(spec))
 
 
 DEFAULT_DECISION_LIBRARY: Mapping[str, DecisionSpace] = {
@@ -347,7 +374,8 @@ DEFAULT_DECISION_LIBRARY: Mapping[str, DecisionSpace] = {
         "formula",
         _FORMULA_ALIGNMENT
         + _FORMULA_SUSPENSION
-        + _FORMULA_MISC,
+        + _FORMULA_MISC_BASE
+        + (("front_wing_angle", -8.0, 8.0, 0.5),),
     ),
 }
 

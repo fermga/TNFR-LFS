@@ -23,6 +23,7 @@ from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.io.profiles import AeroProfile, ProfileManager
 from tnfr_lfs.recommender.rules import (
     AeroCoherenceRule,
+    FrontWingBalanceRule,
     BrakeHeadroomRule,
     BottomingPriorityRule,
     DetuneRatioRule,
@@ -652,6 +653,48 @@ def test_aero_coherence_rule_flags_high_speed_bias() -> None:
     assert "Alta velocidad" in rec.message
     assert "carga trasera" in rec.rationale
     assert "C(a/m)" in rec.rationale
+
+
+def test_front_wing_balance_rule_targets_front_limited_bias() -> None:
+    thresholds = ThresholdProfile(
+        entry_delta_tolerance=0.6,
+        apex_delta_tolerance=0.6,
+        exit_delta_tolerance=0.6,
+        piano_delta_tolerance=0.5,
+        rho_detune_threshold=0.4,
+    )
+    context = RuleContext(
+        car_model="generic_gt",
+        track_name="valencia",
+        thresholds=thresholds,
+        tyre_offsets={},
+        aero_profiles={"race": AeroProfile(low_speed_target=0.0, high_speed_target=0.0)},
+    )
+    microsector = SimpleNamespace(
+        index=7,
+        filtered_measures={
+            "aero_high_imbalance": -0.32,
+            "aero_high_samples": 6,
+            "aero_mechanical_coherence": 0.52,
+            "aero_high_front_total": 0.12,
+            "aero_high_rear_total": 0.36,
+            "aero_high_front_lateral": 0.08,
+            "aero_high_rear_lateral": 0.22,
+            "aero_high_front_longitudinal": 0.04,
+            "aero_high_rear_longitudinal": 0.14,
+        },
+    )
+
+    rule = FrontWingBalanceRule(high_speed_threshold=0.1, min_high_samples=2, max_aero_mechanical=0.6, delta_step=0.6)
+
+    recommendations = list(rule.evaluate([], [microsector], context))
+
+    assert recommendations
+    rec = recommendations[0]
+    assert rec.parameter == "front_wing_angle"
+    assert rec.delta and rec.delta > 0
+    assert "alerón delantero" in rec.message
+    assert "carga delantera" in rec.rationale.lower()
 
 
 def test_aero_coherence_rule_respects_low_speed_window() -> None:

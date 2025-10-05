@@ -19,6 +19,7 @@ from tnfr_lfs.core.epi_models import (
 from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.io.profiles import ProfileManager
 from tnfr_lfs.recommender import RecommendationEngine
+import tnfr_lfs.recommender.search as search_module
 from tnfr_lfs.recommender.search import DEFAULT_DECISION_LIBRARY, SetupPlanner, objective_score
 
 
@@ -39,6 +40,22 @@ def test_decision_space_includes_parallel_steer_controls() -> None:
     space = DEFAULT_DECISION_LIBRARY["XFG"]
     variables = {variable.name for variable in space.variables}
     assert {"parallel_steer", "steering_lock_deg"}.issubset(variables)
+
+
+def test_front_wing_limits_defined_per_model() -> None:
+    for model, limits in search_module._GTR_FRONT_WING_LIMITS.items():
+        space = DEFAULT_DECISION_LIBRARY[model]
+        variable = next(var for var in space.variables if var.name == "front_wing_angle")
+        assert variable.lower == pytest.approx(limits[0])
+        assert variable.upper == pytest.approx(limits[1])
+        assert variable.step == pytest.approx(limits[2])
+
+    for model, limits in search_module._FORMULA_FRONT_WING_LIMITS.items():
+        space = DEFAULT_DECISION_LIBRARY[model]
+        variable = next(var for var in space.variables if var.name == "front_wing_angle")
+        assert variable.lower == pytest.approx(limits[0])
+        assert variable.upper == pytest.approx(limits[1])
+        assert variable.step == pytest.approx(limits[2])
 
 
 BASE_NU_F = {
