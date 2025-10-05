@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shutil
@@ -2602,6 +2603,78 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         aggregated_effects = default_effects
 
     aero = compute_aero_coherence((), plan.telemetry)
+
+    def _rake_velocity_profile_from_bundles(
+        bundles: Sequence[Any],
+        *,
+        low_threshold: float = 35.0,
+        high_threshold: float = 50.0,
+    ) -> list[tuple[float, int]]:
+        bins = {
+            "low": {"sum": 0.0, "count": 0},
+            "medium": {"sum": 0.0, "count": 0},
+            "high": {"sum": 0.0, "count": 0},
+        }
+        for bundle in bundles:
+            transmission = getattr(bundle, "transmission", None)
+            try:
+                speed_value = float(getattr(transmission, "speed", 0.0))
+            except (TypeError, ValueError):
+                speed_value = 0.0
+            if not math.isfinite(speed_value):
+                speed_value = 0.0
+            if speed_value <= low_threshold:
+                bin_key = "low"
+            elif speed_value <= high_threshold:
+                bin_key = "medium"
+            else:
+                bin_key = "high"
+            chassis = getattr(bundle, "chassis", None)
+            suspension = getattr(bundle, "suspension", None)
+            if chassis is None or suspension is None:
+                continue
+            try:
+                pitch_value = float(getattr(chassis, "pitch", 0.0))
+            except (TypeError, ValueError):
+                pitch_value = 0.0
+            if not math.isfinite(pitch_value):
+                pitch_value = 0.0
+            try:
+                front_travel = float(getattr(suspension, "travel_front", 0.0))
+            except (TypeError, ValueError):
+                front_travel = 0.0
+            if not math.isfinite(front_travel):
+                front_travel = 0.0
+            try:
+                rear_travel = float(getattr(suspension, "travel_rear", 0.0))
+            except (TypeError, ValueError):
+                rear_travel = 0.0
+            if not math.isfinite(rear_travel):
+                rear_travel = 0.0
+            wheelbase_value = getattr(bundle, "wheelbase", 2.6)
+            try:
+                wheelbase = float(wheelbase_value)
+            except (TypeError, ValueError):
+                wheelbase = 2.6
+            if not math.isfinite(wheelbase) or wheelbase <= 0.0:
+                wheelbase = 2.6
+            rake_value = pitch_value + math.atan2(rear_travel - front_travel, wheelbase)
+            if not math.isfinite(rake_value):
+                continue
+            bin_payload = bins[bin_key]
+            bin_payload["sum"] += rake_value
+            bin_payload["count"] += 1
+        profile: list[tuple[float, int]] = []
+        for key in ("low", "medium", "high"):
+            payload = bins[key]
+            count = int(payload["count"])
+            if count > 0:
+                average = payload["sum"] / count
+            else:
+                average = 0.0
+            profile.append((average, count))
+        return profile
+
     suspension_deltas = [
         float(getattr(getattr(bundle, "suspension", None), "delta_nfr", 0.0))
         for bundle in plan.telemetry
@@ -2612,11 +2685,22 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
     ]
     coherence_series = [float(getattr(bundle, "coherence_index", 0.0)) for bundle in plan.telemetry]
     avg_coherence = mean(coherence_series) if coherence_series else 0.0
+    ackermann_values = [
+        float(getattr(bundle, "ackermann_parallel_index", 0.0))
+        for bundle in plan.telemetry
+    ]
+    ackermann_clean = [value for value in ackermann_values if math.isfinite(value)]
+    ackermann_parallel = fmean(ackermann_clean) if ackermann_clean else 0.0
+    ackermann_samples = len(ackermann_clean)
+    rake_velocity_profile = _rake_velocity_profile_from_bundles(plan.telemetry)
     aero_mechanical = resolve_aero_mechanical_coherence(
         avg_coherence,
         aero,
         suspension_deltas=suspension_deltas,
         tyre_deltas=tyre_deltas,
+        rake_velocity_profile=rake_velocity_profile,
+        ackermann_parallel_index=ackermann_parallel,
+        ackermann_parallel_samples=ackermann_samples,
     )
     aero_metrics = {
         "low_speed_imbalance": aero.low_speed_imbalance,

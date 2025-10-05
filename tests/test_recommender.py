@@ -859,7 +859,7 @@ def test_aero_coherence_rule_flags_high_speed_bias() -> None:
     assert rec.delta and rec.delta > 0
     assert "Alta velocidad" in rec.message
     assert "carga trasera" in rec.rationale
-    assert "C(a/m)" in rec.rationale
+    assert "C(c/d/a)" in rec.rationale
 
 
 def test_front_wing_balance_rule_targets_front_limited_bias() -> None:
