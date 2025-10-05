@@ -11,11 +11,14 @@ the optimised setup deltas.
 
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from statistics import fmean
 from typing import Any, Callable, Dict, Mapping, MutableMapping, Sequence
 
+from ..core.dissonance import compute_useful_dissonance_stats
 from ..core.epi_models import EPIBundle
 from ..core.segmentation import Microsector
 from .rules import Recommendation, RecommendationEngine
@@ -74,6 +77,7 @@ class Plan:
     phase_sensitivities: Mapping[str, Mapping[str, Mapping[str, float]]] = field(
         default_factory=dict
     )
+    objective_breakdown: Mapping[str, float] = field(default_factory=dict)
 
 
 class CoordinateDescentOptimizer:
@@ -161,39 +165,220 @@ def _phase_integrals(
     return totals
 
 
-def objective_score(results: Sequence[EPIBundle], microsectors: Sequence[Microsector] | None = None) -> float:
-    """Compute the scalar objective combining Si and |ΔNFR| integrals."""
+def objective_score(
+    results: Sequence[EPIBundle],
+    microsectors: Sequence[Microsector] | None = None,
+    *,
+    session_weights: Mapping[str, Mapping[str, float]] | None = None,
+    session_hints: Mapping[str, object] | None = None,
+    breakdown: MutableMapping[str, float] | None = None,
+) -> float:
+    """Compute the Integrated Control Score combining Si and stability penalties."""
 
+    if breakdown is not None:
+        breakdown.clear()
     if not results:
         return float("-inf")
+
+    def _mean(values: Sequence[float], default: float = 0.0) -> float:
+        numeric = [float(value) for value in values if isinstance(value, (int, float))]
+        return fmean(numeric) if numeric else default
+
+    def _hint_float(key: str, default: float) -> float:
+        if not isinstance(session_hints, Mapping):
+            return default
+        candidate = session_hints.get(key)
+        try:
+            numeric = float(candidate)
+        except (TypeError, ValueError):
+            return default
+        return numeric
+
+    def _resolve_session_weight(category: str, default: float) -> float:
+        if not isinstance(session_weights, Mapping):
+            return default
+        collected: list[float] = []
+        for profile in session_weights.values():
+            if not isinstance(profile, Mapping):
+                continue
+            value = profile.get(category)
+            if value is None and category != "__default__":
+                value = profile.get("__default__")
+            try:
+                collected.append(float(value))
+            except (TypeError, ValueError):
+                continue
+        if collected:
+            return max(0.0, fmean(collected))
+        return default
+
+    timestamps = [float(bundle.timestamp) for bundle in results]
+    duration = max(timestamps[-1] - timestamps[0], 1e-3) if len(timestamps) >= 2 else 1.0
+
+    def _rate_series(series: Sequence[float], stamps: Sequence[float]) -> list[float]:
+        rates: list[float] = []
+        limit = min(len(series), len(stamps))
+        for index in range(1, limit):
+            dt = stamps[index] - stamps[index - 1]
+            if dt <= 0.0:
+                continue
+            delta = series[index] - series[index - 1]
+            rate = delta / dt
+            if math.isfinite(rate):
+                rates.append(rate)
+        return rates
+
     mean_si = fmean(bundle.sense_index for bundle in results)
-    coherence_mean = fmean(getattr(bundle, "coherence_index", 0.0) for bundle in results)
-    geometry_penalty = 0.0
-    geometry_samples = 0
-    if microsectors:
-        integral = sum(_microsector_integral(results, micro) for micro in microsectors)
-        duration = max(results[-1].timestamp - results[0].timestamp, 1e-3)
-        nfr_penalty = integral / duration
-        for micro in microsectors:
-            for goal in micro.goals:
-                measured_alignment = micro.phase_alignment.get(
-                    goal.phase, getattr(goal, "measured_phase_alignment", 1.0)
-                )
-                target_alignment = getattr(
-                    goal, "target_phase_alignment", measured_alignment
-                )
-                measured_lag = micro.phase_lag.get(
-                    goal.phase, getattr(goal, "measured_phase_lag", 0.0)
-                )
-                target_lag = getattr(goal, "target_phase_lag", measured_lag)
-                geometry_penalty += abs(target_alignment - measured_alignment)
-                geometry_penalty += 0.5 * abs(measured_lag - target_lag)
-                geometry_samples += 1
+
+    delta_integral = _absolute_delta_integral(results)
+    delta_reference = max(1e-3, _hint_float("delta_reference", 6.0))
+    delta_density = delta_integral / duration
+    delta_score = max(0.0, 1.0 - delta_density / delta_reference)
+
+    yaw_rates = [float(bundle.chassis.yaw_rate) for bundle in results]
+    delta_series = [float(bundle.delta_nfr) for bundle in results]
+    _, _, udr_ratio = compute_useful_dissonance_stats(timestamps, delta_series, yaw_rates)
+    udr_score = max(0.0, min(1.0, udr_ratio))
+
+    bottoming_threshold_front = max(0.0, _hint_float("bottoming_threshold_front", 0.015))
+    bottoming_threshold_rear = max(0.0, _hint_float("bottoming_threshold_rear", 0.015))
+    front_travel = [float(bundle.suspension.travel_front) for bundle in results]
+    rear_travel = [float(bundle.suspension.travel_rear) for bundle in results]
+    if front_travel:
+        front_bottom_ratio = sum(1.0 for value in front_travel if value <= bottoming_threshold_front) / len(front_travel)
     else:
-        nfr_penalty = fmean(abs(bundle.delta_nfr) for bundle in results)
-    if geometry_samples:
-        geometry_penalty /= geometry_samples
-    return mean_si + 0.05 * coherence_mean - 0.05 * nfr_penalty - 0.02 * geometry_penalty
+        front_bottom_ratio = 0.0
+    if rear_travel:
+        rear_bottom_ratio = sum(1.0 for value in rear_travel if value <= bottoming_threshold_rear) / len(rear_travel)
+    else:
+        rear_bottom_ratio = 0.0
+    bottoming_score = max(0.0, 1.0 - max(front_bottom_ratio, rear_bottom_ratio))
+
+    aero_reference = max(1e-3, _hint_float("aero_reference", 0.12))
+    aero_samples = []
+    for bundle in results:
+        tyres = getattr(bundle, "tyres", None)
+        if tyres is None:
+            continue
+        try:
+            front_component = float(getattr(tyres, "mu_eff_front", 0.0))
+            rear_component = float(getattr(tyres, "mu_eff_rear", 0.0))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(front_component) and math.isfinite(rear_component):
+            aero_samples.append(abs(front_component - rear_component))
+    aero_imbalance = _mean(aero_samples, 0.0)
+    aero_score = max(0.0, 1.0 - aero_imbalance / aero_reference)
+
+    mu_max_front = max(1e-6, _hint_float("mu_max_front", 2.0))
+    mu_max_rear = max(1e-6, _hint_float("mu_max_rear", 2.0))
+    target_front_temperature = _hint_float("target_front_temperature", 82.0)
+    target_rear_temperature = _hint_float("target_rear_temperature", 80.0)
+    temperature_tolerance = max(1.0, _hint_float("target_temperature_tolerance", 6.0))
+    gradient_reference = max(1e-3, _hint_float("target_temperature_gradient", 1.2))
+    target_mu_front = max(0.0, min(1.0, _hint_float("target_mu_usage_front", 0.88)))
+    target_mu_rear = max(0.0, min(1.0, _hint_float("target_mu_usage_rear", 0.85)))
+    cphi_weight_temperature = max(0.0, _hint_float("cphi_weight_temperature", 0.5))
+    cphi_weight_gradient = max(0.0, _hint_float("cphi_weight_gradient", 0.3))
+    cphi_weight_mu = max(0.0, _hint_float("cphi_weight_mu", 0.2))
+    cphi_weight_sum = max(
+        1e-6, cphi_weight_temperature + cphi_weight_gradient + cphi_weight_mu
+    )
+
+    wheel_temperatures: dict[str, list[float]] = {suffix: [] for suffix in ("fl", "fr", "rl", "rr")}
+    front_mu_series: list[float] = []
+    rear_mu_series: list[float] = []
+    for bundle in results:
+        tyres = getattr(bundle, "tyres", None)
+        if tyres is None:
+            continue
+        wheel_temperatures["fl"].append(float(getattr(tyres, "tyre_temp_fl", 0.0)))
+        wheel_temperatures["fr"].append(float(getattr(tyres, "tyre_temp_fr", 0.0)))
+        wheel_temperatures["rl"].append(float(getattr(tyres, "tyre_temp_rl", 0.0)))
+        wheel_temperatures["rr"].append(float(getattr(tyres, "tyre_temp_rr", 0.0)))
+        front_mu_series.append(
+            math.hypot(
+                float(getattr(tyres, "mu_eff_front_lateral", 0.0)),
+                float(getattr(tyres, "mu_eff_front_longitudinal", 0.0)),
+            )
+        )
+        rear_mu_series.append(
+            math.hypot(
+                float(getattr(tyres, "mu_eff_rear_lateral", 0.0)),
+                float(getattr(tyres, "mu_eff_rear_longitudinal", 0.0)),
+            )
+        )
+
+    front_mu_ratio = min(1.0, _mean(front_mu_series, 0.0) / mu_max_front)
+    rear_mu_ratio = min(1.0, _mean(rear_mu_series, 0.0) / mu_max_rear)
+
+    wheel_scores: list[float] = []
+    for suffix, temps in wheel_temperatures.items():
+        if not temps:
+            continue
+        avg_temp = _mean(temps, target_front_temperature if suffix in {"fl", "fr"} else target_rear_temperature)
+        rates = _rate_series(temps, timestamps)
+        gradient_abs = _mean([abs(rate) for rate in rates], 0.0)
+        if suffix in {"fl", "fr"}:
+            target_temp = target_front_temperature
+            mu_ratio = front_mu_ratio
+            mu_target = target_mu_front
+        else:
+            target_temp = target_rear_temperature
+            mu_ratio = rear_mu_ratio
+            mu_target = target_mu_rear
+        temp_penalty = min(1.0, abs(avg_temp - target_temp) / temperature_tolerance)
+        gradient_penalty = min(1.0, gradient_abs / gradient_reference)
+        if mu_target >= 1.0 or mu_ratio <= mu_target:
+            mu_penalty = 0.0
+        else:
+            mu_penalty = min(1.0, (mu_ratio - mu_target) / max(1e-6, 1.0 - mu_target))
+        temp_component = (cphi_weight_temperature / cphi_weight_sum) * temp_penalty
+        gradient_component = (cphi_weight_gradient / cphi_weight_sum) * gradient_penalty
+        mu_component = (cphi_weight_mu / cphi_weight_sum) * mu_penalty
+        wheel_scores.append(max(0.0, 1.0 - (temp_component + gradient_component + mu_component)))
+
+    cphi_score = _mean(wheel_scores, 1.0)
+
+    weight_map = {
+        "sense": _resolve_session_weight("__default__", 1.0),
+        "delta": _resolve_session_weight("tyres", 1.0),
+        "udr": _resolve_session_weight("chassis", 0.8),
+        "bottoming": _resolve_session_weight("suspension", 0.7),
+        "aero": _resolve_session_weight("aero", 0.6),
+        "cphi": _resolve_session_weight("tyres", 1.2),
+    }
+    weight_sum = sum(max(0.0, weight) for weight in weight_map.values())
+    if weight_sum <= 1e-9:
+        weight_sum = 1.0
+    normalised_weights = {
+        key: max(0.0, value) / weight_sum for key, value in weight_map.items()
+    }
+
+    component_scores = {
+        "sense": max(0.0, min(1.0, mean_si)),
+        "delta": max(0.0, min(1.0, delta_score)),
+        "udr": max(0.0, min(1.0, udr_score)),
+        "bottoming": max(0.0, min(1.0, bottoming_score)),
+        "aero": max(0.0, min(1.0, aero_score)),
+        "cphi": max(0.0, min(1.0, cphi_score)),
+    }
+
+    contributions = {
+        key: normalised_weights[key] * component_scores[key] for key in component_scores
+    }
+
+    if breakdown is not None:
+        breakdown.update(
+            sense=contributions["sense"],
+            delta=contributions["delta"],
+            udr=contributions["udr"],
+            bottoming=contributions["bottoming"],
+            aero=contributions["aero"],
+            cphi=contributions["cphi"],
+        )
+
+    return sum(contributions.values())
 
 
 _ROAD_ALIGNMENT = (
@@ -417,27 +602,49 @@ class SetupPlanner:
         space = self._space_for_car(car_model)
         resolved_track = track_name or getattr(self.recommendation_engine, "track_name", "")
         space = self._adapt_space(space, car_model, resolved_track)
-        cache: MutableMapping[tuple[tuple[str, float], ...], tuple[float, Sequence[EPIBundle]]] = {}
+        cache: MutableMapping[
+            tuple[tuple[str, float], ...],
+            tuple[float, Sequence[EPIBundle], Mapping[str, float]],
+        ] = {}
         session_payload = getattr(self.recommendation_engine, "session", None)
         session_hints: Mapping[str, Any] | None = None
+        session_weights: Mapping[str, Mapping[str, float]] | None = None
         if isinstance(session_payload, Mapping):
             hints_payload = session_payload.get("hints")
             if isinstance(hints_payload, Mapping):
                 session_hints = hints_payload
+            weights_payload = session_payload.get("weights")
+            if isinstance(weights_payload, Mapping):
+                session_weights = weights_payload  # type: ignore[assignment]
 
-        def _simulate_and_score(vector: Mapping[str, float]) -> tuple[float, Sequence[EPIBundle]]:
+        def _simulate_and_score(
+            vector: Mapping[str, float]
+        ) -> tuple[float, Sequence[EPIBundle], Mapping[str, float]]:
             clamped = space.clamp(vector)
             key = tuple(sorted(clamped.items()))
             if key not in cache:
                 simulated = simulator(clamped, baseline) if simulator else baseline
-                cache[key] = (objective_score(simulated, microsectors), simulated)
-            return cache[key]
+                local_breakdown: Dict[str, float] = {}
+                score = objective_score(
+                    simulated,
+                    microsectors,
+                    session_weights=session_weights,
+                    session_hints=session_hints,
+                    breakdown=local_breakdown,
+                )
+                cache[key] = (
+                    score,
+                    simulated,
+                    MappingProxyType(dict(local_breakdown)),
+                )
+            stored_score, stored_results, stored_breakdown = cache[key]
+            return stored_score, stored_results, stored_breakdown
 
         def evaluate(vector: Mapping[str, float]) -> float:
             return _simulate_and_score(vector)[0]
 
         vector, score, iterations, evaluations = self.optimiser.optimise(evaluate, space)
-        telemetry = _simulate_and_score(vector)[1]
+        _, telemetry, objective_breakdown = _simulate_and_score(vector)
         recommendations = list(self.recommendation_engine.generate(telemetry, microsectors))
         if session_hints:
             extra: list[Recommendation] = []
@@ -479,6 +686,8 @@ class SetupPlanner:
             space=space,
             cache=cache,
             score=score,
+            session_weights=session_weights,
+            session_hints=session_hints,
         )
         return Plan(
             decision_vector=vector,
@@ -487,6 +696,7 @@ class SetupPlanner:
             recommendations=tuple(recommendations),
             sensitivities=sensitivities,
             phase_sensitivities=phase_sensitivities,
+            objective_breakdown=objective_breakdown,
         )
 
     def _adapt_space(
@@ -546,8 +756,13 @@ class SetupPlanner:
         microsectors: Sequence[Microsector] | None,
         simulator: Callable[[Mapping[str, float], Sequence[EPIBundle]], Sequence[EPIBundle]] | None,
         space: DecisionSpace,
-        cache: MutableMapping[tuple[tuple[str, float], ...], tuple[float, Sequence[EPIBundle]]],
+        cache: MutableMapping[
+            tuple[tuple[str, float], ...],
+            tuple[float, Sequence[EPIBundle], Mapping[str, float]],
+        ],
         score: float,
+        session_weights: Mapping[str, Mapping[str, float]] | None,
+        session_hints: Mapping[str, object] | None,
     ) -> tuple[Mapping[str, Mapping[str, float]], Mapping[str, Mapping[str, Mapping[str, float]]]]:
         if not telemetry:
             return {}, {}
@@ -586,8 +801,21 @@ class SetupPlanner:
             key = tuple(sorted(clamped_vector.items()))
             if key not in cache:
                 simulated = simulator(clamped_vector, baseline) if simulator else baseline
-                cache[key] = (objective_score(simulated, microsectors), simulated)
-            return cache[key]
+                local_breakdown: Dict[str, float] = {}
+                score_value = objective_score(
+                    simulated,
+                    microsectors,
+                    session_weights=session_weights,
+                    session_hints=session_hints,
+                    breakdown=local_breakdown,
+                )
+                cache[key] = (
+                    score_value,
+                    simulated,
+                    MappingProxyType(dict(local_breakdown)),
+                )
+            stored_score, stored_results, _ = cache[key]
+            return stored_score, stored_results
 
         for variable in space.variables:
             base_value = vector[variable.name]

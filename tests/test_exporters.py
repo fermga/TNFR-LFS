@@ -160,6 +160,14 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
             "apex": {"longitudinal": 0.2, "lateral": 0.8},
         },
         aero_mechanical_coherence=0.72,
+        objective_breakdown={
+            "sense": 0.32,
+            "delta": 0.18,
+            "udr": 0.12,
+            "bottoming": 0.1,
+            "aero": 0.09,
+            "cphi": 0.19,
+        },
     )
 
 
@@ -185,6 +193,7 @@ def test_serialise_setup_plan_collects_unique_fields():
     assert payload["phase_axis_targets"]["entry"]["longitudinal"] == pytest.approx(0.4)
     assert payload["phase_axis_weights"]["apex"]["lateral"] == pytest.approx(0.8)
     assert payload["aero_mechanical_coherence"] == pytest.approx(0.72)
+    assert payload["ics_breakdown"]["sense"] == pytest.approx(0.32)
 
 
 def test_markdown_exporter_renders_table_and_lists():
@@ -200,6 +209,7 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "**Efectos esperados por fase**" in output
     assert "**Objetivos ΔNFR∥/ΔNFR⊥ por fase**" in output
     assert "C(a/m)" in output
+    assert "**Contribución ICS**" in output
 
 
 def test_lfs_notes_exporter_renders_key_instructions():

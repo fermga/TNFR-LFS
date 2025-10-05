@@ -39,6 +39,7 @@ class SetupPlan:
     aero_guidance: str = ""
     aero_metrics: Mapping[str, float] = field(default_factory=dict)
     aero_mechanical_coherence: float = 0.0
+    objective_breakdown: Mapping[str, float] = field(default_factory=dict)
 
 
 def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
@@ -128,6 +129,10 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
     axis_targets = _normalise_axis_mapping(plan.phase_axis_targets)
     axis_weights = _normalise_axis_mapping(plan.phase_axis_weights)
 
+    ics_breakdown = {
+        str(key): float(value) for key, value in plan.objective_breakdown.items()
+    }
+
     return {
         "car_model": plan.car_model,
         "session": plan.session,
@@ -149,6 +154,7 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
         "aero_guidance": plan.aero_guidance,
         "aero_metrics": {str(key): float(value) for key, value in plan.aero_metrics.items()},
         "aero_mechanical_coherence": float(plan.aero_mechanical_coherence),
+        "ics_breakdown": ics_breakdown,
     }
 
 

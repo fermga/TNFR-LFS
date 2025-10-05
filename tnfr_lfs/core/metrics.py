@@ -26,6 +26,7 @@ __all__ = [
     "BrakeHeadroom",
     "SlideCatchBudget",
     "BumpstopHistogram",
+    "CPHIWheel",
     "WindowMetrics",
     "compute_window_metrics",
     "compute_aero_coherence",
@@ -196,6 +197,18 @@ class BumpstopHistogram:
 
 
 @dataclass(frozen=True)
+class CPHIWheel:
+    """Contact Patch Health Index components for a single wheel."""
+
+    value: float = 1.0
+    temperature_component: float = 0.0
+    gradient_component: float = 0.0
+    mu_component: float = 0.0
+    temperature_delta: float = 0.0
+    gradient_rate: float = 0.0
+
+
+@dataclass(frozen=True)
 class WindowMetrics:
     """Aggregated metrics derived from a telemetry window.
 
@@ -247,6 +260,8 @@ class WindowMetrics:
     epi_derivative_abs: float = 0.0
     brake_headroom: BrakeHeadroom = field(default_factory=BrakeHeadroom)
     bumpstop_histogram: BumpstopHistogram = field(default_factory=BumpstopHistogram)
+    cphi: Mapping[str, CPHIWheel] = field(default_factory=dict)
+    phase_cphi: Mapping[str, Mapping[str, CPHIWheel]] = field(default_factory=dict)
 
 
 def _compute_bumpstop_histogram(
@@ -346,7 +361,7 @@ def _compute_bumpstop_histogram(
 def compute_window_metrics(
     records: Sequence[TelemetryRecord],
     *,
-    phase_indices: Sequence[int] | None = None,
+    phase_indices: Sequence[int] | Mapping[str, Sequence[int]] | None = None,
     bundles: Sequence[EPIBundle] | None = None,
     fallback_to_chronological: bool = True,
     objectives: object | None = None,
@@ -406,7 +421,31 @@ def compute_window_metrics(
             aero_mechanical_coherence=0.0,
             epi_derivative_abs=0.0,
             brake_headroom=BrakeHeadroom(),
+            cphi={},
+            phase_cphi={},
         )
+
+    if isinstance(phase_indices, Mapping):
+        phase_windows: dict[str, tuple[int, ...]] = {}
+        for key, window in phase_indices.items():
+            if not isinstance(window, Sequence):
+                continue
+            indices = tuple(
+                int(index)
+                for index in window
+                if isinstance(index, (int, float))
+            )
+            if indices:
+                phase_windows[str(key)] = indices
+    elif phase_indices is None:
+        phase_windows = {}
+    else:
+        indices = tuple(
+            int(index) for index in phase_indices if isinstance(index, (int, float))
+        )
+        phase_windows = {"active": indices} if indices else {}
+
+    primary_phase_indices = next(iter(phase_windows.values()), ())
 
     def _compute_brake_headroom(
         samples: Sequence[TelemetryRecord],
@@ -510,13 +549,16 @@ def compute_window_metrics(
     front_mu_long_series: list[float] = []
     rear_mu_lat_series: list[float] = []
     rear_mu_long_series: list[float] = []
+    wheel_temperature_series: dict[str, list[float]] = {
+        suffix: [] for suffix in _WHEEL_SUFFIXES
+    }
 
     context_matrix = load_context_matrix()
 
-    if phase_indices:
+    if primary_phase_indices:
         selected = [
             records[index]
-            for index in phase_indices
+            for index in primary_phase_indices
             if 0 <= index < len(records)
         ]
     else:
@@ -587,16 +629,24 @@ def compute_window_metrics(
         rear_mu_long_series = [
             float(getattr(bundle.tyres, "mu_eff_rear_longitudinal", 0.0)) for bundle in bundles
         ]
+        for suffix in _WHEEL_SUFFIXES:
+            attribute = f"tyre_temp_{suffix}"
+            series = wheel_temperature_series[suffix]
+            for bundle in bundles:
+                try:
+                    series.append(float(getattr(bundle.tyres, attribute, 0.0)))
+                except (TypeError, ValueError):
+                    series.append(0.0)
         longitudinal_series = [
             float(getattr(bundle, "delta_nfr_longitudinal", 0.0)) for bundle in bundles
         ]
         lateral_series = [
             float(getattr(bundle, "delta_nfr_lateral", 0.0)) for bundle in bundles
         ]
-        if phase_indices:
+        if primary_phase_indices:
             ackermann_samples = [
                 float(bundles[index].ackermann_parallel_index)
-                for index in phase_indices
+                for index in primary_phase_indices
                 if 0 <= index < len(bundles)
             ]
         else:
@@ -649,6 +699,14 @@ def compute_window_metrics(
         rear_mu_long_series = [
             float(getattr(record, "mu_eff_rear_longitudinal", 0.0)) for record in records
         ]
+        for suffix in _WHEEL_SUFFIXES:
+            attribute = f"tyre_temp_{suffix}"
+            series = wheel_temperature_series[suffix]
+            for record in records:
+                try:
+                    series.append(float(getattr(record, attribute, 0.0)))
+                except (TypeError, ValueError):
+                    series.append(0.0)
     _useful_samples, _high_yaw_samples, udr = compute_useful_dissonance_stats(
         timestamps,
         delta_series,
@@ -767,8 +825,9 @@ def compute_window_metrics(
         lat_series: Sequence[float],
         long_series: Sequence[float],
         mu_max: float,
+        indices: Sequence[int] | None,
     ) -> float:
-        if not phase_indices:
+        if not indices:
             return 0.0
         if not lat_series or not long_series:
             return 0.0
@@ -777,7 +836,7 @@ def compute_window_metrics(
                 index,
                 math.hypot(float(lat_series[index]), float(long_series[index])),
             )
-            for index in phase_indices
+            for index in indices
             if 0 <= index < len(lat_series) and 0 <= index < len(long_series)
         ]
         if not valid_pairs:
@@ -907,11 +966,21 @@ def compute_window_metrics(
         rear_mu_lat_series, rear_mu_long_series, windows, mu_max_rear
     )
     phase_mu_usage_front_ratio = _phase_mu_usage_ratio(
-        front_mu_lat_series, front_mu_long_series, mu_max_front
+        front_mu_lat_series, front_mu_long_series, mu_max_front, primary_phase_indices
     )
     phase_mu_usage_rear_ratio = _phase_mu_usage_ratio(
-        rear_mu_lat_series, rear_mu_long_series, mu_max_rear
+        rear_mu_lat_series, rear_mu_long_series, mu_max_rear, primary_phase_indices
     )
+    phase_mu_usage_map: dict[str, tuple[float, float]] = {}
+    for phase_label, indices in phase_windows.items():
+        phase_mu_usage_map[phase_label] = (
+            _phase_mu_usage_ratio(
+                front_mu_lat_series, front_mu_long_series, mu_max_front, indices
+            ),
+            _phase_mu_usage_ratio(
+                rear_mu_lat_series, rear_mu_long_series, mu_max_rear, indices
+            ),
+        )
 
     def _rate_series(series: Sequence[float], stamps: Sequence[float]) -> list[float]:
         rates: list[float] = []
@@ -936,6 +1005,92 @@ def compute_window_metrics(
             return 1.0
         return ratio
 
+    target_front_temperature = float(_objective("target_front_temperature", 82.0))
+    target_rear_temperature = float(_objective("target_rear_temperature", 80.0))
+    temperature_tolerance = max(
+        1.0, float(_objective("target_temperature_tolerance", 6.0))
+    )
+    gradient_reference = max(
+        1e-3, float(_objective("target_temperature_gradient", 1.2))
+    )
+    target_mu_front = max(
+        0.0, min(1.0, float(_objective("target_mu_usage_front", 0.88)))
+    )
+    target_mu_rear = max(
+        0.0, min(1.0, float(_objective("target_mu_usage_rear", 0.85)))
+    )
+    cphi_weight_temperature = max(
+        0.0, float(_objective("cphi_weight_temperature", 0.5))
+    )
+    cphi_weight_gradient = max(
+        0.0, float(_objective("cphi_weight_gradient", 0.3))
+    )
+    cphi_weight_mu = max(0.0, float(_objective("cphi_weight_mu", 0.2)))
+    cphi_weight_sum = max(
+        1e-6, cphi_weight_temperature + cphi_weight_gradient + cphi_weight_mu
+    )
+
+    def _compute_cphi_for_indices(
+        indices: Sequence[int] | None,
+        front_ratio: float,
+        rear_ratio: float,
+    ) -> dict[str, CPHIWheel]:
+        report: dict[str, CPHIWheel] = {}
+        if indices:
+            usable_indices = tuple(int(index) for index in indices)
+        else:
+            usable_indices = ()
+        for suffix in _WHEEL_SUFFIXES:
+            temps = wheel_temperature_series.get(suffix, [])
+            sampled_values: list[float] = []
+            sampled_times: list[float] = []
+            if usable_indices:
+                for index in usable_indices:
+                    if 0 <= index < len(temps) and 0 <= index < len(timestamps):
+                        sampled_values.append(float(temps[index]))
+                        sampled_times.append(float(timestamps[index]))
+            else:
+                limit = min(len(temps), len(timestamps))
+                for index in range(limit):
+                    sampled_values.append(float(temps[index]))
+                    sampled_times.append(float(timestamps[index]))
+            if not sampled_values:
+                sampled_values = [float(value) for value in temps[: len(timestamps)]]
+                sampled_times = [float(stamp) for stamp in timestamps[: len(sampled_values)]]
+            rates = _rate_series(sampled_values, sampled_times)
+            gradient_mean = mean(rates) if rates else 0.0
+            gradient_abs = mean(abs(rate) for rate in rates) if rates else 0.0
+            if suffix in {"fl", "fr"}:
+                target_temp = target_front_temperature
+                mu_ratio = float(front_ratio)
+                mu_target = target_mu_front
+            else:
+                target_temp = target_rear_temperature
+                mu_ratio = float(rear_ratio)
+                mu_target = target_mu_rear
+            temp_delta = mean(sampled_values) - target_temp if sampled_values else -target_temp
+            temp_penalty = min(1.0, abs(temp_delta) / temperature_tolerance)
+            gradient_penalty = min(1.0, gradient_abs / gradient_reference)
+            if mu_target >= 1.0:
+                mu_penalty = 0.0
+            elif mu_ratio <= mu_target:
+                mu_penalty = 0.0
+            else:
+                mu_penalty = min(1.0, (mu_ratio - mu_target) / max(1e-6, 1.0 - mu_target))
+            temp_component = (cphi_weight_temperature / cphi_weight_sum) * temp_penalty
+            gradient_component = (cphi_weight_gradient / cphi_weight_sum) * gradient_penalty
+            mu_component = (cphi_weight_mu / cphi_weight_sum) * mu_penalty
+            value = max(0.0, 1.0 - (temp_component + gradient_component + mu_component))
+            report[suffix] = CPHIWheel(
+                value=value,
+                temperature_component=temp_component,
+                gradient_component=gradient_component,
+                mu_component=mu_component,
+                temperature_delta=temp_delta,
+                gradient_rate=gradient_mean,
+            )
+        return report
+
     yaw_acceleration_series = _rate_series(yaw_rates, timestamps)
     steer_velocity_series = _rate_series(steer_series, timestamps)
     yaw_accel_average = mean(abs(sample) for sample in yaw_acceleration_series) if yaw_acceleration_series else 0.0
@@ -954,6 +1109,18 @@ def compute_window_metrics(
         steer_velocity_ratio=steer_ratio,
         overshoot_ratio=overshoot_ratio,
     )
+
+    cphi_overall = _compute_cphi_for_indices(
+        None, mu_usage_front_ratio, mu_usage_rear_ratio
+    )
+    phase_cphi: dict[str, Mapping[str, CPHIWheel]] = {}
+    for phase_label, indices in phase_windows.items():
+        front_ratio, rear_ratio = phase_mu_usage_map.get(
+            phase_label, (mu_usage_front_ratio, mu_usage_rear_ratio)
+        )
+        phase_cphi[phase_label] = _compute_cphi_for_indices(
+            indices, front_ratio, rear_ratio
+        )
 
     aero = compute_aero_coherence(records, bundles)
     coherence_values: list[float] = []
@@ -1017,6 +1184,8 @@ def compute_window_metrics(
         epi_derivative_abs=epi_abs_derivative,
         si_variance=si_variance,
         brake_headroom=_compute_brake_headroom(records),
+        cphi=cphi_overall,
+        phase_cphi=phase_cphi,
     )
 
 

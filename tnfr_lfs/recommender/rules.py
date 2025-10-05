@@ -2592,6 +2592,15 @@ class TyreBalanceRule:
         rear_temp_std_values: List[float] = []
         per_wheel_temp_std: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
         per_wheel_pressure_std: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
+        cphi_values: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
+        cphi_temperature_components: Dict[str, List[float]] = {
+            key: [] for key in WHEEL_SUFFIXES
+        }
+        cphi_gradient_components: Dict[str, List[float]] = {
+            key: [] for key in WHEEL_SUFFIXES
+        }
+        cphi_mu_components: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
+        cphi_temp_deltas: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
 
         for microsector in microsectors:
             metrics = microsector.filtered_measures
@@ -2652,6 +2661,30 @@ class TyreBalanceRule:
                     per_wheel_pressure_std.setdefault(suffix, []).append(
                         _safe_float(pressure_std_value)
                     )
+            for suffix in WHEEL_SUFFIXES:
+                value = metrics.get(f"cphi_{suffix}")
+                if value is not None:
+                    cphi_values.setdefault(suffix, []).append(_safe_float(value))
+                temp_component = metrics.get(f"cphi_{suffix}_temperature")
+                if temp_component is not None:
+                    cphi_temperature_components.setdefault(suffix, []).append(
+                        _safe_float(temp_component)
+                    )
+                gradient_component = metrics.get(f"cphi_{suffix}_gradient")
+                if gradient_component is not None:
+                    cphi_gradient_components.setdefault(suffix, []).append(
+                        _safe_float(gradient_component)
+                    )
+                mu_component = metrics.get(f"cphi_{suffix}_mu")
+                if mu_component is not None:
+                    cphi_mu_components.setdefault(suffix, []).append(
+                        _safe_float(mu_component)
+                    )
+                temp_delta = metrics.get(f"cphi_{suffix}_temp_delta")
+                if temp_delta is not None:
+                    cphi_temp_deltas.setdefault(suffix, []).append(
+                        _safe_float(temp_delta)
+                    )
 
         if not controls:
             return []
@@ -2667,6 +2700,22 @@ class TyreBalanceRule:
         per_wheel_pressure_std_avg = {
             key: _average(values) for key, values in per_wheel_pressure_std.items()
         }
+
+        def _aggregate(source: Mapping[str, Sequence[float]], default: float = 0.0) -> Dict[str, float]:
+            return {
+                key: _average(values) if values else default
+                for key, values in source.items()
+            }
+
+        cphi_average = _aggregate(cphi_values, 1.0)
+        cphi_minimum = {
+            key: min(values) if values else 1.0
+            for key, values in cphi_values.items()
+        }
+        cphi_temperature_average = _aggregate(cphi_temperature_components)
+        cphi_gradient_average = _aggregate(cphi_gradient_components)
+        cphi_mu_average = _aggregate(cphi_mu_components)
+        cphi_temp_delta_average = _aggregate(cphi_temp_deltas)
 
         average_front_temp = _average(front_temps)
         average_rear_temp = _average(rear_temps)
@@ -2692,6 +2741,79 @@ class TyreBalanceRule:
         base_rear_pressure = rear_pressure
         front_pressure = _scale_delta(front_pressure, avg_front_dispersion, self.dispersion_pressure_baseline)
         rear_pressure = _scale_delta(rear_pressure, avg_rear_dispersion, self.dispersion_pressure_baseline)
+
+        def _axle_values(keys: Sequence[str], lookup: Mapping[str, float]) -> List[float]:
+            return [lookup.get(suffix, 0.0) for suffix in keys]
+
+        def _avg(values: Sequence[float]) -> float:
+            return _average([float(value) for value in values])
+
+        front_suffixes = ("fl", "fr")
+        rear_suffixes = ("rl", "rr")
+        cphi_threshold = 0.78
+
+        def _select_action(cphi_value: float, temp: float, gradient: float, mu_component: float) -> str | None:
+            if cphi_value >= cphi_threshold:
+                return None
+            dominant = max(
+                (temp, "temperature"),
+                (gradient, "gradient"),
+                (mu_component, "mu"),
+                key=lambda item: item[0],
+            )[1]
+            return "camber" if dominant == "gradient" else "pressure"
+
+        front_cphi = min(_axle_values(front_suffixes, cphi_minimum))
+        rear_cphi = min(_axle_values(rear_suffixes, cphi_minimum))
+        front_temp_component = _avg(_axle_values(front_suffixes, cphi_temperature_average))
+        rear_temp_component = _avg(_axle_values(rear_suffixes, cphi_temperature_average))
+        front_gradient_component = _avg(_axle_values(front_suffixes, cphi_gradient_average))
+        rear_gradient_component = _avg(_axle_values(rear_suffixes, cphi_gradient_average))
+        front_mu_component = _avg(_axle_values(front_suffixes, cphi_mu_average))
+        rear_mu_component = _avg(_axle_values(rear_suffixes, cphi_mu_average))
+        front_temp_delta = _avg(_axle_values(front_suffixes, cphi_temp_delta_average))
+        rear_temp_delta = _avg(_axle_values(rear_suffixes, cphi_temp_delta_average))
+
+        front_action = _select_action(
+            front_cphi, front_temp_component, front_gradient_component, front_mu_component
+        )
+        rear_action = _select_action(
+            rear_cphi, rear_temp_component, rear_gradient_component, rear_mu_component
+        )
+
+        if front_action != "pressure":
+            front_pressure = 0.0
+        else:
+            front_pressure *= max(0.0, 1.0 - front_cphi)
+        if rear_action != "pressure":
+            rear_pressure = 0.0
+        else:
+            rear_pressure *= max(0.0, 1.0 - rear_cphi)
+
+        if front_action != "camber":
+            camber_front = 0.0
+        else:
+            camber_front *= max(0.0, 1.0 - front_cphi)
+        if rear_action != "camber":
+            camber_rear = 0.0
+        else:
+            camber_rear *= max(0.0, 1.0 - rear_cphi)
+
+        def _format_cphi_label(
+            label: str,
+            value: float,
+            bias: str,
+            temp_component: float,
+            gradient_component: float,
+            mu_component: float,
+        ) -> str:
+            return (
+                f"{label} {value:.2f} ({bias}, T {temp_component:.2f}, "
+                f"G {gradient_component:.2f}, μ {mu_component:.2f})"
+            )
+
+        front_bias_label = "externo" if front_temp_delta >= 0.0 else "interno"
+        rear_bias_label = "externo" if rear_temp_delta >= 0.0 else "interno"
 
         front_scale = (
             front_pressure / base_front_pressure
@@ -2723,6 +2845,31 @@ class TyreBalanceRule:
                 f"Per-wheel ΔP {per_wheel_scaled.get('fl', 0.0):+.2f}/{per_wheel_scaled.get('fr', 0.0):+.2f}/"
                 f"{per_wheel_scaled.get('rl', 0.0):+.2f}/{per_wheel_scaled.get('rr', 0.0):+.2f}."
             )
+            cphi_pressure_segments: list[str] = []
+            if front_action == "pressure":
+                cphi_pressure_segments.append(
+                    _format_cphi_label(
+                        "delantero",
+                        front_cphi,
+                        front_bias_label,
+                        front_temp_component,
+                        front_gradient_component,
+                        front_mu_component,
+                    )
+                )
+            if rear_action == "pressure":
+                cphi_pressure_segments.append(
+                    _format_cphi_label(
+                        "trasero",
+                        rear_cphi,
+                        rear_bias_label,
+                        rear_temp_component,
+                        rear_gradient_component,
+                        rear_mu_component,
+                    )
+                )
+            if cphi_pressure_segments:
+                pressure_rationale += f" CPHI {' · '.join(cphi_pressure_segments)}."
             recommendations.append(
                 Recommendation(
                     category="tyres",
@@ -2752,6 +2899,31 @@ class TyreBalanceRule:
                 f"σT FL/FR {per_wheel_temp_std_avg.get('fl', 0.0):.2f}/{per_wheel_temp_std_avg.get('fr', 0.0):.2f} · "
                 f"RL/RR {per_wheel_temp_std_avg.get('rl', 0.0):.2f}/{per_wheel_temp_std_avg.get('rr', 0.0):.2f}."
             )
+            cphi_camber_segments: list[str] = []
+            if front_action == "camber":
+                cphi_camber_segments.append(
+                    _format_cphi_label(
+                        "delantero",
+                        front_cphi,
+                        front_bias_label,
+                        front_temp_component,
+                        front_gradient_component,
+                        front_mu_component,
+                    )
+                )
+            if rear_action == "camber":
+                cphi_camber_segments.append(
+                    _format_cphi_label(
+                        "trasero",
+                        rear_cphi,
+                        rear_bias_label,
+                        rear_temp_component,
+                        rear_gradient_component,
+                        rear_mu_component,
+                    )
+                )
+            if cphi_camber_segments:
+                camber_rationale += f" CPHI {' · '.join(cphi_camber_segments)}."
             recommendations.append(
                 Recommendation(
                     category="tyres",

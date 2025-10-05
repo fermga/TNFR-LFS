@@ -377,6 +377,30 @@ def test_tyre_balance_rule_generates_guidance():
             "tyre_pressure_fr_std": 0.015,
             "tyre_pressure_rl_std": 0.012,
             "tyre_pressure_rr_std": 0.011,
+            "cphi_fl": 0.62,
+            "cphi_fr": 0.58,
+            "cphi_rl": 0.85,
+            "cphi_rr": 0.64,
+            "cphi_fl_temperature": 0.24,
+            "cphi_fr_temperature": 0.26,
+            "cphi_rl_temperature": 0.32,
+            "cphi_rr_temperature": 0.34,
+            "cphi_fl_gradient": 0.38,
+            "cphi_fr_gradient": 0.36,
+            "cphi_rl_gradient": 0.18,
+            "cphi_rr_gradient": 0.16,
+            "cphi_fl_mu": 0.18,
+            "cphi_fr_mu": 0.2,
+            "cphi_rl_mu": 0.12,
+            "cphi_rr_mu": 0.14,
+            "cphi_fl_temp_delta": 2.4,
+            "cphi_fr_temp_delta": 1.8,
+            "cphi_rl_temp_delta": -1.5,
+            "cphi_rr_temp_delta": -1.1,
+            "cphi_fl_gradient_rate": 0.12,
+            "cphi_fr_gradient_rate": 0.11,
+            "cphi_rl_gradient_rate": 0.07,
+            "cphi_rr_gradient_rate": 0.05,
         },
         recursivity_trace=(),
         last_mutation=None,
@@ -433,16 +457,6 @@ def test_tyre_balance_rule_generates_guidance():
     expected_rear_pressure = _scale(
         control.pressure_delta_rear, rear_dispersion, rule.dispersion_pressure_baseline
     )
-    front_scale = (
-        expected_front_pressure / control.pressure_delta_front
-        if abs(control.pressure_delta_front) > 1e-6 and expected_front_pressure
-        else 0.0
-    )
-    rear_scale = (
-        expected_rear_pressure / control.pressure_delta_rear
-        if abs(control.pressure_delta_rear) > 1e-6 and expected_rear_pressure
-        else 0.0
-    )
     expected_camber_front = _scale(
         control.camber_delta_front, front_dispersion, rule.dispersion_camber_baseline
     )
@@ -450,14 +464,40 @@ def test_tyre_balance_rule_generates_guidance():
         control.camber_delta_rear, rear_dispersion, rule.dispersion_camber_baseline
     )
 
+    front_cphi = min(
+        microsector.filtered_measures["cphi_fl"], microsector.filtered_measures["cphi_fr"]
+    )
+    rear_cphi = min(
+        microsector.filtered_measures["cphi_rl"], microsector.filtered_measures["cphi_rr"]
+    )
+    expected_front_pressure = 0.0
+    expected_rear_pressure *= max(0.0, 1.0 - rear_cphi)
+    expected_camber_front = _scale(
+        control.camber_delta_front * max(0.0, 1.0 - front_cphi),
+        front_dispersion,
+        rule.dispersion_camber_baseline,
+    )
+    expected_camber_rear = 0.0
+
+    front_scale = (
+        expected_front_pressure / control.pressure_delta_front
+        if abs(control.pressure_delta_front) > 1e-6 and abs(expected_front_pressure) > 1e-9
+        else 0.0
+    )
+    rear_scale = (
+        expected_rear_pressure / control.pressure_delta_rear
+        if abs(control.pressure_delta_rear) > 1e-6 and abs(expected_rear_pressure) > 1e-9
+        else 0.0
+    )
+
     recommendations = list(rule.evaluate([], [microsector], context))
     assert recommendations
     pressure_rec = next(rec for rec in recommendations if "ΔPfront" in rec.message)
     camber_rec = next(rec for rec in recommendations if "camber" in rec.message)
     assert pressure_rec.priority == 18
-    assert pressure_rec.delta is not None and pressure_rec.delta < 0
-    assert pressure_rec.delta == pytest.approx(expected_front_pressure)
+    assert pressure_rec.delta is not None and pressure_rec.delta == pytest.approx(0.0, abs=1e-6)
     assert f"{expected_rear_pressure:+.2f}" in pressure_rec.message
+    assert "CPHI trasero 0.64" in pressure_rec.rationale
     assert "σT" in pressure_rec.rationale
     assert "σP" in pressure_rec.rationale
     for suffix in ("fl", "fr", "rl", "rr"):
@@ -465,6 +505,7 @@ def test_tyre_balance_rule_generates_guidance():
     assert camber_rec.priority == 19
     assert camber_rec.delta == pytest.approx(expected_camber_front)
     assert f"{expected_camber_rear:+.2f}" in camber_rec.message
+    assert "CPHI delantero 0.58" in camber_rec.rationale
     assert MANUAL_REFERENCES["tyre_balance"].split()[0] in camber_rec.rationale
     assert "σT" in camber_rec.rationale
 
@@ -532,6 +573,90 @@ def test_tyre_balance_rule_suppresses_actions_when_dispersion_low(
         rec.parameter not in {"tyre_pressure", "camber"}
         for rec in recommendations
     ), "expected no tyre adjustments when dispersion is below cutoff"
+
+
+def test_tyre_balance_rule_skips_when_cphi_healthy(car_track_thresholds) -> None:
+    microsector = Microsector(
+        index=6,
+        start_time=0.0,
+        end_time=0.3,
+        curvature=1.4,
+        brake_event=True,
+        support_event=True,
+        delta_nfr_signature=0.4,
+        goals=(),
+        phase_boundaries={"apex": (0, 3)},
+        phase_samples={"apex": (0, 1, 2)},
+        active_phase="apex",
+        dominant_nodes={"apex": ()},
+        phase_weights={},
+        grip_rel=1.0,
+        phase_lag={},
+        phase_alignment={},
+        filtered_measures={
+            "thermal_load": 5100.0,
+            "style_index": 0.84,
+            "grip_rel": 1.0,
+            "d_nfr_flat": -0.22,
+            "tyre_temp_fl": 82.5,
+            "tyre_temp_fr": 82.7,
+            "tyre_temp_rl": 79.5,
+            "tyre_temp_rr": 79.3,
+            "tyre_temp_fl_std": 1.2,
+            "tyre_temp_fr_std": 1.1,
+            "tyre_temp_rl_std": 0.9,
+            "tyre_temp_rr_std": 0.8,
+            "tyre_pressure_fl_std": 0.02,
+            "tyre_pressure_fr_std": 0.018,
+            "tyre_pressure_rl_std": 0.016,
+            "tyre_pressure_rr_std": 0.015,
+            "cphi_fl": 0.9,
+            "cphi_fr": 0.92,
+            "cphi_rl": 0.94,
+            "cphi_rr": 0.95,
+            "cphi_fl_temperature": 0.1,
+            "cphi_fr_temperature": 0.1,
+            "cphi_rl_temperature": 0.1,
+            "cphi_rr_temperature": 0.1,
+            "cphi_fl_gradient": 0.05,
+            "cphi_fr_gradient": 0.05,
+            "cphi_rl_gradient": 0.05,
+            "cphi_rr_gradient": 0.05,
+            "cphi_fl_mu": 0.05,
+            "cphi_fr_mu": 0.05,
+            "cphi_rl_mu": 0.05,
+            "cphi_rr_mu": 0.05,
+            "cphi_fl_temp_delta": 0.2,
+            "cphi_fr_temp_delta": 0.2,
+            "cphi_rl_temp_delta": -0.1,
+            "cphi_rr_temp_delta": -0.1,
+            "cphi_fl_gradient_rate": 0.02,
+            "cphi_fr_gradient_rate": 0.02,
+            "cphi_rl_gradient_rate": 0.02,
+            "cphi_rr_gradient_rate": 0.02,
+        },
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"apex": {}},
+        operator_events={},
+    )
+    thresholds = ThresholdProfile(
+        entry_delta_tolerance=0.6,
+        apex_delta_tolerance=0.6,
+        exit_delta_tolerance=0.6,
+        piano_delta_tolerance=0.5,
+        rho_detune_threshold=0.4,
+    )
+    context = RuleContext(
+        car_model="generic_gt",
+        track_name="valencia",
+        thresholds=thresholds,
+        tyre_offsets={},
+    )
+    rule = TyreBalanceRule(priority=18)
+
+    recommendations = list(rule.evaluate([], [microsector], context))
+    assert not any(rec.parameter in {"tyre_pressure", "camber"} for rec in recommendations)
 
 def test_parallel_steer_rule_recommends_parallel_adjustment_on_negative_delta() -> None:
     rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.2)
