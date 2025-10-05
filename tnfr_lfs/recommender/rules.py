@@ -603,6 +603,7 @@ class RuleProfileObjectives:
 
     target_delta_nfr: float = 0.0
     target_sense_index: float = 0.75
+    target_brake_headroom: float = 0.4
 
 
 @dataclass(frozen=True)
@@ -1045,6 +1046,106 @@ class BottomingPriorityRule:
                         delta=delta,
                     )
                 )
+        return recommendations
+
+
+class BrakeHeadroomRule:
+    """Adjust the maximum brake force when significant headroom mismatches arise."""
+
+    def __init__(
+        self,
+        *,
+        priority: int = 14,
+        margin: float = 0.05,
+        increase_step: float = 0.02,
+        decrease_step: float = 0.02,
+        sustained_lock_threshold: float = 0.5,
+    ) -> None:
+        self.priority = int(priority)
+        self.margin = max(0.0, float(margin))
+        self.increase_step = float(increase_step)
+        self.decrease_step = float(decrease_step)
+        self.sustained_lock_threshold = max(0.0, min(1.0, float(sustained_lock_threshold)))
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors or context is None:
+            return []
+
+        target = getattr(context.objectives, "target_brake_headroom", 0.4)
+        margin = self.margin
+        recommendations: list[Recommendation] = []
+        for microsector in microsectors:
+            if not getattr(microsector, "brake_event", False):
+                continue
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            if not isinstance(measures, Mapping):
+                continue
+            if "brake_headroom" not in measures:
+                continue
+            headroom = _safe_float(measures.get("brake_headroom"), 0.0)
+            if not math.isfinite(headroom):
+                continue
+            deviation = headroom - target
+            abs_activation = max(
+                0.0,
+                min(1.0, _safe_float(measures.get("brake_headroom_abs_activation"), 0.0)),
+            )
+            partial_locking = max(
+                0.0,
+                min(1.0, _safe_float(measures.get("brake_headroom_partial_locking"), 0.0)),
+            )
+            sustained_ratio = max(
+                0.0,
+                min(1.0, _safe_float(measures.get("brake_headroom_sustained_locking"), 0.0)),
+            )
+            peak_decel = _safe_float(measures.get("brake_headroom_peak_decel"), 0.0)
+            if deviation > margin:
+                delta = self.increase_step
+                message = (
+                    f"Operador frenada: incrementar fuerza máxima por rueda en microsector "
+                    f"{microsector.index}"
+                )
+            elif deviation < -margin:
+                delta = -self.decrease_step
+                if sustained_ratio >= self.sustained_lock_threshold:
+                    message = (
+                        f"Operador frenada: aliviar bloqueo sostenido en microsector "
+                        f"{microsector.index}"
+                    )
+                else:
+                    message = (
+                        f"Operador frenada: reducir fuerza máxima por rueda en microsector "
+                        f"{microsector.index}"
+                    )
+            else:
+                continue
+            rationale = (
+                f"Margen de frenada μ {headroom:.2f} frente al objetivo {target:.2f} "
+                f"({deviation:+.2f}). Deceleración pico {peak_decel:.2f}m/s², ABS μ {abs_activation:.2f}, "
+                f"bloqueo parcial μ {partial_locking:.2f}."
+            )
+            if sustained_ratio >= self.sustained_lock_threshold:
+                rationale = (
+                    f"{rationale} Bloqueo sostenido μ {sustained_ratio:.2f} detectado."
+                )
+            rationale = f"{rationale} {MANUAL_REFERENCES['braking']}"
+            priority_scale = _session_priority_scale(context, "entry", "brakes")
+            priority = _scale_priority_value(self.priority, priority_scale)
+            recommendations.append(
+                Recommendation(
+                    category="entry",
+                    message=message,
+                    rationale=rationale,
+                    priority=priority,
+                    parameter="brake_max_per_wheel",
+                    delta=delta,
+                )
+            )
         return recommendations
 
 
@@ -2891,6 +2992,7 @@ class RecommendationEngine:
                     priority=12,
                     reference_key="braking",
                 ),
+                BrakeHeadroomRule(priority=14),
                 PhaseDeltaDeviationRule(
                     phase="apex",
                     operator_label="Operador de vértice",
@@ -2968,6 +3070,9 @@ class RecommendationEngine:
                     ),
                     target_sense_index=_coerce_float(
                         getattr(profile_objectives, "target_sense_index", 0.75), 0.75
+                    ),
+                    target_brake_headroom=_coerce_float(
+                        getattr(profile_objectives, "target_brake_headroom", 0.4), 0.4
                     ),
                 )
         else:

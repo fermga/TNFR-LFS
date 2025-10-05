@@ -553,6 +553,11 @@ def segment_microsectors(
                 "aero_mechanical_coherence": window_metrics.aero_mechanical_coherence,
                 "si_variance": window_metrics.si_variance,
                 "epi_derivative_abs": window_metrics.epi_derivative_abs,
+                "brake_headroom": window_metrics.brake_headroom.value,
+                "brake_headroom_peak_decel": window_metrics.brake_headroom.peak_decel,
+                "brake_headroom_abs_activation": window_metrics.brake_headroom.abs_activation_ratio,
+                "brake_headroom_partial_locking": window_metrics.brake_headroom.partial_locking_ratio,
+                "brake_headroom_sustained_locking": window_metrics.brake_headroom.sustained_locking_ratio,
             }
         )
         rec_trace: Tuple[Mapping[str, float | str | None], ...] = ()

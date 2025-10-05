@@ -33,6 +33,7 @@ def _build_plan() -> SetupPlan:
             SetupChange("front_tyre_pressure", 190.0, "", ""),
             SetupChange("rear_tyre_pressure", 195.0, "", ""),
             SetupChange("brake_bias_pct", 68.5, "", ""),
+            SetupChange("brake_max_per_wheel", 0.12, "", ""),
             SetupChange("diff_power_lock", 45.0, "", ""),
             SetupChange("diff_coast_lock", 35.0, "", ""),
             SetupChange("diff_preload_nm", 80.0, "", ""),
@@ -97,6 +98,7 @@ def test_encode_native_setup_produces_expected_layout(_enable_native_export):
 
     # Brake balance is stored as half-percent increments.
     assert payload[26] == 137
+    assert struct.unpack_from("<f", payload, 16)[0] == pytest.approx(0.12)
 
     # Differential settings.
     assert payload[86] == 45

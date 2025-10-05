@@ -23,6 +23,7 @@ from .structural_time import resolve_time_axis
 
 __all__ = [
     "AeroCoherence",
+    "BrakeHeadroom",
     "WindowMetrics",
     "compute_window_metrics",
     "compute_aero_coherence",
@@ -40,6 +41,14 @@ _REAR_FEATURE_KEYS = {
     "mu_eff_rear_lateral",
     "mu_eff_rear_longitudinal",
 }
+
+
+_BRAKE_DECEL_REFERENCE = 10.0
+_PARTIAL_LOCK_LOWER = -0.35
+_PARTIAL_LOCK_UPPER = -0.06
+_SEVERE_LOCK_THRESHOLD = -0.45
+_SUSTAINED_LOCK_ACTIVATION = 0.75
+_WHEEL_SUFFIXES = ("fl", "fr", "rl", "rr")
 
 
 @dataclass(frozen=True)
@@ -62,6 +71,17 @@ class AeroCoherence:
         if abs(self.high_speed_imbalance) <= tolerance:
             return None
         return "front" if self.high_speed_imbalance < 0.0 else "rear"
+
+
+@dataclass(frozen=True)
+class BrakeHeadroom:
+    """Aggregated braking capacity metrics for the current window."""
+
+    value: float = 0.0
+    peak_decel: float = 0.0
+    abs_activation_ratio: float = 0.0
+    partial_locking_ratio: float = 0.0
+    sustained_locking_ratio: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -111,6 +131,7 @@ class WindowMetrics:
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
     aero_mechanical_coherence: float = 0.0
     epi_derivative_abs: float = 0.0
+    brake_headroom: BrakeHeadroom = field(default_factory=BrakeHeadroom)
 
 
 def compute_window_metrics(
@@ -173,6 +194,79 @@ def compute_window_metrics(
             aero_coherence=AeroCoherence(),
             aero_mechanical_coherence=0.0,
             epi_derivative_abs=0.0,
+            brake_headroom=BrakeHeadroom(),
+        )
+
+    def _compute_brake_headroom(
+        samples: Sequence[TelemetryRecord],
+    ) -> BrakeHeadroom:
+        decel_values: list[float] = []
+        locking_values: list[float] = []
+        partial_samples: list[float] = []
+        severe_samples: list[float] = []
+        for record in samples:
+            try:
+                long_accel = float(getattr(record, "longitudinal_accel", 0.0))
+            except (TypeError, ValueError):
+                long_accel = 0.0
+            if math.isfinite(long_accel):
+                decel_values.append(max(0.0, -long_accel))
+            try:
+                locking = float(getattr(record, "locking", 0.0))
+            except (TypeError, ValueError):
+                locking = 0.0
+            if not math.isfinite(locking):
+                locking = 0.0
+            locking_clamped = max(0.0, min(1.0, locking))
+            locking_values.append(locking_clamped)
+            slip_values: list[float] = []
+            for suffix in _WHEEL_SUFFIXES:
+                attr = f"slip_ratio_{suffix}"
+                try:
+                    slip_value = float(getattr(record, attr))
+                except (TypeError, ValueError, AttributeError):
+                    continue
+                if not math.isfinite(slip_value):
+                    continue
+                slip_values.append(slip_value)
+            if slip_values:
+                partial_count = sum(
+                    1
+                    for slip in slip_values
+                    if _PARTIAL_LOCK_LOWER <= slip <= _PARTIAL_LOCK_UPPER
+                )
+                severe_count = sum(1 for slip in slip_values if slip <= _SEVERE_LOCK_THRESHOLD)
+                wheel_total = len(slip_values)
+                partial_samples.append(partial_count / wheel_total)
+                severe_samples.append(severe_count / wheel_total)
+        if not decel_values:
+            return BrakeHeadroom()
+        peak_decel = max(decel_values)
+        normalized_peak = min(1.0, peak_decel / _BRAKE_DECEL_REFERENCE)
+        if locking_values:
+            abs_activation = mean(locking_values)
+            sustained_from_abs = sum(
+                1.0 for value in locking_values if value >= _SUSTAINED_LOCK_ACTIVATION
+            ) / len(locking_values)
+        else:
+            abs_activation = 0.0
+            sustained_from_abs = 0.0
+        partial_locking = mean(partial_samples) if partial_samples else 0.0
+        sustained_from_slip = mean(severe_samples) if severe_samples else 0.0
+        sustained_ratio = max(sustained_from_abs, sustained_from_slip)
+        stress = 0.7 * abs_activation + 0.25 * partial_locking + 0.15 * sustained_ratio
+        stress = max(0.0, min(1.0, stress))
+        value = (1.0 - normalized_peak) * (1.0 - stress)
+        if value < 0.0:
+            value = 0.0
+        if value > 1.0:
+            value = 1.0
+        return BrakeHeadroom(
+            value=value,
+            peak_decel=peak_decel,
+            abs_activation_ratio=abs_activation,
+            partial_locking_ratio=partial_locking,
+            sustained_locking_ratio=sustained_ratio,
         )
 
     def _objective(name: str, default: float) -> float:
@@ -657,6 +751,7 @@ def compute_window_metrics(
         aero_mechanical_coherence=aero_mechanical,
         epi_derivative_abs=epi_abs_derivative,
         si_variance=si_variance,
+        brake_headroom=_compute_brake_headroom(records),
     )
 
 
