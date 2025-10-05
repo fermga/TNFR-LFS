@@ -522,6 +522,8 @@ def segment_microsectors(
             records[start : end + 1],
             bundles=recomputed_bundles[start : end + 1],
         )
+        front_velocity = window_metrics.suspension_velocity_front
+        rear_velocity = window_metrics.suspension_velocity_rear
         filtered_measures.update(
             {
                 "d_nfr_couple": window_metrics.d_nfr_couple,
@@ -555,6 +557,24 @@ def segment_microsectors(
                 "mu_usage_rear_ratio": window_metrics.mu_usage_rear_ratio,
                 "exit_gear_match": window_metrics.exit_gear_match,
                 "shift_stability": window_metrics.shift_stability,
+                "suspension_velocity_front_compression_low_ratio": front_velocity.compression_low_ratio,
+                "suspension_velocity_front_compression_medium_ratio": front_velocity.compression_medium_ratio,
+                "suspension_velocity_front_compression_high_ratio": front_velocity.compression_high_ratio,
+                "suspension_velocity_front_rebound_low_ratio": front_velocity.rebound_low_ratio,
+                "suspension_velocity_front_rebound_medium_ratio": front_velocity.rebound_medium_ratio,
+                "suspension_velocity_front_rebound_high_ratio": front_velocity.rebound_high_ratio,
+                "suspension_velocity_front_high_speed_pct": front_velocity.compression_high_speed_percentage,
+                "suspension_velocity_front_high_speed_rebound_pct": front_velocity.rebound_high_speed_percentage,
+                "suspension_velocity_front_ar_index": front_velocity.ar_index,
+                "suspension_velocity_rear_compression_low_ratio": rear_velocity.compression_low_ratio,
+                "suspension_velocity_rear_compression_medium_ratio": rear_velocity.compression_medium_ratio,
+                "suspension_velocity_rear_compression_high_ratio": rear_velocity.compression_high_ratio,
+                "suspension_velocity_rear_rebound_low_ratio": rear_velocity.rebound_low_ratio,
+                "suspension_velocity_rear_rebound_medium_ratio": rear_velocity.rebound_medium_ratio,
+                "suspension_velocity_rear_rebound_high_ratio": rear_velocity.rebound_high_ratio,
+                "suspension_velocity_rear_high_speed_pct": rear_velocity.compression_high_speed_percentage,
+                "suspension_velocity_rear_high_speed_rebound_pct": rear_velocity.rebound_high_speed_percentage,
+                "suspension_velocity_rear_ar_index": rear_velocity.ar_index,
                 "aero_low_imbalance": window_metrics.aero_coherence.low_speed_imbalance,
                 "aero_medium_imbalance": window_metrics.aero_coherence.medium_speed_imbalance,
                 "aero_high_imbalance": window_metrics.aero_coherence.high_speed_imbalance,

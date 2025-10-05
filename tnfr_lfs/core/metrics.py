@@ -29,6 +29,7 @@ __all__ = [
     "CPHIWheel",
     "WindowMetrics",
     "CamberEffectiveness",
+    "SuspensionVelocityBands",
     "compute_window_metrics",
     "compute_aero_coherence",
     "resolve_aero_mechanical_coherence",
@@ -222,6 +223,82 @@ class CamberEffectiveness:
 
 
 @dataclass(frozen=True)
+class SuspensionVelocityBands:
+    """Distribution of suspension velocities split by direction and band."""
+
+    compression_low_ratio: float = 0.0
+    compression_medium_ratio: float = 0.0
+    compression_high_ratio: float = 0.0
+    rebound_low_ratio: float = 0.0
+    rebound_medium_ratio: float = 0.0
+    rebound_high_ratio: float = 0.0
+    ar_index: float = 0.0
+
+    @property
+    def compression_high_speed_percentage(self) -> float:
+        return self.compression_high_ratio * 100.0
+
+    @property
+    def rebound_high_speed_percentage(self) -> float:
+        return self.rebound_high_ratio * 100.0
+
+
+def _suspension_velocity_bands_from_series(
+    series: Sequence[float],
+    *,
+    low_threshold: float,
+    high_threshold: float,
+) -> SuspensionVelocityBands:
+    if not series:
+        return SuspensionVelocityBands()
+
+    def _ratios(values: Sequence[float]) -> tuple[float, float, float]:
+        if not values:
+            return 0.0, 0.0, 0.0
+        total = float(len(values))
+        low_count = 0
+        medium_count = 0
+        high_count = 0
+        for value in values:
+            magnitude = abs(float(value))
+            if magnitude < low_threshold:
+                low_count += 1
+            elif magnitude < high_threshold:
+                medium_count += 1
+            else:
+                high_count += 1
+        return low_count / total, medium_count / total, high_count / total
+
+    compression_samples = [float(value) for value in series if float(value) >= 0.0]
+    rebound_samples = [float(value) for value in series if float(value) < 0.0]
+
+    comp_low, comp_med, comp_high = _ratios(compression_samples)
+    reb_low, reb_med, reb_high = _ratios(rebound_samples)
+
+    compression_mean = (
+        mean(abs(sample) for sample in compression_samples) if compression_samples else 0.0
+    )
+    rebound_mean = (
+        mean(abs(sample) for sample in rebound_samples) if rebound_samples else 0.0
+    )
+    denominator = rebound_mean if rebound_mean > 1e-9 else 1e-9
+    ar_index = compression_mean / denominator if denominator > 0.0 else 0.0
+
+    if not math.isfinite(ar_index):
+        ar_index = 0.0
+
+    return SuspensionVelocityBands(
+        compression_low_ratio=max(0.0, min(1.0, comp_low)),
+        compression_medium_ratio=max(0.0, min(1.0, comp_med)),
+        compression_high_ratio=max(0.0, min(1.0, comp_high)),
+        rebound_low_ratio=max(0.0, min(1.0, reb_low)),
+        rebound_medium_ratio=max(0.0, min(1.0, reb_med)),
+        rebound_high_ratio=max(0.0, min(1.0, reb_high)),
+        ar_index=max(0.0, min(10.0, ar_index)),
+    )
+
+
+@dataclass(frozen=True)
 class WindowMetrics:
     """Aggregated metrics derived from a telemetry window.
 
@@ -278,6 +355,12 @@ class WindowMetrics:
     camber: Mapping[str, CamberEffectiveness] = field(default_factory=dict)
     phase_camber: Mapping[str, Mapping[str, CamberEffectiveness]] = field(
         default_factory=dict
+    )
+    suspension_velocity_front: SuspensionVelocityBands = field(
+        default_factory=SuspensionVelocityBands
+    )
+    suspension_velocity_rear: SuspensionVelocityBands = field(
+        default_factory=SuspensionVelocityBands
     )
 
 
@@ -564,6 +647,8 @@ def compute_window_metrics(
     tyre_series: list[float] = []
     front_travel_series: list[float] = []
     rear_travel_series: list[float] = []
+    front_velocity_series: list[float] = []
+    rear_velocity_series: list[float] = []
     front_mu_lat_series: list[float] = []
     front_mu_long_series: list[float] = []
     rear_mu_lat_series: list[float] = []
@@ -638,6 +723,12 @@ def compute_window_metrics(
         ]
         rear_travel_series = [
             float(getattr(bundle.suspension, "travel_rear", 0.0)) for bundle in bundles
+        ]
+        front_velocity_series = [
+            float(getattr(bundle.suspension, "velocity_front", 0.0)) for bundle in bundles
+        ]
+        rear_velocity_series = [
+            float(getattr(bundle.suspension, "velocity_rear", 0.0)) for bundle in bundles
         ]
         front_mu_lat_series = [
             float(getattr(bundle.tyres, "mu_eff_front_lateral", 0.0)) for bundle in bundles
@@ -719,6 +810,12 @@ def compute_window_metrics(
         ]
         rear_travel_series = [
             float(getattr(record, "suspension_travel_rear", 0.0)) for record in records
+        ]
+        front_velocity_series = [
+            float(getattr(record, "suspension_velocity_front", 0.0)) for record in records
+        ]
+        rear_velocity_series = [
+            float(getattr(record, "suspension_velocity_rear", 0.0)) for record in records
         ]
         front_mu_lat_series = [
             float(getattr(record, "mu_eff_front_lateral", 0.0)) for record in records
@@ -1138,6 +1235,28 @@ def compute_window_metrics(
             ),
         )
 
+    velocity_low_threshold = max(
+        0.0, _objective("suspension_velocity_low_threshold", _SUSPENSION_LOW_SPEED_THRESHOLD)
+    )
+    velocity_high_candidate = max(
+        0.0, _objective("suspension_velocity_high_threshold", _SUSPENSION_HIGH_SPEED_THRESHOLD)
+    )
+    if velocity_high_candidate <= velocity_low_threshold:
+        velocity_high_threshold = velocity_low_threshold + max(0.01, velocity_low_threshold * 0.5 + 1e-6)
+    else:
+        velocity_high_threshold = velocity_high_candidate
+
+    front_velocity_profile = _suspension_velocity_bands_from_series(
+        front_velocity_series,
+        low_threshold=velocity_low_threshold,
+        high_threshold=velocity_high_threshold,
+    )
+    rear_velocity_profile = _suspension_velocity_bands_from_series(
+        rear_velocity_series,
+        low_threshold=velocity_low_threshold,
+        high_threshold=velocity_high_threshold,
+    )
+
     camber_mapping: dict[str, CamberEffectiveness] = {}
     for suffix in _WHEEL_SUFFIXES:
         camber_mapping[suffix] = _camber_metrics_for_suffix(suffix)
@@ -1343,6 +1462,8 @@ def compute_window_metrics(
         phase_mu_usage_rear_ratio=phase_mu_usage_rear_ratio,
         exit_gear_match=exit_gear_match,
         shift_stability=shift_stability,
+        suspension_velocity_front=front_velocity_profile,
+        suspension_velocity_rear=rear_velocity_profile,
         frequency_label=frequency_label,
         aero_coherence=aero,
         aero_mechanical_coherence=aero_mechanical,
@@ -1653,4 +1774,9 @@ def _gradient(
         end_delta, end_factors, context_matrix=context_matrix
     )
     return (end_value - start_value) / dt
+
+_SUSPENSION_LOW_SPEED_THRESHOLD = 0.05
+_SUSPENSION_HIGH_SPEED_THRESHOLD = 0.2
+
+
 

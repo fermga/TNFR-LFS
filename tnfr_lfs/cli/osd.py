@@ -77,6 +77,10 @@ HUD_PHASE_LABELS = {
     "exit4": "Salida 4",
 }
 
+PACKING_HIGH_SPEED_THRESHOLD = 35.0
+PACKING_AR_THRESHOLD = 1.25
+PACKING_ASYMMETRY_GAP = 0.35
+
 
 @dataclass(frozen=True)
 class ActivePhase:
@@ -565,6 +569,43 @@ def _render_page_a(
         candidate = "\n".join((*lines, aero_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(aero_line)
+    front_velocity = window_metrics.suspension_velocity_front
+    rear_velocity = window_metrics.suspension_velocity_rear
+    damper_segments: List[str] = []
+    if (
+        front_velocity.compression_high_speed_percentage >= PACKING_HIGH_SPEED_THRESHOLD
+        and front_velocity.ar_index >= PACKING_AR_THRESHOLD
+    ):
+        damper_segments.append(
+            "F HS "
+            f"{front_velocity.compression_high_speed_percentage:.0f}%"
+            f" A/R {front_velocity.ar_index:.2f}"
+        )
+    if (
+        rear_velocity.compression_high_speed_percentage >= PACKING_HIGH_SPEED_THRESHOLD
+        and rear_velocity.ar_index >= PACKING_AR_THRESHOLD
+    ):
+        damper_segments.append(
+            "R HS "
+            f"{rear_velocity.compression_high_speed_percentage:.0f}%"
+            f" A/R {rear_velocity.ar_index:.2f}"
+        )
+    ar_gap = abs(front_velocity.ar_index - rear_velocity.ar_index)
+    if (
+        ar_gap >= PACKING_ASYMMETRY_GAP
+        and max(
+            front_velocity.compression_high_speed_percentage,
+            rear_velocity.compression_high_speed_percentage,
+        )
+        >= PACKING_HIGH_SPEED_THRESHOLD * 0.5
+    ):
+        damper_segments.append(f"ΔA/R {ar_gap:.2f}")
+    if damper_segments:
+        damper_line = _truncate_line(f"Amortig: {' · '.join(damper_segments)}")
+        candidate = "\n".join((*lines, damper_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(damper_line)
+
     thermal_lines = _thermal_dispersion_lines(active.microsector)
     for thermal_line in thermal_lines:
         candidate = "\n".join((*lines, thermal_line))

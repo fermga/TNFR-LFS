@@ -195,6 +195,42 @@ def test_compute_window_metrics_handles_small_windows() -> None:
     assert metrics.shift_stability == pytest.approx(1.0)
 
 
+def test_compute_window_metrics_suspension_velocity_histograms() -> None:
+    base = _record(0.0, 110.0)
+    front_values = [0.02, 0.08, 0.3, -0.02, -0.15, -0.35]
+    rear_values = [0.01, 0.12, 0.25, -0.04, -0.18, -0.5]
+    records = [
+        replace(
+            base,
+            timestamp=float(index),
+            nfr=110.0 + index,
+            suspension_velocity_front=front_values[index],
+            suspension_velocity_rear=rear_values[index],
+        )
+        for index in range(len(front_values))
+    ]
+
+    metrics = compute_window_metrics(records)
+    front_bands = metrics.suspension_velocity_front
+    rear_bands = metrics.suspension_velocity_rear
+
+    assert front_bands.compression_low_ratio == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert front_bands.compression_medium_ratio == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert front_bands.compression_high_ratio == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert front_bands.rebound_low_ratio == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert front_bands.rebound_medium_ratio == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert front_bands.rebound_high_ratio == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert front_bands.compression_high_speed_percentage == pytest.approx(33.333, rel=1e-3)
+    assert front_bands.rebound_high_speed_percentage == pytest.approx(33.333, rel=1e-3)
+    assert front_bands.ar_index == pytest.approx(0.769, rel=1e-3)
+
+    assert rear_bands.compression_high_ratio == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert rear_bands.rebound_high_ratio == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert rear_bands.compression_high_speed_percentage == pytest.approx(33.333, rel=1e-3)
+    assert rear_bands.rebound_high_speed_percentage == pytest.approx(33.333, rel=1e-3)
+    assert rear_bands.ar_index == pytest.approx(0.528, rel=1e-3)
+
+
 def _longitudinal_bundle(
     timestamp: float,
     delta_long: float,
