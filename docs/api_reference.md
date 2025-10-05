@@ -122,16 +122,25 @@ la carga vertical media) y los pares
 ``structural_expansion_longitudinal``/``structural_contraction_longitudinal`` y
 ``structural_expansion_lateral``/``structural_contraction_lateral`` que
 describen cómo las componentes longitudinal/lateral de ΔNFR expanden o
-comprimen el eje estructural de la ventana analizada.  Además se publica
-``aero_balance_drift``, que agrupa el rake medio (pitch + viajes por eje) y la
-diferencia ``μ_front - μ_rear`` por bandas de velocidad baja/media/alta para
-resaltar deriva aerodinámica cuando ``AeroCoherence`` todavía parece neutra.
+comprimen el eje estructural de la ventana analizada.  Los presupuestos de
+dirección ``ackermann_parallel_index`` y ``slide_catch_budget`` se calculan
+exclusivamente a partir de los ``slip_angle_*`` y del ``yaw_rate`` que OutSim
+emite; cuando esa telemetría de Live for Speed no está presente la salida
+reporta ``"sin datos"``.  Además se publica ``aero_balance_drift``, que agrupa
+el rake medio (pitch + viajes por eje) y la diferencia ``μ_front - μ_rear`` por
+bandas de velocidad baja/media/alta.  El rake se evalúa únicamente con el
+``pitch`` y los viajes de suspensión proporcionados por OutSim, garantizando
+que la deriva aerodinámica refleja directamente los datos nativos incluso si
+``AeroCoherence`` todavía parece neutra.
 
 Cuando se comparte el ``operator_state`` utilizado por
 ``segment_microsectors``, la orquestación añade el campo ``network_memory`` y
 un espejo en ``sense_memory["network"]`` con la memoria de red por sesión
 (``car_model``/``track_name``/``tyre_compound``), incluyendo historiales por
-stint y el estado activo de cada microsector.
+stint y el estado activo de cada microsector.  Si OutGauge no transmite el
+bloque extendido con temperaturas/presiones por rueda, las superficies de HUD y
+los exportadores muestran ``"sin datos"`` en esos campos para dejar claro que la
+telemetría de LFS no estaba disponible.
 
 ### `tnfr_lfs.core.segmentation`
 

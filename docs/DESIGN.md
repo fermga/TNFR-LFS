@@ -102,6 +102,10 @@ dos operadores con estado ubicados en ``tnfr_lfs.core.operators``:
   cuando corresponde para que el filtro no contamine transiciones abruptas; el
   historial completo se expone a través de ``orchestrate_delta_metrics`` como
   ``network_memory`` para que HUD y exportadores accedan a la memoria de red.
+  Cuando OutGauge no transmite el bloque extendido (temperaturas y presiones
+  por rueda) las entradas correspondientes en HUD/exportadores muestran
+  explícitamente ``"sin datos"`` para remarcar que la telemetría de LFS no
+  estaba disponible.
 * ``mutation_operator`` observa la entropía del reparto ΔNFR y las desviaciones
   de estilo filtradas para decidir si el arquetipo táctico debe mutar hacia un
   candidato alternativo o volver a un modo de recuperación.
@@ -152,10 +156,16 @@ respuesta.  Además se exponen indicadores agregados del apoyo estructural en
 * ``structural_expansion_lateral``/``structural_contraction_lateral`` replican
   la métrica para la componente lateral, revelando apoyos que abren o cierran
   el eje estructural en la ventana.
+* ``ackermann_parallel_index`` y ``slide_catch_budget`` se derivan
+  exclusivamente de los ``slip_angle_*`` y del ``yaw_rate`` emitidos por
+  OutSim; sin esa telemetría los presupuestos de Ackermann y de captura de
+  derrapaje permanecen en cero y los reportes lo indican como ``"sin datos"``.
 * ``aero_balance_drift`` resume el rake medio (pitch + viajes) y la diferencia
-  ``μ_front - μ_rear`` por bandas de velocidad (baja/media/alta), exponiendo
-  cuándo el reparto aerodinámico deriva hacia un eje concreto incluso cuando la
-  coherencia aparente permanece estable.
+  ``μ_front - μ_rear`` por bandas de velocidad (baja/media/alta).  El rake se
+  calcula únicamente con el ``pitch`` y los viajes de suspensión suministrados
+  por OutSim, de modo que la deriva aerodinámica responde directamente a la
+  telemetría nativa de LFS incluso cuando la coherencia aparente permanece
+  estable.
 
 ## Artefactos generados
 

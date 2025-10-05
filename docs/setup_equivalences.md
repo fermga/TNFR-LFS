@@ -24,6 +24,17 @@ telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
   distribución nodal de ΔNFR, de los coeficientes `mu_eff_*` derivados de
   las aceleraciones OutSim y de la actividad ABS/TC reportada por
   OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+- **Presupuestos Ackermann / Slide Catch** – dependen únicamente de los
+  `slip_angle_*` y del `yaw_rate` que OutSim transmite para cada rueda;
+  si la fuente no incluye esos campos, TNFR × LFS mostrará `"sin datos"`
+  en las lecturas asociadas.
+- **Deriva de balance aero (`aero_balance_drift`)** – resume el rake a
+  partir del `pitch` y los viajes de suspensión por eje que emite OutSim,
+  además del contraste `μ_front - μ_rear`, sin combinar señales sintéticas
+  adicionales.
+- **Temperaturas/presiones de neumáticos** – sólo aparecen cuando
+  OutGauge envía el payload extendido; de lo contrario HUD y exportadores
+  señalan `"sin datos"` para evitar asumir valores ficticios.
 
 ## Subsistema aerodinámico
 
