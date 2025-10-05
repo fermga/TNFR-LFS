@@ -201,6 +201,8 @@ _ROAD_ALIGNMENT = (
     ("front_toe_deg", -0.6, 0.6, 0.05),
     ("rear_toe_deg", -0.6, 0.6, 0.05),
     ("caster_deg", -1.0, 1.0, 0.25),
+    ("steering_lock_deg", -6.0, 6.0, 0.5),
+    ("parallel_steer", -0.6, 0.6, 0.05),
 )
 
 _ROAD_SUSPENSION = (
@@ -243,6 +245,8 @@ _GTR_ALIGNMENT = (
     ("front_toe_deg", -0.3, 0.3, 0.01),
     ("rear_toe_deg", -0.3, 0.3, 0.01),
     ("caster_deg", -0.8, 0.8, 0.1),
+    ("steering_lock_deg", -4.0, 4.0, 0.5),
+    ("parallel_steer", -0.4, 0.4, 0.025),
 )
 
 _GTR_SUSPENSION = (
@@ -275,6 +279,8 @@ _FORMULA_ALIGNMENT = (
     ("front_toe_deg", -0.4, 0.4, 0.01),
     ("rear_toe_deg", -0.4, 0.4, 0.01),
     ("caster_deg", -0.6, 0.6, 0.05),
+    ("steering_lock_deg", -3.0, 3.0, 0.25),
+    ("parallel_steer", -0.3, 0.3, 0.02),
 )
 
 _FORMULA_SUSPENSION = (

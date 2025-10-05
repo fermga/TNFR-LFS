@@ -9,7 +9,7 @@ from tnfr_lfs.acquisition import ButtonEvent, ButtonLayout, MacroQueue, OverlayM
 from tnfr_lfs.cli import osd as osd_module
 from tnfr_lfs.cli.osd import HUDPager, MacroStatus, OSDController, TelemetryHUD
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
-from tnfr_lfs.core.metrics import AeroCoherence, BrakeHeadroom, WindowMetrics
+from tnfr_lfs.core.metrics import AeroCoherence, BrakeHeadroom, SlideCatchBudget, WindowMetrics
 
 
 def _populate_hud(records) -> TelemetryHUD:
@@ -337,6 +337,7 @@ def test_render_page_a_includes_wave_when_active_phase():
         useful_dissonance_percentage=60.0,
         coherence_index=0.4,
         ackermann_parallel_index=0.0,
+        slide_catch_budget=SlideCatchBudget(),
         support_effective=0.18,
         load_support_ratio=0.000036,
         structural_expansion_longitudinal=0.12,
@@ -441,6 +442,7 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
         useful_dissonance_percentage=58.0,
         coherence_index=0.45,
         ackermann_parallel_index=0.0,
+        slide_catch_budget=SlideCatchBudget(),
         support_effective=0.2,
         load_support_ratio=0.000038,
         structural_expansion_longitudinal=0.16,
@@ -514,6 +516,7 @@ def test_render_page_a_includes_no_tocar_notice():
         useful_dissonance_percentage=20.0,
         coherence_index=0.5,
         ackermann_parallel_index=0.0,
+        slide_catch_budget=SlideCatchBudget(),
         support_effective=0.15,
         load_support_ratio=0.00003,
         structural_expansion_longitudinal=0.12,

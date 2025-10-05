@@ -2315,10 +2315,17 @@ class PhaseNodeOperatorRule:
 class ParallelSteerRule:
     """React to Ackermann steering deviations using the aggregated index."""
 
-    def __init__(self, priority: int = 20, threshold: float = 0.08, delta_step: float = 0.1) -> None:
+    def __init__(
+        self,
+        priority: int = 20,
+        threshold: float = 0.08,
+        delta_step: float = 0.1,
+        lock_step: float = 0.5,
+    ) -> None:
         self.priority = int(priority)
         self.threshold = float(threshold)
         self.delta_step = float(delta_step)
+        self.lock_step = float(lock_step)
 
     def evaluate(
         self,
@@ -2332,27 +2339,45 @@ class ParallelSteerRule:
         recommendations: List[Recommendation] = []
         for microsector in microsectors:
             measures = getattr(microsector, "filtered_measures", {}) or {}
-            try:
-                deviation = float(measures.get("ackermann_parallel_index", 0.0))
-            except (TypeError, ValueError):
-                continue
+            deviation = _safe_float(measures.get("ackermann_parallel_index", 0.0), 0.0)
             if not math.isfinite(deviation):
                 continue
             magnitude = abs(deviation)
             if magnitude <= self.threshold:
                 continue
+            budget = max(0.0, min(1.0, _safe_float(measures.get("slide_catch_budget"), 0.0)))
+            yaw_ratio = max(
+                0.0,
+                min(1.0, _safe_float(measures.get("slide_catch_budget_yaw"), 0.0)),
+            )
+            steer_ratio = max(
+                0.0,
+                min(1.0, _safe_float(measures.get("slide_catch_budget_steer"), 0.0)),
+            )
+            overshoot_ratio = max(
+                0.0,
+                min(1.0, _safe_float(measures.get("slide_catch_budget_overshoot"), 0.0)),
+            )
             if deviation < 0.0:
-                action = "abrir toe delantero"
-                delta = self.delta_step
+                steer_action = "incrementar"
+                steer_delta = self.delta_step
+                lock_delta = self.lock_step
             else:
-                action = "cerrar toe delantero"
-                delta = -self.delta_step
+                steer_action = "reducir"
+                steer_delta = -self.delta_step
+                lock_delta = -self.lock_step
+            rationale_header = (
+                f"Desfase Ackermann medio {deviation:+.3f}rad supera el umbral {self.threshold:.3f}."
+            )
+            slide_context = (
+                f" Slide Catch Budget {budget:.2f} · yaw {yaw_ratio:.2f} · volante {steer_ratio:.2f} · overshoot {overshoot_ratio:.2f}."
+            )
             message = (
-                f"Operador Ackermann: {action} (parallel steer) en microsector {microsector.index}"
+                f"Operador Ackermann: {steer_action} parallel steer en microsector {microsector.index}"
             )
             rationale = (
-                f"Desfase Ackermann medio {deviation:+.3f}rad supera el umbral {self.threshold:.3f}. "
-                f"Ajusta toe estático para recuperar el par teórico ({MANUAL_REFERENCES['tyre_balance']})."
+                f"{rationale_header}{slide_context} Ajusta parallel steer para acercar el par teórico "
+                f"({MANUAL_REFERENCES['tyre_balance']})."
             )
             recommendations.append(
                 Recommendation(
@@ -2360,10 +2385,30 @@ class ParallelSteerRule:
                     message=message,
                     rationale=rationale,
                     priority=self.priority,
-                    parameter="front_toe_deg",
-                    delta=delta,
+                    parameter="parallel_steer",
+                    delta=steer_delta,
                 )
             )
+
+            if budget < 0.45:
+                lock_action = "ampliar" if lock_delta > 0 else "reducir"
+                lock_message = (
+                    f"Operador Ackermann: {lock_action} steering lock en microsector {microsector.index}"
+                )
+                lock_rationale = (
+                    f"{rationale_header}{slide_context} El margen de corrección es limitado, por lo que se recomienda "
+                    f"ajustar steering lock para facilitar la captura del derrape."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category="entry",
+                        message=lock_message,
+                        rationale=lock_rationale,
+                        priority=self.priority + 2,
+                        parameter="steering_lock_deg",
+                        delta=lock_delta,
+                    )
+                )
         return recommendations
 
 

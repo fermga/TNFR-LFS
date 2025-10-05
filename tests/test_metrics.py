@@ -7,6 +7,7 @@ import pytest
 from tnfr_lfs.core.metrics import (
     AeroCoherence,
     BrakeHeadroom,
+    SlideCatchBudget,
     WindowMetrics,
     compute_aero_coherence,
     compute_window_metrics,
@@ -60,6 +61,57 @@ def _record(timestamp: float, nfr: float, si: float = 0.8) -> TelemetryRecord:
         suspension_travel_rear=0.0,
         suspension_velocity_front=0.0,
         suspension_velocity_rear=0.0,
+    )
+
+
+def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBundle:
+    share = record.nfr / 7.0
+    return EPIBundle(
+        timestamp=record.timestamp,
+        epi=0.0,
+        delta_nfr=record.nfr,
+        delta_nfr_longitudinal=0.0,
+        delta_nfr_lateral=0.0,
+        sense_index=record.si,
+        tyres=TyresNode(delta_nfr=share, sense_index=record.si),
+        suspension=SuspensionNode(delta_nfr=share, sense_index=record.si),
+        chassis=ChassisNode(
+            delta_nfr=share,
+            sense_index=record.si,
+            yaw=record.yaw,
+            pitch=record.pitch,
+            roll=record.roll,
+            yaw_rate=record.yaw_rate,
+            lateral_accel=record.lateral_accel,
+            longitudinal_accel=record.longitudinal_accel,
+        ),
+        brakes=BrakesNode(delta_nfr=share, sense_index=record.si),
+        transmission=TransmissionNode(
+            delta_nfr=share,
+            sense_index=record.si,
+            throttle=record.throttle,
+            gear=record.gear,
+            speed=record.speed,
+            longitudinal_accel=record.longitudinal_accel,
+            rpm=record.rpm,
+            line_deviation=record.line_deviation,
+        ),
+        track=TrackNode(
+            delta_nfr=share,
+            sense_index=record.si,
+            axle_load_balance=0.0,
+            axle_velocity_balance=0.0,
+            yaw=record.yaw,
+            lateral_accel=record.lateral_accel,
+        ),
+        driver=DriverNode(
+            delta_nfr=share,
+            sense_index=record.si,
+            steer=record.steer,
+            throttle=record.throttle,
+            style_index=record.si,
+        ),
+        ackermann_parallel_index=ackermann_delta,
     )
 
 
@@ -346,6 +398,24 @@ def test_compute_window_metrics_brake_headroom_components() -> None:
     assert headroom.value == pytest.approx(0.08324, rel=1e-5)
 
 
+def test_slide_catch_budget_aggregates_components() -> None:
+    base = _record(0.0, 100.0)
+    records = [
+        replace(base, timestamp=0.0, yaw_rate=0.0, steer=0.0, throttle=0.3),
+        replace(base, timestamp=0.5, yaw_rate=0.3, steer=0.4, throttle=0.35),
+        replace(base, timestamp=1.0, yaw_rate=-0.2, steer=-0.3, throttle=0.32),
+        replace(base, timestamp=1.5, yaw_rate=0.1, steer=0.1, throttle=0.34),
+    ]
+    bundles = [_steering_bundle(record, 0.18) for record in records]
+    metrics = compute_window_metrics(records, bundles=bundles)
+    budget = metrics.slide_catch_budget
+    assert budget.yaw_acceleration_ratio == pytest.approx(1.0)
+    assert budget.steer_velocity_ratio == pytest.approx(0.285714, rel=1e-3)
+    assert budget.overshoot_ratio == pytest.approx(1.0)
+    expected_combined = 0.5 * 1.0 + 0.3 * 0.285714 + 0.2 * 1.0
+    assert budget.value == pytest.approx(max(0.0, 1.0 - expected_combined), rel=1e-3)
+
+
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
     assert metrics == WindowMetrics(
@@ -363,6 +433,7 @@ def test_compute_window_metrics_empty_window() -> None:
         useful_dissonance_percentage=0.0,
         coherence_index=0.0,
         ackermann_parallel_index=0.0,
+        slide_catch_budget=SlideCatchBudget(),
         support_effective=0.0,
         load_support_ratio=0.0,
         structural_expansion_longitudinal=0.0,
