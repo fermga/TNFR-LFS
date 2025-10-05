@@ -1412,7 +1412,7 @@ class AeroCoherenceRule:
                     message=f"Alta velocidad microsector {microsector.index}: {action}",
                     rationale=(
                         f"ΔNFR aero alta velocidad {high_imbalance:+.2f} frente al objetivo {target_high:+.2f} "
-                        f"con baja velocidad estable ({low_imbalance:+.2f}) y C(a/m) {am_coherence:.2f}. "
+                        f"con baja velocidad estable ({low_imbalance:+.2f}) y C(c/d/a) {am_coherence:.2f}. "
                         f"Refuerza carga {direction} "
                         f"({MANUAL_REFERENCES['aero']})."
                     ),
@@ -1485,7 +1485,7 @@ class FrontWingBalanceRule:
 
             rationale = (
                 f"ΔNFR aero alta velocidad {high_imbalance:+.2f} frente al objetivo {target_high:+.2f} "
-                f"con C(a/m) {am_coherence:.2f}. Reparto total F/R {front_total:+.2f}/{rear_total:+.2f}. "
+                f"con C(c/d/a) {am_coherence:.2f}. Reparto total F/R {front_total:+.2f}/{rear_total:+.2f}. "
                 f"Ejes lateral {lat_front:+.2f}/{lat_rear:+.2f}, longitudinal {long_front:+.2f}/{long_rear:+.2f}. "
                 f"Refuerza carga delantera ({MANUAL_REFERENCES['aero']})."
             )

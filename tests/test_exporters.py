@@ -219,7 +219,7 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "**Mapa ΔNFR∥/ΔNFR⊥ por fase**" in output
     assert "Entrada ∥" in output
     assert "**Sugerencias de fases prioritarias**" in output
-    assert "C(a/m)" in output
+    assert "C(c/d/a)" in output
     assert "**Contribución SCI**" in output
 
 

@@ -315,7 +315,7 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
     output = osd_module._render_page_c(None, plan, thresholds, None)
     assert "Aero Alta velocidad" in output
     assert "Δaero alta" in output
-    assert "C(a/m) 0.68" in output
+    assert "C(c/d/a) 0.68" in output
 
 
 def test_render_page_c_includes_phase_axis_summary_map(synthetic_records):
@@ -459,10 +459,10 @@ def test_render_page_a_includes_wave_when_active_phase():
     if len((output + "\n" + aero_line).encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
         assert "Δaero" in output
     amc_line = osd_module._truncate_line(
-        f"C(a/m) {window_metrics.aero_mechanical_coherence:.2f}"
+        f"C(c/d/a) {window_metrics.aero_mechanical_coherence:.2f}"
     )
     if len((output + "\n" + amc_line).encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
-        assert "C(a/m)" in output
+        assert "C(c/d/a)" in output
 
 
 def test_render_page_a_displays_brake_meter_on_severe_events():

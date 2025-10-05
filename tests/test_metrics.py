@@ -917,6 +917,23 @@ def test_aero_mechanical_coherence_blends_components() -> None:
     assert 0.0 <= metrics.aero_mechanical_coherence <= 1.0
     suspension_deltas = [bundle.suspension.delta_nfr for bundle in bundles]
     tyre_deltas = [bundle.tyres.delta_nfr for bundle in bundles]
+    ackermann_values = [float(bundle.ackermann_parallel_index) for bundle in bundles]
+    ackermann_clean = [value for value in ackermann_values if math.isfinite(value)]
+    if ackermann_clean:
+        ackermann_parallel = sum(ackermann_clean) / len(ackermann_clean)
+    else:
+        ackermann_parallel = 0.0
+    rake_velocity_profile = [
+        (metrics.aero_balance_drift.low_speed.rake_mean, metrics.aero_balance_drift.low_speed.samples),
+        (
+            metrics.aero_balance_drift.medium_speed.rake_mean,
+            metrics.aero_balance_drift.medium_speed.samples,
+        ),
+        (
+            metrics.aero_balance_drift.high_speed.rake_mean,
+            metrics.aero_balance_drift.high_speed.samples,
+        ),
+    ]
     expected = resolve_aero_mechanical_coherence(
         metrics.coherence_index,
         metrics.aero_coherence,
@@ -925,5 +942,8 @@ def test_aero_mechanical_coherence_blends_components() -> None:
         target_delta_nfr=objectives["target_delta_nfr"],
         target_mechanical_ratio=objectives["target_mechanical_ratio"],
         target_aero_imbalance=objectives["target_aero_imbalance"],
+        rake_velocity_profile=rake_velocity_profile,
+        ackermann_parallel_index=ackermann_parallel,
+        ackermann_parallel_samples=len(ackermann_clean),
     )
     assert metrics.aero_mechanical_coherence == pytest.approx(expected)

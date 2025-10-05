@@ -144,9 +144,9 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         lines.append("**Indicadores aerodinámicos**")
         if amc_value is not None:
             try:
-                lines.append(f"- C(a/m) {float(amc_value):.2f}")
+                lines.append(f"- C(c/d/a) {float(amc_value):.2f}")
             except (TypeError, ValueError):
-                lines.append(f"- C(a/m) {amc_value}")
+                lines.append(f"- C(c/d/a) {amc_value}")
         if aero_guidance:
             lines.append(f"- {aero_guidance}")
         high = aero_metrics.get("high_speed_imbalance")

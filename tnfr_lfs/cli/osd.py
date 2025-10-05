@@ -584,7 +584,7 @@ def _render_page_a(
         lines.append(nu_wave)
     amc_value = float(getattr(window_metrics, "aero_mechanical_coherence", 0.0))
     if amc_value > 0.0:
-        amc_line = _truncate_line(f"C(a/m) {amc_value:.2f}")
+        amc_line = _truncate_line(f"C(c/d/a) {amc_value:.2f}")
         candidate = "\n".join((*lines, amc_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(amc_line)
@@ -1288,7 +1288,7 @@ def _render_page_c(
         except (TypeError, ValueError):
             amc_float = None
         if amc_float is not None:
-            lines.append(_truncate_line(f"C(a/m) {amc_float:.2f}"))
+            lines.append(_truncate_line(f"C(c/d/a) {amc_float:.2f}"))
         high_imbalance = aero_metrics.get("high_speed_imbalance")
         low_imbalance = aero_metrics.get("low_speed_imbalance")
         if high_imbalance is not None and low_imbalance is not None:

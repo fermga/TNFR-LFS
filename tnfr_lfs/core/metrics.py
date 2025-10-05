@@ -1939,6 +1939,15 @@ def compute_window_metrics(
             frequency_label = str(getattr(bundles[-1], "nu_f_label", ""))
     raw_coherence = mean(coherence_values) if coherence_values else 0.0
     ackermann_parallel = mean(ackermann_samples) if ackermann_samples else 0.0
+    ackermann_sample_count = sum(1 for sample in ackermann_samples if math.isfinite(sample))
+    rake_velocity_profile = [
+        (aero_balance_drift.low_speed.rake_mean, int(aero_balance_drift.low_speed.samples)),
+        (
+            aero_balance_drift.medium_speed.rake_mean,
+            int(aero_balance_drift.medium_speed.samples),
+        ),
+        (aero_balance_drift.high_speed.rake_mean, int(aero_balance_drift.high_speed.samples)),
+    ]
     target_si = max(1e-6, min(1.0, _objective("target_sense_index", 0.75)))
     si_factor = si_value / target_si if target_si > 0 else 0.0
     normalised_coherence = max(0.0, min(1.0, raw_coherence * si_factor))
@@ -1954,6 +1963,9 @@ def compute_window_metrics(
         target_delta_nfr=target_delta_nfr,
         target_mechanical_ratio=target_mechanical_ratio,
         target_aero_imbalance=target_aero_imbalance,
+        rake_velocity_profile=rake_velocity_profile,
+        ackermann_parallel_index=ackermann_parallel,
+        ackermann_parallel_samples=ackermann_sample_count,
     )
 
     return WindowMetrics(
@@ -2166,6 +2178,9 @@ def resolve_aero_mechanical_coherence(
     target_delta_nfr: float = 0.0,
     target_mechanical_ratio: float = 0.55,
     target_aero_imbalance: float = 0.12,
+    rake_velocity_profile: Sequence[tuple[float, int]] | None = None,
+    ackermann_parallel_index: float | None = None,
+    ackermann_parallel_samples: int | None = None,
 ) -> float:
     """Return a blended aero-mechanical coherence indicator in ``[0, 1]``."""
 
@@ -2235,7 +2250,92 @@ def resolve_aero_mechanical_coherence(
     if total_samples == 0:
         aero_factor *= 0.5
 
-    composite = (ratio_factor + coverage_factor + aero_factor) / 3.0
+    def _body_factor(profile: Sequence[tuple[float, int]] | None) -> float | None:
+        if not profile:
+            return None
+        total_weight = 0
+        weighted_rake = 0.0
+        for rake_mean, samples in profile:
+            count = int(samples)
+            if count <= 0:
+                continue
+            rake_value = float(rake_mean)
+            if not math.isfinite(rake_value):
+                continue
+            total_weight += count
+            weighted_rake += abs(rake_value) * count
+        if total_weight <= 0:
+            return None
+        tolerance = math.radians(2.5)
+        if tolerance <= 1e-9:
+            return None
+        average_rake = weighted_rake / total_weight
+        ratio = average_rake / tolerance
+        return max(0.0, 1.0 - min(1.0, ratio))
+
+    def _steering_factor(
+        index: float | None, samples: int | None = None
+    ) -> float | None:
+        if index is None:
+            return None
+        try:
+            value = float(index)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(value):
+            return None
+        tolerance = 0.25
+        magnitude = abs(value)
+        ratio = magnitude / tolerance if tolerance > 1e-9 else 0.0
+        factor = max(0.0, 1.0 - min(1.0, ratio))
+        sample_count = int(samples or 0)
+        if sample_count <= 0:
+            return factor * 0.5
+        return factor
+
+    def _aero_velocity_factor(bands: AeroCoherence) -> float | None:
+        contributions: list[tuple[float, int]] = []
+        for band in (
+            bands.low_speed,
+            bands.medium_speed,
+            bands.high_speed,
+        ):
+            count = int(getattr(band, "samples", 0))
+            if count <= 0:
+                continue
+            front = abs(float(getattr(band.total, "front", 0.0)))
+            rear = abs(float(getattr(band.total, "rear", 0.0)))
+            total = front + rear
+            if total <= 1e-9:
+                continue
+            balance = 1.0 - min(1.0, abs(front - rear) / total)
+            contributions.append((balance, count))
+        if not contributions:
+            return None
+        total_weight = sum(weight for _, weight in contributions)
+        if total_weight <= 0:
+            return None
+        weighted = sum(balance * weight for balance, weight in contributions)
+        result = weighted / total_weight
+        if result < 0.0:
+            return 0.0
+        if result > 1.0:
+            return 1.0
+        return result
+
+    body_factor = _body_factor(rake_velocity_profile)
+    steering_factor = _steering_factor(
+        ackermann_parallel_index, ackermann_parallel_samples
+    )
+    aero_velocity_factor = _aero_velocity_factor(aero)
+
+    components = [ratio_factor, coverage_factor, aero_factor]
+    for candidate in (body_factor, steering_factor, aero_velocity_factor):
+        if candidate is not None:
+            components.append(candidate)
+    if not components:
+        return 0.0
+    composite = sum(components) / len(components)
     return max(0.0, min(1.0, coherence * composite))
 
 
