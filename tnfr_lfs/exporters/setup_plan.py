@@ -3,7 +3,103 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+import math
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+
+
+_PHASE_SUMMARY_ORDER: Tuple[str, ...] = ("entry", "apex", "exit")
+_PHASE_SUMMARY_LABELS: Dict[str, str] = {
+    "entry": "Entrada",
+    "apex": "Vértice",
+    "exit": "Salida",
+}
+_AXIS_ORDER: Tuple[str, ...] = ("longitudinal", "lateral")
+_AXIS_SYMBOLS: Dict[str, str] = {"longitudinal": "∥", "lateral": "⊥"}
+
+
+def _safe_float(value: object) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if math.isnan(numeric):
+        return 0.0
+    return numeric
+
+
+def _format_phase_axis_cell(target: float, weight: float) -> str:
+    emphasis = max(0.0, min(1.0, weight))
+    magnitude = abs(target)
+    if magnitude < 0.01 and emphasis < 0.05:
+        return "·0.00"
+    if magnitude < 0.01:
+        arrow = "⇒"
+    elif target > 0:
+        if emphasis >= 0.66:
+            arrow = "⇈"
+        elif emphasis >= 0.33:
+            arrow = "↑"
+        else:
+            arrow = "↗"
+    elif target < 0:
+        if emphasis >= 0.66:
+            arrow = "⇊"
+        elif emphasis >= 0.33:
+            arrow = "↓"
+        else:
+            arrow = "↘"
+    else:
+        arrow = "→"
+    return f"{arrow}{target:+.2f}"
+
+
+def compute_phase_axis_summary(
+    targets: Mapping[str, Mapping[str, float]] | None,
+    weights: Mapping[str, Mapping[str, float]] | None,
+) -> Tuple[Dict[str, Dict[str, str]], Tuple[str, ...]]:
+    summary: Dict[str, Dict[str, str]] = {}
+    suggestions: List[str] = []
+    ranking: List[Tuple[float, str, str, str]] = []
+    targets = targets or {}
+    weights = weights or {}
+    for axis in _AXIS_ORDER:
+        axis_summary: Dict[str, str] = {}
+        for phase in _PHASE_SUMMARY_ORDER:
+            phase_targets = targets.get(phase, {})
+            phase_weights = weights.get(phase, {})
+            target_value = _safe_float(phase_targets.get(axis, 0.0))
+            weight_value = _safe_float(phase_weights.get(axis, 0.0))
+            cell = _format_phase_axis_cell(target_value, weight_value)
+            axis_summary[phase] = cell
+            score = abs(target_value) * max(weight_value, 0.05)
+            if cell != "·0.00" and score > 0.0:
+                ranking.append((score, phase, axis, cell))
+        summary[axis] = axis_summary
+    ranking.sort(reverse=True)
+    for _, phase, axis, cell in ranking[:3]:
+        phase_label = _PHASE_SUMMARY_LABELS.get(phase, phase)
+        axis_label = _AXIS_SYMBOLS.get(axis, axis)
+        suggestions.append(f"{phase_label} {axis_label} {cell}")
+    return summary, tuple(suggestions)
+
+
+def phase_axis_summary_lines(
+    summary: Mapping[str, Mapping[str, str]] | None,
+) -> Tuple[str, ...]:
+    if not summary:
+        return ()
+    header_parts = ["Fase"]
+    for phase in _PHASE_SUMMARY_ORDER:
+        header_parts.append(f"{_PHASE_SUMMARY_LABELS.get(phase, phase):>7}")
+    lines: List[str] = [" ".join(header_parts)]
+    for axis in _AXIS_ORDER:
+        axis_label = _AXIS_SYMBOLS.get(axis, axis[:1].upper())
+        row_parts = [f"{axis_label:>4}"]
+        for phase in _PHASE_SUMMARY_ORDER:
+            cell = summary.get(axis, {}).get(phase, "·0.00")
+            row_parts.append(f"{cell:>7}")
+        lines.append(" ".join(row_parts))
+    return tuple(lines)
 
 
 @dataclass(frozen=True)
@@ -37,6 +133,8 @@ class SetupPlan:
     expected_effects_by_phase: Mapping[str, Sequence[str]] = field(default_factory=dict)
     phase_axis_targets: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     phase_axis_weights: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    phase_axis_summary: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    phase_axis_suggestions: Sequence[str] = field(default_factory=tuple)
     aero_guidance: str = ""
     aero_metrics: Mapping[str, float] = field(default_factory=dict)
     aero_mechanical_coherence: float = 0.0
@@ -129,6 +227,22 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
     effects_phase = _normalise_mapping(plan.expected_effects_by_phase)
     axis_targets = _normalise_axis_mapping(plan.phase_axis_targets)
     axis_weights = _normalise_axis_mapping(plan.phase_axis_weights)
+    summary_mapping = plan.phase_axis_summary
+    suggestions_seq = plan.phase_axis_suggestions
+    if (not summary_mapping or not suggestions_seq) and (axis_targets or axis_weights):
+        computed_summary, computed_suggestions = compute_phase_axis_summary(
+            plan.phase_axis_targets,
+            plan.phase_axis_weights,
+        )
+        if not summary_mapping:
+            summary_mapping = computed_summary
+        if not suggestions_seq:
+            suggestions_seq = computed_suggestions
+    summary_payload = {
+        str(axis): {str(phase): str(value) for phase, value in phases.items()}
+        for axis, phases in (summary_mapping or {}).items()
+    }
+    suggestions_payload = [str(entry) for entry in (suggestions_seq or ())]
 
     sci_breakdown = {str(key): float(value) for key, value in plan.sci_breakdown.items()}
 
@@ -151,6 +265,8 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
         "expected_effects_by_phase": effects_phase,
         "phase_axis_targets": axis_targets,
         "phase_axis_weights": axis_weights,
+        "phase_axis_summary": summary_payload,
+        "phase_axis_suggestions": suggestions_payload,
         "aero_guidance": plan.aero_guidance,
         "aero_metrics": {str(key): float(value) for key, value in plan.aero_metrics.items()},
         "aero_mechanical_coherence": float(plan.aero_mechanical_coherence),
@@ -163,4 +279,10 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
     return payload
 
 
-__all__ = ["SetupChange", "SetupPlan", "serialise_setup_plan"]
+__all__ = [
+    "SetupChange",
+    "SetupPlan",
+    "serialise_setup_plan",
+    "compute_phase_axis_summary",
+    "phase_axis_summary_lines",
+]

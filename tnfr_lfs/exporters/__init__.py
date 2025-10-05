@@ -10,7 +10,11 @@ from statistics import mean
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Protocol, Sequence, Tuple
 
 from ..core.epi_models import EPIBundle
-from .setup_plan import SetupPlan, serialise_setup_plan
+from .setup_plan import (
+    SetupPlan,
+    phase_axis_summary_lines,
+    serialise_setup_plan,
+)
 from ..session import format_session_messages
 
 
@@ -247,6 +251,19 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
             lines.append(
                 f"| {phase} | {target_long:+.3f} | {target_lat:+.3f} | {weight_long:.2f} | {weight_lat:.2f} |"
             )
+    summary_lines = phase_axis_summary_lines(plan.get("phase_axis_summary"))
+    if summary_lines:
+        lines.append("")
+        lines.append("**Mapa ΔNFR∥/ΔNFR⊥ por fase**")
+        lines.append("```")
+        lines.extend(summary_lines)
+        lines.append("```")
+    suggestions = [hint for hint in plan.get("phase_axis_suggestions", []) if hint]
+    if suggestions:
+        lines.append("")
+        lines.append("**Sugerencias de fases prioritarias**")
+        for hint in suggestions:
+            lines.append(f"- {hint}")
 
     def _extend_mapping_section(title: str, mapping: Mapping[str, Sequence[str]] | None) -> None:
         if not mapping:

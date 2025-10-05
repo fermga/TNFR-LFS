@@ -194,6 +194,11 @@ def test_serialise_setup_plan_collects_unique_fields():
     assert "front_arb_steps" in payload["clamped_parameters"]
     assert payload["phase_axis_targets"]["entry"]["longitudinal"] == pytest.approx(0.4)
     assert payload["phase_axis_weights"]["apex"]["lateral"] == pytest.approx(0.8)
+    assert (
+        payload["phase_axis_summary"]["longitudinal"]["entry"]
+        == "⇈+0.40"
+    )
+    assert any("Entrada ∥" in hint for hint in payload["phase_axis_suggestions"])
     assert payload["aero_mechanical_coherence"] == pytest.approx(0.72)
     assert payload["sci_breakdown"]["sense"] == pytest.approx(0.32)
     assert payload["ics_breakdown"]["sense"] == pytest.approx(0.32)
@@ -211,6 +216,9 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "**Racionales TNFR por nodo**" in output
     assert "**Efectos esperados por fase**" in output
     assert "**Objetivos ΔNFR∥/ΔNFR⊥ por fase**" in output
+    assert "**Mapa ΔNFR∥/ΔNFR⊥ por fase**" in output
+    assert "Entrada ∥" in output
+    assert "**Sugerencias de fases prioritarias**" in output
     assert "C(a/m)" in output
     assert "**Contribución SCI**" in output
 

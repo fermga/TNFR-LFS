@@ -77,7 +77,7 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
         assert "Si↺" in page_a or "Si plan" in page_c
     assert "Líder" in page_b and "ν_f" in page_b
     assert "C(t)" in page_b
-    assert "dSi" in page_c
+    assert "Mapa ΔNFR fases" in page_c
     assert "Aplicar" in page_d
 
 
@@ -316,6 +316,65 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
     assert "Aero Alta velocidad" in output
     assert "Δaero alta" in output
     assert "C(a/m) 0.68" in output
+
+
+def test_render_page_c_includes_phase_axis_summary_map(synthetic_records):
+    hud = _populate_hud(synthetic_records[:60])
+    thresholds = hud._thresholds
+    plan = SetupPlan(
+        car_model="generic_gt",
+        session=None,
+        sci=0.731,
+        changes=(),
+        rationales=(),
+        expected_effects=(),
+        sensitivities={},
+        phase_axis_targets={
+            "entry": {"longitudinal": 0.4, "lateral": 0.1},
+            "apex": {"longitudinal": 0.05, "lateral": 0.3},
+        },
+        phase_axis_weights={
+            "entry": {"longitudinal": 0.7, "lateral": 0.3},
+            "apex": {"longitudinal": 0.2, "lateral": 0.8},
+        },
+    )
+    output = osd_module._render_page_c(None, plan, thresholds, None)
+    assert "Mapa ΔNFR fases" in output
+    assert "⇈+0.40" in output
+    assert "Entrada ∥ ⇈+0.40" in output
+
+
+def test_build_setup_plan_includes_phase_axis_summary() -> None:
+    base_plan = SimpleNamespace(
+        recommendations=[],
+        decision_vector={},
+        sensitivities={},
+        phase_sensitivities={},
+        sci=0.0,
+        sci_breakdown={},
+        objective_breakdown={},
+    )
+    microsectors = [
+        SimpleNamespace(
+            goals=(
+                SimpleNamespace(
+                    phase="entry1",
+                    target_delta_nfr_long=0.4,
+                    target_delta_nfr_lat=0.1,
+                    delta_axis_weights={"longitudinal": 0.7, "lateral": 0.3},
+                ),
+                SimpleNamespace(
+                    phase="apex3a",
+                    target_delta_nfr_long=0.05,
+                    target_delta_nfr_lat=0.3,
+                    delta_axis_weights={"longitudinal": 0.2, "lateral": 0.8},
+                ),
+            ),
+        )
+    ]
+    plan = osd_module._build_setup_plan(base_plan, "generic_gt", None, microsectors)
+    assert plan.phase_axis_summary["longitudinal"]["entry"] == "⇈+0.40"
+    assert any("Entrada ∥" in hint for hint in plan.phase_axis_suggestions)
 
 
 def test_render_page_a_includes_wave_when_active_phase():
