@@ -536,44 +536,12 @@ class TelemetryFusion:
     def _resolve_wheel_temperature_layers(
         self, outgauge: OutGaugePacket, previous: TelemetryRecord | None
     ) -> tuple[tuple[float, float, float, float], ...]:
-        def _layer(attribute: str, fallbacks: tuple[float, float, float, float]) -> tuple[float, ...]:
-            candidate = getattr(outgauge, attribute, (0.0, 0.0, 0.0, 0.0))
-            if not isinstance(candidate, tuple) or len(candidate) != 4:
-                candidate = (0.0, 0.0, 0.0, 0.0)
-            resolved: list[float] = []
-            for index, value in enumerate(candidate):
-                try:
-                    numeric = float(value)
-                except (TypeError, ValueError):
-                    numeric = 0.0
-                if not math.isfinite(numeric) or numeric <= 0.0:
-                    numeric = fallbacks[index]
-                resolved.append(float(numeric))
-            return tuple(resolved)
-
-        fallback_inner = (
-            previous.tyre_temp_fl_inner if previous else 0.0,
-            previous.tyre_temp_fr_inner if previous else 0.0,
-            previous.tyre_temp_rl_inner if previous else 0.0,
-            previous.tyre_temp_rr_inner if previous else 0.0,
-        )
-        fallback_middle = (
-            previous.tyre_temp_fl_middle if previous else 0.0,
-            previous.tyre_temp_fr_middle if previous else 0.0,
-            previous.tyre_temp_rl_middle if previous else 0.0,
-            previous.tyre_temp_rr_middle if previous else 0.0,
-        )
-        fallback_outer = (
-            previous.tyre_temp_fl_outer if previous else 0.0,
-            previous.tyre_temp_fr_outer if previous else 0.0,
-            previous.tyre_temp_rl_outer if previous else 0.0,
-            previous.tyre_temp_rr_outer if previous else 0.0,
-        )
-
-        inner = _layer("tyre_temps_inner", fallback_inner)
-        middle = _layer("tyre_temps_middle", fallback_middle)
-        outer = _layer("tyre_temps_outer", fallback_outer)
-        return (inner, middle, outer)
+        unavailable_layer = tuple(float("nan") for _ in range(4))
+        # Live for Speed's OutGauge stream does not broadcast any tyre
+        # temperature layers.  Exposing ``NaN`` values makes the absence of
+        # real telemetry explicit so downstream operators avoid fabricating
+        # gradients or footprints from stale samples.
+        return (unavailable_layer, unavailable_layer, unavailable_layer)
 
     def _resolve_wheel_temperatures(
         self,
@@ -582,44 +550,18 @@ class TelemetryFusion:
         *,
         layers: tuple[tuple[float, float, float, float], ...] | None = None,
     ) -> tuple[float, float, float, float]:
-        if layers is None:
-            layers = self._resolve_wheel_temperature_layers(outgauge, previous)
-        inner, middle, outer = layers
-        resolved: list[float] = []
-        for index in range(4):
-            values = [inner[index], middle[index], outer[index]]
-            finite = [value for value in values if math.isfinite(value) and value > 0.0]
-            if finite:
-                resolved.append(float(sum(finite) / len(finite)))
-                continue
-            fallback = (
-                previous.tyre_temp_fl if previous else 0.0,
-                previous.tyre_temp_fr if previous else 0.0,
-                previous.tyre_temp_rl if previous else 0.0,
-                previous.tyre_temp_rr if previous else 0.0,
-            )
-            resolved.append(float(fallback[index]))
-        return tuple(resolved)  # type: ignore[return-value]
+        # No average temperature is available without native telemetry from the
+        # simulator, therefore expose a tuple of ``NaN`` values instead of
+        # attempting to recycle stale readings.
+        return tuple(float("nan") for _ in range(4))  # type: ignore[return-value]
 
     def _resolve_wheel_pressures(
         self, outgauge: OutGaugePacket, previous: TelemetryRecord | None
     ) -> tuple[float, float, float, float]:
-        candidate = getattr(outgauge, "tyre_pressures", (0.0, 0.0, 0.0, 0.0))
-        if len(candidate) != 4:
-            candidate = (0.0, 0.0, 0.0, 0.0)
-        fallback = (
-            previous.tyre_pressure_fl if previous else 0.0,
-            previous.tyre_pressure_fr if previous else 0.0,
-            previous.tyre_pressure_rl if previous else 0.0,
-            previous.tyre_pressure_rr if previous else 0.0,
-        )
-        resolved = []
-        for value, default in zip(candidate, fallback):
-            if isinstance(value, (int, float)) and math.isfinite(value) and value > 0.0:
-                resolved.append(float(value))
-            else:
-                resolved.append(float(default))
-        return tuple(resolved)  # type: ignore[return-value]
+        # OutGauge packets likewise omit tyre pressure samples; keep the signal
+        # marked as unavailable so consumers can short-circuit any synthetic
+        # heuristics.
+        return tuple(float("nan") for _ in range(4))  # type: ignore[return-value]
 
     def _resolve_brake_temperatures(
         self, outgauge: OutGaugePacket, previous: TelemetryRecord | None

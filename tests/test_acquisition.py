@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import StringIO
+import math
 import struct
 
 import pytest
@@ -215,3 +216,11 @@ def test_fusion_consumes_extended_outsim_packet(
     assert record.vertical_load_rear == pytest.approx(575.0)
     assert record.suspension_travel_front == pytest.approx((0.06 + 0.058) * 0.5)
     assert record.suspension_travel_rear == pytest.approx((0.052 + 0.05) * 0.5)
+    assert math.isnan(record.tyre_temp_fl)
+    assert math.isnan(record.tyre_temp_fr)
+    assert math.isnan(record.tyre_temp_rl)
+    assert math.isnan(record.tyre_temp_rr)
+    assert math.isnan(record.tyre_pressure_fl)
+    assert math.isnan(record.tyre_pressure_fr)
+    assert math.isnan(record.tyre_pressure_rl)
+    assert math.isnan(record.tyre_pressure_rr)

@@ -2733,6 +2733,29 @@ class TyreBalanceRule:
         if not microsectors or context is None:
             return []
 
+        telemetry_keys = set(TEMPERATURE_MEAN_KEYS.values())
+        telemetry_keys.update(TEMPERATURE_STD_KEYS.values())
+        telemetry_keys.update(PRESSURE_STD_KEYS.values())
+        telemetry_available = False
+        for microsector in microsectors:
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            if not isinstance(measures, Mapping):
+                continue
+            for key in telemetry_keys:
+                if key not in measures:
+                    continue
+                try:
+                    value = float(measures[key])
+                except (TypeError, ValueError):
+                    continue
+                if math.isfinite(value) and value > 0.0:
+                    telemetry_available = True
+                    break
+            if telemetry_available:
+                break
+        if not telemetry_available:
+            return []
+
         def _safe_float(value: object) -> float:
             try:
                 return float(value)
