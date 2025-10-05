@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from statistics import mean, pvariance
+from statistics import mean, pvariance, pstdev
 from typing import Iterable, Mapping, Sequence
 
 from .contextual_delta import (
@@ -432,9 +432,11 @@ class WindowMetrics:
     mu_usage_rear_ratio: float
     phase_mu_usage_front_ratio: float
     phase_mu_usage_rear_ratio: float
-    exit_gear_match: float
-    shift_stability: float
-    frequency_label: str
+    delta_nfr_std: float = 0.0
+    nodal_delta_nfr_std: float = 0.0
+    exit_gear_match: float = 0.0
+    shift_stability: float = 0.0
+    frequency_label: str = ""
     locking_window_score: LockingWindowScore = field(default_factory=LockingWindowScore)
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
     aero_mechanical_coherence: float = 0.0
@@ -454,6 +456,8 @@ class WindowMetrics:
         default_factory=SuspensionVelocityBands
     )
     aero_balance_drift: AeroBalanceDrift = field(default_factory=AeroBalanceDrift)
+    phase_delta_nfr_std: Mapping[str, float] = field(default_factory=dict)
+    phase_nodal_delta_nfr_std: Mapping[str, float] = field(default_factory=dict)
 
 
 def _compute_bumpstop_histogram(
@@ -607,6 +611,8 @@ def compute_window_metrics(
             mu_usage_rear_ratio=0.0,
             phase_mu_usage_front_ratio=0.0,
             phase_mu_usage_rear_ratio=0.0,
+            delta_nfr_std=0.0,
+            nodal_delta_nfr_std=0.0,
             exit_gear_match=0.0,
             shift_stability=0.0,
             frequency_label="",
@@ -619,6 +625,8 @@ def compute_window_metrics(
             camber={},
             phase_camber={},
             aero_balance_drift=AeroBalanceDrift(),
+            phase_delta_nfr_std={},
+            phase_nodal_delta_nfr_std={},
         )
 
     if isinstance(phase_indices, Mapping):
@@ -1125,6 +1133,18 @@ def compute_window_metrics(
             accumulator += float(value) * weights[index - 1]
         return accumulator / total_weight
 
+    def _standard_deviation(values: Sequence[float]) -> float:
+        if len(values) < 2:
+            return 0.0
+        clean = [
+            float(value)
+            for value in values
+            if isinstance(value, (int, float)) and math.isfinite(float(value))
+        ]
+        if len(clean) < 2:
+            return 0.0
+        return pstdev(clean)
+
     def _expansion_payload(
         series: Sequence[float], weights: Sequence[float]
     ) -> tuple[float, float]:
@@ -1304,6 +1324,17 @@ def compute_window_metrics(
                 selected.append(value)
         return selected
 
+    def _phase_standard_deviation_map(
+        series: Sequence[float],
+    ) -> dict[str, float]:
+        if not phase_windows:
+            return {}
+        phase_map: dict[str, float] = {}
+        for phase_label, indices in phase_windows.items():
+            samples = _select_series(series, indices)
+            phase_map[phase_label] = _standard_deviation(samples)
+        return phase_map
+
     def _camber_metrics_for_suffix(
         suffix: str, indices: Sequence[int] | None = None
     ) -> CamberEffectiveness:
@@ -1350,6 +1381,11 @@ def compute_window_metrics(
             corr_slip_angle=corr_slip,
             index=index_value,
         )
+
+    delta_std = _standard_deviation(delta_series)
+    nodal_std = _standard_deviation(support_samples)
+    phase_delta_std_map = _phase_standard_deviation_map(delta_series)
+    phase_nodal_std_map = _phase_standard_deviation_map(support_samples)
 
     support_effective = _weighted_average(support_samples, windows)
     load_support_ratio = (
@@ -1920,6 +1956,8 @@ def compute_window_metrics(
         mu_usage_rear_ratio=mu_usage_rear_ratio,
         phase_mu_usage_front_ratio=phase_mu_usage_front_ratio,
         phase_mu_usage_rear_ratio=phase_mu_usage_rear_ratio,
+        delta_nfr_std=delta_std,
+        nodal_delta_nfr_std=nodal_std,
         exit_gear_match=exit_gear_match,
         shift_stability=shift_stability,
         suspension_velocity_front=front_velocity_profile,
@@ -1935,6 +1973,8 @@ def compute_window_metrics(
         camber=camber_mapping,
         phase_camber=phase_camber_mapping,
         aero_balance_drift=aero_balance_drift,
+        phase_delta_nfr_std=phase_delta_std_map,
+        phase_nodal_delta_nfr_std=phase_nodal_std_map,
     )
 
 

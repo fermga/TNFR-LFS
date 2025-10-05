@@ -68,6 +68,23 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         assert "epi_derivative_abs" in microsector.filtered_measures
         assert "aero_medium_imbalance" in microsector.filtered_measures
         assert "aero_high_front_total" in microsector.filtered_measures
+        assert "delta_nfr_std" in microsector.filtered_measures
+        assert "nodal_delta_nfr_std" in microsector.filtered_measures
+        assert microsector.delta_nfr_std == pytest.approx(
+            float(microsector.filtered_measures["delta_nfr_std"]), rel=1e-6
+        )
+        assert microsector.nodal_delta_nfr_std == pytest.approx(
+            float(microsector.filtered_measures["nodal_delta_nfr_std"]), rel=1e-6
+        )
+        assert microsector.phase_delta_nfr_std
+        assert microsector.phase_nodal_delta_nfr_std
+        assert any(
+            key.startswith("delta_nfr_std_") for key in microsector.filtered_measures
+        )
+        assert any(
+            key.startswith("nodal_delta_nfr_std_")
+            for key in microsector.filtered_measures
+        )
         assert isinstance(microsector.recursivity_trace, tuple)
         assert microsector.last_mutation is None
         phases = [goal.phase for goal in microsector.goals]

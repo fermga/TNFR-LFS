@@ -484,6 +484,12 @@ def _render_page_a(
                 )
             ),
         ]
+        sigma_line = _truncate_line(
+            f"σΔ {window_metrics.delta_nfr_std:.3f} · σΔₙ {window_metrics.nodal_delta_nfr_std:.3f}"
+        )
+        candidate = "\n".join((*lines, sigma_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(sigma_line)
         if sense_line:
             candidate = "\n".join((*lines, sense_line))
             if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
@@ -526,6 +532,21 @@ def _render_page_a(
         f"Δ∥ {long_component:+.2f} obj {goal_long:+.2f} · Δ⊥ {lat_component:+.2f} obj {goal_lat:+.2f}"
         f" · w∥ {weight_long:.2f} · w⊥ {weight_lat:.2f}",
     ]
+    phase_key = str(active.phase)
+    phase_sigma = float(
+        window_metrics.phase_delta_nfr_std.get(phase_key, window_metrics.delta_nfr_std)
+    )
+    phase_nodal_sigma = float(
+        window_metrics.phase_nodal_delta_nfr_std.get(
+            phase_key, window_metrics.nodal_delta_nfr_std
+        )
+    )
+    sigma_line = _truncate_line(
+        f"σΔ {phase_sigma:.3f} ({window_metrics.delta_nfr_std:.3f}) · σΔₙ {phase_nodal_sigma:.3f}"
+    )
+    candidate = "\n".join((*lines, sigma_line))
+    if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+        lines.append(sigma_line)
     quiet_line: str | None = None
     if quiet_sequences and active is not None:
         quiet_line = _quiet_notice_line(active.microsector, quiet_sequences)

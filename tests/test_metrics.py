@@ -17,8 +17,14 @@ from tnfr_lfs.core.metrics import (
     resolve_aero_mechanical_coherence,
 )
 from dataclasses import replace
-from statistics import pvariance
+from statistics import pvariance, pstdev
 from types import SimpleNamespace
+from tnfr_lfs.core.contextual_delta import (
+    apply_contextual_delta,
+    load_context_matrix,
+    resolve_context_from_bundle,
+    resolve_context_from_record,
+)
 from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
@@ -156,6 +162,23 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.aero_balance_drift.guidance == ""
     expected_variance = pvariance([record.si for record in records])
     assert metrics.si_variance == pytest.approx(expected_variance, rel=1e-6)
+    context_matrix = load_context_matrix()
+    record_context = [
+        resolve_context_from_record(context_matrix, record) for record in records
+    ]
+    contextual_delta = [
+        apply_contextual_delta(
+            getattr(record, "delta_nfr", record.nfr),
+            factors,
+            context_matrix=context_matrix,
+        )
+        for record, factors in zip(records, record_context)
+    ]
+    expected_std = pstdev(contextual_delta)
+    assert metrics.delta_nfr_std == pytest.approx(expected_std, rel=1e-6)
+    assert metrics.nodal_delta_nfr_std == pytest.approx(0.0, abs=1e-9)
+    assert metrics.phase_delta_nfr_std == {}
+    assert metrics.phase_nodal_delta_nfr_std == {}
     assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
     assert metrics.exit_gear_match == pytest.approx(0.0)
     assert metrics.shift_stability == pytest.approx(1.0)
@@ -174,8 +197,73 @@ def test_compute_window_metrics_variance_and_derivative(
     expected_derivative = sum(
         abs(float(bundle.dEPI_dt)) for bundle in acceptance_bundle_series
     ) / len(acceptance_bundle_series)
+    context_matrix = load_context_matrix()
+    bundle_context = [
+        resolve_context_from_bundle(context_matrix, bundle)
+        for bundle in acceptance_bundle_series
+    ]
+    contextual_delta = [
+        apply_contextual_delta(
+            bundle.delta_nfr,
+            factors,
+            context_matrix=context_matrix,
+        )
+        for bundle, factors in zip(acceptance_bundle_series, bundle_context)
+    ]
+    expected_delta_std = pstdev(contextual_delta)
+    support_samples = [
+        max(0.0, bundle.tyres.delta_nfr) + max(0.0, bundle.suspension.delta_nfr)
+        for bundle in acceptance_bundle_series
+    ]
+    expected_nodal_std = pstdev(support_samples)
     assert metrics.si_variance == pytest.approx(expected_variance, rel=1e-6)
     assert metrics.epi_derivative_abs == pytest.approx(expected_derivative, rel=1e-6)
+    assert metrics.delta_nfr_std == pytest.approx(expected_delta_std, rel=1e-6)
+    assert metrics.nodal_delta_nfr_std == pytest.approx(expected_nodal_std, rel=1e-6)
+
+
+def test_compute_window_metrics_phase_std_with_bundles(
+    acceptance_records, acceptance_bundle_series
+) -> None:
+    phase_indices = {"entry": (0, 1), "exit": (2, 3)}
+    metrics = compute_window_metrics(
+        acceptance_records,
+        bundles=acceptance_bundle_series,
+        phase_indices=phase_indices,
+    )
+    context_matrix = load_context_matrix()
+    bundle_context = [
+        resolve_context_from_bundle(context_matrix, bundle)
+        for bundle in acceptance_bundle_series
+    ]
+    contextual_delta = [
+        apply_contextual_delta(
+            bundle.delta_nfr,
+            factors,
+            context_matrix=context_matrix,
+        )
+        for bundle, factors in zip(acceptance_bundle_series, bundle_context)
+    ]
+    expected_overall = pstdev(contextual_delta)
+    assert metrics.delta_nfr_std == pytest.approx(expected_overall, rel=1e-6)
+    for label, indices in phase_indices.items():
+        subset = [contextual_delta[idx] for idx in indices]
+        expected_phase = pstdev(subset)
+        assert metrics.phase_delta_nfr_std[label] == pytest.approx(
+            expected_phase, rel=1e-6
+        )
+    support_samples = [
+        max(0.0, bundle.tyres.delta_nfr) + max(0.0, bundle.suspension.delta_nfr)
+        for bundle in acceptance_bundle_series
+    ]
+    expected_nodal = pstdev(support_samples)
+    assert metrics.nodal_delta_nfr_std == pytest.approx(expected_nodal, rel=1e-6)
+    for label, indices in phase_indices.items():
+        subset = [support_samples[idx] for idx in indices]
+        expected_phase = pstdev(subset)
+        assert metrics.phase_nodal_delta_nfr_std[label] == pytest.approx(
+            expected_phase, rel=1e-6
+        )
 
 
 def test_compute_window_metrics_handles_small_windows() -> None:
@@ -456,6 +544,28 @@ def test_compute_window_metrics_mu_usage_ratios() -> None:
     assert metrics.mu_usage_rear_ratio == pytest.approx(0.8104912544074854, rel=1e-6)
     assert metrics.phase_mu_usage_front_ratio == pytest.approx(0.9203843968780266, rel=1e-6)
     assert metrics.phase_mu_usage_rear_ratio == pytest.approx(0.8584645893961879, rel=1e-6)
+    context_matrix = load_context_matrix()
+    record_context = [
+        resolve_context_from_record(context_matrix, record) for record in records
+    ]
+    contextual_delta = [
+        apply_contextual_delta(
+            getattr(record, "delta_nfr", record.nfr),
+            factors,
+            context_matrix=context_matrix,
+        )
+        for record, factors in zip(records, record_context)
+    ]
+    expected_overall_std = pstdev(contextual_delta)
+    expected_phase_std = pstdev(contextual_delta[1:3])
+    assert metrics.delta_nfr_std == pytest.approx(expected_overall_std, rel=1e-6)
+    assert metrics.phase_delta_nfr_std.get("active") == pytest.approx(
+        expected_phase_std, rel=1e-6
+    )
+    assert metrics.nodal_delta_nfr_std == pytest.approx(0.0, abs=1e-9)
+    assert metrics.phase_nodal_delta_nfr_std.get("active", 0.0) == pytest.approx(
+        0.0, abs=1e-9
+    )
 
 
 def test_compute_window_metrics_aero_balance_drift_bins() -> None:
