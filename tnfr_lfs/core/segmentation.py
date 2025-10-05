@@ -649,6 +649,22 @@ def segment_microsectors(
                 "brake_headroom_ventilation_index": window_metrics.brake_headroom.ventilation_index,
             }
         )
+        if window_metrics.cphi:
+            for suffix, wheel in window_metrics.cphi.items():
+                filtered_measures[f"cphi_{suffix}"] = float(wheel.value)
+                filtered_measures[
+                    f"cphi_{suffix}_temperature"
+                ] = float(wheel.temperature_component)
+                filtered_measures[
+                    f"cphi_{suffix}_gradient"
+                ] = float(wheel.gradient_component)
+                filtered_measures[f"cphi_{suffix}_mu"] = float(wheel.mu_component)
+                filtered_measures[
+                    f"cphi_{suffix}_temp_delta"
+                ] = float(wheel.temperature_delta)
+                filtered_measures[
+                    f"cphi_{suffix}_gradient_rate"
+                ] = float(wheel.gradient_rate)
         ventilation_alert = window_metrics.brake_headroom.ventilation_alert
         if ventilation_alert:
             filtered_measures["brake_headroom_ventilation_alert"] = ventilation_alert

@@ -1105,9 +1105,12 @@ def _generate_out_reports(
                 if value is None:
                     continue
                 try:
-                    samples[suffix].append(float(value))
+                    numeric = float(value)
                 except (TypeError, ValueError):
                     continue
+                if not math.isfinite(numeric):
+                    continue
+                samples[suffix].append(numeric)
         return {
             suffix: (sum(values) / len(values) if values else 0.0)
             for suffix, values in samples.items()
@@ -1120,9 +1123,12 @@ def _generate_out_reports(
 
     def _floatify(value: Any, *, default: float = 0.0) -> float:
         try:
-            return float(value)
+            numeric = float(value)
         except (TypeError, ValueError):
             return float(default)
+        if not math.isfinite(numeric):
+            return float(default)
+        return numeric
 
     def _floatify_mapping(mapping: Mapping[str, Any]) -> Dict[str, Any]:
         payload: Dict[str, Any] = {}

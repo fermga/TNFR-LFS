@@ -904,34 +904,50 @@ def test_recursivity_operator_detects_time_gap_rollover():
 
 def test_tyre_balance_controller_computes_clamped_deltas():
     metrics = {
-        "tyre_temp_fl": 85.0,
-        "tyre_temp_fr": 84.0,
-        "tyre_temp_rl": 79.0,
-        "tyre_temp_rr": 78.0,
-        "tyre_temp_fl_dt": 2.0,
-        "tyre_temp_fr_dt": 1.5,
-        "tyre_temp_rl_dt": 0.8,
-        "tyre_temp_rr_dt": 1.0,
+        "cphi_fl": 0.68,
+        "cphi_fr": 0.74,
+        "cphi_rl": 0.70,
+        "cphi_rr": 0.76,
+        "cphi_fl_temperature": 0.42,
+        "cphi_fr_temperature": 0.35,
+        "cphi_rl_temperature": 0.39,
+        "cphi_rr_temperature": 0.33,
+        "cphi_fl_gradient": 0.48,
+        "cphi_fr_gradient": 0.36,
+        "cphi_rl_gradient": 0.41,
+        "cphi_rr_gradient": 0.34,
+        "cphi_fl_mu": 0.55,
+        "cphi_fr_mu": 0.50,
+        "cphi_rl_mu": 0.52,
+        "cphi_rr_mu": 0.47,
+        "cphi_fl_temp_delta": 0.12,
+        "cphi_fr_temp_delta": -0.05,
+        "cphi_rl_temp_delta": 0.08,
+        "cphi_rr_temp_delta": -0.02,
+        "cphi_fl_gradient_rate": 0.58,
+        "cphi_fr_gradient_rate": 0.44,
+        "cphi_rl_gradient_rate": 0.52,
+        "cphi_rr_gradient_rate": 0.40,
         "d_nfr_flat": -0.4,
     }
 
     control = tyre_balance_controller(metrics)
     assert isinstance(control, TyreBalanceControlOutput)
-    assert control.pressure_delta_front == pytest.approx(-0.2)
-    assert control.pressure_delta_rear == pytest.approx(-0.13, abs=1e-6)
-    assert control.camber_delta_front == pytest.approx(-0.21, abs=1e-6)
-    assert control.camber_delta_rear == pytest.approx(-0.108, abs=1e-6)
-    assert control.per_wheel_pressure["fl"] == pytest.approx(-0.19, abs=1e-6)
-    assert control.per_wheel_pressure["fr"] == pytest.approx(-0.2, abs=1e-6)
+    assert control.pressure_delta_front == pytest.approx(-0.045, abs=1e-6)
+    assert control.pressure_delta_rear == pytest.approx(-0.055, abs=1e-6)
+    assert control.camber_delta_front == pytest.approx(-0.0756, abs=1e-6)
+    assert control.camber_delta_rear == pytest.approx(-0.0675, abs=1e-6)
+    assert control.per_wheel_pressure["fl"] == pytest.approx(-0.0402, abs=1e-6)
+    assert control.per_wheel_pressure["fr"] == pytest.approx(-0.0470, abs=1e-6)
 
     with_offsets = tyre_balance_controller(
         metrics, offsets={"pressure_front": 0.05, "camber_rear": 0.05}
     )
-    assert with_offsets.pressure_delta_front == pytest.approx(-0.16, abs=1e-6)
-    assert with_offsets.camber_delta_rear == pytest.approx(-0.058, abs=1e-6)
+    assert with_offsets.pressure_delta_front == pytest.approx(0.005, abs=1e-6)
+    assert with_offsets.camber_delta_rear == pytest.approx(-0.0175, abs=1e-6)
 
 
-def test_tyre_balance_controller_returns_zero_without_temperatures():
+def test_tyre_balance_controller_returns_zero_without_cphi():
     control = tyre_balance_controller({})
     assert control.pressure_delta_front == 0.0
     assert control.pressure_delta_rear == 0.0
