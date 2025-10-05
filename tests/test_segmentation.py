@@ -407,6 +407,8 @@ def bottoming_segments(monkeypatch):
         aero_mechanical_coherence=0.5,
         epi_derivative_abs=0.05,
         brake_headroom=BrakeHeadroom(),
+        camber={},
+        phase_camber={},
     )
     rough_metrics = replace(
         smooth_metrics,

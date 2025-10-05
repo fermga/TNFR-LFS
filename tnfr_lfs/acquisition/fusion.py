@@ -115,7 +115,10 @@ class TelemetryFusion:
             outsim.accel_y, outsim.accel_x, rear_share, calibration
         )
 
-        tyre_temps = self._resolve_wheel_temperatures(outgauge, previous)
+        tyre_temp_layers = self._resolve_wheel_temperature_layers(outgauge, previous)
+        tyre_temps = self._resolve_wheel_temperatures(
+            outgauge, previous, layers=tyre_temp_layers
+        )
         tyre_pressures = self._resolve_wheel_pressures(outgauge, previous)
         line_deviation = self._compute_line_deviation(outsim)
 
@@ -154,6 +157,18 @@ class TelemetryFusion:
             tyre_temp_fr=tyre_temps[1],
             tyre_temp_rl=tyre_temps[2],
             tyre_temp_rr=tyre_temps[3],
+            tyre_temp_fl_inner=tyre_temp_layers[0][0],
+            tyre_temp_fr_inner=tyre_temp_layers[0][1],
+            tyre_temp_rl_inner=tyre_temp_layers[0][2],
+            tyre_temp_rr_inner=tyre_temp_layers[0][3],
+            tyre_temp_fl_middle=tyre_temp_layers[1][0],
+            tyre_temp_fr_middle=tyre_temp_layers[1][1],
+            tyre_temp_rl_middle=tyre_temp_layers[1][2],
+            tyre_temp_rr_middle=tyre_temp_layers[1][3],
+            tyre_temp_fl_outer=tyre_temp_layers[2][0],
+            tyre_temp_fr_outer=tyre_temp_layers[2][1],
+            tyre_temp_rl_outer=tyre_temp_layers[2][2],
+            tyre_temp_rr_outer=tyre_temp_layers[2][3],
             tyre_pressure_fl=tyre_pressures[0],
             tyre_pressure_fr=tyre_pressures[1],
             tyre_pressure_rl=tyre_pressures[2],
@@ -415,24 +430,72 @@ class TelemetryFusion:
         combined = _clamp((lateral_mu + longitudinal_mu) * 0.5, 0.0, 3.0)
         return combined, lateral_mu, longitudinal_mu
 
-    def _resolve_wheel_temperatures(
+    def _resolve_wheel_temperature_layers(
         self, outgauge: OutGaugePacket, previous: TelemetryRecord | None
-    ) -> tuple[float, float, float, float]:
-        candidate = getattr(outgauge, "tyre_temps", (0.0, 0.0, 0.0, 0.0))
-        if len(candidate) != 4:
-            candidate = (0.0, 0.0, 0.0, 0.0)
-        fallback = (
-            previous.tyre_temp_fl if previous else 0.0,
-            previous.tyre_temp_fr if previous else 0.0,
-            previous.tyre_temp_rl if previous else 0.0,
-            previous.tyre_temp_rr if previous else 0.0,
+    ) -> tuple[tuple[float, float, float, float], ...]:
+        def _layer(attribute: str, fallbacks: tuple[float, float, float, float]) -> tuple[float, ...]:
+            candidate = getattr(outgauge, attribute, (0.0, 0.0, 0.0, 0.0))
+            if not isinstance(candidate, tuple) or len(candidate) != 4:
+                candidate = (0.0, 0.0, 0.0, 0.0)
+            resolved: list[float] = []
+            for index, value in enumerate(candidate):
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    numeric = 0.0
+                if not math.isfinite(numeric) or numeric <= 0.0:
+                    numeric = fallbacks[index]
+                resolved.append(float(numeric))
+            return tuple(resolved)
+
+        fallback_inner = (
+            previous.tyre_temp_fl_inner if previous else 0.0,
+            previous.tyre_temp_fr_inner if previous else 0.0,
+            previous.tyre_temp_rl_inner if previous else 0.0,
+            previous.tyre_temp_rr_inner if previous else 0.0,
         )
-        resolved = []
-        for value, default in zip(candidate, fallback):
-            if isinstance(value, (int, float)) and math.isfinite(value) and value > 0.0:
-                resolved.append(float(value))
-            else:
-                resolved.append(float(default))
+        fallback_middle = (
+            previous.tyre_temp_fl_middle if previous else 0.0,
+            previous.tyre_temp_fr_middle if previous else 0.0,
+            previous.tyre_temp_rl_middle if previous else 0.0,
+            previous.tyre_temp_rr_middle if previous else 0.0,
+        )
+        fallback_outer = (
+            previous.tyre_temp_fl_outer if previous else 0.0,
+            previous.tyre_temp_fr_outer if previous else 0.0,
+            previous.tyre_temp_rl_outer if previous else 0.0,
+            previous.tyre_temp_rr_outer if previous else 0.0,
+        )
+
+        inner = _layer("tyre_temps_inner", fallback_inner)
+        middle = _layer("tyre_temps_middle", fallback_middle)
+        outer = _layer("tyre_temps_outer", fallback_outer)
+        return (inner, middle, outer)
+
+    def _resolve_wheel_temperatures(
+        self,
+        outgauge: OutGaugePacket,
+        previous: TelemetryRecord | None,
+        *,
+        layers: tuple[tuple[float, float, float, float], ...] | None = None,
+    ) -> tuple[float, float, float, float]:
+        if layers is None:
+            layers = self._resolve_wheel_temperature_layers(outgauge, previous)
+        inner, middle, outer = layers
+        resolved: list[float] = []
+        for index in range(4):
+            values = [inner[index], middle[index], outer[index]]
+            finite = [value for value in values if math.isfinite(value) and value > 0.0]
+            if finite:
+                resolved.append(float(sum(finite) / len(finite)))
+                continue
+            fallback = (
+                previous.tyre_temp_fl if previous else 0.0,
+                previous.tyre_temp_fr if previous else 0.0,
+                previous.tyre_temp_rl if previous else 0.0,
+                previous.tyre_temp_rr if previous else 0.0,
+            )
+            resolved.append(float(fallback[index]))
         return tuple(resolved)  # type: ignore[return-value]
 
     def _resolve_wheel_pressures(
