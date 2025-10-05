@@ -1,0 +1,148 @@
+# Ajustes específicos por clase de LFS que pueden sobrescribir perfiles TNFR.
+# Cada sección define los bloques "targets", "policy" y/o "recommender" que
+# sustituyen a los declarados en el perfil base.
+
+["STD".overrides]
+
+  [ "STD".overrides.targets.balance ]
+  delta_nfr = 0.28
+  nu_f = 0.26
+  yaw_rate_deg_s = 0.55
+
+  [ "STD".overrides.targets.stability ]
+  # Ventanas más anchas: coches de calle ligeros (~125 bhp/ton)
+  slip_lat_window  = [-0.36,  0.36]
+  slip_long_window = [-0.28,  0.28]
+
+  [ "STD".overrides.policy.throttle ]
+  aggressiveness = 0.50
+  lift_margin    = 0.08
+
+  [ "STD".overrides.recommender.steering ]
+  # Bloque de giro típico de 900° en esta familia
+  lock_deg = 900
+  kp = 1.20
+  ki = 0.05
+  kd = 0.10
+
+
+
+["TBO".overrides]
+
+  [ "TBO".overrides.targets.balance ]
+  delta_nfr = 0.30
+  nu_f = 0.27
+  yaw_rate_deg_s = 0.60
+
+  [ "TBO".overrides.targets.stability ]
+  # Un poco más de tolerancia lateral; margen longitudinal por turbo-spool
+  slip_lat_window  = [-0.40,  0.40]
+  slip_long_window = [-0.32,  0.32]
+
+  [ "TBO".overrides.policy.throttle ]
+  aggressiveness = 0.58
+  lift_margin    = 0.12
+
+  [ "TBO".overrides.recommender.steering ]
+  lock_deg = 900
+  kp = 1.30
+  ki = 0.05
+  kd = 0.11
+
+
+
+["LRF".overrides]
+
+  [ "LRF".overrides.targets.balance ]
+  delta_nfr = 0.31
+  nu_f = 0.28
+  yaw_rate_deg_s = 0.62
+
+  [ "LRF".overrides.targets.stability ]
+  # RWD potentes y ligeros (250–310 bhp/ton): ancho lateral, control en longitudinal
+  slip_lat_window  = [-0.42,  0.42]
+  slip_long_window = [-0.30,  0.30]
+
+  [ "LRF".overrides.policy.throttle ]
+  aggressiveness = 0.55
+  lift_margin    = 0.09
+
+  [ "LRF".overrides.recommender.steering ]
+  lock_deg = 900
+  kp = 1.35
+  ki = 0.05
+  kd = 0.12
+
+
+
+["GTR".overrides]
+
+  [ "GTR".overrides.targets.balance ]
+  delta_nfr = 0.33
+  nu_f = 0.29
+  yaw_rate_deg_s = 0.65
+
+  [ "GTR".overrides.targets.stability ]
+  # Alta carga (≈450 bhp/ton): ventanas más finas, exige precisión
+  slip_lat_window  = [-0.28,  0.28]
+  slip_long_window = [-0.24,  0.24]
+
+  [ "GTR".overrides.policy.throttle ]
+  aggressiveness = 0.62
+  lift_margin    = 0.10
+
+  [ "GTR".overrides.recommender.steering ]
+  # En LFS estos coches usan 540° de giro
+  lock_deg = 540
+  kp = 1.45
+  ki = 0.06
+  kd = 0.12
+
+
+
+["FWD GTR".overrides]
+
+  [ "FWD GTR".overrides.targets.balance ]
+  delta_nfr = 0.30
+  nu_f = 0.27
+  yaw_rate_deg_s = 0.58
+
+  [ "FWD GTR".overrides.targets.stability ]
+  # FWD de alta potencia: cuidar temperatura y tracción del eje delantero
+  slip_lat_window  = [-0.30,  0.30]
+  slip_long_window = [-0.26,  0.26]
+
+  [ "FWD GTR".overrides.policy.throttle ]
+  aggressiveness = 0.57
+  lift_margin    = 0.11
+
+  [ "FWD GTR".overrides.recommender.steering ]
+  lock_deg = 540
+  kp = 1.40
+  ki = 0.05
+  kd = 0.12
+
+
+
+["Single-seaters".overrides]
+
+  [ "Single-seaters".overrides.targets.balance ]
+  delta_nfr = 0.34
+  nu_f = 0.30
+  yaw_rate_deg_s = 0.80
+
+  [ "Single-seaters".overrides.targets.stability ]
+  # Monoplazas: mucha respuesta y apoyo; ventanas estrechas y limpias
+  slip_lat_window  = [-0.26,  0.26]
+  slip_long_window = [-0.22,  0.22]
+
+  [ "Single-seaters".overrides.policy.throttle ]
+  aggressiveness = 0.66
+  lift_margin    = 0.07
+
+  [ "Single-seaters".overrides.recommender.steering ]
+  # Por clase usamos 450° como default; luego puedes afinar por coche (BF1=400, MRT=270)
+  lock_deg = 450
+  kp = 1.60
+  ki = 0.06
+  kd = 0.13

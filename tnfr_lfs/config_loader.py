@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping as ABCMapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -12,6 +13,7 @@ import tomllib
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent
 _DATA_ROOT = _PACKAGE_ROOT.parent / "data"
+_LFS_CLASS_OVERRIDES_CACHE: dict[Path, Mapping[str, Mapping[str, Any]]] = {}
 
 
 def _freeze_value(value: Any) -> Any:
@@ -28,6 +30,71 @@ def _freeze_dict(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     """Return an immutable view for a mapping, freezing nested structures."""
 
     return MappingProxyType({str(key): _freeze_value(value) for key, value in payload.items()})
+
+
+def _deep_merge(
+    base: ABCMapping[str, Any], overlay: ABCMapping[str, Any]
+) -> dict[str, Any]:
+    """Recursively merge ``overlay`` into ``base`` returning a new mapping."""
+
+    merged: dict[str, Any] = {str(key): value for key, value in base.items()}
+
+    for key, overlay_value in overlay.items():
+        key_str = str(key)
+        base_value = merged.get(key_str)
+        if isinstance(base_value, ABCMapping) and isinstance(overlay_value, ABCMapping):
+            merged[key_str] = _deep_merge(base_value, overlay_value)
+        else:
+            merged[key_str] = overlay_value
+
+    return merged
+
+
+def _load_lfs_class_overrides(
+    overrides_path: str | Path | None = None,
+) -> Mapping[str, Mapping[str, Any]]:
+    """Return cached LFS class overrides, loading them lazily when required."""
+
+    if overrides_path is None:
+        candidate = _DATA_ROOT / "lfs_class_overrides.toml"
+    else:
+        candidate = Path(overrides_path)
+
+    candidate = candidate.expanduser()
+    cache_key = candidate.resolve(strict=False)
+
+    cached = _LFS_CLASS_OVERRIDES_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    if not candidate.exists():
+        overrides: Mapping[str, Mapping[str, Any]] = MappingProxyType({})
+        _LFS_CLASS_OVERRIDES_CACHE[cache_key] = overrides
+        return overrides
+
+    with candidate.open("rb") as buffer:
+        payload = tomllib.load(buffer)
+
+    overrides_dict: dict[str, Mapping[str, Any]] = {}
+
+    for class_name, section in payload.items():
+        if not isinstance(section, ABCMapping):
+            continue
+        overrides_section = section.get("overrides")
+        if isinstance(overrides_section, ABCMapping):
+            overrides_dict[str(class_name)] = _freeze_value(overrides_section)
+
+    overrides = MappingProxyType(overrides_dict)
+    _LFS_CLASS_OVERRIDES_CACHE[cache_key] = overrides
+    return overrides
+
+
+def load_lfs_class_overrides(
+    overrides_path: str | Path | None = None,
+) -> Mapping[str, Mapping[str, Any]]:
+    """Public wrapper to access the cached LFS class overrides mapping."""
+
+    return _load_lfs_class_overrides(overrides_path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +193,8 @@ def resolve_targets(
     car_abbrev: str,
     cars: Mapping[str, Car],
     profiles: Mapping[str, Profile],
+    *,
+    overrides: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> Mapping[str, Mapping[str, Any]]:
     """Resolve the profile referenced by ``car_abbrev``.
 
@@ -148,14 +217,25 @@ def resolve_targets(
             f"Car '{car.abbrev}' references unknown profile '{car.profile}'"
         ) from exc
 
-    return MappingProxyType(
-        {
-            "meta": profile.meta,
-            "targets": profile.targets,
-            "policy": profile.policy,
-            "recommender": profile.recommender,
-        }
-    )
+    payload = {
+        "meta": profile.meta,
+        "targets": profile.targets,
+        "policy": profile.policy,
+        "recommender": profile.recommender,
+    }
+
+    if overrides is None:
+        overrides = _load_lfs_class_overrides()
+
+    if car.lfs_class is None:
+        return MappingProxyType(payload)
+
+    class_overrides = overrides.get(car.lfs_class)
+    if not class_overrides:
+        return MappingProxyType(payload)
+
+    merged = _deep_merge(payload, class_overrides)
+    return _freeze_dict(merged)
 
 
 def example_pipeline(
@@ -170,8 +250,13 @@ def example_pipeline(
     profiles = (
         load_profiles(base / "profiles") if data_root is not None else load_profiles()
     )
+    overrides = (
+        load_lfs_class_overrides(base / "lfs_class_overrides.toml")
+        if data_root is not None
+        else load_lfs_class_overrides()
+    )
 
-    return resolve_targets(car_abbrev, cars, profiles)
+    return resolve_targets(car_abbrev, cars, profiles, overrides=overrides)
 
 
 __all__ = [
@@ -181,4 +266,5 @@ __all__ = [
     "load_profiles",
     "resolve_targets",
     "example_pipeline",
+    "load_lfs_class_overrides",
 ]

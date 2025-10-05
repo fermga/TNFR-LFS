@@ -75,6 +75,7 @@ from ..config_loader import (
     Car as PackCar,
     Profile as PackProfile,
     load_cars as load_pack_cars,
+    load_lfs_class_overrides as load_pack_lfs_class_overrides,
     load_profiles as load_pack_profiles,
     resolve_targets as resolve_pack_targets,
 )
@@ -197,6 +198,24 @@ def _load_pack_modifiers(pack_root: Path | None) -> Mapping[tuple[str, str], Map
     )
 
 
+def _load_pack_lfs_class_overrides(
+    pack_root: Path | None,
+) -> Mapping[str, Mapping[str, Any]]:
+    if pack_root is None:
+        return load_pack_lfs_class_overrides()
+
+    candidates = [
+        pack_root / "data" / "lfs_class_overrides.toml",
+        pack_root / "lfs_class_overrides.toml",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return load_pack_lfs_class_overrides(candidate)
+
+    return load_pack_lfs_class_overrides(candidates[0])
+
+
 def _load_pack_track(pack_root: Path | None, slug: str) -> Track:
     tracks_dir = _pack_data_dir(pack_root, "tracks")
     return (
@@ -272,7 +291,11 @@ def _serialise_pack_payload(payload: Any) -> Any:
 
 
 def _resolve_tnfr_targets(
-    car_model: str, cars: Mapping[str, PackCar], profiles: Mapping[str, PackProfile]
+    car_model: str,
+    cars: Mapping[str, PackCar],
+    profiles: Mapping[str, PackProfile],
+    *,
+    overrides: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> Mapping[str, Any] | None:
     """Return TNFR objectives for ``car_model`` when available."""
 
@@ -280,7 +303,7 @@ def _resolve_tnfr_targets(
     if car is None:
         return None
     try:
-        return resolve_pack_targets(car.abbrev, cars, profiles)
+        return resolve_pack_targets(car.abbrev, cars, profiles, overrides=overrides)
     except KeyError:
         return None
 
@@ -1857,8 +1880,12 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
     cars = _load_pack_cars(pack_root)
     track_profiles = _load_pack_track_profiles(pack_root)
     modifiers = _load_pack_modifiers(pack_root)
+    class_overrides = _load_pack_lfs_class_overrides(pack_root)
     tnfr_targets = _resolve_tnfr_targets(
-        resolved_car_model, cars, profiles_ctx.pack_profiles
+        resolved_car_model,
+        cars,
+        profiles_ctx.pack_profiles,
+        overrides=class_overrides,
     )
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     engine = RecommendationEngine(
@@ -2081,7 +2108,13 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     cars = _load_pack_cars(pack_root)
     track_profiles = _load_pack_track_profiles(pack_root)
     modifiers = _load_pack_modifiers(pack_root)
-    tnfr_targets = _resolve_tnfr_targets(car_model, cars, profiles_ctx.pack_profiles)
+    class_overrides = _load_pack_lfs_class_overrides(pack_root)
+    tnfr_targets = _resolve_tnfr_targets(
+        car_model,
+        cars,
+        profiles_ctx.pack_profiles,
+        overrides=class_overrides,
+    )
     car_metadata = _lookup_car_metadata(car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     engine = RecommendationEngine(
@@ -2208,8 +2241,12 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     cars = _load_pack_cars(pack_root)
     track_profiles = _load_pack_track_profiles(pack_root)
     modifiers = _load_pack_modifiers(pack_root)
+    class_overrides = _load_pack_lfs_class_overrides(pack_root)
     tnfr_targets = _resolve_tnfr_targets(
-        namespace.car_model, cars, profiles_ctx.pack_profiles
+        namespace.car_model,
+        cars,
+        profiles_ctx.pack_profiles,
+        overrides=class_overrides,
     )
     car_metadata = _lookup_car_metadata(namespace.car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
@@ -2440,8 +2477,12 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
     cars = _load_pack_cars(pack_root)
     track_profiles = _load_pack_track_profiles(pack_root)
     modifiers = _load_pack_modifiers(pack_root)
+    class_overrides = _load_pack_lfs_class_overrides(pack_root)
     tnfr_targets = _resolve_tnfr_targets(
-        namespace.car_model, cars, profiles_ctx.pack_profiles
+        namespace.car_model,
+        cars,
+        profiles_ctx.pack_profiles,
+        overrides=class_overrides,
     )
     car_metadata = _lookup_car_metadata(namespace.car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
