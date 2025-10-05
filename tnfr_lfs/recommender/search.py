@@ -216,6 +216,17 @@ _ROAD_SUSPENSION = (
     ("rear_ride_height", -15.0, 15.0, 0.5),
 )
 
+_TRANSMISSION_RATIOS = (
+    ("final_drive_ratio", -0.5, 0.5, 0.01),
+    ("gear_1_ratio", -0.5, 0.5, 0.01),
+    ("gear_2_ratio", -0.5, 0.5, 0.01),
+    ("gear_3_ratio", -0.5, 0.5, 0.01),
+    ("gear_4_ratio", -0.5, 0.5, 0.01),
+    ("gear_5_ratio", -0.5, 0.5, 0.01),
+    ("gear_6_ratio", -0.5, 0.5, 0.01),
+    ("gear_7_ratio", -0.5, 0.5, 0.01),
+)
+
 _ROAD_MISC = (
     ("front_tyre_pressure", -0.6, 0.6, 0.05),
     ("rear_tyre_pressure", -0.6, 0.6, 0.05),
@@ -223,7 +234,7 @@ _ROAD_MISC = (
     ("diff_power_lock", -30.0, 30.0, 5.0),
     ("diff_coast_lock", -30.0, 30.0, 5.0),
     ("diff_preload_nm", -300.0, 300.0, 20.0),
-)
+) + _TRANSMISSION_RATIOS
 
 _GTR_ALIGNMENT = (
     ("front_camber_deg", -1.4, 1.4, 0.05),
@@ -254,7 +265,7 @@ _GTR_MISC = (
     ("diff_coast_lock", -40.0, 40.0, 5.0),
     ("diff_preload_nm", -400.0, 400.0, 25.0),
     ("rear_wing_angle", -6.0, 6.0, 0.5),
-)
+) + _TRANSMISSION_RATIOS
 
 _FORMULA_ALIGNMENT = (
     ("front_camber_deg", -1.8, 1.8, 0.05),
@@ -285,7 +296,7 @@ _FORMULA_MISC = (
     ("diff_coast_lock", -50.0, 50.0, 5.0),
     ("diff_preload_nm", -500.0, 500.0, 25.0),
     ("rear_wing_angle", -10.0, 10.0, 0.5),
-)
+) + _TRANSMISSION_RATIOS
 
 
 def _build_space(car_model: str, spec: Sequence[tuple[str, float, float, float]]) -> DecisionSpace:

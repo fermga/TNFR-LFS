@@ -36,6 +36,13 @@ def _build_plan() -> SetupPlan:
             SetupChange("diff_power_lock", 45.0, "", ""),
             SetupChange("diff_coast_lock", 35.0, "", ""),
             SetupChange("diff_preload_nm", 80.0, "", ""),
+            SetupChange("final_drive_ratio", 3.72, "", ""),
+            SetupChange("gear_1_ratio", 3.10, "", ""),
+            SetupChange("gear_2_ratio", 2.12, "", ""),
+            SetupChange("gear_3_ratio", 1.55, "", ""),
+            SetupChange("gear_4_ratio", 1.22, "", ""),
+            SetupChange("gear_5_ratio", 1.00, "", ""),
+            SetupChange("gear_6_ratio", 0.88, "", ""),
             SetupChange("rear_wing_angle", 12.0, "", ""),
         ),
     )
@@ -98,3 +105,12 @@ def test_encode_native_setup_produces_expected_layout(_enable_native_export):
 
     # Wing angle is stored as a raw byte.
     assert payload[20] == 12
+
+    # Final drive and gear ratios stored as floats.
+    assert struct.unpack_from("<f", payload, 28)[0] == pytest.approx(3.72)
+    assert struct.unpack_from("<f", payload, 32)[0] == pytest.approx(3.10)
+    assert struct.unpack_from("<f", payload, 36)[0] == pytest.approx(2.12)
+    assert struct.unpack_from("<f", payload, 40)[0] == pytest.approx(1.55)
+    assert struct.unpack_from("<f", payload, 44)[0] == pytest.approx(1.22)
+    assert struct.unpack_from("<f", payload, 48)[0] == pytest.approx(1.00)
+    assert struct.unpack_from("<f", payload, 72)[0] == pytest.approx(0.88)

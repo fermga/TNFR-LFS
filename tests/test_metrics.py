@@ -95,6 +95,8 @@ def test_compute_window_metrics_trending_series() -> None:
     expected_variance = pvariance([record.si for record in records])
     assert metrics.si_variance == pytest.approx(expected_variance, rel=1e-6)
     assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
+    assert metrics.exit_gear_match == pytest.approx(0.0)
+    assert metrics.shift_stability == pytest.approx(1.0)
 
 
 def test_compute_window_metrics_variance_and_derivative(
@@ -129,6 +131,8 @@ def test_compute_window_metrics_handles_small_windows() -> None:
     assert metrics.aero_mechanical_coherence == pytest.approx(0.0)
     assert metrics.si_variance == pytest.approx(0.0, abs=1e-9)
     assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
+    assert metrics.exit_gear_match == pytest.approx(0.0)
+    assert metrics.shift_stability == pytest.approx(1.0)
 
 
 def _longitudinal_bundle(
@@ -196,6 +200,46 @@ def _longitudinal_bundle(
             style_index=si,
         ),
     )
+
+
+def test_compute_window_metrics_shift_metrics() -> None:
+    records = [
+        replace(
+            _record(0.0, 30.0, si=0.78),
+            speed=42.0,
+            gear=3,
+            rpm=4800.0,
+        ),
+        replace(
+            _record(0.1, 28.0, si=0.76),
+            speed=18.0,
+            gear=2,
+            rpm=5200.0,
+        ),
+        replace(
+            _record(0.2, 32.0, si=0.79),
+            speed=25.0,
+            gear=3,
+            rpm=4800.0,
+        ),
+        replace(
+            _record(0.3, 34.0, si=0.8),
+            speed=30.0,
+            gear=4,
+            rpm=3000.0,
+        ),
+        replace(
+            _record(0.4, 36.0, si=0.82),
+            speed=40.0,
+            gear=4,
+            rpm=5000.0,
+        ),
+    ]
+
+    metrics = compute_window_metrics(records)
+
+    assert metrics.shift_stability == pytest.approx(1.0 - 2.0 / 3.0, rel=1e-6)
+    assert metrics.exit_gear_match == pytest.approx(0.8888888889, rel=1e-6)
 
 
 def test_compute_window_metrics_bottoming_ratio_tracks_overlap() -> None:
@@ -297,6 +341,8 @@ def test_compute_window_metrics_empty_window() -> None:
         mu_usage_rear_ratio=0.0,
         phase_mu_usage_front_ratio=0.0,
         phase_mu_usage_rear_ratio=0.0,
+        exit_gear_match=0.0,
+        shift_stability=0.0,
         frequency_label="",
         aero_coherence=AeroCoherence(),
         aero_mechanical_coherence=0.0,

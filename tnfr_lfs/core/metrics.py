@@ -105,6 +105,8 @@ class WindowMetrics:
     mu_usage_rear_ratio: float
     phase_mu_usage_front_ratio: float
     phase_mu_usage_rear_ratio: float
+    exit_gear_match: float
+    shift_stability: float
     frequency_label: str
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
     aero_mechanical_coherence: float = 0.0
@@ -165,6 +167,8 @@ def compute_window_metrics(
             mu_usage_rear_ratio=0.0,
             phase_mu_usage_front_ratio=0.0,
             phase_mu_usage_rear_ratio=0.0,
+            exit_gear_match=0.0,
+            shift_stability=0.0,
             frequency_label="",
             aero_coherence=AeroCoherence(),
             aero_mechanical_coherence=0.0,
@@ -497,6 +501,85 @@ def compute_window_metrics(
     long_expansion, long_contraction = _expansion_payload(longitudinal_series, windows)
     lat_expansion, lat_contraction = _expansion_payload(lateral_series, windows)
 
+    def _exit_shift_metrics() -> tuple[float, float]:
+        if not records:
+            return 0.0, 0.0
+        apex_index = 0
+        min_speed = float("inf")
+        for index, record in enumerate(records):
+            try:
+                speed_value = float(getattr(record, "speed", 0.0))
+            except (TypeError, ValueError):
+                speed_value = 0.0
+            if speed_value < min_speed:
+                min_speed = speed_value
+                apex_index = index
+        exit_window = records[apex_index:]
+        if len(exit_window) <= 1:
+            return 0.0, 1.0
+
+        def _gear_ratio(record: TelemetryRecord) -> float | None:
+            try:
+                rpm_value = float(getattr(record, "rpm", 0.0))
+                speed_value = float(getattr(record, "speed", 0.0))
+            except (TypeError, ValueError):
+                return None
+            if speed_value <= 1e-6 or rpm_value <= 0.0:
+                return None
+            ratio_value = rpm_value / speed_value
+            if not math.isfinite(ratio_value):
+                return None
+            return ratio_value
+
+        shift_events = 0
+        for previous, current in zip(exit_window, exit_window[1:]):
+            try:
+                previous_gear = int(getattr(previous, "gear", 0))
+                current_gear = int(getattr(current, "gear", 0))
+            except (TypeError, ValueError):
+                continue
+            if current_gear != previous_gear:
+                shift_events += 1
+        exit_span = max(1, len(exit_window) - 1)
+        stability = 1.0 - min(1.0, shift_events / exit_span)
+        if stability < 0.0:
+            stability = 0.0
+
+        exit_record = exit_window[-1]
+        exit_ratio = _gear_ratio(exit_record)
+        if exit_ratio is None:
+            return 0.0, stability
+        try:
+            exit_gear = int(getattr(exit_record, "gear", 0))
+        except (TypeError, ValueError):
+            exit_gear = 0
+        same_gear_ratios: list[float] = []
+        for record in records:
+            try:
+                record_gear = int(getattr(record, "gear", 0))
+            except (TypeError, ValueError):
+                continue
+            if record_gear != exit_gear:
+                continue
+            ratio_value = _gear_ratio(record)
+            if ratio_value is None:
+                continue
+            same_gear_ratios.append(ratio_value)
+        if not same_gear_ratios:
+            return 0.0, stability
+        baseline_ratio = mean(same_gear_ratios)
+        if baseline_ratio <= 1e-9 or not math.isfinite(baseline_ratio):
+            return 0.0, stability
+        mismatch = abs(exit_ratio - baseline_ratio) / baseline_ratio
+        if not math.isfinite(mismatch):
+            return 0.0, stability
+        gear_match = 1.0 - min(1.0, mismatch)
+        if gear_match < 0.0:
+            gear_match = 0.0
+        return gear_match, stability
+
+    exit_gear_match, shift_stability = _exit_shift_metrics()
+
     bottoming_ratio_front = _bottoming_ratio(front_travel_series, bottoming_threshold_front)
     bottoming_ratio_rear = _bottoming_ratio(rear_travel_series, bottoming_threshold_rear)
 
@@ -567,6 +650,8 @@ def compute_window_metrics(
         mu_usage_rear_ratio=mu_usage_rear_ratio,
         phase_mu_usage_front_ratio=phase_mu_usage_front_ratio,
         phase_mu_usage_rear_ratio=phase_mu_usage_rear_ratio,
+        exit_gear_match=exit_gear_match,
+        shift_stability=shift_stability,
         frequency_label=frequency_label,
         aero_coherence=aero,
         aero_mechanical_coherence=aero_mechanical,
