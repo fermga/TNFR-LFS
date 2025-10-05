@@ -74,3 +74,28 @@ def test_profile_manager_updates_aero_profiles(tmp_path: Path) -> None:
     reloaded = ProfileManager(profiles_path)
     re_snapshot = reloaded.resolve(car_model, track)
     assert re_snapshot.aero_profiles["stint_save"].high_speed_target == pytest.approx(0.08)
+
+
+def test_profile_manager_merges_session_weights(tmp_path: Path) -> None:
+    profiles_path = tmp_path / "profiles.toml"
+    manager = ProfileManager(profiles_path)
+    car_model = "generic_gt"
+    track = "generic"
+    session_one = {
+        "weights": {"entry": {"__default__": 1.25, "brakes": 1.4}},
+        "hints": {"rho_detune_threshold": 0.63, "surface": "mixed"},
+    }
+    snapshot = manager.resolve(car_model, track, session=session_one)
+    assert snapshot.session_weights["entry"]["__default__"] == pytest.approx(1.25)
+    assert snapshot.thresholds.phase_weights["entry"]["__default__"] == pytest.approx(1.25)
+    assert snapshot.session_hints["rho_detune_threshold"] == pytest.approx(0.63)
+    assert snapshot.thresholds.rho_detune_threshold == pytest.approx(0.63)
+
+    session_two = {
+        "weights": {"entry": {"__default__": 1.1}},
+        "hints": {"rho_detune_threshold": 0.7},
+    }
+    snapshot_two = manager.resolve(car_model, track, session=session_two)
+    assert snapshot_two.session_weights["entry"]["__default__"] == pytest.approx(1.1)
+    assert snapshot_two.thresholds.phase_weights["entry"]["__default__"] == pytest.approx(1.1)
+    assert snapshot_two.thresholds.rho_detune_threshold == pytest.approx(0.7)

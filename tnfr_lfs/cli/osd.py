@@ -151,6 +151,8 @@ class TelemetryHUD:
         self.recommendation_engine = recommendation_engine or RecommendationEngine(
             car_model=car_model, track_name=track_name
         )
+        if session is not None:
+            self.recommendation_engine.session = session
         self.setup_planner = setup_planner or SetupPlanner(
             recommendation_engine=self.recommendation_engine
         )

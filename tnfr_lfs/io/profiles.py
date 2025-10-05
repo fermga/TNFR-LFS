@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Dict, Mapping, MutableMapping, Tuple
+from typing import Any, Dict, Mapping, MutableMapping, Sequence, Tuple
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -71,6 +71,8 @@ class ProfileRecord:
     objectives: ProfileObjectives
     tolerances: ProfileTolerances
     weights: Dict[str, Dict[str, float]]
+    session_weights: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    session_hints: Dict[str, Any] = field(default_factory=dict)
     pending_plan: Dict[str, float] = field(default_factory=dict)
     pending_reference: StintMetrics | None = None
     last_result: StintMetrics | None = None
@@ -93,8 +95,8 @@ class ProfileRecord:
         weights: Mapping[str, Mapping[str, float]] | None = None,
         aero_profiles: Mapping[str, AeroProfile] | Mapping[str, Mapping[str, float]] | None = None,
     ) -> "ProfileRecord":
-        payload_weights = _normalise_phase_weights(
-            weights if weights is not None else base_profile.phase_weights
+        payload_weights = (
+            _normalise_phase_weights(weights) if weights is not None else {}
         )
         payload_objectives = objectives or ProfileObjectives()
         payload_tolerances = tolerances or ProfileTolerances(
@@ -116,13 +118,27 @@ class ProfileRecord:
         )
 
     def to_threshold_profile(self, base_profile: ThresholdProfile) -> ThresholdProfile:
-        merged_weights = _merge_phase_weights(base_profile.phase_weights, self.weights)
+        merged_weights: Mapping[str, Mapping[str, float] | float] = (
+            base_profile.phase_weights
+        )
+        if self.session_weights:
+            merged_weights = _merge_phase_weights(merged_weights, self.session_weights)
+        merged_weights = _merge_phase_weights(merged_weights, self.weights)
+        rho_threshold = base_profile.rho_detune_threshold
+        hint_rho = self.session_hints.get("rho_detune_threshold")
+        if isinstance(hint_rho, (int, float)):
+            rho_threshold = float(hint_rho)
+        else:
+            try:
+                rho_threshold = float(hint_rho)
+            except (TypeError, ValueError):
+                rho_threshold = base_profile.rho_detune_threshold
         return ThresholdProfile(
             entry_delta_tolerance=self.tolerances.entry,
             apex_delta_tolerance=self.tolerances.apex,
             exit_delta_tolerance=self.tolerances.exit,
             piano_delta_tolerance=self.tolerances.piano,
-            rho_detune_threshold=base_profile.rho_detune_threshold,
+            rho_detune_threshold=rho_threshold,
             phase_targets=base_profile.phase_targets,
             phase_weights=merged_weights,
             archetype_phase_targets=base_profile.archetype_phase_targets,
@@ -147,7 +163,13 @@ class ProfileRecord:
             if weight_factor <= 0.0:
                 continue
             profile = self.weights.setdefault(phase, {})
-            current = profile.get("__default__", 1.0)
+            current = profile.get("__default__")
+            if current is None:
+                session_profile = self.session_weights.get(phase, {})
+                if isinstance(session_profile, Mapping):
+                    current = session_profile.get("__default__")
+            if current is None:
+                current = 1.0
             boosted = current * (1.0 + base_boost * weight_factor)
             profile["__default__"] = round(min(boosted, 5.0), 6)
 
@@ -197,6 +219,8 @@ class ProfileSnapshot:
     thresholds: ThresholdProfile
     objectives: ProfileObjectives
     pending_plan: Mapping[str, float]
+    session_weights: Mapping[str, Mapping[str, float]]
+    session_hints: Mapping[str, Any]
     last_result: StintMetrics | None
     phase_weights: Mapping[str, Mapping[str, float] | float]
     jacobian: Mapping[str, Mapping[str, float]]
@@ -226,6 +250,8 @@ class ProfileManager:
         car_model: str,
         track_name: str,
         base_profile: ThresholdProfile | None = None,
+        *,
+        session: Mapping[str, Any] | None = None,
     ) -> ProfileSnapshot:
         key = (car_model, track_name)
         if base_profile is None:
@@ -237,8 +263,34 @@ class ProfileManager:
         if record is None:
             record = ProfileRecord.from_base(car_model, track_name, reference)
             self._profiles[key] = record
+        if isinstance(session, Mapping):
+            weights_payload = session.get("weights")
+            hints_payload = session.get("hints")
+            session_weights = (
+                _normalise_phase_weights(weights_payload)
+                if isinstance(weights_payload, Mapping)
+                else {}
+            )
+            session_hints = (
+                _normalise_session_hints(hints_payload)
+                if isinstance(hints_payload, Mapping)
+                else {}
+            )
+            record.session_weights = session_weights
+            record.session_hints = session_hints
+        elif session is not None:
+            record.session_weights = {}
+            record.session_hints = {}
+        elif not record.session_weights:
+            record.session_weights = _normalise_phase_weights(reference.phase_weights)
         thresholds = record.to_threshold_profile(reference)
-        record.weights = _normalise_phase_weights(thresholds.phase_weights)
+        record.weights = (
+            _normalise_phase_weights(record.weights) if record.weights else {}
+        )
+        if record.session_weights:
+            record.session_weights = _normalise_phase_weights(record.session_weights)
+        if record.session_hints:
+            record.session_hints = _normalise_session_hints(record.session_hints)
         aero_payload = _normalise_aero_profiles(record.aero_profiles)
         if aero_payload:
             record.aero_profiles = dict(aero_payload)
@@ -261,10 +313,21 @@ class ProfileManager:
             {str(key): float(value) for key, value in record.tyre_offsets.items()}
         )
         aero_snapshot = MappingProxyType({str(mode): profile for mode, profile in record.aero_profiles.items()})
+        session_weight_snapshot = MappingProxyType(
+            {
+                str(phase): MappingProxyType(dict(values))
+                for phase, values in record.session_weights.items()
+            }
+        )
+        session_hint_snapshot = MappingProxyType(
+            {str(key): _freeze_hint_value(value) for key, value in record.session_hints.items()}
+        )
         return ProfileSnapshot(
             thresholds=thresholds,
             objectives=record.objectives,
             pending_plan=MappingProxyType(dict(record.pending_plan)),
+            session_weights=session_weight_snapshot,
+            session_hints=session_hint_snapshot,
             last_result=record.last_result,
             phase_weights=thresholds.phase_weights,
             jacobian=MappingProxyType(jacobian_snapshot),
@@ -586,6 +649,14 @@ def _record_from_mapping(
             for axis, value in offsets.items()
             if isinstance(value, (int, float))
         }
+    session_spec = spec.get("session")
+    if isinstance(session_spec, Mapping):
+        session_weights = session_spec.get("weights")
+        if isinstance(session_weights, Mapping):
+            record.session_weights = _normalise_phase_weights(session_weights)
+        session_hints = session_spec.get("hints")
+        if isinstance(session_hints, Mapping):
+            record.session_hints = _normalise_session_hints(session_hints)
     return record
 
 
@@ -704,6 +775,35 @@ def _smooth(previous: float | None, new: float, smoothing: float) -> float:
     return float(previous) * (1.0 - smoothing) + float(new) * smoothing
 
 
+def _normalise_session_hints(payload: Mapping[str, Any] | None) -> Dict[str, Any]:
+    if not isinstance(payload, Mapping):
+        return {}
+    hints: Dict[str, Any] = {}
+    for key, value in payload.items():
+        label = str(key)
+        if isinstance(value, (str, bool)):
+            hints[label] = value
+            continue
+        if isinstance(value, (int, float)):
+            hints[label] = float(value)
+            continue
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            entries: list[Any] = []
+            for item in value:
+                if isinstance(item, (str, bool)):
+                    entries.append(item)
+                elif isinstance(item, (int, float)):
+                    entries.append(float(item))
+            hints[label] = tuple(entries)
+    return hints
+
+
+def _freeze_hint_value(value: Any) -> Any:
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_hint_value(item) for item in value)
+    return value
+
+
 def _serialise_record(car_model: str, track_name: str, record: ProfileRecord) -> list[str]:
     lines: list[str] = []
     base_prefix = ["profiles", car_model, track_name]
@@ -725,6 +825,20 @@ def _serialise_record(car_model: str, track_name: str, record: ProfileRecord) ->
         lines.append(_table_header(base_prefix + ["weights", phase]))
         for node, value in sorted(profile.items()):
             lines.append(f"{_format_key(node)} = {_format_float(value)}")
+    if record.session_weights:
+        for phase, profile in sorted(record.session_weights.items()):
+            lines.append("")
+            lines.append(_table_header(base_prefix + ["session", "weights", phase]))
+            for node, value in sorted(profile.items()):
+                lines.append(f"{_format_key(node)} = {_format_float(value)}")
+    if record.session_hints:
+        lines.append("")
+        lines.append(_table_header(base_prefix + ["session", "hints"]))
+        for key, value in sorted(record.session_hints.items()):
+            formatted = _format_hint_value(value)
+            if formatted is None:
+                continue
+            lines.append(f"{_format_key(key)} = {formatted}")
     if record.tyre_offsets:
         lines.append("")
         lines.append(_table_header(base_prefix + ["tyre_offsets"]))
@@ -800,6 +914,22 @@ def _serialise_record(car_model: str, track_name: str, record: ProfileRecord) ->
 
 def _format_float(value: float) -> str:
     return ("{0:.6f}".format(float(value))).rstrip("0").rstrip(".") or "0"
+
+
+def _format_hint_value(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return _format_float(float(value))
+    if isinstance(value, str):
+        escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
+        return f'"{escaped}"'
+    if isinstance(value, (list, tuple)):
+        formatted_items = [
+            item for item in (_format_hint_value(entry) for entry in value) if item
+        ]
+        return f"[{', '.join(formatted_items)}]"
+    return None
 
 
 def _format_key(token: str) -> str:

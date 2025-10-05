@@ -855,16 +855,39 @@ def _phase_deviation_messages(
     *,
     car_model: str,
     track_name: str,
+    session: Mapping[str, Any] | None = None,
 ) -> List[str]:
+    hints: Mapping[str, Any] | None = None
+    if isinstance(session, Mapping):
+        hints_payload = session.get("hints")
+        if isinstance(hints_payload, Mapping):
+            hints = hints_payload
+    hint_messages: List[str] = []
+    if hints:
+        slip_bias = hints.get("slip_ratio_bias")
+        if isinstance(slip_bias, str) and slip_bias:
+            direction = "delantero" if slip_bias.lower() == "front" else "trasero"
+            hint_messages.append(
+                f"Hint sesión: prioriza aero {direction} (slip_ratio_bias={slip_bias})."
+            )
+        surface = hints.get("surface")
+        if isinstance(surface, str) and surface:
+            hint_messages.append(
+                f"Hint sesión: superficie {surface} → ajusta amortiguación y alturas."
+            )
     if not microsectors or not bundles:
-        return [
+        base_messages = [
             "Sin desviaciones ΔNFR↓ relevantes; no se detectaron curvas segmentadas.",
         ]
+        base_messages.extend(hint_messages)
+        return base_messages
 
     tolerances = _phase_tolerances(config, car_model, track_name)
     quiet_sequences = detect_quiet_microsector_streaks(microsectors)
     if quiet_sequences:
-        return [_quiet_cli_notice(microsectors, quiet_sequences)]
+        messages = [_quiet_cli_notice(microsectors, quiet_sequences)]
+        messages.extend(hint_messages)
+        return messages
     messages: List[str] = []
     bundle_count = len(bundles)
     for microsector in microsectors:
@@ -897,9 +920,12 @@ def _phase_deviation_messages(
                 )
             )
     if not messages:
-        return [
+        messages = [
             "Sin desviaciones ΔNFR↓ relevantes por fase; mantener la referencia actual.",
         ]
+        messages.extend(hint_messages)
+        return messages
+    messages.extend(hint_messages)
     return messages
 
 
@@ -1781,7 +1807,12 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         engine.session = session_payload
     if pack_delta is not None or pack_si is not None:
         base_profile = engine._lookup_profile(resolved_car_model, resolved_track)
-        snapshot = profile_manager.resolve(resolved_car_model, resolved_track, base_profile)
+        snapshot = profile_manager.resolve(
+            resolved_car_model,
+            resolved_track,
+            base_profile,
+            session=session_payload,
+        )
         profile_manager.update_objectives(
             resolved_car_model,
             resolved_track,
@@ -2042,6 +2073,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         config,
         car_model=car_model,
         track_name=track_name,
+        session=session_payload,
     )
     session_messages = format_session_messages(session_payload)
     if session_messages:
@@ -2179,6 +2211,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         config,
         car_model=namespace.car_model,
         track_name=track_name,
+        session=session_payload,
     )
     session_messages = format_session_messages(session_payload)
     if session_messages:
@@ -2596,7 +2629,10 @@ def _compute_insights(
     base_profile = engine._lookup_profile(car_model, track_name)
     snapshot: ProfileSnapshot | None = None
     if profile_manager is not None:
-        snapshot = profile_manager.resolve(car_model, track_name, base_profile)
+        session_payload = getattr(engine, "session", None)
+        snapshot = profile_manager.resolve(
+            car_model, track_name, base_profile, session=session_payload
+        )
         profile = snapshot.thresholds
     else:
         profile = base_profile

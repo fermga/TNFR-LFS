@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from statistics import fmean
-from typing import Callable, Dict, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Dict, Mapping, MutableMapping, Sequence
 
 from ..core.epi_models import EPIBundle
 from ..core.segmentation import Microsector
@@ -370,6 +370,12 @@ class SetupPlanner:
         resolved_track = track_name or getattr(self.recommendation_engine, "track_name", "")
         space = self._adapt_space(space, car_model, resolved_track)
         cache: MutableMapping[tuple[tuple[str, float], ...], tuple[float, Sequence[EPIBundle]]] = {}
+        session_payload = getattr(self.recommendation_engine, "session", None)
+        session_hints: Mapping[str, Any] | None = None
+        if isinstance(session_payload, Mapping):
+            hints_payload = session_payload.get("hints")
+            if isinstance(hints_payload, Mapping):
+                session_hints = hints_payload
 
         def _simulate_and_score(vector: Mapping[str, float]) -> tuple[float, Sequence[EPIBundle]]:
             clamped = space.clamp(vector)
@@ -384,7 +390,38 @@ class SetupPlanner:
 
         vector, score, iterations, evaluations = self.optimiser.optimise(evaluate, space)
         telemetry = _simulate_and_score(vector)[1]
-        recommendations = self.recommendation_engine.generate(telemetry, microsectors)
+        recommendations = list(self.recommendation_engine.generate(telemetry, microsectors))
+        if session_hints:
+            extra: list[Recommendation] = []
+            slip_bias = session_hints.get("slip_ratio_bias")
+            if isinstance(slip_bias, str) and slip_bias:
+                direction = "delantero" if slip_bias.lower() == "front" else "trasero"
+                extra.append(
+                    Recommendation(
+                        category="aero",
+                        message=f"Hint sesión: refuerza aero {direction}",
+                        rationale=(
+                            f"El hint slip_ratio_bias={slip_bias} indica priorizar ajustes aerodinámicos "
+                            f"en el eje {direction}."
+                        ),
+                        priority=108,
+                    )
+                )
+            surface = session_hints.get("surface")
+            if isinstance(surface, str) and surface:
+                extra.append(
+                    Recommendation(
+                        category="suspension",
+                        message=f"Hint sesión: adapta amortiguación a superficie {surface}",
+                        rationale=(
+                            f"La sesión describe surface={surface}; prioriza amortiguación y alturas "
+                            "para esa condición."
+                        ),
+                        priority=96,
+                    )
+                )
+            if extra:
+                recommendations.extend(extra)
         sensitivities, phase_sensitivities = self._compute_sensitivities(
             vector=vector,
             telemetry=telemetry,
