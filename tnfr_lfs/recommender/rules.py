@@ -55,6 +55,21 @@ MANUAL_REFERENCES = {
     "tyre_balance": "Advanced Setup Guide · Presiones y caídas [ADV-TYR]",
 }
 
+WHEEL_SUFFIXES: Tuple[str, ...] = ("fl", "fr", "rl", "rr")
+WHEEL_LABELS = MappingProxyType({
+    "fl": "FL",
+    "fr": "FR",
+    "rl": "RL",
+    "rr": "RR",
+})
+TEMPERATURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_temp_{suffix}" for suffix in WHEEL_SUFFIXES})
+TEMPERATURE_STD_KEYS = MappingProxyType({
+    suffix: f"{TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
+})
+PRESSURE_STD_KEYS = MappingProxyType({
+    suffix: f"tyre_pressure_{suffix}_std" for suffix in WHEEL_SUFFIXES
+})
+
 
 _ALIGNMENT_ALIGNMENT_GAP = 0.15
 _ALIGNMENT_LAG_GAP = 0.3
@@ -2254,10 +2269,24 @@ class ParallelSteerRule:
 class TyreBalanceRule:
     """Recommend ΔP and camber tweaks from tyre thermal trends."""
 
-    def __init__(self, priority: int = 18, target_front: float = 82.0, target_rear: float = 80.0) -> None:
+    def __init__(
+        self,
+        priority: int = 18,
+        target_front: float = 82.0,
+        target_rear: float = 80.0,
+        *,
+        dispersion_pressure_baseline: float = 0.5,
+        dispersion_camber_baseline: float = 0.35,
+        dispersion_cutoff: float = 0.05,
+        max_dispersion_scale: float = 1.5,
+    ) -> None:
         self.priority = priority
         self.target_front = target_front
         self.target_rear = target_rear
+        self.dispersion_pressure_baseline = max(1e-6, float(dispersion_pressure_baseline))
+        self.dispersion_camber_baseline = max(1e-6, float(dispersion_camber_baseline))
+        self.dispersion_cutoff = max(0.0, float(dispersion_cutoff))
+        self.max_dispersion_scale = max(1.0, float(max_dispersion_scale))
 
     def evaluate(
         self,
@@ -2281,7 +2310,11 @@ class TyreBalanceRule:
         front_temps: List[float] = []
         rear_temps: List[float] = []
         delta_flat_values: List[float] = []
-        per_wheel: Dict[str, List[float]] = {key: [] for key in ("fl", "fr", "rl", "rr")}
+        per_wheel: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
+        front_temp_std_values: List[float] = []
+        rear_temp_std_values: List[float] = []
+        per_wheel_temp_std: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
+        per_wheel_pressure_std: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
 
         for microsector in microsectors:
             metrics = microsector.filtered_measures
@@ -2311,6 +2344,37 @@ class TyreBalanceRule:
             delta_flat_values.append(_safe_float(metrics.get("d_nfr_flat")))
             for key, value in control.per_wheel_pressure.items():
                 per_wheel.setdefault(key, []).append(float(value))
+            front_std = _average(
+                [
+                    _safe_float(metrics.get(TEMPERATURE_STD_KEYS["fl"])),
+                    _safe_float(metrics.get(TEMPERATURE_STD_KEYS["fr"])),
+                ]
+            )
+            rear_std = _average(
+                [
+                    _safe_float(metrics.get(TEMPERATURE_STD_KEYS["rl"])),
+                    _safe_float(metrics.get(TEMPERATURE_STD_KEYS["rr"])),
+                ]
+            )
+            if front_std > 0.0:
+                front_temp_std_values.append(front_std)
+            if rear_std > 0.0:
+                rear_temp_std_values.append(rear_std)
+            for suffix in WHEEL_SUFFIXES:
+                temp_std_key = TEMPERATURE_STD_KEYS[suffix]
+                temp_std_value = metrics.get(temp_std_key)
+                if temp_std_value is not None:
+                    per_wheel_temp_std.setdefault(suffix, []).append(
+                        _safe_float(temp_std_value)
+                    )
+                pressure_std_key = PRESSURE_STD_KEYS.get(suffix)
+                if pressure_std_key is None:
+                    continue
+                pressure_std_value = metrics.get(pressure_std_key)
+                if pressure_std_value is not None:
+                    per_wheel_pressure_std.setdefault(suffix, []).append(
+                        _safe_float(pressure_std_value)
+                    )
 
         if not controls:
             return []
@@ -2320,18 +2384,67 @@ class TyreBalanceRule:
         camber_front = _average([control.camber_delta_front for control in controls])
         camber_rear = _average([control.camber_delta_rear for control in controls])
         per_wheel_avg = {key: _average(values) for key, values in per_wheel.items()}
+        per_wheel_temp_std_avg = {
+            key: _average(values) for key, values in per_wheel_temp_std.items()
+        }
+        per_wheel_pressure_std_avg = {
+            key: _average(values) for key, values in per_wheel_pressure_std.items()
+        }
 
         average_front_temp = _average(front_temps)
         average_rear_temp = _average(rear_temps)
         avg_delta_flat = _average(delta_flat_values)
+        avg_front_dispersion = _average(front_temp_std_values)
+        avg_rear_dispersion = _average(rear_temp_std_values)
+
+        def _scale_delta(delta: float, dispersion: float, baseline: float) -> float:
+            if abs(delta) <= 1e-6:
+                return 0.0
+            if dispersion <= self.dispersion_cutoff:
+                return 0.0
+            scale = dispersion / baseline if baseline > 1e-6 else 1.0
+            scale = min(self.max_dispersion_scale, max(0.0, scale))
+            adjusted = delta * scale
+            if abs(adjusted) < 1e-3:
+                return 0.0
+            return adjusted
 
         recommendations: List[Recommendation] = []
 
+        base_front_pressure = front_pressure
+        base_rear_pressure = rear_pressure
+        front_pressure = _scale_delta(front_pressure, avg_front_dispersion, self.dispersion_pressure_baseline)
+        rear_pressure = _scale_delta(rear_pressure, avg_rear_dispersion, self.dispersion_pressure_baseline)
+
+        front_scale = (
+            front_pressure / base_front_pressure
+            if abs(base_front_pressure) > 1e-6
+            else 0.0
+        )
+        rear_scale = (
+            rear_pressure / base_rear_pressure
+            if abs(base_rear_pressure) > 1e-6
+            else 0.0
+        )
+        per_wheel_scaled = {}
+        for suffix, value in per_wheel_avg.items():
+            scale = front_scale if suffix in {"fl", "fr"} else rear_scale
+            per_wheel_scaled[suffix] = value * scale
+
         if abs(front_pressure) > 0.01 or abs(rear_pressure) > 0.01:
+            temp_sigma_segments = [
+                f"{WHEEL_LABELS[suffix]} {per_wheel_temp_std_avg.get(suffix, 0.0):.2f}"
+                for suffix in WHEEL_SUFFIXES
+            ]
+            pressure_sigma_segments = [
+                f"{WHEEL_LABELS[suffix]} {per_wheel_pressure_std_avg.get(suffix, 0.0):.3f}"
+                for suffix in WHEEL_SUFFIXES
+            ]
             pressure_rationale = (
                 f"Temperaturas medias {average_front_temp:.1f}°C / {average_rear_temp:.1f}°C con ΔNFR_flat {avg_delta_flat:+.2f}. "
-                f"Per-wheel ΔP {per_wheel_avg['fl']:+.2f}/{per_wheel_avg['fr']:+.2f}/"
-                f"{per_wheel_avg['rl']:+.2f}/{per_wheel_avg['rr']:+.2f}."
+                f"σT {' · '.join(temp_sigma_segments)} · σP {' · '.join(pressure_sigma_segments)}. "
+                f"Per-wheel ΔP {per_wheel_scaled.get('fl', 0.0):+.2f}/{per_wheel_scaled.get('fr', 0.0):+.2f}/"
+                f"{per_wheel_scaled.get('rl', 0.0):+.2f}/{per_wheel_scaled.get('rr', 0.0):+.2f}."
             )
             recommendations.append(
                 Recommendation(
@@ -2343,7 +2456,7 @@ class TyreBalanceRule:
                     ),
                     rationale=(
                         f"{pressure_rationale} Sigue las pautas de {MANUAL_REFERENCES['tyre_balance']} "
-                        "para implementar los ajustes." 
+                        "para implementar los ajustes."
                     ),
                     priority=self.priority,
                     parameter="tyre_pressure",
@@ -2351,9 +2464,16 @@ class TyreBalanceRule:
                 )
             )
 
+        base_camber_front = camber_front
+        base_camber_rear = camber_rear
+        camber_front = _scale_delta(camber_front, avg_front_dispersion, self.dispersion_camber_baseline)
+        camber_rear = _scale_delta(camber_rear, avg_rear_dispersion, self.dispersion_camber_baseline)
+
         if abs(camber_front) > 0.01 or abs(camber_rear) > 0.01:
             camber_rationale = (
-                f"Gradiente térmico front {camber_front:+.2f}·dt y rear {camber_rear:+.2f}·dt derivados de dT/dt."
+                f"Gradiente térmico front {base_camber_front:+.2f}·dt y rear {base_camber_rear:+.2f}·dt derivados de dT/dt. "
+                f"σT FL/FR {per_wheel_temp_std_avg.get('fl', 0.0):.2f}/{per_wheel_temp_std_avg.get('fr', 0.0):.2f} · "
+                f"RL/RR {per_wheel_temp_std_avg.get('rl', 0.0):.2f}/{per_wheel_temp_std_avg.get('rr', 0.0):.2f}."
             )
             recommendations.append(
                 Recommendation(

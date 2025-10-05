@@ -39,6 +39,22 @@ PAYLOAD_LIMIT = OverlayManager.MAX_BUTTON_TEXT - 1
 DEFAULT_UPDATE_RATE = 6.0
 DEFAULT_PLAN_INTERVAL = 5.0
 
+WHEEL_SUFFIXES: Tuple[str, ...] = ("fl", "fr", "rl", "rr")
+WHEEL_LABELS = {
+    "fl": "FL",
+    "fr": "FR",
+    "rl": "RL",
+    "rr": "RR",
+}
+TEMPERATURE_MEAN_KEYS = {suffix: f"tyre_temp_{suffix}" for suffix in WHEEL_SUFFIXES}
+TEMPERATURE_STD_KEYS = {
+    suffix: f"{TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
+}
+PRESSURE_MEAN_KEYS = {suffix: f"tyre_pressure_{suffix}" for suffix in WHEEL_SUFFIXES}
+PRESSURE_STD_KEYS = {
+    suffix: f"{PRESSURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
+}
+
 NODE_AXIS_LABELS = {
     "yaw": "guiñada",
     "roll": "balanceo",
@@ -549,6 +565,11 @@ def _render_page_a(
         candidate = "\n".join((*lines, aero_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(aero_line)
+    thermal_lines = _thermal_dispersion_lines(active.microsector)
+    for thermal_line in thermal_lines:
+        candidate = "\n".join((*lines, thermal_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(thermal_line)
     return _ensure_limit("\n".join(lines))
 
 
@@ -573,6 +594,69 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · μF {window_metrics.mu_usage_front_ratio:.2f}"
         f" · μR {window_metrics.mu_usage_rear_ratio:.2f}"
     )
+
+
+def _format_dispersion_line(
+    measures: Mapping[str, object],
+    mean_keys: Mapping[str, str],
+    std_keys: Mapping[str, str],
+    *,
+    prefix: str,
+    mean_format: str,
+    std_format: str,
+) -> str | None:
+    segments: List[str] = []
+    for suffix in WHEEL_SUFFIXES:
+        mean_key = mean_keys.get(suffix)
+        std_key = std_keys.get(suffix)
+        if mean_key is None or std_key is None:
+            continue
+        mean_raw = measures.get(mean_key)
+        std_raw = measures.get(std_key)
+        if mean_raw is None or std_raw is None:
+            continue
+        try:
+            mean_value = float(mean_raw)
+            std_value = float(std_raw)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(mean_value) or not math.isfinite(std_value):
+            continue
+        label = WHEEL_LABELS.get(suffix, suffix.upper())
+        segments.append(
+            f"{label} {mean_format.format(mean_value)}±{std_format.format(std_value)}"
+        )
+    if not segments:
+        return None
+    return _truncate_line(f"{prefix} {' · '.join(segments)}")
+
+
+def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
+    measures = getattr(microsector, "filtered_measures", {}) or {}
+    if not isinstance(measures, Mapping):
+        return ()
+    lines: List[str] = []
+    temp_line = _format_dispersion_line(
+        measures,
+        TEMPERATURE_MEAN_KEYS,
+        TEMPERATURE_STD_KEYS,
+        prefix="T°",
+        mean_format="{:.1f}",
+        std_format="{:.1f}",
+    )
+    if temp_line:
+        lines.append(temp_line)
+    pressure_line = _format_dispersion_line(
+        measures,
+        PRESSURE_MEAN_KEYS,
+        PRESSURE_STD_KEYS,
+        prefix="Pbar",
+        mean_format="{:.2f}",
+        std_format="{:.3f}",
+    )
+    if pressure_line:
+        lines.append(pressure_line)
+    return tuple(lines)
 
 
 def _phase_sparkline(

@@ -269,18 +269,29 @@ def segment_microsectors(
         min_speed = min(float(record.speed) for record in record_window)
         speed_drop = max(0.0, entry_speed - min_speed)
         direction_changes = _direction_changes(record_window)
-        wheel_temperatures = {
-            "tyre_temp_fl": mean(record.tyre_temp_fl for record in record_window),
-            "tyre_temp_fr": mean(record.tyre_temp_fr for record in record_window),
-            "tyre_temp_rl": mean(record.tyre_temp_rl for record in record_window),
-            "tyre_temp_rr": mean(record.tyre_temp_rr for record in record_window),
-        }
-        wheel_pressures = {
-            "tyre_pressure_fl": mean(record.tyre_pressure_fl for record in record_window),
-            "tyre_pressure_fr": mean(record.tyre_pressure_fr for record in record_window),
-            "tyre_pressure_rl": mean(record.tyre_pressure_rl for record in record_window),
-            "tyre_pressure_rr": mean(record.tyre_pressure_rr for record in record_window),
-        }
+        def _mean_std(attribute: str) -> tuple[float, float]:
+            values = [float(getattr(record, attribute, 0.0)) for record in record_window]
+            if not values:
+                return 0.0, 0.0
+            avg_value = mean(values)
+            spread = pstdev(values) if len(values) > 1 else 0.0
+            return avg_value, spread
+
+        wheel_temperatures: Dict[str, float] = {}
+        wheel_temperature_dispersion: Dict[str, float] = {}
+        for suffix in ("fl", "fr", "rl", "rr"):
+            key = f"tyre_temp_{suffix}"
+            avg_value, spread = _mean_std(key)
+            wheel_temperatures[key] = avg_value
+            wheel_temperature_dispersion[f"{key}_std"] = spread
+
+        wheel_pressures: Dict[str, float] = {}
+        wheel_pressure_dispersion: Dict[str, float] = {}
+        for suffix in ("fl", "fr", "rl", "rr"):
+            key = f"tyre_pressure_{suffix}"
+            avg_value, spread = _mean_std(key)
+            wheel_pressures[key] = avg_value
+            wheel_pressure_dispersion[f"{key}_std"] = spread
         phase_weight_map = _initial_phase_weight_map(records, phase_samples)
         if phase_weight_overrides:
             phase_weight_map = _blend_phase_weight_map(
@@ -312,7 +323,9 @@ def segment_microsectors(
                 "phase_samples": phase_samples,
                 "phase_weights": phase_weight_map,
                 "wheel_temperatures": wheel_temperatures,
+                "wheel_temperature_std": wheel_temperature_dispersion,
                 "wheel_pressures": wheel_pressures,
+                "wheel_pressure_std": wheel_pressure_dispersion,
                 "duration": duration,
                 "speed_drop": speed_drop,
                 "direction_changes": direction_changes,
@@ -488,12 +501,22 @@ def segment_microsectors(
             key: float(value)
             for key, value in spec.get("wheel_temperatures", {}).items()
         }
+        wheel_temperature_std = {
+            key: float(value)
+            for key, value in spec.get("wheel_temperature_std", {}).items()
+        }
         wheel_pressures = {
             key: float(value)
             for key, value in spec.get("wheel_pressures", {}).items()
         }
+        wheel_pressure_std = {
+            key: float(value)
+            for key, value in spec.get("wheel_pressure_std", {}).items()
+        }
         filtered_measures.update(wheel_temperatures)
+        filtered_measures.update(wheel_temperature_std)
         filtered_measures.update(wheel_pressures)
+        filtered_measures.update(wheel_pressure_std)
         window_metrics = compute_window_metrics(
             records[start : end + 1],
             bundles=recomputed_bundles[start : end + 1],
@@ -544,7 +567,9 @@ def segment_microsectors(
                 "timestamp": float(spec.get("end_timestamp", records[spec["end"]].timestamp)),
             }
             measures.update(wheel_temperatures)
+            measures.update(wheel_temperature_std)
             measures.update(wheel_pressures)
+            measures.update(wheel_pressure_std)
             rec_info = recursivity_operator(
                 rec_state_root,
                 session_components,
@@ -631,7 +656,9 @@ def segment_microsectors(
                 "epi_derivative_abs": window_metrics.epi_derivative_abs,
             }
             defaults.update(wheel_temperatures)
+            defaults.update(wheel_temperature_std)
             defaults.update(wheel_pressures)
+            defaults.update(wheel_pressure_std)
             for key, value in defaults.items():
                 filtered_measures.setdefault(key, value)
             rec_trace = tuple(
