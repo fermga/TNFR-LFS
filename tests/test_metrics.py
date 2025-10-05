@@ -6,6 +6,7 @@ import pytest
 
 from tnfr_lfs.core.metrics import (
     AeroCoherence,
+    BrakeHeadroom,
     WindowMetrics,
     compute_aero_coherence,
     compute_window_metrics,
@@ -312,6 +313,39 @@ def test_compute_window_metrics_mu_usage_ratios() -> None:
     assert metrics.phase_mu_usage_rear_ratio == pytest.approx(0.8584645893961879, rel=1e-6)
 
 
+def test_compute_window_metrics_brake_headroom_components() -> None:
+    longitudinal = [-4.0, -6.5, -8.0, -7.2, -5.5]
+    locking = [0.0, 0.2, 0.7, 0.85, 0.92]
+    slip_profiles = [
+        (-0.02, -0.03, -0.01, -0.02),
+        (-0.08, -0.12, -0.07, -0.09),
+        (-0.4, -0.32, -0.18, -0.22),
+        (-0.5, -0.47, -0.38, -0.2),
+        (-0.1, -0.08, -0.07, -0.06),
+    ]
+    records = [
+        replace(
+            _record(float(index), 100.0 + index * 2.0),
+            longitudinal_accel=longitudinal[index],
+            locking=locking[index],
+            slip_ratio_fl=slip_profiles[index][0],
+            slip_ratio_fr=slip_profiles[index][1],
+            slip_ratio_rl=slip_profiles[index][2],
+            slip_ratio_rr=slip_profiles[index][3],
+        )
+        for index in range(len(longitudinal))
+    ]
+
+    metrics = compute_window_metrics(records)
+
+    headroom = metrics.brake_headroom
+    assert headroom.peak_decel == pytest.approx(8.0)
+    assert headroom.abs_activation_ratio == pytest.approx(sum(locking) / len(locking))
+    assert headroom.partial_locking_ratio == pytest.approx(0.6, rel=1e-6)
+    assert headroom.sustained_locking_ratio == pytest.approx(0.4, rel=1e-6)
+    assert headroom.value == pytest.approx(0.08324, rel=1e-5)
+
+
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
     assert metrics == WindowMetrics(
@@ -347,6 +381,7 @@ def test_compute_window_metrics_empty_window() -> None:
         aero_coherence=AeroCoherence(),
         aero_mechanical_coherence=0.0,
         epi_derivative_abs=0.0,
+        brake_headroom=BrakeHeadroom(),
     )
 
 

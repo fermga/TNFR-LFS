@@ -22,7 +22,7 @@ from tnfr_lfs.core.epi import (
     resolve_nu_f_by_node,
 )
 from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias, phase_family
-from tnfr_lfs.core.metrics import AeroCoherence, WindowMetrics
+from tnfr_lfs.core.metrics import AeroCoherence, BrakeHeadroom, WindowMetrics
 from tnfr_lfs.core.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
@@ -376,6 +376,7 @@ def bottoming_segments(monkeypatch):
         aero_coherence=aero,
         aero_mechanical_coherence=0.5,
         epi_derivative_abs=0.05,
+        brake_headroom=BrakeHeadroom(),
     )
     rough_metrics = replace(
         smooth_metrics,

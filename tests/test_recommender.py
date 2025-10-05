@@ -23,6 +23,7 @@ from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.io.profiles import AeroProfile, ProfileManager
 from tnfr_lfs.recommender.rules import (
     AeroCoherenceRule,
+    BrakeHeadroomRule,
     BottomingPriorityRule,
     DetuneRatioRule,
     MANUAL_REFERENCES,
@@ -31,6 +32,7 @@ from tnfr_lfs.recommender.rules import (
     ParallelSteerRule,
     Recommendation,
     RecommendationEngine,
+    RuleProfileObjectives,
     RuleContext,
     FootprintEfficiencyRule,
     TyreBalanceRule,
@@ -49,6 +51,48 @@ BASE_NU_F = {
     "track": 0.08,
     "driver": 0.05,
 }
+
+
+def _brake_headroom_microsector(
+    index: int,
+    headroom: float,
+    *,
+    abs_activation: float,
+    partial: float,
+    sustained: float,
+    peak: float,
+    brake_event: bool = True,
+) -> Microsector:
+    return Microsector(
+        index=index,
+        start_time=0.0,
+        end_time=0.4,
+        curvature=1.0,
+        brake_event=brake_event,
+        support_event=False,
+        delta_nfr_signature=0.0,
+        goals=(),
+        phase_boundaries={},
+        phase_samples={},
+        active_phase="entry",
+        dominant_nodes={},
+        phase_weights={},
+        grip_rel=1.0,
+        phase_lag={},
+        phase_alignment={},
+        filtered_measures={
+            "brake_headroom": headroom,
+            "brake_headroom_peak_decel": peak,
+            "brake_headroom_abs_activation": abs_activation,
+            "brake_headroom_partial_locking": partial,
+            "brake_headroom_sustained_locking": sustained,
+        },
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={},
+        context_factors={},
+        sample_context_factors={},
+    )
 
 
 def _udr_bundle_series(values: Sequence[float], *, si: float = 0.8) -> Sequence[EPIBundle]:
@@ -1643,6 +1687,63 @@ def test_bottoming_priority_rule_switches_focus(bottoming_microsectors) -> None:
     assert bump_targets
     assert "altura" in height_targets[0].message.lower()
     assert "compresión" in bump_targets[0].message.lower()
+
+
+def test_brake_headroom_rule_increases_force_when_surplus() -> None:
+    rule = BrakeHeadroomRule(priority=14, margin=0.05, increase_step=0.03, decrease_step=0.02)
+    thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
+    objectives = RuleProfileObjectives(target_brake_headroom=0.3)
+    context = RuleContext(
+        car_model="XFG",
+        track_name="BL1",
+        thresholds=thresholds,
+        objectives=objectives,
+    )
+    microsector = _brake_headroom_microsector(
+        5,
+        0.45,
+        abs_activation=0.2,
+        partial=0.1,
+        sustained=0.1,
+        peak=6.5,
+    )
+
+    recommendations = list(rule.evaluate([], [microsector], context))
+
+    assert recommendations
+    recommendation = recommendations[0]
+    assert recommendation.parameter == "brake_max_per_wheel"
+    assert recommendation.delta == pytest.approx(0.03)
+    assert "incrementar fuerza" in recommendation.message.lower()
+    assert "margen de frenada" in recommendation.rationale.lower()
+
+
+def test_brake_headroom_rule_reduces_force_on_sustained_locking() -> None:
+    rule = BrakeHeadroomRule(priority=16, decrease_step=0.04, sustained_lock_threshold=0.4)
+    thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
+    objectives = RuleProfileObjectives(target_brake_headroom=0.35)
+    context = RuleContext(
+        car_model="XFG",
+        track_name="BL1",
+        thresholds=thresholds,
+        objectives=objectives,
+    )
+    microsector = _brake_headroom_microsector(
+        7,
+        0.12,
+        abs_activation=0.85,
+        partial=0.7,
+        sustained=0.65,
+        peak=9.2,
+    )
+
+    recommendations = list(rule.evaluate([], [microsector], context))
+
+    assert recommendations
+    recommendation = recommendations[0]
+    assert recommendation.delta == pytest.approx(-0.04)
+    assert "bloqueo sostenido" in recommendation.message.lower()
+    assert "bloqueo sostenido" in recommendation.rationale.lower()
 
 
 def test_footprint_efficiency_rule_relaxes_delta_when_usage_high() -> None:

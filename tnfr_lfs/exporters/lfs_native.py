@@ -91,6 +91,7 @@ def encode_native_setup(plan: SetupPlan) -> bytes:
         "rear_arb_steps": lambda buf, val: _write_float(buf, 68, val),
         "front_tyre_pressure": lambda buf, val: _encode_pressure(buf, 128, val),
         "rear_tyre_pressure": lambda buf, val: _encode_pressure(buf, 88, val),
+        "brake_max_per_wheel": lambda buf, val: _encode_brake_force(buf, 16, val),
         "brake_bias_pct": lambda buf, val: _encode_brake_bias(buf, 26, val),
         "diff_power_lock": lambda buf, val: _encode_percentage(buf, 86, val),
         "diff_coast_lock": lambda buf, val: _encode_percentage(buf, 87, val),
@@ -106,11 +107,10 @@ def encode_native_setup(plan: SetupPlan) -> bytes:
         "gear_7_ratio": lambda buf, val: _write_float(buf, 112, val),
     }
 
-    for parameter, raw_value in vector.decision_vector.items():
-        encoder = encoders.get(parameter)
-        if not encoder:
+    for parameter, encoder in encoders.items():
+        if parameter not in vector.decision_vector:
             continue
-        encoder(buffer, float(raw_value))
+        encoder(buffer, float(vector.decision_vector[parameter]))
 
     return bytes(buffer)
 
@@ -160,6 +160,11 @@ def _encode_pressure(buffer: bytearray, offset: int, value: float) -> None:
 def _encode_brake_bias(buffer: bytearray, offset: int, value: float) -> None:
     encoded = int(round(max(0.0, min(100.0, value)) * 2.0))
     _write_byte(buffer, offset, encoded)
+
+
+def _encode_brake_force(buffer: bytearray, offset: int, value: float) -> None:
+    clamped = max(-1.0, min(1.0, float(value)))
+    _write_float(buffer, offset, clamped)
 
 
 def _encode_percentage(buffer: bytearray, offset: int, value: float) -> None:
