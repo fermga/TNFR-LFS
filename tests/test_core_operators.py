@@ -9,7 +9,7 @@ from typing import List
 
 import pytest
 
-from tnfr_lfs.core import Goal, Microsector, TelemetryRecord
+from tnfr_lfs.core import Goal, Microsector, TelemetryRecord, phase_synchrony_index
 from tnfr_lfs.core.coherence import sense_index
 from tnfr_lfs.core.contextual_delta import (
     apply_contextual_delta,
@@ -251,6 +251,7 @@ def _build_microsector(
     phase_weights = {phase: {} for phase in PHASE_SEQUENCE}
     phase_lag = {phase: 0.0 for phase in PHASE_SEQUENCE}
     phase_alignment = {phase: 1.0 for phase in PHASE_SEQUENCE}
+    phase_synchrony = {phase: 1.0 for phase in PHASE_SEQUENCE}
     filtered_measures = {
         "thermal_load": 5000.0,
         "style_index": 0.9,
@@ -277,6 +278,7 @@ def _build_microsector(
         grip_rel=1.0,
         phase_lag=phase_lag,
         phase_alignment=phase_alignment,
+        phase_synchrony=phase_synchrony,
         filtered_measures=filtered_measures,
         recursivity_trace=(),
         last_mutation=None,
@@ -458,6 +460,8 @@ def test_window_metrics_phase_alignment_tracks_cross_spectrum():
     assert metrics.nu_f == pytest.approx(frequency, abs=0.1)
     assert abs(metrics.phase_alignment - cos(phase_offset)) < 0.15
     assert abs(abs(metrics.phase_lag) - phase_offset) < 0.25
+    expected_sync = phase_synchrony_index(phase_offset, cos(phase_offset))
+    assert metrics.phase_synchrony_index == pytest.approx(expected_sync, abs=0.05)
 
 
 def test_orchestrator_respects_phase_weight_overrides():
@@ -498,6 +502,7 @@ def test_orchestrator_respects_phase_weight_overrides():
         grip_rel=1.0,
         phase_lag={"entry": 0.0, "apex": 0.0, "exit": 0.0},
         phase_alignment={"entry": 1.0, "apex": 1.0, "exit": 1.0},
+        phase_synchrony={"entry": 1.0, "apex": 1.0, "exit": 1.0},
         filtered_measures={"thermal_load": 5200.0, "style_index": 0.9, "grip_rel": 1.0},
         recursivity_trace=(),
         last_mutation=None,

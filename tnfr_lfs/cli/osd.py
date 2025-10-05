@@ -350,16 +350,25 @@ class TelemetryHUD:
         if active and active.goal:
             target_alignment = float(active.goal.target_phase_alignment)
             target_lag = float(active.goal.target_phase_lag)
+            target_synchrony = float(
+                getattr(active.goal, "target_phase_synchrony", target_alignment)
+            )
             measured_alignment = float(window_metrics.phase_alignment)
             measured_lag = float(window_metrics.phase_lag)
+            measured_synchrony = float(window_metrics.phase_synchrony_index)
+            synchrony_gap = target_synchrony - measured_synchrony
             if (
                 measured_alignment < target_alignment - 0.1
                 or measured_alignment < 0.0
                 or abs(measured_lag - target_lag) > 0.2
+                or synchrony_gap > 0.08
+                or measured_synchrony < 0.72
             ):
                 alignment_hint = (
                     f"θ {measured_lag:+.2f}rad · Siφ {measured_alignment:+.2f}"
-                    f" (obj θ {target_lag:+.2f} · Siφ {target_alignment:+.2f})"
+                    f" · Φsync {measured_synchrony:.2f}"
+                    f" (obj θ {target_lag:+.2f} · Siφ {target_alignment:+.2f}"
+                    f" · Φsync {target_synchrony:.2f})"
                 )
         phase_hint = None
         if active:
@@ -676,6 +685,7 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · C(t) {window_metrics.coherence_index:.2f} · {frequency_segment}"
         f" · ρ {window_metrics.rho:.2f} · θ {window_metrics.phase_lag:+.2f}rad"
         f" · Siφ {window_metrics.phase_alignment:+.2f}"
+        f" · Φsync {window_metrics.phase_synchrony_index:.2f}"
         f" · UDR {window_metrics.useful_dissonance_ratio:.2f}"
         f" · Soporte {window_metrics.support_effective:+.2f}"
         f" · Carga {window_metrics.load_support_ratio:.4f}"

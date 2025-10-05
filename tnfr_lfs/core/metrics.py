@@ -36,6 +36,7 @@ __all__ = [
     "compute_window_metrics",
     "compute_aero_coherence",
     "resolve_aero_mechanical_coherence",
+    "phase_synchrony_index",
 ]
 
 
@@ -91,6 +92,29 @@ _LOCKING_TRANSITION_HIGH = 0.55
 _LOCKING_YAW_REFERENCE = 1.0
 _LOCKING_LONGITUDINAL_REFERENCE = 260.0
 _LOCKING_THROTTLE_REFERENCE = 0.5
+
+
+def phase_synchrony_index(lag: float, alignment: float) -> float:
+    """Return a composite synchrony index combining phase lag and alignment.
+
+    The index normalises the absolute phase lag to a [0, 1] range where ``1``
+    represents perfect synchronisation (zero lag) and ``0`` corresponds to a
+    π radian mismatch.  The alignment cosine, naturally bounded in [-1, 1], is
+    translated to the same [0, 1] interval.  The final score favours alignment
+    while preserving the sensitivity to lag, providing a stable indicator for
+    desynchronisation alerts.
+    """
+
+    if not math.isfinite(lag):
+        lag = 0.0
+    if not math.isfinite(alignment):
+        alignment = 1.0
+    lag_score = 1.0 - min(abs(lag) / math.pi, 1.0)
+    lag_score = max(0.0, min(1.0, lag_score))
+    alignment_score = (alignment + 1.0) * 0.5
+    alignment_score = max(0.0, min(1.0, alignment_score))
+    composite = 0.6 * alignment_score + 0.4 * lag_score
+    return max(0.0, min(1.0, composite))
 
 
 @dataclass(frozen=True)
@@ -402,7 +426,9 @@ class WindowMetrics:
     (negative) the structural timeline when weighted by structural occupancy
     windows. The ``bumpstop_histogram`` field captures the occupancy density and
     ΔNFR energy accumulated when the suspension operates within the bump stop
-    envelope for each axle.
+    envelope for each axle.  ``phase_synchrony_index`` blends the normalised
+    phase lag with the phase alignment cosine to produce a stable, unitless
+    indicator for desynchronisation events.
     """
 
     si: float
@@ -415,6 +441,7 @@ class WindowMetrics:
     rho: float
     phase_lag: float
     phase_alignment: float
+    phase_synchrony_index: float
     useful_dissonance_ratio: float
     useful_dissonance_percentage: float
     coherence_index: float
@@ -592,6 +619,7 @@ def compute_window_metrics(
             rho=0.0,
             phase_lag=0.0,
             phase_alignment=1.0,
+            phase_synchrony_index=1.0,
             useful_dissonance_ratio=0.0,
             useful_dissonance_percentage=0.0,
             coherence_index=0.0,
@@ -921,6 +949,7 @@ def compute_window_metrics(
     freq, lag, alignment = phase_alignment(selected)
     nu_exc = estimate_excitation_frequency(records)
     rho = nu_exc / freq if freq > 1e-9 else 0.0
+    synchrony = phase_synchrony_index(lag, alignment)
 
     couple, resonance, flatten = _segment_gradients(
         records, segments=3, fallback_to_chronological=fallback_to_chronological
@@ -1937,6 +1966,7 @@ def compute_window_metrics(
         rho=rho,
         phase_lag=lag,
         phase_alignment=alignment,
+        phase_synchrony_index=synchrony,
         useful_dissonance_ratio=udr,
         useful_dissonance_percentage=udr * 100.0,
         coherence_index=normalised_coherence,

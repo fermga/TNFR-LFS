@@ -412,6 +412,7 @@ def test_render_page_a_includes_wave_when_active_phase():
         rho=0.75,
         phase_lag=0.0,
         phase_alignment=1.0,
+        phase_synchrony_index=1.0,
         useful_dissonance_ratio=0.6,
         useful_dissonance_percentage=60.0,
         coherence_index=0.4,
@@ -440,6 +441,8 @@ def test_render_page_a_includes_wave_when_active_phase():
         camber={},
         phase_camber={},
     )
+    gradient_line = osd_module._gradient_line(window_metrics)
+    assert "Φsync" in gradient_line
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
     curve_label = f"Curva {microsector.index + 1}"
     assert curve_label in output
@@ -520,6 +523,7 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
         rho=0.78,
         phase_lag=0.05,
         phase_alignment=0.9,
+        phase_synchrony_index=0.92,
         useful_dissonance_ratio=0.64,
         useful_dissonance_percentage=58.0,
         coherence_index=0.45,
@@ -615,6 +619,7 @@ def test_render_page_a_includes_no_tocar_notice():
         rho=0.9,
         phase_lag=0.0,
         phase_alignment=0.95,
+        phase_synchrony_index=0.97,
         useful_dissonance_ratio=0.2,
         useful_dissonance_percentage=20.0,
         coherence_index=0.5,
