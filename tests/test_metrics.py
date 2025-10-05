@@ -330,6 +330,49 @@ def test_compute_window_metrics_bottoming_ratio_tracks_overlap() -> None:
     assert metrics.bottoming_ratio_rear == pytest.approx(0.0)
 
 
+def test_compute_window_metrics_bumpstop_histogram_energy() -> None:
+    records: list[TelemetryRecord] = []
+    bundles: list[EPIBundle] = []
+    travels_front = [0.02, 0.012, 0.009, 0.006, 0.003]
+    travels_rear = [0.025, 0.024, 0.026, 0.014, 0.004]
+    delta_long = [0.05, 0.35, 0.48, 0.5, 0.6]
+    for index, (front, rear, delta_value) in enumerate(
+        zip(travels_front, travels_rear, delta_long)
+    ):
+        timestamp = index * 0.1
+        record = _record(timestamp, 120.0 + index, si=0.83)
+        records.append(
+            replace(
+                record,
+                suspension_travel_front=front,
+                suspension_travel_rear=rear,
+            )
+        )
+        bundles.append(
+            _longitudinal_bundle(
+                timestamp,
+                delta_value,
+                travel_front=front,
+                travel_rear=rear,
+                si=record.si,
+            )
+        )
+
+    metrics = compute_window_metrics(records, bundles=bundles)
+
+    histogram = metrics.bumpstop_histogram
+    assert histogram.front_total_density == pytest.approx(0.8, rel=1e-6)
+    assert histogram.rear_total_density == pytest.approx(0.4, rel=1e-6)
+    assert histogram.front_energy[0] == pytest.approx(0.05, rel=1e-6)
+    assert histogram.front_energy[1] == pytest.approx(0.0685714286, rel=1e-6)
+    assert histogram.front_energy[2] == pytest.approx(0.0642857143, rel=1e-6)
+    assert histogram.front_energy[3] == pytest.approx(0.0447204969, rel=1e-6)
+    assert histogram.rear_energy[0] == pytest.approx(0.0071428571, rel=1e-6)
+    assert histogram.rear_energy[2] == pytest.approx(0.0409937888, rel=1e-6)
+    assert histogram.front_total_energy == pytest.approx(0.2275776398, rel=1e-6)
+    assert histogram.rear_total_energy == pytest.approx(0.0481366460, rel=1e-6)
+
+
 def test_compute_window_metrics_mu_usage_ratios() -> None:
     records = [
         replace(

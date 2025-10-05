@@ -252,6 +252,12 @@ def bottoming_microsectors() -> Tuple[Microsector, Microsector]:
         filtered_measures={
             "bottoming_ratio_front": 0.62,
             "bottoming_ratio_rear": 0.14,
+            "bumpstop_front_density": 0.12,
+            "bumpstop_front_energy": 0.18,
+            "bumpstop_front_density_bin_0": 0.12,
+            "bumpstop_front_energy_bin_0": 0.09,
+            "bumpstop_rear_density": 0.05,
+            "bumpstop_rear_energy": 0.04,
         },
         index=2,
     )
@@ -262,6 +268,12 @@ def bottoming_microsectors() -> Tuple[Microsector, Microsector]:
         filtered_measures={
             "bottoming_ratio_front": 0.18,
             "bottoming_ratio_rear": 0.71,
+            "bumpstop_front_density": 0.08,
+            "bumpstop_front_energy": 0.12,
+            "bumpstop_rear_density": 0.32,
+            "bumpstop_rear_energy": 1.2,
+            "bumpstop_rear_density_bin_2": 0.21,
+            "bumpstop_rear_energy_bin_2": 0.8,
         },
         index=3,
     )
@@ -1765,6 +1777,25 @@ def test_bottoming_priority_rule_switches_focus(bottoming_microsectors) -> None:
     assert bump_targets
     assert "altura" in height_targets[0].message.lower()
     assert "compresión" in bump_targets[0].message.lower()
+
+
+def test_bottoming_priority_rule_prefers_springs_on_apex_energy() -> None:
+    goal = _udr_goal("apex", 0.3)
+    apex_sector = _udr_microsector(
+        goal,
+        udr=0.28,
+        sample_count=6,
+        filtered_measures={
+            "bottoming_ratio_front": 0.64,
+            "bumpstop_front_density": 0.34,
+            "bumpstop_front_energy": 1.05,
+        },
+        index=4,
+    )
+    apex_sector = replace(apex_sector, context_factors={"surface": 0.98})
+    rule = BottomingPriorityRule(ratio_threshold=0.5)
+    recommendations = list(rule.evaluate([], [apex_sector]))
+    assert any(rec.parameter == "front_spring_stiffness" for rec in recommendations)
 
 
 def test_brake_headroom_rule_increases_force_when_surplus() -> None:

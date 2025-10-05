@@ -25,11 +25,19 @@ __all__ = [
     "AeroCoherence",
     "BrakeHeadroom",
     "SlideCatchBudget",
+    "BumpstopHistogram",
     "WindowMetrics",
     "compute_window_metrics",
     "compute_aero_coherence",
     "resolve_aero_mechanical_coherence",
 ]
+
+
+_BUMPSTOP_DEPTH_BINS: tuple[float, ...] = (0.25, 0.5, 0.75, 1.0)
+
+
+def _zero_bump_bins() -> tuple[float, ...]:
+    return tuple(0.0 for _ in _BUMPSTOP_DEPTH_BINS)
 
 
 _FRONT_FEATURE_KEYS = {
@@ -173,6 +181,21 @@ class BrakeHeadroom:
 
 
 @dataclass(frozen=True)
+class BumpstopHistogram:
+    """Density and energy accumulated in the bump stop zone by axle."""
+
+    depth_bins: tuple[float, ...] = _BUMPSTOP_DEPTH_BINS
+    front_density: tuple[float, ...] = field(default_factory=_zero_bump_bins)
+    rear_density: tuple[float, ...] = field(default_factory=_zero_bump_bins)
+    front_energy: tuple[float, ...] = field(default_factory=_zero_bump_bins)
+    rear_energy: tuple[float, ...] = field(default_factory=_zero_bump_bins)
+    front_total_density: float = 0.0
+    rear_total_density: float = 0.0
+    front_total_energy: float = 0.0
+    rear_total_energy: float = 0.0
+
+
+@dataclass(frozen=True)
 class WindowMetrics:
     """Aggregated metrics derived from a telemetry window.
 
@@ -184,7 +207,9 @@ class WindowMetrics:
     vertical load.  The structural expansion/contraction fields quantify how
     longitudinal and lateral ΔNFR components expand (positive) or contract
     (negative) the structural timeline when weighted by structural occupancy
-    windows.
+    windows. The ``bumpstop_histogram`` field captures the occupancy density and
+    ΔNFR energy accumulated when the suspension operates within the bump stop
+    envelope for each axle.
     """
 
     si: float
@@ -221,6 +246,101 @@ class WindowMetrics:
     aero_mechanical_coherence: float = 0.0
     epi_derivative_abs: float = 0.0
     brake_headroom: BrakeHeadroom = field(default_factory=BrakeHeadroom)
+    bumpstop_histogram: BumpstopHistogram = field(default_factory=BumpstopHistogram)
+
+
+def _compute_bumpstop_histogram(
+    front_series: Sequence[float],
+    rear_series: Sequence[float],
+    *,
+    front_threshold: float,
+    rear_threshold: float,
+    energy_series: Sequence[float],
+) -> BumpstopHistogram:
+    if not front_series and not rear_series:
+        return BumpstopHistogram()
+
+    front_values = list(front_series)
+    rear_values = list(rear_series)
+    energy_values = list(energy_series)
+    bin_count = len(_BUMPSTOP_DEPTH_BINS)
+    front_density_counts = [0.0] * bin_count
+    rear_density_counts = [0.0] * bin_count
+    front_energy_bins = [0.0] * bin_count
+    rear_energy_bins = [0.0] * bin_count
+    front_total_samples = float(len(front_values))
+    rear_total_samples = float(len(rear_values))
+    sample_count = max(len(front_values), len(rear_values), len(energy_values))
+    if sample_count <= 0:
+        return BumpstopHistogram()
+
+    def _depth(value: float, threshold: float) -> float:
+        if threshold <= 1e-12:
+            return 0.0
+        remaining = threshold - value
+        if remaining <= 0.0:
+            return 0.0
+        ratio = remaining / threshold
+        if ratio < 0.0:
+            return 0.0
+        if ratio > 1.0:
+            return 1.0
+        return ratio
+
+    def _bin_index(depth_ratio: float) -> int | None:
+        if depth_ratio <= 0.0:
+            return None
+        for index, boundary in enumerate(_BUMPSTOP_DEPTH_BINS):
+            if depth_ratio <= boundary:
+                return index
+        return bin_count - 1 if bin_count else None
+
+    for index in range(sample_count):
+        front_present = index < len(front_values)
+        rear_present = index < len(rear_values)
+        front_value = float(front_values[index]) if front_present else 0.0
+        rear_value = float(rear_values[index]) if rear_present else 0.0
+        energy_value = (
+            abs(float(energy_values[index])) if index < len(energy_values) else 0.0
+        )
+        front_depth = _depth(front_value, front_threshold) if front_present else 0.0
+        rear_depth = _depth(rear_value, rear_threshold) if rear_present else 0.0
+        total_depth = front_depth + rear_depth
+        energy_front = energy_value * (front_depth / total_depth) if total_depth > 0.0 else 0.0
+        energy_rear = energy_value * (rear_depth / total_depth) if total_depth > 0.0 else 0.0
+
+        front_bin = _bin_index(front_depth)
+        if front_bin is not None and front_present:
+            front_density_counts[front_bin] += 1.0
+            front_energy_bins[front_bin] += energy_front
+
+        rear_bin = _bin_index(rear_depth)
+        if rear_bin is not None and rear_present:
+            rear_density_counts[rear_bin] += 1.0
+            rear_energy_bins[rear_bin] += energy_rear
+
+    def _normalise_counts(counts: Sequence[float], total: float) -> tuple[float, ...]:
+        if total <= 0.0:
+            return _zero_bump_bins()
+        return tuple(count / total for count in counts)
+
+    front_density = _normalise_counts(front_density_counts, front_total_samples)
+    rear_density = _normalise_counts(rear_density_counts, rear_total_samples)
+    front_total_density = sum(front_density)
+    rear_total_density = sum(rear_density)
+    front_total_energy = sum(front_energy_bins)
+    rear_total_energy = sum(rear_energy_bins)
+
+    return BumpstopHistogram(
+        front_density=front_density,
+        rear_density=rear_density,
+        front_energy=tuple(front_energy_bins),
+        rear_energy=tuple(rear_energy_bins),
+        front_total_density=front_total_density,
+        rear_total_density=rear_total_density,
+        front_total_energy=front_total_energy,
+        rear_total_energy=rear_total_energy,
+    )
 
 
 def compute_window_metrics(
@@ -274,6 +394,7 @@ def compute_window_metrics(
             structural_contraction_lateral=0.0,
             bottoming_ratio_front=0.0,
             bottoming_ratio_rear=0.0,
+            bumpstop_histogram=BumpstopHistogram(),
             mu_usage_front_ratio=0.0,
             mu_usage_rear_ratio=0.0,
             phase_mu_usage_front_ratio=0.0,
@@ -769,6 +890,13 @@ def compute_window_metrics(
 
     bottoming_ratio_front = _bottoming_ratio(front_travel_series, bottoming_threshold_front)
     bottoming_ratio_rear = _bottoming_ratio(rear_travel_series, bottoming_threshold_rear)
+    bumpstop_histogram = _compute_bumpstop_histogram(
+        front_travel_series,
+        rear_travel_series,
+        front_threshold=bottoming_threshold_front,
+        rear_threshold=bottoming_threshold_rear,
+        energy_series=suspension_series,
+    )
 
     mu_max_front = max(1e-6, _objective("mu_max_front", 2.0))
     mu_max_rear = max(1e-6, _objective("mu_max_rear", 2.0))
@@ -876,6 +1004,7 @@ def compute_window_metrics(
         structural_contraction_lateral=lat_contraction,
         bottoming_ratio_front=bottoming_ratio_front,
         bottoming_ratio_rear=bottoming_ratio_rear,
+        bumpstop_histogram=bumpstop_histogram,
         mu_usage_front_ratio=mu_usage_front_ratio,
         mu_usage_rear_ratio=mu_usage_rear_ratio,
         phase_mu_usage_front_ratio=phase_mu_usage_front_ratio,

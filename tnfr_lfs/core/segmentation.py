@@ -546,6 +546,10 @@ def segment_microsectors(
                 "structural_contraction_lateral": window_metrics.structural_contraction_lateral,
                 "bottoming_ratio_front": window_metrics.bottoming_ratio_front,
                 "bottoming_ratio_rear": window_metrics.bottoming_ratio_rear,
+                "bumpstop_front_density": window_metrics.bumpstop_histogram.front_total_density,
+                "bumpstop_rear_density": window_metrics.bumpstop_histogram.rear_total_density,
+                "bumpstop_front_energy": window_metrics.bumpstop_histogram.front_total_energy,
+                "bumpstop_rear_energy": window_metrics.bumpstop_histogram.rear_total_energy,
                 "mu_usage_front_ratio": window_metrics.mu_usage_front_ratio,
                 "mu_usage_rear_ratio": window_metrics.mu_usage_rear_ratio,
                 "exit_gear_match": window_metrics.exit_gear_match,
@@ -578,6 +582,12 @@ def segment_microsectors(
                 "brake_headroom_sustained_locking": window_metrics.brake_headroom.sustained_locking_ratio,
             }
         )
+        histogram = window_metrics.bumpstop_histogram
+        for index, _ in enumerate(histogram.depth_bins):
+            filtered_measures[f"bumpstop_front_density_bin_{index}"] = histogram.front_density[index]
+            filtered_measures[f"bumpstop_rear_density_bin_{index}"] = histogram.rear_density[index]
+            filtered_measures[f"bumpstop_front_energy_bin_{index}"] = histogram.front_energy[index]
+            filtered_measures[f"bumpstop_rear_energy_bin_{index}"] = histogram.rear_energy[index]
         rec_trace: Tuple[Mapping[str, float | str | None], ...] = ()
         mutation_details: Mapping[str, object] | None = None
         if rec_state_root is not None:
