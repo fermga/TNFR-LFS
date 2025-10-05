@@ -311,7 +311,7 @@ def test_sci_breakdown_matches_score() -> None:
     ]
     breakdown: dict[str, float] = {}
     score = objective_score(results, breakdown=breakdown)
-    assert set(breakdown) == {"sense", "delta", "udr", "bottoming", "aero", "cphi"}
+    assert set(breakdown) == {"sense", "delta", "udr", "bottoming", "aero"}
     assert score == pytest.approx(sum(breakdown.values()), rel=1e-6)
     assert all(value >= 0.0 for value in breakdown.values())
 
@@ -359,7 +359,7 @@ def test_objective_responds_to_component_variations(monkeypatch: pytest.MonkeyPa
         _rich_bundle(index * 0.2, temps=(110.0, 109.5, 105.0, 104.5))
         for index in range(4)
     ]
-    assert objective_score(overheated_series) < score_base
+    assert objective_score(overheated_series) == score_base
 
 
 def test_objective_penalises_delta_nfr_integral():

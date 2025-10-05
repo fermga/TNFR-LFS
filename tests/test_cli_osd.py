@@ -283,7 +283,6 @@ def test_render_page_c_marks_riesgos(synthetic_records):
             "udr": 0.085,
             "bottoming": 0.025,
             "aero": 0.012,
-            "cphi": 0.010,
         },
     )
     output = osd_module._render_page_c(None, plan, thresholds, None)

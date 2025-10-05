@@ -42,8 +42,6 @@ from .contextual_delta import (
     resolve_series_context,
 )
 from .metrics import (
-    CamberEffectiveness,
-    CPHIWheel,
     compute_window_metrics,
     phase_synchrony_index,
 )
@@ -305,15 +303,6 @@ def segment_microsectors(
             spread = pstdev(values) if len(values) > 1 else 0.0
             return avg_value, spread
 
-        wheel_temperatures: Dict[str, float] = {}
-        wheel_temperature_dispersion: Dict[str, float] = {}
-        for suffix in ("fl", "fr", "rl", "rr"):
-            for layer in ("", "_inner", "_middle", "_outer"):
-                key = f"tyre_temp_{suffix}{layer}"
-                avg_value, spread = _mean_std(key)
-                wheel_temperatures[key] = avg_value
-                wheel_temperature_dispersion[f"{key}_std"] = spread
-
         brake_temperatures: Dict[str, float] = {}
         brake_temperature_dispersion: Dict[str, float] = {}
         for suffix in ("fl", "fr", "rl", "rr"):
@@ -321,14 +310,6 @@ def segment_microsectors(
             avg_value, spread = _mean_std(key)
             brake_temperatures[key] = avg_value
             brake_temperature_dispersion[f"{key}_std"] = spread
-
-        wheel_pressures: Dict[str, float] = {}
-        wheel_pressure_dispersion: Dict[str, float] = {}
-        for suffix in ("fl", "fr", "rl", "rr"):
-            key = f"tyre_pressure_{suffix}"
-            avg_value, spread = _mean_std(key)
-            wheel_pressures[key] = avg_value
-            wheel_pressure_dispersion[f"{key}_std"] = spread
         phase_weight_map = _initial_phase_weight_map(records, phase_samples)
         if phase_weight_overrides:
             phase_weight_map = _blend_phase_weight_map(
@@ -359,12 +340,8 @@ def segment_microsectors(
                 "phase_boundaries": phase_boundaries,
                 "phase_samples": phase_samples,
                 "phase_weights": phase_weight_map,
-                "wheel_temperatures": wheel_temperatures,
-                "wheel_temperature_std": wheel_temperature_dispersion,
                 "brake_temperatures": brake_temperatures,
                 "brake_temperature_std": brake_temperature_dispersion,
-                "wheel_pressures": wheel_pressures,
-                "wheel_pressure_std": wheel_pressure_dispersion,
                 "duration": duration,
                 "speed_drop": speed_drop,
                 "direction_changes": direction_changes,
@@ -536,14 +513,6 @@ def segment_microsectors(
             "grip_rel": grip_rel,
         }
         filtered_measures["gradient"] = microsector_gradient
-        wheel_temperatures = {
-            key: float(value)
-            for key, value in spec.get("wheel_temperatures", {}).items()
-        }
-        wheel_temperature_std = {
-            key: float(value)
-            for key, value in spec.get("wheel_temperature_std", {}).items()
-        }
         brake_temperatures = {
             key: float(value)
             for key, value in spec.get("brake_temperatures", {}).items()
@@ -552,20 +521,8 @@ def segment_microsectors(
             key: float(value)
             for key, value in spec.get("brake_temperature_std", {}).items()
         }
-        wheel_pressures = {
-            key: float(value)
-            for key, value in spec.get("wheel_pressures", {}).items()
-        }
-        wheel_pressure_std = {
-            key: float(value)
-            for key, value in spec.get("wheel_pressure_std", {}).items()
-        }
-        filtered_measures.update(wheel_temperatures)
-        filtered_measures.update(wheel_temperature_std)
         filtered_measures.update(brake_temperatures)
         filtered_measures.update(brake_temperature_std)
-        filtered_measures.update(wheel_pressures)
-        filtered_measures.update(wheel_pressure_std)
         local_phase_indices = {
             phase: tuple(
                 index - start
@@ -703,71 +660,6 @@ def segment_microsectors(
             window_metrics.phase_nodal_delta_nfr_std or {}
         ).items():
             filtered_measures[f"nodal_delta_nfr_std_{phase_label}"] = float(value)
-        if isinstance(window_metrics.camber, Mapping):
-            for suffix, payload in window_metrics.camber.items():
-                prefix = f"camber_{suffix}"
-                if isinstance(payload, CamberEffectiveness):
-                    filtered_measures[f"{prefix}_gradient_im"] = float(payload.gradient_im)
-                    filtered_measures[f"{prefix}_gradient_mo"] = float(payload.gradient_mo)
-                    filtered_measures[f"{prefix}_gradient_io"] = float(payload.gradient_io)
-                    filtered_measures[f"{prefix}_corr_delta_perp"] = float(
-                        payload.corr_delta_perp
-                    )
-                    filtered_measures[f"{prefix}_corr_slip"] = float(
-                        payload.corr_slip_angle
-                    )
-                    filtered_measures[f"{prefix}_index"] = float(payload.index)
-                else:
-                    filtered_measures.setdefault(f"{prefix}_index", 0.0)
-        if isinstance(window_metrics.phase_camber, Mapping):
-            for phase_label, wheels in window_metrics.phase_camber.items():
-                if not isinstance(wheels, Mapping):
-                    continue
-                label = str(phase_label)
-                for suffix in ("fl", "fr", "rl", "rr"):
-                    payload = wheels.get(suffix)
-                    key_prefix = f"camber_{label}_{suffix}"
-                    if isinstance(payload, CamberEffectiveness):
-                        filtered_measures[f"{key_prefix}_index"] = float(payload.index)
-                    else:
-                        filtered_measures.setdefault(f"{key_prefix}_index", 0.0)
-        cphi_data = window_metrics.cphi if isinstance(window_metrics.cphi, Mapping) else {}
-        for suffix in ("fl", "fr", "rl", "rr"):
-            wheel = cphi_data.get(suffix)
-            if isinstance(wheel, CPHIWheel):
-                filtered_measures[f"cphi_{suffix}"] = float(wheel.value)
-                filtered_measures[f"cphi_{suffix}_temperature"] = float(
-                    wheel.temperature_component
-                )
-                filtered_measures[f"cphi_{suffix}_gradient"] = float(
-                    wheel.gradient_component
-                )
-                filtered_measures[f"cphi_{suffix}_mu"] = float(wheel.mu_component)
-                filtered_measures[f"cphi_{suffix}_temp_delta"] = float(
-                    wheel.temperature_delta
-                )
-                filtered_measures[f"cphi_{suffix}_gradient_rate"] = float(
-                    wheel.gradient_rate
-                )
-            else:
-                filtered_measures.setdefault(f"cphi_{suffix}", 0.0)
-                filtered_measures.setdefault(f"cphi_{suffix}_temperature", 0.0)
-                filtered_measures.setdefault(f"cphi_{suffix}_gradient", 0.0)
-                filtered_measures.setdefault(f"cphi_{suffix}_mu", 0.0)
-                filtered_measures.setdefault(f"cphi_{suffix}_temp_delta", 0.0)
-                filtered_measures.setdefault(f"cphi_{suffix}_gradient_rate", 0.0)
-        if isinstance(window_metrics.phase_cphi, Mapping):
-            for phase_label, wheels in window_metrics.phase_cphi.items():
-                if not isinstance(wheels, Mapping):
-                    continue
-                label = str(phase_label)
-                for suffix in ("fl", "fr", "rl", "rr"):
-                    wheel = wheels.get(suffix)
-                    key = f"cphi_{label}_{suffix}"
-                    if isinstance(wheel, CPHIWheel):
-                        filtered_measures[key] = float(wheel.value)
-                    else:
-                        filtered_measures.setdefault(key, 0.0)
         histogram = window_metrics.bumpstop_histogram
         for index, _ in enumerate(histogram.depth_bins):
             filtered_measures[f"bumpstop_front_density_bin_{index}"] = histogram.front_density[index]
@@ -787,12 +679,8 @@ def segment_microsectors(
                 "epi_derivative_abs": window_metrics.epi_derivative_abs,
                 "timestamp": float(spec.get("end_timestamp", records[spec["end"]].timestamp)),
             }
-            measures.update(wheel_temperatures)
-            measures.update(wheel_temperature_std)
             measures.update(brake_temperatures)
             measures.update(brake_temperature_std)
-            measures.update(wheel_pressures)
-            measures.update(wheel_pressure_std)
             rec_info = recursivity_operator(
                 rec_state_root,
                 session_components,
@@ -885,12 +773,8 @@ def segment_microsectors(
                 "epi_derivative_abs": window_metrics.epi_derivative_abs,
                 "phase_synchrony_window": window_metrics.phase_synchrony_index,
             }
-            defaults.update(wheel_temperatures)
-            defaults.update(wheel_temperature_std)
             defaults.update(brake_temperatures)
             defaults.update(brake_temperature_std)
-            defaults.update(wheel_pressures)
-            defaults.update(wheel_pressure_std)
             for key, value in defaults.items():
                 filtered_measures.setdefault(key, value)
             rec_trace = tuple(

@@ -188,23 +188,25 @@ def test_segment_microsectors_computes_wheel_dispersion(
     updated = recomputed[0]
     measures = updated.filtered_measures
 
-    assert measures["tyre_temp_fl"] == pytest.approx(mean(fl_temps))
-    assert measures["tyre_temp_fr"] == pytest.approx(mean(fr_temps))
-    assert measures["tyre_temp_rl"] == pytest.approx(mean(rl_temps))
-    assert measures["tyre_temp_rr"] == pytest.approx(mean(rr_temps))
-    assert measures["tyre_pressure_fl"] == pytest.approx(mean(fl_pressures))
-    assert measures["tyre_pressure_fr"] == pytest.approx(mean(fr_pressures))
-    assert measures["tyre_pressure_rl"] == pytest.approx(mean(rl_pressures))
-    assert measures["tyre_pressure_rr"] == pytest.approx(mean(rr_pressures))
-
-    assert measures["tyre_temp_fl_std"] == pytest.approx(pstdev(fl_temps))
-    assert measures["tyre_temp_fr_std"] == pytest.approx(pstdev(fr_temps))
-    assert measures["tyre_temp_rl_std"] == pytest.approx(pstdev(rl_temps))
-    assert measures["tyre_temp_rr_std"] == pytest.approx(pstdev(rr_temps))
-    assert measures["tyre_pressure_fl_std"] == pytest.approx(pstdev(fl_pressures))
-    assert measures["tyre_pressure_fr_std"] == pytest.approx(pstdev(fr_pressures))
-    assert measures["tyre_pressure_rl_std"] == pytest.approx(pstdev(rl_pressures))
-    assert measures["tyre_pressure_rr_std"] == pytest.approx(pstdev(rr_pressures))
+    for key in (
+        "tyre_temp_fl",
+        "tyre_temp_fr",
+        "tyre_temp_rl",
+        "tyre_temp_rr",
+        "tyre_pressure_fl",
+        "tyre_pressure_fr",
+        "tyre_pressure_rl",
+        "tyre_pressure_rr",
+        "tyre_temp_fl_std",
+        "tyre_temp_fr_std",
+        "tyre_temp_rl_std",
+        "tyre_temp_rr_std",
+        "tyre_pressure_fl_std",
+        "tyre_pressure_fr_std",
+        "tyre_pressure_rl_std",
+        "tyre_pressure_rr_std",
+    ):
+        assert key not in measures
 
 def test_detect_quiet_microsector_streaks_flags_sequences() -> None:
     def _microsector(index: int, *, quiet: bool) -> Microsector:

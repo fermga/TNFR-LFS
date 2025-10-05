@@ -167,7 +167,6 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
             "udr": 0.12,
             "bottoming": 0.1,
             "aero": 0.09,
-            "cphi": 0.19,
         },
     )
 

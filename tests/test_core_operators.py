@@ -808,60 +808,6 @@ def test_recursivity_operator_tracks_state_and_phase_changes():
     )
     assert other["filtered"]["thermal_load"] == pytest.approx(300.0)
     assert len(active_state) == 2
-
-
-def test_recursivity_operator_filters_tyre_temperatures_and_derivatives():
-    state: dict[str, dict[str, object]] = {}
-    session = {"car_model": "gt3", "track_name": "kyoto", "tyre_compound": "soft"}
-
-    recursivity_operator(
-        state,
-        session,
-        "tyre-1",
-        {
-            "thermal_load": 400.0,
-            "style_index": 0.8,
-            "phase": "apex",
-            "tyre_temp_fl": 80.0,
-            "tyre_temp_fr": 81.0,
-            "tyre_temp_rl": 78.0,
-            "tyre_temp_rr": 77.5,
-            "tyre_pressure_fl": 24.0,
-            "tyre_pressure_fr": 24.1,
-            "tyre_pressure_rl": 23.8,
-            "tyre_pressure_rr": 23.7,
-            "timestamp": 10.0,
-        },
-        decay=0.3,
-    )
-
-    second = recursivity_operator(
-        state,
-        session,
-        "tyre-1",
-        {
-            "thermal_load": 405.0,
-            "style_index": 0.79,
-            "phase": "apex",
-            "tyre_temp_fl": 84.0,
-            "tyre_temp_fr": 85.0,
-            "tyre_temp_rl": 80.5,
-            "tyre_temp_rr": 79.0,
-            "tyre_pressure_fl": 24.2,
-            "tyre_pressure_fr": 24.3,
-            "tyre_pressure_rl": 24.0,
-            "tyre_pressure_rr": 23.9,
-            "timestamp": 10.5,
-        },
-        decay=0.3,
-    )
-
-    assert second["filtered"]["tyre_temp_fl"] == pytest.approx(82.8)
-    assert second["filtered"]["tyre_pressure_rr"] == pytest.approx(23.84)
-    assert "tyre_temp_fl_dt" in second["filtered"]
-    assert second["filtered"]["tyre_temp_fl_dt"] == pytest.approx((82.8 - 80.0) / 0.5)
-
-
 def test_recursivity_operator_separates_sessions_and_tracks_history():
     state: dict[str, dict[str, object]] = {}
     session_a = ("gt3", "aston", "soft")
@@ -983,6 +929,15 @@ def test_tyre_balance_controller_computes_clamped_deltas():
     )
     assert with_offsets.pressure_delta_front == pytest.approx(-0.16, abs=1e-6)
     assert with_offsets.camber_delta_rear == pytest.approx(-0.058, abs=1e-6)
+
+
+def test_tyre_balance_controller_returns_zero_without_temperatures():
+    control = tyre_balance_controller({})
+    assert control.pressure_delta_front == 0.0
+    assert control.pressure_delta_rear == 0.0
+    assert control.camber_delta_front == 0.0
+    assert control.camber_delta_rear == 0.0
+    assert control.per_wheel_pressure == {"fl": 0.0, "fr": 0.0, "rl": 0.0, "rr": 0.0}
 
 
 def test_mutation_operator_detects_style_and_entropy_mutations():
