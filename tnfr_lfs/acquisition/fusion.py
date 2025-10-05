@@ -13,7 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
 from ..core.epi import EPIExtractor, EPIBundle, TelemetryRecord
-from .outsim_udp import OutSimPacket
+from .outsim_udp import OutSimPacket, OutSimWheelState
 from .outgauge_udp import OutGaugePacket
 
 __all__ = ["TelemetryFusion"]
@@ -21,6 +21,16 @@ __all__ = ["TelemetryFusion"]
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(value, maximum))
+
+
+def _safe_float(value: float, default: float = 0.0) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(numeric):
+        return default
+    return numeric
 
 
 @dataclass(frozen=True)
@@ -80,6 +90,39 @@ class TelemetryFusion:
         calibration = self._select_calibration(outgauge)
         self._append_vertical_accel(outsim.accel_z, calibration)
 
+        wheels_raw = tuple(getattr(outsim, "wheels", ()))
+        if len(wheels_raw) < 4:
+            wheels_raw = wheels_raw + tuple(
+                OutSimWheelState() for _ in range(4 - len(wheels_raw))
+            )
+        wheels = wheels_raw[:4]
+
+        wheel_slip_ratios = tuple(
+            _clamp(_safe_float(wheel.slip_ratio), -1.0, 1.0) for wheel in wheels
+        )
+        wheel_slip_angles = tuple(_safe_float(wheel.slip_angle) for wheel in wheels)
+        wheel_lateral_forces = tuple(_safe_float(wheel.lateral_force) for wheel in wheels)
+        wheel_longitudinal_forces = tuple(
+            _safe_float(wheel.longitudinal_force) for wheel in wheels
+        )
+        wheel_loads = tuple(max(0.0, _safe_float(wheel.load)) for wheel in wheels)
+        wheel_deflections = tuple(
+            _safe_float(wheel.suspension_deflection) for wheel in wheels
+        )
+
+        inputs = getattr(outsim, "inputs", None)
+        throttle = _clamp(
+            _safe_float(getattr(inputs, "throttle", outgauge.throttle)), 0.0, 1.0
+        )
+        brake_input = _clamp(
+            _safe_float(getattr(inputs, "brake", outgauge.brake)), 0.0, 1.0
+        )
+        clutch_input = _clamp(
+            _safe_float(getattr(inputs, "clutch", outgauge.clutch)), 0.0, 1.0
+        )
+        handbrake_input = _clamp(_safe_float(getattr(inputs, "handbrake", 0.0)), 0.0, 1.0)
+        steer_input = _clamp(_safe_float(getattr(inputs, "steer", 0.0)), -1.0, 1.0)
+
         vertical_load = self._compute_vertical_load(outsim, calibration)
         speed = self._compute_speed(outsim, outgauge)
         yaw = self._normalise_heading(outsim.heading)
@@ -88,25 +131,52 @@ class TelemetryFusion:
         slip_angle = self._compute_slip_angle(
             yaw_rate, speed, slip_ratio, outsim, calibration, previous, dt
         )
-        throttle = _clamp(outgauge.throttle, 0.0, 1.0)
         steer = self._compute_steer(yaw_rate, speed, calibration)
-        front_share, rear_share = self._estimate_axle_distribution(outsim, speed, calibration)
+        front_share, rear_share = self._estimate_axle_distribution(
+            outsim, speed, calibration
+        )
         front_load = vertical_load * front_share
         rear_load = vertical_load * rear_share
-        travel_front, vel_front = self._compute_suspension_velocity(
-            "front",
-            front_share,
-            previous.suspension_travel_front if previous else None,
-            dt,
-            calibration,
-        )
-        travel_rear, vel_rear = self._compute_suspension_velocity(
-            "rear",
-            rear_share,
-            previous.suspension_travel_rear if previous else None,
-            dt,
-            calibration,
-        )
+
+        total_wheel_load = sum(wheel_loads)
+        if total_wheel_load > 1e-6:
+            front_load = wheel_loads[0] + wheel_loads[1]
+            rear_load = wheel_loads[2] + wheel_loads[3]
+            vertical_load = front_load + rear_load
+            if vertical_load > 1e-6:
+                front_share = _clamp(front_load / vertical_load, 0.0, 1.0)
+                rear_share = 1.0 - front_share
+            else:
+                front_share = rear_share = 0.5
+
+        if any(abs(value) > 1e-6 for value in wheel_deflections):
+            travel_front = (wheel_deflections[0] + wheel_deflections[1]) * 0.5
+            travel_rear = (wheel_deflections[2] + wheel_deflections[3]) * 0.5
+            if previous and dt > 1e-6:
+                vel_front = _clamp(
+                    (travel_front - previous.suspension_travel_front) / dt, -5.0, 5.0
+                )
+                vel_rear = _clamp(
+                    (travel_rear - previous.suspension_travel_rear) / dt, -5.0, 5.0
+                )
+            else:
+                vel_front = 0.0
+                vel_rear = 0.0
+        else:
+            travel_front, vel_front = self._compute_suspension_velocity(
+                "front",
+                front_share,
+                previous.suspension_travel_front if previous else None,
+                dt,
+                calibration,
+            )
+            travel_rear, vel_rear = self._compute_suspension_velocity(
+                "rear",
+                rear_share,
+                previous.suspension_travel_rear if previous else None,
+                dt,
+                calibration,
+            )
 
         mu_front, mu_front_lat, mu_front_long = self._compute_mu_eff(
             outsim.accel_y, outsim.accel_x, front_share, calibration
@@ -180,6 +250,34 @@ class TelemetryFusion:
             brake_temp_rr=brake_temps[3],
             rpm=float(outgauge.rpm),
             line_deviation=line_deviation,
+            slip_ratio_fl=wheel_slip_ratios[0],
+            slip_ratio_fr=wheel_slip_ratios[1],
+            slip_ratio_rl=wheel_slip_ratios[2],
+            slip_ratio_rr=wheel_slip_ratios[3],
+            slip_angle_fl=wheel_slip_angles[0],
+            slip_angle_fr=wheel_slip_angles[1],
+            slip_angle_rl=wheel_slip_angles[2],
+            slip_angle_rr=wheel_slip_angles[3],
+            brake_input=brake_input,
+            clutch_input=clutch_input,
+            handbrake_input=handbrake_input,
+            steer_input=steer_input,
+            wheel_load_fl=wheel_loads[0],
+            wheel_load_fr=wheel_loads[1],
+            wheel_load_rl=wheel_loads[2],
+            wheel_load_rr=wheel_loads[3],
+            wheel_lateral_force_fl=wheel_lateral_forces[0],
+            wheel_lateral_force_fr=wheel_lateral_forces[1],
+            wheel_lateral_force_rl=wheel_lateral_forces[2],
+            wheel_lateral_force_rr=wheel_lateral_forces[3],
+            wheel_longitudinal_force_fl=wheel_longitudinal_forces[0],
+            wheel_longitudinal_force_fr=wheel_longitudinal_forces[1],
+            wheel_longitudinal_force_rl=wheel_longitudinal_forces[2],
+            wheel_longitudinal_force_rr=wheel_longitudinal_forces[3],
+            suspension_deflection_fl=wheel_deflections[0],
+            suspension_deflection_fr=wheel_deflections[1],
+            suspension_deflection_rl=wheel_deflections[2],
+            suspension_deflection_rr=wheel_deflections[3],
         )
         self._records.append(record)
         return record

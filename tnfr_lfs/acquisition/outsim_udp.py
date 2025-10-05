@@ -16,11 +16,41 @@ import struct
 import time
 from typing import Optional, Tuple
 
-__all__ = ["OutSimPacket", "OutSimUDPClient"]
+__all__ = [
+    "OutSimDriverInputs",
+    "OutSimPacket",
+    "OutSimUDPClient",
+    "OutSimWheelState",
+]
 
 
 _BASE_STRUCT = struct.Struct("<I15f")
 _ID_STRUCT = struct.Struct("<I15fI")
+_INPUT_STRUCT = struct.Struct("<5f")
+_WHEEL_STRUCT = struct.Struct("<6f")
+
+
+@dataclass(frozen=True)
+class OutSimDriverInputs:
+    """Driver control inputs contained in extended OutSim packets."""
+
+    throttle: float = 0.0
+    brake: float = 0.0
+    clutch: float = 0.0
+    handbrake: float = 0.0
+    steer: float = 0.0
+
+
+@dataclass(frozen=True)
+class OutSimWheelState:
+    """Per-wheel telemetry sampled from the OutSim stream."""
+
+    slip_ratio: float = 0.0
+    slip_angle: float = 0.0
+    longitudinal_force: float = 0.0
+    lateral_force: float = 0.0
+    load: float = 0.0
+    suspension_deflection: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -44,6 +74,13 @@ class OutSimPacket:
     pos_y: float
     pos_z: float
     player_id: Optional[int] = None
+    inputs: Optional[OutSimDriverInputs] = None
+    wheels: Tuple[OutSimWheelState, OutSimWheelState, OutSimWheelState, OutSimWheelState] = (
+        OutSimWheelState(),
+        OutSimWheelState(),
+        OutSimWheelState(),
+        OutSimWheelState(),
+    )
 
     @classmethod
     def from_bytes(cls, payload: bytes) -> "OutSimPacket":
@@ -54,14 +91,58 @@ class OutSimPacket:
                 f"OutSim payload too small: {len(payload)} bytes (expected {_BASE_STRUCT.size})"
             )
 
-        if len(payload) >= _ID_STRUCT.size:
-            values = _ID_STRUCT.unpack_from(payload)
-            *base_values, player_id = values
-        else:
-            base_values = _BASE_STRUCT.unpack_from(payload)
-            player_id = None
+        base_values = _BASE_STRUCT.unpack_from(payload)
+        offset = _BASE_STRUCT.size
 
-        return cls(*base_values, player_id=player_id)
+        player_id: Optional[int] = None
+        if len(payload) >= offset + struct.calcsize("<I"):
+            candidate_id = struct.unpack_from("<I", payload, offset)[0]
+            if candidate_id <= 1_000_000:
+                player_id = candidate_id
+                offset += struct.calcsize("<I")
+
+        inputs: Optional[OutSimDriverInputs] = None
+        if len(payload) >= offset + _INPUT_STRUCT.size:
+            throttle, brake, clutch, handbrake, steer = _INPUT_STRUCT.unpack_from(
+                payload, offset
+            )
+            inputs = OutSimDriverInputs(
+                throttle=throttle,
+                brake=brake,
+                clutch=clutch,
+                handbrake=handbrake,
+                steer=steer,
+            )
+            offset += _INPUT_STRUCT.size
+
+        wheels = []
+        for _ in range(4):
+            if len(payload) < offset + _WHEEL_STRUCT.size:
+                break
+            slip_ratio, slip_angle, long_force, lat_force, load, deflection = (
+                _WHEEL_STRUCT.unpack_from(payload, offset)
+            )
+            wheels.append(
+                OutSimWheelState(
+                    slip_ratio=slip_ratio,
+                    slip_angle=slip_angle,
+                    longitudinal_force=long_force,
+                    lateral_force=lat_force,
+                    load=load,
+                    suspension_deflection=deflection,
+                )
+            )
+            offset += _WHEEL_STRUCT.size
+
+        if len(wheels) < 4:
+            wheels.extend([OutSimWheelState()] * (4 - len(wheels)))
+
+        return cls(
+            *base_values,
+            player_id=player_id,
+            inputs=inputs,
+            wheels=tuple(wheels),  # type: ignore[arg-type]
+        )
 
 
 class OutSimUDPClient:
