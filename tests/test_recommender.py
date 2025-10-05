@@ -2,11 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from typing import Sequence, Tuple
+from typing import Iterable, Sequence, Tuple
 from dataclasses import replace
 from types import SimpleNamespace
-
-import pytest
 
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
@@ -222,6 +220,44 @@ def bottoming_microsectors() -> Tuple[Microsector, Microsector]:
     smooth = replace(smooth, context_factors={"surface": 0.94})
     rough = replace(rough, context_factors={"surface": 1.28})
     return smooth, rough
+
+
+def test_recommendation_engine_uses_session_weights() -> None:
+    captured_contexts: list[RuleContext] = []
+
+    class CaptureRule:
+        def evaluate(
+            self,
+            results: Sequence[EPIBundle],
+            microsectors: Sequence[Microsector] | None = None,
+            context: RuleContext | None = None,
+        ) -> Iterable[Recommendation]:
+            if context is not None:
+                captured_contexts.append(context)
+            return []
+
+    engine = RecommendationEngine(
+        rules=[CaptureRule()],
+        car_model="generic",
+        track_name="generic",
+    )
+
+    engine.session = {
+        "weights": {
+            "entry": {"__default__": 1.0, "brakes": "1.25"},
+            "exit": {"__default__": 0.9},
+        },
+        "hints": {"slip_ratio_bias": "aggressive"},
+    }
+
+    result = engine.generate([])
+
+    assert result == []
+    assert captured_contexts
+    context = captured_contexts[0]
+    assert context.session_weights["entry"]["brakes"] == pytest.approx(1.25)
+    assert context.session_weights["exit"]["__default__"] == pytest.approx(0.9)
+    assert context.session_hints["slip_ratio_bias"] == "aggressive"
 
 
 def test_tyre_balance_rule_generates_guidance():
