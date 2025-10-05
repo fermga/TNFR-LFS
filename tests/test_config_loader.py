@@ -9,6 +9,7 @@ from tnfr_lfs.config_loader import (
     Car,
     example_pipeline,
     load_cars,
+    load_lfs_class_overrides,
     load_profiles,
     resolve_targets,
 )
@@ -91,6 +92,21 @@ def config_pack(tmp_path: Path) -> Path:
         )
     )
 
+    pack_root.joinpath("lfs_class_overrides.toml").write_text(
+        dedent(
+            """
+            ["STD".overrides.targets.balance]
+            delta_nfr = 0.3
+
+            ["STD".overrides.policy.steering]
+            aggressiveness = 0.75
+
+            ["STD".overrides.recommender.steering]
+            kp = 2.5
+            """
+        )
+    )
+
     return pack_root
 
 
@@ -128,7 +144,19 @@ def test_resolve_targets_returns_expected_sections(config_pack: Path) -> None:
     assert resolved["meta"]["category"] == "road"
 
 
+def test_resolve_targets_applies_class_overrides(config_pack: Path) -> None:
+    cars = load_cars(config_pack / "cars")
+    profiles = load_profiles(config_pack / "profiles")
+    overrides = load_lfs_class_overrides(config_pack / "lfs_class_overrides.toml")
+
+    resolved = resolve_targets("ABC", cars, profiles, overrides=overrides)
+
+    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
+    assert resolved["policy"]["steering"]["aggressiveness"] == pytest.approx(0.75)
+    assert resolved["recommender"]["steering"]["kp"] == pytest.approx(2.5)
+
+
 def test_example_pipeline_accepts_custom_data_root(config_pack: Path) -> None:
     resolved = example_pipeline("ABC", data_root=config_pack)
 
-    assert resolved["targets"]["balance"]["delta_nfr"] == 0.1
+    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
