@@ -520,31 +520,66 @@ def test_tyre_balance_rule_suppresses_actions_when_dispersion_low(
         for rec in recommendations
     ), "expected no tyre adjustments when dispersion is below cutoff"
 
-def test_parallel_steer_rule_recommends_open_toe_on_negative_delta() -> None:
+def test_parallel_steer_rule_recommends_parallel_adjustment_on_negative_delta() -> None:
     rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.2)
     microsector = SimpleNamespace(
         index=7,
-        filtered_measures={"ackermann_parallel_index": -0.12},
+        filtered_measures={
+            "ackermann_parallel_index": -0.12,
+            "slide_catch_budget": 0.82,
+            "slide_catch_budget_yaw": 0.24,
+            "slide_catch_budget_steer": 0.31,
+            "slide_catch_budget_overshoot": 0.18,
+        },
     )
     recommendations = list(rule.evaluate([], [microsector], None))
     assert recommendations
-    recommendation = recommendations[0]
-    assert "parallel steer" in recommendation.message.lower()
-    assert recommendation.parameter == "front_toe_deg"
-    assert recommendation.delta == pytest.approx(0.2)
+    parallel_rec = recommendations[0]
+    assert "parallel steer" in parallel_rec.message.lower()
+    assert parallel_rec.parameter == "parallel_steer"
+    assert parallel_rec.delta == pytest.approx(0.2)
+    assert not any(rec.parameter == "steering_lock_deg" for rec in recommendations)
 
 
-def test_parallel_steer_rule_recommends_closing_toe_on_positive_delta() -> None:
+def test_parallel_steer_rule_recommends_reducing_parallel_on_positive_delta() -> None:
     rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.15)
     microsector = SimpleNamespace(
         index=5,
-        filtered_measures={"ackermann_parallel_index": 0.11},
+        filtered_measures={
+            "ackermann_parallel_index": 0.11,
+            "slide_catch_budget": 0.7,
+            "slide_catch_budget_yaw": 0.4,
+            "slide_catch_budget_steer": 0.35,
+            "slide_catch_budget_overshoot": 0.25,
+        },
     )
     recommendations = list(rule.evaluate([], [microsector], None))
     assert recommendations
-    recommendation = recommendations[0]
-    assert recommendation.delta == pytest.approx(-0.15)
-    assert "parallel steer" in recommendation.message.lower()
+    parallel_rec = recommendations[0]
+    assert parallel_rec.parameter == "parallel_steer"
+    assert parallel_rec.delta == pytest.approx(-0.15)
+    assert "parallel steer" in parallel_rec.message.lower()
+
+
+def test_parallel_steer_rule_recommends_lock_when_budget_limited() -> None:
+    rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.1, lock_step=0.75)
+    microsector = SimpleNamespace(
+        index=3,
+        filtered_measures={
+            "ackermann_parallel_index": -0.16,
+            "slide_catch_budget": 0.2,
+            "slide_catch_budget_yaw": 0.8,
+            "slide_catch_budget_steer": 0.7,
+            "slide_catch_budget_overshoot": 0.6,
+        },
+    )
+    recommendations = list(rule.evaluate([], [microsector], None))
+    assert len(recommendations) == 2
+    parallel_rec = next(rec for rec in recommendations if rec.parameter == "parallel_steer")
+    lock_rec = next(rec for rec in recommendations if rec.parameter == "steering_lock_deg")
+    assert parallel_rec.delta == pytest.approx(0.1)
+    assert lock_rec.delta == pytest.approx(0.75)
+    assert "steering lock" in lock_rec.message.lower()
 
 
 def test_recommendation_engine_suppresses_when_quiet_sequence():

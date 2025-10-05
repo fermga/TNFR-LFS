@@ -14,7 +14,7 @@ from .contextual_delta import (
     resolve_context_from_bundle,
     resolve_context_from_record,
 )
-from .dissonance import compute_useful_dissonance_stats
+from .dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
 from .epi import TelemetryRecord
 from .epi_models import EPIBundle
 from .spectrum import phase_alignment
@@ -24,6 +24,7 @@ from .structural_time import resolve_time_axis
 __all__ = [
     "AeroCoherence",
     "BrakeHeadroom",
+    "SlideCatchBudget",
     "WindowMetrics",
     "compute_window_metrics",
     "compute_aero_coherence",
@@ -49,6 +50,20 @@ _PARTIAL_LOCK_UPPER = -0.06
 _SEVERE_LOCK_THRESHOLD = -0.45
 _SUSTAINED_LOCK_ACTIVATION = 0.75
 _WHEEL_SUFFIXES = ("fl", "fr", "rl", "rr")
+
+
+_STEER_VELOCITY_THRESHOLD = 3.5
+_ACKERMANN_OVERSHOOT_REFERENCE = 0.18
+
+
+@dataclass(frozen=True)
+class SlideCatchBudget:
+    """Composite steering margin metric derived from yaw and steer activity."""
+
+    value: float = 0.0
+    yaw_acceleration_ratio: float = 0.0
+    steer_velocity_ratio: float = 0.0
+    overshoot_ratio: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -113,6 +128,7 @@ class WindowMetrics:
     useful_dissonance_percentage: float
     coherence_index: float
     ackermann_parallel_index: float
+    slide_catch_budget: SlideCatchBudget
     support_effective: float
     load_support_ratio: float
     structural_expansion_longitudinal: float
@@ -176,6 +192,7 @@ def compute_window_metrics(
             useful_dissonance_percentage=0.0,
             coherence_index=0.0,
             ackermann_parallel_index=0.0,
+            slide_catch_budget=SlideCatchBudget(),
             support_effective=0.0,
             load_support_ratio=0.0,
             structural_expansion_longitudinal=0.0,
@@ -322,6 +339,7 @@ def compute_window_metrics(
 
     epi_abs_derivative = 0.0
     ackermann_samples: list[float] = []
+    steer_series: list[float] = []
 
     if bundles:
         timestamps = resolve_time_axis(
@@ -343,6 +361,7 @@ def compute_window_metrics(
             for bundle, factors in zip(bundles, bundle_context)
         ]
         yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
+        steer_series = [float(getattr(bundle.driver, "steer", 0.0)) for bundle in bundles]
         epi_values = [abs(float(getattr(bundle, "dEPI_dt", 0.0))) for bundle in bundles]
         if epi_values:
             epi_abs_derivative = mean(epi_values)
@@ -411,6 +430,7 @@ def compute_window_metrics(
             for record, factors in zip(records, record_context)
         ]
         yaw_rates = [record.yaw_rate for record in records]
+        steer_series = [float(getattr(record, "steer", 0.0)) for record in records]
         longitudinal_series = [
             float(getattr(record, "delta_nfr_longitudinal", 0.0)) for record in records
         ]
@@ -692,6 +712,48 @@ def compute_window_metrics(
         rear_mu_lat_series, rear_mu_long_series, mu_max_rear
     )
 
+    def _rate_series(series: Sequence[float], stamps: Sequence[float]) -> list[float]:
+        rates: list[float] = []
+        length = min(len(series), len(stamps))
+        for index in range(1, length):
+            dt = float(stamps[index] - stamps[index - 1])
+            if dt <= 0.0 or not math.isfinite(dt):
+                continue
+            delta = float(series[index] - series[index - 1])
+            rate = delta / dt
+            if math.isfinite(rate):
+                rates.append(rate)
+        return rates
+
+    def _normalised_ratio(value: float, reference: float) -> float:
+        if reference <= 1e-9:
+            return 0.0
+        ratio = value / reference
+        if ratio < 0.0:
+            return 0.0
+        if ratio > 1.0:
+            return 1.0
+        return ratio
+
+    yaw_acceleration_series = _rate_series(yaw_rates, timestamps)
+    steer_velocity_series = _rate_series(steer_series, timestamps)
+    yaw_accel_average = mean(abs(sample) for sample in yaw_acceleration_series) if yaw_acceleration_series else 0.0
+    steer_velocity_average = mean(abs(sample) for sample in steer_velocity_series) if steer_velocity_series else 0.0
+    overshoot_average = mean(abs(sample) for sample in ackermann_samples) if ackermann_samples else 0.0
+
+    yaw_ratio = _normalised_ratio(yaw_accel_average, YAW_ACCELERATION_THRESHOLD)
+    steer_ratio = _normalised_ratio(steer_velocity_average, _STEER_VELOCITY_THRESHOLD)
+    overshoot_ratio = _normalised_ratio(overshoot_average, _ACKERMANN_OVERSHOOT_REFERENCE)
+    combined_load = 0.5 * yaw_ratio + 0.3 * steer_ratio + 0.2 * overshoot_ratio
+    if combined_load > 1.0:
+        combined_load = 1.0
+    slide_catch_budget = SlideCatchBudget(
+        value=max(0.0, 1.0 - combined_load),
+        yaw_acceleration_ratio=yaw_ratio,
+        steer_velocity_ratio=steer_ratio,
+        overshoot_ratio=overshoot_ratio,
+    )
+
     aero = compute_aero_coherence(records, bundles)
     coherence_values: list[float] = []
     frequency_label = ""
@@ -732,6 +794,7 @@ def compute_window_metrics(
         useful_dissonance_percentage=udr * 100.0,
         coherence_index=normalised_coherence,
         ackermann_parallel_index=ackermann_parallel,
+        slide_catch_budget=slide_catch_budget,
         support_effective=support_effective,
         load_support_ratio=load_support_ratio,
         structural_expansion_longitudinal=long_expansion,

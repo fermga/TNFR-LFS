@@ -22,7 +22,7 @@ from tnfr_lfs.core.epi import (
     resolve_nu_f_by_node,
 )
 from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias, phase_family
-from tnfr_lfs.core.metrics import AeroCoherence, BrakeHeadroom, WindowMetrics
+from tnfr_lfs.core.metrics import AeroCoherence, BrakeHeadroom, SlideCatchBudget, WindowMetrics
 from tnfr_lfs.core.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
@@ -358,6 +358,7 @@ def bottoming_segments(monkeypatch):
         useful_dissonance_percentage=40.0,
         coherence_index=0.5,
         ackermann_parallel_index=0.0,
+        slide_catch_budget=SlideCatchBudget(),
         support_effective=0.12,
         load_support_ratio=0.00003,
         structural_expansion_longitudinal=0.1,

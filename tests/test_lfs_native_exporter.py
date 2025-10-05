@@ -20,6 +20,8 @@ def _build_plan() -> SetupPlan:
             SetupChange("front_toe_deg", 0.1, "", ""),
             SetupChange("rear_toe_deg", -0.2, "", ""),
             SetupChange("caster_deg", 3.4, "", ""),
+            SetupChange("parallel_steer", 0.25, "", ""),
+            SetupChange("steering_lock_deg", 32.0, "", ""),
             SetupChange("front_ride_height", 55.0, "", ""),
             SetupChange("rear_ride_height", 60.0, "", ""),
             SetupChange("front_spring_stiffness", 75.0, "", ""),
@@ -79,6 +81,8 @@ def test_encode_native_setup_produces_expected_layout(_enable_native_export):
 
     # Caster stored as tenths of a degree.
     assert payload[117] == 34
+    assert payload[118] == 125
+    assert struct.unpack_from("<H", payload, 122)[0] == 320
 
     # Ride heights and spring data are stored as little-endian floats.
     assert struct.unpack_from("<f", payload, 92)[0] == pytest.approx(55.0)

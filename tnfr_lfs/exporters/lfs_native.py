@@ -79,6 +79,8 @@ def encode_native_setup(plan: SetupPlan) -> bytes:
         "front_toe_deg": lambda buf, val: _encode_toe(buf, 116, val),
         "rear_toe_deg": lambda buf, val: _encode_toe(buf, 76, val),
         "caster_deg": lambda buf, val: _encode_caster(buf, 117, val),
+        "parallel_steer": lambda buf, val: _encode_parallel_steer(buf, 118, val),
+        "steering_lock_deg": lambda buf, val: _encode_steering_lock(buf, 122, val),
         "front_ride_height": lambda buf, val: _write_float(buf, 92, val),
         "rear_ride_height": lambda buf, val: _write_float(buf, 52, val),
         "front_spring_stiffness": lambda buf, val: _write_float(buf, 96, val),
@@ -155,6 +157,18 @@ def _encode_caster(buffer: bytearray, offset: int, value: float) -> None:
 
 def _encode_pressure(buffer: bytearray, offset: int, value: float) -> None:
     _write_word(buffer, offset, round(max(0.0, min(6553.5, value)) * 1.0))
+
+
+def _encode_parallel_steer(buffer: bytearray, offset: int, value: float) -> None:
+    clamped = max(-1.0, min(1.0, float(value)))
+    encoded = int(round((clamped + 1.0) * 100.0))
+    _write_byte(buffer, offset, encoded)
+
+
+def _encode_steering_lock(buffer: bytearray, offset: int, value: float) -> None:
+    clamped = max(5.0, min(65.0, float(value)))
+    encoded = int(round(clamped * 10.0))
+    _write_word(buffer, offset, encoded)
 
 
 def _encode_brake_bias(buffer: bytearray, offset: int, value: float) -> None:

@@ -35,6 +35,12 @@ SUPPORTED_CAR_MODELS = [
 ]
 
 
+def test_decision_space_includes_parallel_steer_controls() -> None:
+    space = DEFAULT_DECISION_LIBRARY["XFG"]
+    variables = {variable.name for variable in space.variables}
+    assert {"parallel_steer", "steering_lock_deg"}.issubset(variables)
+
+
 BASE_NU_F = {
     "tyres": 0.18,
     "suspension": 0.14,
