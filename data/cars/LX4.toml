@@ -6,3 +6,4 @@ drive = "RWD"
 weight_kg = 490
 wheel_rotation_group_deg = 28
 profile = "road_small_mid"
+lfs_class = "LRF"

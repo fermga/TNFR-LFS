@@ -33,6 +33,7 @@ def config_pack(tmp_path: Path) -> Path:
             weight_kg = 900
             wheel_rotation_group_deg = 30
             profile = "custom-profile"
+            lfs_class = "STD"
             """
         )
     )
@@ -48,6 +49,7 @@ def config_pack(tmp_path: Path) -> Path:
             weight_kg = 1000
             wheel_rotation_group_deg = 28
             profile = "missing-profile"
+            lfs_class = "Unclassified"
             """
         )
     )
@@ -97,6 +99,8 @@ def test_load_cars_indexed_by_abbrev(config_pack: Path) -> None:
 
     assert set(cars) == {"ABC", "DEF"}
     assert isinstance(cars["ABC"], Car)
+    assert cars["ABC"].lfs_class == "STD"
+    assert cars["DEF"].lfs_class == "Unclassified"
 
 
 def test_load_profiles_prefers_meta_id(config_pack: Path) -> None:

@@ -6,3 +6,4 @@ drive = "FWD"
 weight_kg = 900
 wheel_rotation_group_deg = 26
 profile = "gt_club"
+lfs_class = "FWD GTR"

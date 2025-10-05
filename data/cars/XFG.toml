@@ -6,3 +6,4 @@ drive = "FWD"
 weight_kg = 960
 wheel_rotation_group_deg = 30
 profile = "road_small_fwd"
+lfs_class = "STD"

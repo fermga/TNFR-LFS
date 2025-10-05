@@ -6,3 +6,4 @@ drive = "FWD"
 weight_kg = 1180
 wheel_rotation_group_deg = 30
 profile = "road_medium_fwd"
+lfs_class = "TBO"
