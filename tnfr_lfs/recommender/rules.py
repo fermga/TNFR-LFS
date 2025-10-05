@@ -1104,6 +1104,106 @@ class BottomingPriorityRule:
         return recommendations
 
 
+class SuspensionVelocityRule:
+    """Detect damper packing and axle asymmetries using velocity histograms."""
+
+    def __init__(
+        self,
+        *,
+        priority: int = 18,
+        packing_threshold_pct: float = 35.0,
+        packing_ar_threshold: float = 1.25,
+        asymmetry_gap: float = 0.35,
+    ) -> None:
+        self.priority = int(priority)
+        self.packing_threshold_pct = max(0.0, float(packing_threshold_pct))
+        self.packing_ar_threshold = max(0.0, float(packing_ar_threshold))
+        self.asymmetry_gap = max(0.0, float(asymmetry_gap))
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors:
+            return []
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            if not isinstance(measures, Mapping):
+                continue
+            front_high_pct = _safe_float(
+                measures.get("suspension_velocity_front_high_speed_pct"), 0.0
+            )
+            rear_high_pct = _safe_float(
+                measures.get("suspension_velocity_rear_high_speed_pct"), 0.0
+            )
+            front_rebound_pct = _safe_float(
+                measures.get("suspension_velocity_front_high_speed_rebound_pct"), 0.0
+            )
+            rear_rebound_pct = _safe_float(
+                measures.get("suspension_velocity_rear_high_speed_rebound_pct"), 0.0
+            )
+            front_ar = _safe_float(
+                measures.get("suspension_velocity_front_ar_index"), 0.0
+            )
+            rear_ar = _safe_float(measures.get("suspension_velocity_rear_ar_index"), 0.0)
+            phase_category = phase_family(getattr(microsector, "active_phase", "apex"))
+            for axle_label, high_pct, rebound_pct, ar_index in (
+                ("delantero", front_high_pct, front_rebound_pct, front_ar),
+                ("trasero", rear_high_pct, rear_rebound_pct, rear_ar),
+            ):
+                if high_pct < self.packing_threshold_pct:
+                    continue
+                if ar_index < self.packing_ar_threshold:
+                    continue
+                if rebound_pct >= self.packing_threshold_pct * 0.6:
+                    continue
+                message = (
+                    f"Operador amortiguación: aliviar packing {axle_label} "
+                    f"en microsector {microsector.index}"
+                )
+                rationale = (
+                    f"Compresión HS {high_pct:.1f}% vs rebote HS {rebound_pct:.1f}% "
+                    f"(A/R {ar_index:.2f}) superan el umbral {self.packing_threshold_pct:.1f}%. "
+                    f"Reduce rebote siguiendo {MANUAL_REFERENCES['dampers']}."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category=phase_category,
+                        message=message,
+                        rationale=rationale,
+                        priority=self.priority,
+                    )
+                )
+
+            ar_gap = abs(front_ar - rear_ar)
+            if ar_gap < self.asymmetry_gap:
+                continue
+            if max(front_high_pct, rear_high_pct) < self.packing_threshold_pct * 0.5:
+                continue
+            dominant = "delantero" if front_ar > rear_ar else "trasero"
+            message = (
+                f"Operador amortiguación: equilibrar A/R {dominant} "
+                f"en microsector {microsector.index}"
+            )
+            rationale = (
+                f"Índices A/R F {front_ar:.2f} · R {rear_ar:.2f} difieren {ar_gap:.2f}. "
+                f"Compensa clics de compresión/rebote según {MANUAL_REFERENCES['dampers']}."
+            )
+            recommendations.append(
+                Recommendation(
+                    category=phase_category,
+                    message=message,
+                    rationale=rationale,
+                    priority=self.priority + 1,
+                )
+            )
+        return recommendations
+
+
 class BrakeHeadroomRule:
     """Adjust the maximum brake force when significant headroom mismatches arise."""
 
@@ -3360,6 +3460,7 @@ class RecommendationEngine:
                 TyreBalanceRule(priority=24),
                 FootprintEfficiencyRule(priority=16),
                 BottomingPriorityRule(priority=18),
+                SuspensionVelocityRule(priority=18),
                 DetuneRatioRule(priority=24),
                 ShiftStabilityRule(priority=28),
                 UsefulDissonanceRule(priority=26),

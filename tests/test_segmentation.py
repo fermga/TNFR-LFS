@@ -27,6 +27,7 @@ from tnfr_lfs.core.metrics import (
     BrakeHeadroom,
     BumpstopHistogram,
     SlideCatchBudget,
+    SuspensionVelocityBands,
     WindowMetrics,
 )
 from tnfr_lfs.core.segmentation import (
@@ -361,6 +362,24 @@ def bottoming_segments(monkeypatch):
         front_total_energy=0.18,
         rear_total_energy=0.08,
     )
+    front_velocity_profile = SuspensionVelocityBands(
+        compression_low_ratio=0.25,
+        compression_medium_ratio=0.3,
+        compression_high_ratio=0.45,
+        rebound_low_ratio=0.3,
+        rebound_medium_ratio=0.4,
+        rebound_high_ratio=0.3,
+        ar_index=1.5,
+    )
+    rear_velocity_profile = SuspensionVelocityBands(
+        compression_low_ratio=0.35,
+        compression_medium_ratio=0.35,
+        compression_high_ratio=0.3,
+        rebound_low_ratio=0.4,
+        rebound_medium_ratio=0.35,
+        rebound_high_ratio=0.25,
+        ar_index=0.9,
+    )
     rough_histogram = BumpstopHistogram(
         front_density=(0.03, 0.06, 0.09, 0.0),
         rear_density=(0.04, 0.07, 0.11, 0.0),
@@ -409,6 +428,8 @@ def bottoming_segments(monkeypatch):
         brake_headroom=BrakeHeadroom(),
         camber={},
         phase_camber={},
+        suspension_velocity_front=front_velocity_profile,
+        suspension_velocity_rear=rear_velocity_profile,
     )
     rough_metrics = replace(
         smooth_metrics,
@@ -417,6 +438,24 @@ def bottoming_segments(monkeypatch):
         useful_dissonance_ratio=0.46,
         useful_dissonance_percentage=46.0,
         bumpstop_histogram=rough_histogram,
+        suspension_velocity_front=SuspensionVelocityBands(
+            compression_low_ratio=0.2,
+            compression_medium_ratio=0.25,
+            compression_high_ratio=0.55,
+            rebound_low_ratio=0.25,
+            rebound_medium_ratio=0.35,
+            rebound_high_ratio=0.4,
+            ar_index=1.65,
+        ),
+        suspension_velocity_rear=SuspensionVelocityBands(
+            compression_low_ratio=0.4,
+            compression_medium_ratio=0.3,
+            compression_high_ratio=0.3,
+            rebound_low_ratio=0.45,
+            rebound_medium_ratio=0.3,
+            rebound_high_ratio=0.25,
+            ar_index=0.8,
+        ),
     )
     metric_sequence = iter([smooth_metrics, rough_metrics])
 
@@ -528,10 +567,16 @@ def test_segment_microsectors_exposes_bottoming_ratios(bottoming_segments) -> No
     assert smooth.context_factors.get("surface") == pytest.approx(0.95)
     assert smooth.filtered_measures["bumpstop_front_density"] == pytest.approx(0.12)
     assert smooth.filtered_measures["bumpstop_front_energy_bin_0"] == pytest.approx(0.12)
+    assert smooth.filtered_measures["suspension_velocity_front_high_speed_pct"] == pytest.approx(45.0)
+    assert smooth.filtered_measures["suspension_velocity_front_ar_index"] == pytest.approx(1.5)
     assert rough.filtered_measures["bottoming_ratio_rear"] == pytest.approx(0.68)
     assert rough.context_factors.get("surface") == pytest.approx(1.25)
     assert rough.filtered_measures["bumpstop_rear_density"] == pytest.approx(0.22)
     assert rough.filtered_measures["bumpstop_rear_energy_bin_1"] == pytest.approx(0.09)
+    assert rough.filtered_measures["suspension_velocity_front_high_speed_pct"] == pytest.approx(
+        55.0
+    )
+    assert rough.filtered_measures["suspension_velocity_rear_ar_index"] == pytest.approx(0.8)
 
 
 def _yaw_rate(records: list[TelemetryRecord], index: int) -> float:
