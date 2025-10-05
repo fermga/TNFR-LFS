@@ -224,3 +224,65 @@ def test_fusion_consumes_extended_outsim_packet(
     assert math.isnan(record.tyre_pressure_fr)
     assert math.isnan(record.tyre_pressure_rl)
     assert math.isnan(record.tyre_pressure_rr)
+
+
+def test_fusion_marks_missing_wheel_block_as_nan(
+    sample_outgauge_packet: OutGaugePacket,
+) -> None:
+    time_ms = 5678
+    base_floats = [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -9.81,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+    payload = struct.pack("<I15f", time_ms, *base_floats)
+    packet = OutSimPacket.from_bytes(payload)
+
+    fusion = TelemetryFusion()
+    record = fusion.fuse(packet, sample_outgauge_packet)
+
+    wheel_attrs = [
+        "slip_ratio_fl",
+        "slip_ratio_fr",
+        "slip_ratio_rl",
+        "slip_ratio_rr",
+        "slip_angle_fl",
+        "slip_angle_fr",
+        "slip_angle_rl",
+        "slip_angle_rr",
+        "wheel_load_fl",
+        "wheel_load_fr",
+        "wheel_load_rl",
+        "wheel_load_rr",
+        "wheel_lateral_force_fl",
+        "wheel_lateral_force_fr",
+        "wheel_lateral_force_rl",
+        "wheel_lateral_force_rr",
+        "wheel_longitudinal_force_fl",
+        "wheel_longitudinal_force_fr",
+        "wheel_longitudinal_force_rl",
+        "wheel_longitudinal_force_rr",
+        "suspension_deflection_fl",
+        "suspension_deflection_fr",
+        "suspension_deflection_rl",
+        "suspension_deflection_rr",
+    ]
+    for attribute in wheel_attrs:
+        assert math.isnan(getattr(record, attribute)), attribute
+
+    assert math.isnan(record.suspension_travel_front)
+    assert math.isnan(record.suspension_travel_rear)
+    assert math.isnan(record.suspension_velocity_front)
+    assert math.isnan(record.suspension_velocity_rear)
