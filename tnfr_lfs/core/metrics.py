@@ -1657,14 +1657,17 @@ def compute_window_metrics(
             rear_travel = 0.0
         if not math.isfinite(rear_travel):
             rear_travel = 0.0
-        try:
-            wheelbase = float(getattr(record, "wheelbase", 2.6))
-        except (TypeError, ValueError):
-            wheelbase = 2.6
-        if not math.isfinite(wheelbase) or wheelbase <= 0.0:
-            wheelbase = 2.6
         travel_delta = rear_travel - front_travel
-        rake_correction = math.atan2(travel_delta, wheelbase)
+        if abs(front_travel) > 1e-9:
+            travel_ratio = rear_travel / front_travel
+        elif abs(rear_travel) > 1e-9:
+            travel_ratio = math.copysign(10.0, rear_travel)
+        else:
+            travel_ratio = 1.0
+        if not math.isfinite(travel_ratio):
+            travel_ratio = 1.0
+        travel_ratio = max(-10.0, min(10.0, travel_ratio))
+        rake_correction = math.atan2(travel_delta, travel_ratio)
         rake_value = pitch_value + rake_correction
         try:
             mu_front = float(getattr(record, "mu_eff_front", 0.0))

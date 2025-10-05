@@ -669,8 +669,18 @@ def test_compute_window_metrics_mu_usage_ratios() -> None:
 def test_compute_window_metrics_aero_balance_drift_bins() -> None:
     base = _record(0.0, 110.0, si=0.82)
 
-    def _rake_value(pitch: float, front: float, rear: float, wheelbase: float = 2.6) -> float:
-        return pitch + math.atan2(rear - front, wheelbase)
+    def _rake_value(pitch: float, front: float, rear: float) -> float:
+        travel_delta = rear - front
+        if abs(front) > 1e-9:
+            travel_ratio = rear / front
+        elif abs(rear) > 1e-9:
+            travel_ratio = math.copysign(10.0, rear)
+        else:
+            travel_ratio = 1.0
+        if not math.isfinite(travel_ratio):
+            travel_ratio = 1.0
+        travel_ratio = max(-10.0, min(10.0, travel_ratio))
+        return pitch + math.atan2(travel_delta, travel_ratio)
 
     records = [
         replace(
