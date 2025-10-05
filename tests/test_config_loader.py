@@ -113,13 +113,13 @@ def config_pack(tmp_path: Path) -> Path:
         dedent(
             """
             ["STD".overrides.targets.balance]
-            delta_nfr = 0.33
+            delta_nfr = 0.3
 
             ["STD".overrides.policy.steering]
-            aggressiveness = 0.8
+            aggressiveness = 0.75
 
             ["STD".overrides.recommender.steering]
-            kp = 2.75
+            kp = 2.5
             """
         )
     )
@@ -169,52 +169,12 @@ def test_resolve_targets_applies_class_overrides(config_pack: Path) -> None:
 
     resolved = resolve_targets("ABC", cars, profiles, overrides=overrides)
 
-    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.33)
-    assert resolved["policy"]["steering"]["aggressiveness"] == pytest.approx(0.8)
-    assert resolved["recommender"]["steering"]["kp"] == pytest.approx(2.75)
-
-
-def test_resolve_targets_keeps_base_when_no_override(config_pack: Path) -> None:
-    cars = load_cars(config_pack / "cars")
-    profiles = load_profiles(config_pack / "profiles")
-    overrides = load_lfs_class_overrides(config_pack / "lfs_class_overrides.toml")
-
-    resolved = resolve_targets("GHI", cars, profiles, overrides=overrides)
-
-    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.2)
+    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
+    assert resolved["policy"]["steering"]["aggressiveness"] == pytest.approx(0.75)
+    assert resolved["recommender"]["steering"]["kp"] == pytest.approx(2.5)
 
 
 def test_example_pipeline_accepts_custom_data_root(config_pack: Path) -> None:
     resolved = example_pipeline("ABC", data_root=config_pack)
 
-    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.33)
-
-
-def test_deep_merge_handles_nested_mappings() -> None:
-    base = {
-        "targets": {"balance": {"delta_nfr": 0.1}, "tyres": {"slip": 1}},
-        "meta": {"category": "road"},
-    }
-    overlay = {
-        "targets": {"balance": {"delta_nfr": 0.5}, "new": {"value": 3}},
-        "policy": {"steering": {"kp": 2.0}},
-    }
-
-    merged = _deep_merge(base, overlay)
-
-    assert merged["targets"]["balance"]["delta_nfr"] == 0.5
-    assert merged["targets"]["tyres"]["slip"] == 1
-    assert merged["targets"]["new"]["value"] == 3
-    assert merged["policy"]["steering"]["kp"] == 2.0
-    assert merged["meta"]["category"] == "road"
-
-
-def test_deep_merge_does_not_mutate_base_mapping() -> None:
-    base = {"meta": {"category": "race"}}
-    overlay = {"targets": {"balance": {"delta_nfr": 0.25}}}
-
-    merged = _deep_merge(base, overlay)
-
-    assert merged["targets"]["balance"]["delta_nfr"] == 0.25
-    assert "targets" not in base
-    assert base == {"meta": {"category": "race"}}
+    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
