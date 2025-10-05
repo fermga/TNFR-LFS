@@ -12,6 +12,7 @@ from tnfr_lfs.config_loader import (
     load_lfs_class_overrides,
     load_profiles,
     resolve_targets,
+    _deep_merge,
 )
 
 
@@ -51,6 +52,22 @@ def config_pack(tmp_path: Path) -> Path:
             wheel_rotation_group_deg = 28
             profile = "missing-profile"
             lfs_class = "Unclassified"
+            """
+        )
+    )
+
+    cars_dir.joinpath("GHI.toml").write_text(
+        dedent(
+            """
+            abbrev = "GHI"
+            name = "Gamma"
+            license = "demo"
+            engine_layout = "rear"
+            drive = "RWD"
+            weight_kg = 950
+            wheel_rotation_group_deg = 32
+            profile = "fallback"
+            lfs_class = "GT"
             """
         )
     )
@@ -113,10 +130,11 @@ def config_pack(tmp_path: Path) -> Path:
 def test_load_cars_indexed_by_abbrev(config_pack: Path) -> None:
     cars = load_cars(config_pack / "cars")
 
-    assert set(cars) == {"ABC", "DEF"}
+    assert set(cars) == {"ABC", "DEF", "GHI"}
     assert isinstance(cars["ABC"], Car)
     assert cars["ABC"].lfs_class == "STD"
     assert cars["DEF"].lfs_class == "Unclassified"
+    assert cars["GHI"].lfs_class == "GT"
 
 
 def test_load_profiles_prefers_meta_id(config_pack: Path) -> None:
