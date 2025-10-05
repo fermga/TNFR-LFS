@@ -20,6 +20,30 @@ pipelines:
 The project ships with a CLI (`tnfr-lfs`) as well as examples and unit
 tests to illustrate the workflow.
 
+## Telemetry requirements
+
+All TNFR metrics (`ΔNFR`, `ΔNFR_lat`, `ν_f`, `C(t)` and related
+indicators) are derived from the Live for Speed OutSim/OutGauge telemetry
+streams; the toolkit does not synthesise additional inputs. Enable both
+UDP broadcasters and extend OutSim with `OutSim Opts ff` in `cfg.txt`
+(or run `/outsim Opts ff` before `/outsim 1 …`) so the UDP packets
+include the player identifier, driver inputs and the four-wheel block
+that feeds the telemetry fusion layer.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+
+### Metric field checklist
+
+- **ΔNFR / ΔNFR_lat** – consumes vertical loads, lateral/longitudinal
+  acceleration, wheel forces and suspension deflection from the OutSim
+  wheel payload together with engine speed, pedal positions and ABS/TC
+  lights sourced from OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+- **ν_f (natural frequency)** – requires load split, slip ratios/angles
+  and yaw rate/velocity from OutSim, plus driver style signals (throttle,
+  gear) resolved via OutGauge to tailor node categories and spectral
+  windows.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+- **C(t) (structural coherence)** – builds on the ΔNFR distribution and
+  ν_f bands, leveraging the same OutSim data, the derived `mu_eff_*`
+  coefficients and the ABS/TC flags that OutGauge exposes.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+
 ## Branding and terminology
 
 - **TNFR theory** describes the conceptual framework and vocabulary.
