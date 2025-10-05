@@ -105,6 +105,22 @@ Path("tests/data/car_track_profiles.json").write_text(
 )
 ```
 
+## Mini track pack fixtures
+
+The `mini_track_pack` fixture synthesises a compact dataset with:
+
+* `data/tracks/AS.toml` describing the `AS3` layout and its extras.
+* `data/track_profiles/p_test_combo.toml` containing deterministic weights and hints.
+* `modifiers/combos/demo_profile__p_test_combo.toml` with scale factors and hint overrides.
+* `data/cars/DEMO.toml` so the CLI can resolve the modifier via the car profile.
+
+When adding new test circuits or modifiers reuse the fixture by copying its
+structure into new files under the temporary directory. Prefer short manifest
+names and floats with few decimals so assertions stay readable. For additional
+layouts extend the TOML with `[config.XY#]` tables; for more profiles write extra
+`*.toml` files into the generated directories and return their identifiers from
+the fixture as new dataclass fields.
+
 ## Acceptance orchestration fixtures
 
 The `acceptance_bundle_series`, `acceptance_records` and

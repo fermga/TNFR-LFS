@@ -3,7 +3,9 @@ from __future__ import annotations
 import csv
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from textwrap import dedent
 from typing import Dict, Iterable, List
 
 import pytest
@@ -406,4 +408,141 @@ def acceptance_microsectors() -> List[Microsector]:
         operator_events={},
     )
     return [microsector]
+
+@dataclass(frozen=True)
+class MiniTrackPack:
+    """Container describing the synthetic track pack used in tests."""
+
+    root: Path
+    track_slug: str
+    layout_code: str
+    track_profile: str
+    car_model: str
+    car_profile: str
+    tracks_dir: Path
+    track_profiles_dir: Path
+    modifiers_dir: Path
+
+
+@pytest.fixture()
+def mini_track_pack(tmp_path: Path) -> MiniTrackPack:
+    """Create a minimal pack with track manifests, profiles and modifiers."""
+
+    pack_root = tmp_path / "mini_pack"
+    tracks_dir = pack_root / "data" / "tracks"
+    track_profiles_dir = pack_root / "data" / "track_profiles"
+    modifiers_dir = pack_root / "modifiers" / "combos"
+    cars_dir = pack_root / "data" / "cars"
+
+    for directory in (tracks_dir, track_profiles_dir, modifiers_dir, cars_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    track_slug = "AS"
+    layout_code = "AS3"
+    track_profile = "p_test_combo"
+    car_model = "DEMO"
+    car_profile = "demo_profile"
+
+    tracks_dir.joinpath(f"{track_slug}.toml").write_text(
+        dedent(
+            """
+            [config.AS3]
+            name = "Mini Aston Historic"
+            length_km = 5.2
+            surface = "asphalt"
+            track_profile = "p_test_combo"
+            pit_boxes = 32
+            notes = ["tight chicane", "long straight"]
+            """
+        ),
+        encoding="utf8",
+    )
+
+    track_profiles_dir.joinpath(f"{track_profile}.toml").write_text(
+        dedent(
+            """
+            [meta]
+            id = "p_test_combo"
+            archetype = "balanced"
+            length_category = "medium"
+
+            [weights.entry]
+            __default__ = 1.0
+            brakes = 1.05
+            tyres = 1.0
+
+            [weights.apex]
+            __default__ = 0.95
+            anti_roll = 1.1
+
+            [weights.exit]
+            __default__ = 0.9
+            differential = 1.2
+
+            [hints]
+            microsector_span = "compact"
+            notes = ["aggressive hairpins", "short braking"]
+
+            [hints.surface_bias]
+            entry = 0.2
+            exit = -0.1
+            """
+        ),
+        encoding="utf8",
+    )
+
+    modifiers_dir.joinpath(f"{car_profile}__{track_profile}.toml").write_text(
+        dedent(
+            """
+            [meta]
+            id = "demo_profile__p_test_combo"
+            car_group = "demo_profile"
+            base_profile = "p_test_combo"
+
+            [scale.weights.__default__]
+            __default__ = 1.1
+
+            [scale.weights.entry]
+            __default__ = 1.25
+            brakes = 1.4
+
+            [scale.weights.exit]
+            __default__ = 0.95
+            differential = 1.3
+
+            [hints]
+            slip_ratio_bias = "aggressive"
+            surface = "asphalt"
+            """
+        ),
+        encoding="utf8",
+    )
+
+    cars_dir.joinpath(f"{car_model}.toml").write_text(
+        dedent(
+            """
+            abbrev = "DEMO"
+            name = "Demonstrator"
+            license = "s3"
+            engine_layout = "mid"
+            drive = "RWD"
+            weight_kg = 950
+            wheel_rotation_group_deg = 30
+            profile = "demo_profile"
+            """
+        ),
+        encoding="utf8",
+    )
+
+    return MiniTrackPack(
+        root=pack_root,
+        track_slug=track_slug,
+        layout_code=layout_code,
+        track_profile=track_profile,
+        car_model=car_model,
+        car_profile=car_profile,
+        tracks_dir=tracks_dir,
+        track_profiles_dir=track_profiles_dir,
+        modifiers_dir=modifiers_dir,
+    )
 

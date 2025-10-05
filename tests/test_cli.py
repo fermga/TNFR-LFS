@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from tnfr_lfs.cli import tnfr_lfs_cli as cli_module
 from tnfr_lfs.cli.tnfr_lfs_cli import run_cli
 from tnfr_lfs.io.profiles import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
@@ -149,6 +150,48 @@ def test_template_command_emits_phase_presets() -> None:
     assert entry_template["slip_lat_window"][0] == pytest.approx(-0.045, rel=1e-3)
     report_templates = data["report"]["phase_templates"]
     assert report_templates["apex"]["yaw_rate_window"][1] == pytest.approx(0.24, rel=1e-3)
+
+
+def test_track_argument_resolves_session_payload(mini_track_pack) -> None:
+    config: dict[str, object] = {}
+    selection = cli_module._resolve_track_argument(
+        mini_track_pack.layout_code,
+        config,
+        pack_root=mini_track_pack.root,
+    )
+
+    assert selection.layout == mini_track_pack.layout_code
+    assert selection.config is not None
+    assert selection.config.name == "Mini Aston Historic"
+    assert selection.config.track_profile == mini_track_pack.track_profile
+    assert selection.config.length_km == pytest.approx(5.2)
+
+    cars = cli_module._load_pack_cars(mini_track_pack.root)
+    track_profiles = cli_module._load_pack_track_profiles(mini_track_pack.root)
+    modifiers = cli_module._load_pack_modifiers(mini_track_pack.root)
+
+    payload = cli_module._assemble_session_payload(
+        mini_track_pack.car_model,
+        selection,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+    )
+
+    assert payload is not None
+    assert payload["car_profile"] == mini_track_pack.car_profile
+    assert payload["layout_name"] == "Mini Aston Historic"
+    assert payload["weights"]["entry"]["brakes"] == pytest.approx(1.05 * 1.4)
+    assert payload["hints"]["slip_ratio_bias"] == "aggressive"
+
+    engine = RecommendationEngine(
+        car_model=mini_track_pack.car_model,
+        track_name=selection.name,
+    )
+    engine.session = payload
+    context = engine._resolve_context(mini_track_pack.car_model, selection.name)
+    assert context.session_weights["entry"]["brakes"] == pytest.approx(1.05 * 1.4)
+    assert context.session_hints["surface"] == "asphalt"
 
 
 def test_analyze_pipeline_json_export(
