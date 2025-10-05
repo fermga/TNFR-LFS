@@ -31,6 +31,7 @@ from tnfr_lfs.recommender.rules import (
     Recommendation,
     RecommendationEngine,
     RuleContext,
+    FootprintEfficiencyRule,
     TyreBalanceRule,
     UsefulDissonanceRule,
     ThresholdProfile,
@@ -1507,6 +1508,36 @@ def test_bottoming_priority_rule_switches_focus(bottoming_microsectors) -> None:
     assert bump_targets
     assert "altura" in height_targets[0].message.lower()
     assert "compresión" in bump_targets[0].message.lower()
+
+
+def test_footprint_efficiency_rule_relaxes_delta_when_usage_high() -> None:
+    goal = _udr_goal("apex", target_delta=0.2)
+    results = _udr_bundle_series([0.2, 0.21, 0.19])
+    microsector = _udr_microsector(
+        goal,
+        udr=0.3,
+        sample_count=len(results),
+        filtered_measures={
+            "mu_usage_front_ratio": 0.92,
+            "mu_usage_rear_ratio": 0.82,
+        },
+    )
+    context = RuleContext(
+        car_model="XFG",
+        track_name="BL1",
+        thresholds=ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5),
+    )
+    rule = FootprintEfficiencyRule(priority=18, threshold=0.9)
+
+    recommendations = list(rule.evaluate(results, [microsector], context))
+
+    assert recommendations
+    messages = [rec.message.lower() for rec in recommendations]
+    assert any("huella" in message for message in messages)
+    assert any("delanter" in message for message in messages)
+    assert not any("traser" in message for message in messages)
+    rationales = " ".join(rec.rationale.lower() for rec in recommendations)
+    assert "0.92" in rationales
 
 
 def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:

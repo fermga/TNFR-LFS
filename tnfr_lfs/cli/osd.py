@@ -570,6 +570,8 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · UDR {window_metrics.useful_dissonance_ratio:.2f}"
         f" · Soporte {window_metrics.support_effective:+.2f}"
         f" · Carga {window_metrics.load_support_ratio:.4f}"
+        f" · μF {window_metrics.mu_usage_front_ratio:.2f}"
+        f" · μR {window_metrics.mu_usage_rear_ratio:.2f}"
     )
 
 

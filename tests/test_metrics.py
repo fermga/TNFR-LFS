@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from tnfr_lfs.core.metrics import (
@@ -231,6 +233,41 @@ def test_compute_window_metrics_bottoming_ratio_tracks_overlap() -> None:
     assert metrics.bottoming_ratio_rear == pytest.approx(0.0)
 
 
+def test_compute_window_metrics_mu_usage_ratios() -> None:
+    records = [
+        replace(
+            _record(0.0, 100.0),
+            mu_eff_front_lateral=0.8,
+            mu_eff_front_longitudinal=0.6,
+            mu_eff_rear_lateral=0.7,
+            mu_eff_rear_longitudinal=0.5,
+        ),
+        replace(
+            _record(0.5, 101.0),
+            mu_eff_front_lateral=0.9,
+            mu_eff_front_longitudinal=0.4,
+            mu_eff_rear_lateral=0.65,
+            mu_eff_rear_longitudinal=0.45,
+        ),
+        replace(
+            _record(1.1, 102.0),
+            mu_eff_front_lateral=0.85,
+            mu_eff_front_longitudinal=0.55,
+            mu_eff_rear_lateral=0.75,
+            mu_eff_rear_longitudinal=0.5,
+        ),
+    ]
+
+    objectives = {"mu_max_front": 1.1, "mu_max_rear": 1.05}
+
+    metrics = compute_window_metrics(records, phase_indices=[1, 2], objectives=objectives)
+
+    assert metrics.mu_usage_front_ratio == pytest.approx(0.9090054479581015, rel=1e-6)
+    assert metrics.mu_usage_rear_ratio == pytest.approx(0.8104912544074854, rel=1e-6)
+    assert metrics.phase_mu_usage_front_ratio == pytest.approx(0.9203843968780266, rel=1e-6)
+    assert metrics.phase_mu_usage_rear_ratio == pytest.approx(0.8584645893961879, rel=1e-6)
+
+
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
     assert metrics == WindowMetrics(
@@ -256,6 +293,10 @@ def test_compute_window_metrics_empty_window() -> None:
         structural_contraction_lateral=0.0,
         bottoming_ratio_front=0.0,
         bottoming_ratio_rear=0.0,
+        mu_usage_front_ratio=0.0,
+        mu_usage_rear_ratio=0.0,
+        phase_mu_usage_front_ratio=0.0,
+        phase_mu_usage_rear_ratio=0.0,
         frequency_label="",
         aero_coherence=AeroCoherence(),
         aero_mechanical_coherence=0.0,

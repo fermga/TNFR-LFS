@@ -519,6 +519,8 @@ def segment_microsectors(
                 "structural_contraction_lateral": window_metrics.structural_contraction_lateral,
                 "bottoming_ratio_front": window_metrics.bottoming_ratio_front,
                 "bottoming_ratio_rear": window_metrics.bottoming_ratio_rear,
+                "mu_usage_front_ratio": window_metrics.mu_usage_front_ratio,
+                "mu_usage_rear_ratio": window_metrics.mu_usage_rear_ratio,
                 "aero_low_imbalance": window_metrics.aero_coherence.low_speed_imbalance,
                 "aero_high_imbalance": window_metrics.aero_coherence.high_speed_imbalance,
                 "aero_low_samples": float(window_metrics.aero_coherence.low_speed_samples),
@@ -623,6 +625,8 @@ def segment_microsectors(
                 "structural_contraction_longitudinal": window_metrics.structural_contraction_longitudinal,
                 "structural_expansion_lateral": window_metrics.structural_expansion_lateral,
                 "structural_contraction_lateral": window_metrics.structural_contraction_lateral,
+                "mu_usage_front_ratio": window_metrics.mu_usage_front_ratio,
+                "mu_usage_rear_ratio": window_metrics.mu_usage_rear_ratio,
                 "si_variance": window_metrics.si_variance,
                 "epi_derivative_abs": window_metrics.epi_derivative_abs,
             }
