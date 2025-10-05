@@ -561,34 +561,52 @@ def _resolve_track_gradient(record: TelemetryRecord) -> float:
 
 
 def _ackermann_parallel_delta(record: TelemetryRecord, baseline: TelemetryRecord) -> float:
-    radius = getattr(record, "instantaneous_radius", 0.0)
-    if not math.isfinite(radius) or abs(radius) <= 1e-6:
+    """Return the parallel steer delta derived from wheel slip angles."""
+
+    def _turn_direction(sample: TelemetryRecord, fallback: int = 0) -> int:
+        try:
+            yaw_rate = float(getattr(sample, "yaw_rate", 0.0))
+        except (TypeError, ValueError):
+            yaw_rate = 0.0
+        if not math.isfinite(yaw_rate) or abs(yaw_rate) <= 1e-6:
+            return fallback
+        return 1 if yaw_rate > 0.0 else -1
+
+    def _wheel_slip(sample: TelemetryRecord, direction: int) -> tuple[float, float]:
+        default_angle = float(getattr(sample, "slip_angle", 0.0))
+
+        def _clean(value: float) -> float:
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                return default_angle
+            if not math.isfinite(numeric):
+                return default_angle
+            return numeric
+
+        if direction >= 0:
+            inner_attr, outer_attr = "slip_angle_fl", "slip_angle_fr"
+        else:
+            inner_attr, outer_attr = "slip_angle_fr", "slip_angle_fl"
+        inner = _clean(getattr(sample, inner_attr, default_angle))
+        outer = _clean(getattr(sample, outer_attr, default_angle))
+        return inner, outer
+
+    direction = _turn_direction(record)
+    baseline_direction = _turn_direction(baseline, direction)
+    effective_direction = direction or baseline_direction
+    if effective_direction == 0:
         return 0.0
-    track = getattr(record, "front_track_width", None)
-    if track is None or not math.isfinite(track):
-        track = getattr(baseline, "front_track_width", 1.5)
-    wheelbase = getattr(record, "wheelbase", None)
-    if wheelbase is None or not math.isfinite(wheelbase):
-        wheelbase = getattr(baseline, "wheelbase", 2.6)
-    wheelbase = max(1e-6, float(wheelbase))
-    track = max(1e-6, float(track))
-    half_track = track * 0.5
-    effective_radius = abs(float(radius))
-    inner_radius = max(1e-6, effective_radius - half_track)
-    outer_radius = max(1e-6, effective_radius + half_track)
-    expected_inner = math.atan2(wheelbase, inner_radius)
-    expected_outer = math.atan2(wheelbase, outer_radius)
-    if radius >= 0.0:
-        observed_inner = float(getattr(record, "slip_angle_fl", record.slip_angle))
-        observed_outer = float(getattr(record, "slip_angle_fr", record.slip_angle))
-    else:
-        observed_inner = float(getattr(record, "slip_angle_fr", record.slip_angle))
-        observed_outer = float(getattr(record, "slip_angle_fl", record.slip_angle))
-    expected_delta = expected_inner - expected_outer
+
+    observed_inner, observed_outer = _wheel_slip(record, effective_direction)
+    baseline_inner, baseline_outer = _wheel_slip(
+        baseline, baseline_direction or effective_direction
+    )
     observed_delta = observed_inner - observed_outer
-    if not math.isfinite(observed_delta) or not math.isfinite(expected_delta):
+    baseline_delta = baseline_inner - baseline_outer
+    if not math.isfinite(observed_delta) or not math.isfinite(baseline_delta):
         return 0.0
-    return observed_delta - expected_delta
+    return observed_delta - baseline_delta
 
 
 def _node_feature_contributions(
@@ -995,9 +1013,6 @@ class DeltaCalculator:
             suspension_travel_rear=mean(record.suspension_travel_rear for record in records),
             suspension_velocity_front=mean(record.suspension_velocity_front for record in records),
             suspension_velocity_rear=mean(record.suspension_velocity_rear for record in records),
-            instantaneous_radius=mean(record.instantaneous_radius for record in records),
-            front_track_width=mean(record.front_track_width for record in records),
-            wheelbase=mean(record.wheelbase for record in records),
             car_model=getattr(records[0], "car_model", None),
             track_name=getattr(records[0], "track_name", None),
             tyre_compound=getattr(records[0], "tyre_compound", None),

@@ -21,6 +21,8 @@ from collections.abc import Mapping
 
 from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.io.profiles import AeroProfile, ProfileManager
+from tnfr_lfs.core.metrics import compute_window_metrics
+from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
 from tnfr_lfs.recommender.rules import (
     AeroCoherenceRule,
     FrontWingBalanceRule,
@@ -53,6 +55,146 @@ BASE_NU_F = {
     "track": 0.08,
     "driver": 0.05,
 }
+
+
+def _steering_record(
+    timestamp: float,
+    *,
+    yaw_rate: float,
+    steer: float,
+    slip_angle_fl: float,
+    slip_angle_fr: float,
+    nfr: float,
+) -> TelemetryRecord:
+    return TelemetryRecord(
+        timestamp=timestamp,
+        vertical_load=5000.0,
+        slip_ratio=0.0,
+        lateral_accel=0.0,
+        longitudinal_accel=0.0,
+        yaw=0.0,
+        pitch=0.0,
+        roll=0.0,
+        brake_pressure=0.0,
+        locking=0.0,
+        nfr=nfr,
+        si=0.8,
+        speed=45.0,
+        yaw_rate=yaw_rate,
+        slip_angle=0.0,
+        steer=steer,
+        throttle=0.4,
+        gear=3,
+        vertical_load_front=2500.0,
+        vertical_load_rear=2500.0,
+        mu_eff_front=1.0,
+        mu_eff_rear=1.0,
+        mu_eff_front_lateral=1.0,
+        mu_eff_front_longitudinal=0.95,
+        mu_eff_rear_lateral=1.0,
+        mu_eff_rear_longitudinal=0.95,
+        suspension_travel_front=0.0,
+        suspension_travel_rear=0.0,
+        suspension_velocity_front=0.0,
+        suspension_velocity_rear=0.0,
+        slip_angle_fl=slip_angle_fl,
+        slip_angle_fr=slip_angle_fr,
+    )
+
+
+def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBundle:
+    share = record.nfr / 7.0
+    return EPIBundle(
+        timestamp=record.timestamp,
+        epi=0.0,
+        delta_nfr=record.nfr,
+        sense_index=record.si,
+        tyres=TyresNode(delta_nfr=share, sense_index=record.si),
+        suspension=SuspensionNode(delta_nfr=share, sense_index=record.si),
+        chassis=ChassisNode(
+            delta_nfr=share,
+            sense_index=record.si,
+            yaw=record.yaw,
+            pitch=record.pitch,
+            roll=record.roll,
+            yaw_rate=record.yaw_rate,
+            lateral_accel=record.lateral_accel,
+            longitudinal_accel=record.longitudinal_accel,
+        ),
+        brakes=BrakesNode(delta_nfr=share, sense_index=record.si),
+        transmission=TransmissionNode(
+            delta_nfr=share,
+            sense_index=record.si,
+            throttle=record.throttle,
+            gear=record.gear,
+            speed=record.speed,
+            longitudinal_accel=record.longitudinal_accel,
+            rpm=record.rpm,
+            line_deviation=record.line_deviation,
+        ),
+        track=TrackNode(
+            delta_nfr=share,
+            sense_index=record.si,
+            axle_load_balance=0.0,
+            axle_velocity_balance=0.0,
+            yaw=record.yaw,
+            lateral_accel=record.lateral_accel,
+        ),
+        driver=DriverNode(
+            delta_nfr=share,
+            sense_index=record.si,
+            steer=record.steer,
+            throttle=record.throttle,
+            style_index=record.si,
+        ),
+        ackermann_parallel_index=ackermann_delta,
+    )
+
+
+def _parallel_window_metrics(
+    slip_angles: Sequence[tuple[float, float]],
+    *,
+    yaw_sign: float,
+    yaw_rates: Sequence[float] | None = None,
+    steer_series: Sequence[float] | None = None,
+):
+    records: list[TelemetryRecord] = []
+    for index, (inner, outer) in enumerate(slip_angles):
+        timestamp = float(index) * 0.4
+        yaw_rate = (
+            float(yaw_rates[index])
+            if yaw_rates is not None and index < len(yaw_rates)
+            else yaw_sign * (0.5 + 0.05 * index)
+        )
+        steer = (
+            float(steer_series[index])
+            if steer_series is not None and index < len(steer_series)
+            else yaw_sign * (0.2 + 0.04 * index)
+        )
+        if yaw_sign >= 0.0:
+            slip_fl, slip_fr = inner, outer
+        else:
+            slip_fl, slip_fr = outer, inner
+        records.append(
+            _steering_record(
+                timestamp,
+                yaw_rate=yaw_rate,
+                steer=steer,
+                slip_angle_fl=slip_fl,
+                slip_angle_fr=slip_fr,
+                nfr=100.0 + index,
+            )
+        )
+    baseline = DeltaCalculator.derive_baseline(records)
+    ackermann_values = [
+        _ackermann_parallel_delta(record, baseline) for record in records
+    ]
+    bundles = [
+        _steering_bundle(record, ackermann)
+        for record, ackermann in zip(records, ackermann_values)
+    ]
+    metrics = compute_window_metrics(records, bundles=bundles)
+    return metrics
 
 
 def _brake_headroom_microsector(
@@ -489,14 +631,18 @@ def test_tyre_balance_rule_skips_when_cphi_healthy(car_track_thresholds) -> None
 
 def test_parallel_steer_rule_recommends_parallel_adjustment_on_negative_delta() -> None:
     rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.2)
+    metrics = _parallel_window_metrics(
+        [(0.04, 0.015), (0.034, 0.018), (0.03, 0.02)],
+        yaw_sign=1.0,
+    )
     microsector = SimpleNamespace(
         index=7,
         filtered_measures={
             "ackermann_parallel_index": -0.12,
-            "slide_catch_budget": 0.82,
-            "slide_catch_budget_yaw": 0.24,
-            "slide_catch_budget_steer": 0.31,
-            "slide_catch_budget_overshoot": 0.18,
+            "slide_catch_budget": metrics.slide_catch_budget.value,
+            "slide_catch_budget_yaw": metrics.slide_catch_budget.yaw_acceleration_ratio,
+            "slide_catch_budget_steer": metrics.slide_catch_budget.steer_velocity_ratio,
+            "slide_catch_budget_overshoot": metrics.slide_catch_budget.overshoot_ratio,
         },
     )
     recommendations = list(rule.evaluate([], [microsector], None))
@@ -510,14 +656,18 @@ def test_parallel_steer_rule_recommends_parallel_adjustment_on_negative_delta() 
 
 def test_parallel_steer_rule_recommends_reducing_parallel_on_positive_delta() -> None:
     rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.15)
+    metrics = _parallel_window_metrics(
+        [(0.082, 0.012), (0.078, 0.015), (0.074, 0.018)],
+        yaw_sign=1.0,
+    )
     microsector = SimpleNamespace(
         index=5,
         filtered_measures={
             "ackermann_parallel_index": 0.11,
-            "slide_catch_budget": 0.7,
-            "slide_catch_budget_yaw": 0.4,
-            "slide_catch_budget_steer": 0.35,
-            "slide_catch_budget_overshoot": 0.25,
+            "slide_catch_budget": metrics.slide_catch_budget.value,
+            "slide_catch_budget_yaw": metrics.slide_catch_budget.yaw_acceleration_ratio,
+            "slide_catch_budget_steer": metrics.slide_catch_budget.steer_velocity_ratio,
+            "slide_catch_budget_overshoot": metrics.slide_catch_budget.overshoot_ratio,
         },
     )
     recommendations = list(rule.evaluate([], [microsector], None))
@@ -530,14 +680,20 @@ def test_parallel_steer_rule_recommends_reducing_parallel_on_positive_delta() ->
 
 def test_parallel_steer_rule_recommends_lock_when_budget_limited() -> None:
     rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.1, lock_step=0.75)
+    metrics = _parallel_window_metrics(
+        [(0.02, 0.019), (0.022, 0.0215), (0.18, 0.01)],
+        yaw_sign=1.0,
+        yaw_rates=[0.0, 1.5, -1.5],
+        steer_series=[0.0, 2.5, -2.5],
+    )
     microsector = SimpleNamespace(
         index=3,
         filtered_measures={
             "ackermann_parallel_index": -0.16,
-            "slide_catch_budget": 0.2,
-            "slide_catch_budget_yaw": 0.8,
-            "slide_catch_budget_steer": 0.7,
-            "slide_catch_budget_overshoot": 0.6,
+            "slide_catch_budget": metrics.slide_catch_budget.value,
+            "slide_catch_budget_yaw": metrics.slide_catch_budget.yaw_acceleration_ratio,
+            "slide_catch_budget_steer": metrics.slide_catch_budget.steer_velocity_ratio,
+            "slide_catch_budget_overshoot": metrics.slide_catch_budget.overshoot_ratio,
         },
     )
     recommendations = list(rule.evaluate([], [microsector], None))

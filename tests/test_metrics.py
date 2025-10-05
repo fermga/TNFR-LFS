@@ -26,7 +26,7 @@ from tnfr_lfs.core.contextual_delta import (
     resolve_context_from_bundle,
     resolve_context_from_record,
 )
-from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -39,8 +39,8 @@ from tnfr_lfs.core.epi_models import (
 )
 
 
-def _record(timestamp: float, nfr: float, si: float = 0.8) -> TelemetryRecord:
-    return TelemetryRecord(
+def _record(timestamp: float, nfr: float, si: float = 0.8, **overrides) -> TelemetryRecord:
+    base = TelemetryRecord(
         timestamp=timestamp,
         vertical_load=5000.0,
         slip_ratio=0.0,
@@ -76,6 +76,9 @@ def _record(timestamp: float, nfr: float, si: float = 0.8) -> TelemetryRecord:
         brake_temp_rl=0.0,
         brake_temp_rr=0.0,
     )
+    if overrides:
+        base = replace(base, **overrides)
+    return base
 
 
 def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBundle:
@@ -126,6 +129,104 @@ def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBund
             style_index=record.si,
         ),
         ackermann_parallel_index=ackermann_delta,
+    )
+
+
+def test_ackermann_parallel_delta_uses_wheel_slip_angles() -> None:
+    baseline = _record(
+        0.0,
+        100.0,
+        yaw_rate=0.6,
+        slip_angle=0.02,
+        slip_angle_fl=0.06,
+        slip_angle_fr=0.01,
+    )
+    sample = replace(
+        baseline,
+        yaw_rate=0.8,
+        slip_angle_fl=0.10,
+        slip_angle_fr=-0.02,
+    )
+    delta = _ackermann_parallel_delta(sample, baseline)
+    assert delta == pytest.approx(0.07, rel=1e-6)
+
+
+def test_ackermann_parallel_delta_swaps_wheels_on_right_turn() -> None:
+    baseline = _record(
+        0.0,
+        95.0,
+        yaw_rate=-0.5,
+        slip_angle=0.015,
+        slip_angle_fl=0.02,
+        slip_angle_fr=0.08,
+    )
+    sample = replace(
+        baseline,
+        yaw_rate=-0.7,
+        slip_angle_fl=0.01,
+        slip_angle_fr=0.12,
+    )
+    delta = _ackermann_parallel_delta(sample, baseline)
+    assert delta == pytest.approx(0.05, rel=1e-6)
+
+
+def test_ackermann_parallel_delta_ignores_low_yaw_rate() -> None:
+    baseline = _record(0.0, 92.0, yaw_rate=0.0, slip_angle_fl=0.03, slip_angle_fr=0.0)
+    sample = replace(baseline, yaw_rate=1e-7, slip_angle_fl=0.2, slip_angle_fr=-0.1)
+    delta = _ackermann_parallel_delta(sample, baseline)
+    assert delta == pytest.approx(0.0)
+
+
+def test_compute_window_metrics_tracks_ackermann_overshoot() -> None:
+    records = [
+        _record(
+            0.0,
+            100.0,
+            yaw_rate=0.52,
+            steer=0.18,
+            slip_angle=0.04,
+            slip_angle_fl=0.09,
+            slip_angle_fr=0.01,
+        ),
+        _record(
+            0.5,
+            101.0,
+            yaw_rate=0.55,
+            steer=0.24,
+            slip_angle=0.035,
+            slip_angle_fl=0.07,
+            slip_angle_fr=0.02,
+        ),
+        _record(
+            1.0,
+            99.0,
+            yaw_rate=0.58,
+            steer=0.3,
+            slip_angle=0.03,
+            slip_angle_fl=0.045,
+            slip_angle_fr=0.025,
+        ),
+    ]
+    baseline = DeltaCalculator.derive_baseline(records)
+    ackermann_values = [
+        _ackermann_parallel_delta(record, baseline) for record in records
+    ]
+    bundles = [
+        _steering_bundle(record, ackermann)
+        for record, ackermann in zip(records, ackermann_values)
+    ]
+    metrics = compute_window_metrics(records, bundles=bundles)
+    expected_overshoot = sum(abs(value) for value in ackermann_values) / len(
+        ackermann_values
+    )
+    normalised = min(1.0, expected_overshoot / math.radians(5.0))
+    assert metrics.slide_catch_budget.overshoot_ratio == pytest.approx(
+        normalised,
+        rel=1e-6,
+    )
+    assert metrics.ackermann_parallel_index == pytest.approx(
+        sum(ackermann_values) / len(ackermann_values),
+        rel=1e-6,
     )
 
 
