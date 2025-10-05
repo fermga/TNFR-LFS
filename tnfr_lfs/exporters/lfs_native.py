@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+import struct
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Callable, Mapping
 
 from .setup_plan import SetupPlan, serialise_setup_plan
 
@@ -53,13 +54,119 @@ def encode_native_setup(plan: SetupPlan) -> bytes:
             "Native LFS exporter is disabled. Set TNFR_LFS_NATIVE_EXPORT=1 to enable."
         )
 
-    # TODO: Map ``decision_vector`` into the native LFS binary/text format.
-    # This requires mirroring the structure of ``data\setups\*.set`` files or
-    # interfacing with LFS utilities to ensure compatibility.
     vector = build_native_vector(plan)
-    raise NotImplementedError(
-        "Serialisation of NativeSetupVector to the LFS format is pending."
-    )
+
+    buffer = bytearray(132)
+    _write_bytes(buffer, 0, b"SRSETT")
+    _write_byte(buffer, 6, 0)
+    _write_byte(buffer, 7, 252)
+    _write_byte(buffer, 8, 2)
+    _write_bytes(buffer, 9, b"\x00\x00\x00")
+    # Bit 7 marks modern setups; keep the rest cleared by default unless
+    # explicitly overridden by the decision vector.
+    flags = 0x80
+    if _as_bool(vector.decision_vector.get("abs_enabled")):
+        flags |= 0x04
+    if _as_bool(vector.decision_vector.get("traction_control")):
+        flags |= 0x02
+    if _as_bool(vector.decision_vector.get("asymmetric_setup")):
+        flags |= 0x01
+    _write_byte(buffer, 12, flags)
+
+    encoders: Mapping[str, Callable[[bytearray, float], None]] = {
+        "front_camber_deg": lambda buf, val: _encode_camber(buf, (120, 121), val),
+        "rear_camber_deg": lambda buf, val: _encode_camber(buf, (80, 81), val),
+        "front_toe_deg": lambda buf, val: _encode_toe(buf, 116, val),
+        "rear_toe_deg": lambda buf, val: _encode_toe(buf, 76, val),
+        "caster_deg": lambda buf, val: _encode_caster(buf, 117, val),
+        "front_ride_height": lambda buf, val: _write_float(buf, 92, val),
+        "rear_ride_height": lambda buf, val: _write_float(buf, 52, val),
+        "front_spring_stiffness": lambda buf, val: _write_float(buf, 96, val),
+        "rear_spring_stiffness": lambda buf, val: _write_float(buf, 56, val),
+        "front_rebound_clicks": lambda buf, val: _write_float(buf, 104, val),
+        "rear_rebound_clicks": lambda buf, val: _write_float(buf, 64, val),
+        "front_compression_clicks": lambda buf, val: _write_float(buf, 100, val),
+        "rear_compression_clicks": lambda buf, val: _write_float(buf, 60, val),
+        "front_arb_steps": lambda buf, val: _write_float(buf, 108, val),
+        "rear_arb_steps": lambda buf, val: _write_float(buf, 68, val),
+        "front_tyre_pressure": lambda buf, val: _encode_pressure(buf, 128, val),
+        "rear_tyre_pressure": lambda buf, val: _encode_pressure(buf, 88, val),
+        "brake_bias_pct": lambda buf, val: _encode_brake_bias(buf, 26, val),
+        "diff_power_lock": lambda buf, val: _encode_percentage(buf, 86, val),
+        "diff_coast_lock": lambda buf, val: _encode_percentage(buf, 87, val),
+        "diff_preload_nm": lambda buf, val: _encode_preload(buf, 83, val),
+        "rear_wing_angle": lambda buf, val: _encode_angle(buf, 20, val),
+    }
+
+    for parameter, raw_value in vector.decision_vector.items():
+        encoder = encoders.get(parameter)
+        if not encoder:
+            continue
+        encoder(buffer, float(raw_value))
+
+    return bytes(buffer)
+
+
+def _as_bool(value: float | int | bool | None) -> bool:
+    return bool(value)
+
+
+def _write_bytes(buffer: bytearray, offset: int, value: bytes) -> None:
+    buffer[offset : offset + len(value)] = value
+
+
+def _write_byte(buffer: bytearray, offset: int, value: int) -> None:
+    buffer[offset] = max(0, min(255, int(value)))
+
+
+def _write_word(buffer: bytearray, offset: int, value: int) -> None:
+    buffer[offset : offset + 2] = struct.pack("<H", max(0, min(0xFFFF, int(value))))
+
+
+def _write_float(buffer: bytearray, offset: int, value: float) -> None:
+    buffer[offset : offset + 4] = struct.pack("<f", float(value))
+
+
+def _encode_camber(buffer: bytearray, offsets: tuple[int, int], value: float) -> None:
+    clamped = max(-4.5, min(4.5, value))
+    encoded = int(round(clamped * 10.0 + 45.0))
+    for offset in offsets:
+        _write_byte(buffer, offset, encoded)
+
+
+def _encode_toe(buffer: bytearray, offset: int, value: float) -> None:
+    clamped = max(-0.9, min(0.9, value))
+    encoded = int(round((clamped + 0.9) / 0.1))
+    _write_byte(buffer, offset, encoded)
+
+
+def _encode_caster(buffer: bytearray, offset: int, value: float) -> None:
+    encoded = int(round(max(0.0, min(25.5, value)) * 10.0))
+    _write_byte(buffer, offset, encoded)
+
+
+def _encode_pressure(buffer: bytearray, offset: int, value: float) -> None:
+    _write_word(buffer, offset, round(max(0.0, min(6553.5, value)) * 1.0))
+
+
+def _encode_brake_bias(buffer: bytearray, offset: int, value: float) -> None:
+    encoded = int(round(max(0.0, min(100.0, value)) * 2.0))
+    _write_byte(buffer, offset, encoded)
+
+
+def _encode_percentage(buffer: bytearray, offset: int, value: float) -> None:
+    encoded = int(round(max(0.0, min(100.0, value))))
+    _write_byte(buffer, offset, encoded)
+
+
+def _encode_preload(buffer: bytearray, offset: int, value: float) -> None:
+    encoded = int(round(max(0.0, min(2550.0, value)) / 10.0))
+    _write_byte(buffer, offset, encoded)
+
+
+def _encode_angle(buffer: bytearray, offset: int, value: float) -> None:
+    encoded = int(round(max(0.0, min(255.0, value))))
+    _write_byte(buffer, offset, encoded)
 
 
 __all__ = [
