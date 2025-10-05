@@ -8,7 +8,10 @@ tnfr-lfs telemetry.csv --export csv
 ```
 
 The CLI ingests the telemetry file, computes EPI metrics, and prints the
-selected export format to stdout.
+selected export format to stdout. All TNFR indicators (`ΔNFR`,
+`ΔNFR_lat`, `ν_f`, `C(t)` and nodal derivatives) are computed from the
+Live for Speed OutSim/OutGauge telemetry streams, so make sure the
+simulator exposes both feeds before running any subcommand.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
 
 ## Subcommands
 
@@ -337,17 +340,33 @@ When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config
 Before running the CLI against Live for Speed you must enable the telemetry broadcasters inside
 ``cfg.txt`` (located in the simulator root directory):
 
-1. Edit the ``OutSim`` block to contain ``Mode 1``, ``Port 4123`` and ``IP 127.0.0.1``.  These values
-   match the default options of ``tnfr-lfs baseline`` and can be activated on the fly with the command
+1. Edit the ``OutSim`` block to contain ``Mode 1``, ``Port 4123`` y ``IP 127.0.0.1``.  Estos valores
+   coinciden con las opciones por defecto de ``tnfr-lfs baseline`` y pueden activarse al vuelo con
    ``/outsim 1 127.0.0.1 4123`` desde el chat del simulador.
-2. Update the ``OutGauge`` block with ``Mode 1``, ``Port 3000`` and ``IP 127.0.0.1``; Live for Speed acepta
+2. Añade ``OutSim Opts ff`` para incluir el ID del jugador, las entradas de piloto y el bloque de ruedas
+   (fuerzas, cargas, deflexión) que requieren los cálculos de ΔNFR y ν_f.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+3. Actualiza el bloque ``OutGauge`` con ``Mode 1``, ``Port 3000`` e ``IP 127.0.0.1``; Live for Speed acepta
    ``/outgauge 1 127.0.0.1 3000`` como atajo para la misma configuración.
-3. Reserva un puerto ``InSim`` estableciendo ``InSim Port 29999`` (o el valor preferido) y la IP del equipo
-   donde se ejecuta TNFR × LFS.  Lanza ``/insim 29999`` al iniciar una sesión para realizar el handshake que
+4. Reserva un puerto ``InSim`` estableciendo ``InSim Port 29999`` (o el valor preferido) y la IP del equipo
+   donde se ejecuta TNFR × LFS.  Lanza ``/insim 29999`` al iniciar una sesión para realizar el *handshake* que
    requieren algunos mods de Live for Speed.
 
 Guarda los cambios y ejecuta ``tnfr-lfs diagnose /ruta/a/cfg.txt`` para confirmar que los valores son
 coherentes y que ningún servicio está bloqueando los puertos UDP.
+
+### Telemetry field checklist
+
+- **ΔNFR / ΔNFR_lat** – requiere OutSim para exponer cargas verticales,
+  aceleraciones, fuerzas y deflexión de rueda junto a OutGauge para
+  obtener `rpm`, pedales y luces ABS/TC.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+- **ν_f (frecuencia natural)** – depende de la distribución de cargas,
+  `slip_ratio`/`slip_angle`, velocidad y `yaw_rate` calculados desde
+  OutSim, con señales de estilo (`throttle`, `gear`) procedentes de
+  OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+- **C(t) (coherencia estructural)** – se alimenta de la misma mezcla de
+  señales OutSim para ΔNFR y de los coeficientes `mu_eff_*`, además de
+  las banderas ABS/TC de OutGauge que el fusionador traduce en eventos de
+  bloqueo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
 
 Use ``--config`` to point to an alternative file on a per-invocation
 basis:

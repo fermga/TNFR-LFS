@@ -27,6 +27,16 @@ tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-po
 
 El panel alterna tres páginas (estado de curva/fase, contribuciones nodales y plan de setup) que caben en un botón `IS_BTN` de 40×16. Puedes moverlo con `--layout-left/--layout-top` si otro mod ocupa la misma zona.
 
+### Telemetría requerida
+
+Todas las métricas e indicadores TNFR (`ΔNFR`, `ΔNFR_lat`, `ν_f`, `C(t)` y derivados) se calculan exclusivamente a partir de la telemetría que exponen OutSim y OutGauge en Live for Speed. Asegúrate de activar ambos broadcasters y de ampliar el bloque de OutSim con `OutSim Opts ff` en `cfg.txt` (o mediante `/outsim Opts ff` seguido de `/outsim 1 …`) para incluir ID de jugador, entradas de piloto y el paquete de ruedas que contiene fuerzas, cargas y deflexiones que consume el fusionador de telemetría del toolkit.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+
+#### Señales clave por métrica
+
+- **ΔNFR / ΔNFR_lat** – combina las cargas verticales, aceleraciones longitudinales y laterales, fuerzas de rueda y deflexiones de suspensión derivadas del paquete de ruedas OutSim con el régimen del motor, posición de pedal y luces ABS/TC de OutGauge para contextualizar el bloqueo y la referencia longitudinal.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+- **ν_f (frecuencia natural)** – requiere el reparto de carga, las ratios/ángulos de deslizamiento y la velocidad/yaw rate procedentes de OutSim junto a la señal de estilo del piloto (`throttle`, `gear`) para ajustar la categoría y ventana espectral de cada nodo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+- **C(t) (coherencia estructural)** – se deriva de la distribución nodal de ΔNFR y de las bandas de ν_f, por lo que depende de los mismos campos de OutSim, de los coeficientes de adherencia `mu_eff_*` calculados a partir de las aceleraciones laterales/longitudinales y de las banderas ABS/TC que llegan por OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+
 ## Documentación
 
 La documentación completa se encuentra en el directorio `docs/` y se publica con MkDocs.
