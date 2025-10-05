@@ -6,7 +6,7 @@ import math
 from collections import deque
 from dataclasses import dataclass
 from time import monotonic, sleep
-from typing import Deque, Dict, List, Mapping, MutableMapping, Sequence, Tuple
+from typing import Any, Deque, Dict, List, Mapping, MutableMapping, Sequence, Tuple
 
 from ..acquisition import (
     ButtonEvent,
@@ -33,6 +33,7 @@ from ..core.segmentation import (
 from ..exporters.setup_plan import SetupChange, SetupPlan
 from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObjectives
+from ..session import format_session_messages
 
 PAYLOAD_LIMIT = OverlayManager.MAX_BUTTON_TEXT - 1
 DEFAULT_UPDATE_RATE = 6.0
@@ -141,6 +142,7 @@ class TelemetryHUD:
         setup_planner: SetupPlanner | None = None,
         plan_interval: float = DEFAULT_PLAN_INTERVAL,
         time_fn=monotonic,
+        session: Mapping[str, Any] | None = None,
     ) -> None:
         self._records: Deque[TelemetryRecord] = deque(maxlen=max(8, int(window)))
         self.extractor = extractor or EPIExtractor()
@@ -176,6 +178,7 @@ class TelemetryHUD:
         self._last_plan_time = -math.inf
         self._cached_plan: SetupPlan | None = None
         self._macro_status = MacroStatus()
+        self._session_messages: Tuple[str, ...] = tuple(format_session_messages(session))
         context = self.recommendation_engine._resolve_context(  # type: ignore[attr-defined]
             car_model, track_name
         )
@@ -211,6 +214,9 @@ class TelemetryHUD:
         )
         self._thresholds = context.thresholds
         self._profile_objectives = context.objectives
+        self._session_messages = tuple(
+            format_session_messages(getattr(self.recommendation_engine, "session", None))
+        )
 
         records = list(self._records)
         if len(records) < 8:
@@ -391,6 +397,7 @@ class TelemetryHUD:
                 sense_state=self._sense_state,
                 microsectors=self._microsectors,
                 quiet_sequences=self._quiet_sequences,
+                session_messages=self._session_messages,
             ),
             _render_page_d(top_changes, self._macro_status),
         )
@@ -949,6 +956,7 @@ def _render_page_c(
     sense_state: Mapping[str, object] | None = None,
     microsectors: Sequence[Microsector] | None = None,
     quiet_sequences: Sequence[Sequence[int]] | None = None,
+    session_messages: Sequence[str] | None = None,
 ) -> str:
     lines: List[str] = []
     sense_line = _sense_state_line(sense_state, prefix="Si plan ")
@@ -958,6 +966,11 @@ def _render_page_c(
         summary_line = _quiet_summary_line(microsectors, quiet_sequences)
         if summary_line:
             lines.append(summary_line)
+    if session_messages:
+        for message in session_messages:
+            truncated = _truncate_line(message)
+            if truncated:
+                lines.append(truncated)
     if active and phase_hint:
         lines.append(_truncate_line(f"Hint {phase_hint}"))
     elif active:
