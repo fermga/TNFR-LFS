@@ -144,7 +144,7 @@ class InSimClient:
             self.TINY_STRUCT.size,
             self.ISP_TINY,
             self.request_id,
-            self.TINY_ALIVE,
+            self.TINY_NONE,
         )
         self._socket.sendall(packet)  # type: ignore[union-attr]
 
