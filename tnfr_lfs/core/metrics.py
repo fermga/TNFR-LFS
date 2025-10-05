@@ -31,7 +31,6 @@ __all__ = [
     "BumpstopHistogram",
     "CPHIWheel",
     "WindowMetrics",
-    "CamberEffectiveness",
     "SuspensionVelocityBands",
     "compute_window_metrics",
     "compute_aero_coherence",
@@ -92,6 +91,29 @@ _LOCKING_TRANSITION_HIGH = 0.55
 _LOCKING_YAW_REFERENCE = 1.0
 _LOCKING_LONGITUDINAL_REFERENCE = 260.0
 _LOCKING_THROTTLE_REFERENCE = 0.5
+
+
+_CPHI_SLIP_RATIO_REFERENCE = 0.12
+_CPHI_SLIP_ANGLE_REFERENCE = math.radians(7.0)
+_CPHI_MU_REFERENCE = 1.2
+_CPHI_LOAD_BIAS_REFERENCE = 0.25
+
+
+def _safe_numeric(value: object) -> float | None:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return numeric
+
+
+def _mean_optional(values: Sequence[float | None]) -> float | None:
+    finite = [value for value in values if value is not None and math.isfinite(value)]
+    if not finite:
+        return None
+    return sum(finite) / len(finite)
 
 
 def phase_synchrony_index(lag: float, alignment: float) -> float:
@@ -324,16 +346,102 @@ class CPHIWheel:
     gradient_rate: float = 0.0
 
 
-@dataclass(frozen=True)
-class CamberEffectiveness:
-    """Per-wheel camber efficacy metrics derived from IMO gradients."""
+def _cphi_wheel_from_samples(
+    samples: Sequence[tuple[float, float, float, float, float, float, float]]
+) -> CPHIWheel:
+    if not samples:
+        return CPHIWheel()
 
-    gradient_im: float = 0.0
-    gradient_mo: float = 0.0
-    gradient_io: float = 0.0
-    corr_delta_perp: float = 0.0
-    corr_slip_angle: float = 0.0
-    index: float = 0.0
+    slip_components: list[float] = []
+    angle_components: list[float] = []
+    mu_components: list[float] = []
+    bias_components: list[float] = []
+    bias_values: list[float] = []
+    gradient_rates: list[float] = []
+
+    prev_angle: float | None = None
+    prev_time: float | None = None
+
+    for slip_ratio, slip_angle, lat_force, long_force, load, bias, timestamp in samples:
+        if math.isfinite(slip_ratio):
+            ratio_component = abs(slip_ratio) / max(_CPHI_SLIP_RATIO_REFERENCE, 1e-6)
+            slip_components.append(min(1.0, ratio_component))
+        if math.isfinite(slip_angle):
+            angle_component = abs(slip_angle) / max(_CPHI_SLIP_ANGLE_REFERENCE, 1e-6)
+            angle_components.append(min(1.0, angle_component))
+        if (
+            math.isfinite(lat_force)
+            and math.isfinite(long_force)
+            and math.isfinite(load)
+            and abs(load) > 1e-6
+        ):
+            resultant = math.hypot(lat_force, long_force)
+            mu_usage = resultant / abs(load)
+            mu_components.append(min(1.0, mu_usage / max(_CPHI_MU_REFERENCE, 1e-6)))
+        if math.isfinite(bias):
+            bias_components.append(min(1.0, abs(bias) / max(_CPHI_LOAD_BIAS_REFERENCE, 1e-6)))
+            bias_values.append(bias)
+        if (
+            math.isfinite(slip_angle)
+            and prev_angle is not None
+            and math.isfinite(timestamp)
+            and prev_time is not None
+        ):
+            dt = timestamp - prev_time
+            if dt > 1e-3:
+                gradient = abs(slip_angle - prev_angle) / dt
+                if math.isfinite(gradient):
+                    gradient_rates.append(gradient)
+        if math.isfinite(slip_angle):
+            prev_angle = slip_angle
+        if math.isfinite(timestamp):
+            prev_time = timestamp
+
+    def _average(values: Sequence[float]) -> float:
+        return sum(values) / len(values) if values else 0.0
+
+    temperature_component = _average(slip_components)
+    gradient_component = _average(angle_components)
+    mu_component = _average(mu_components)
+    bias_component = _average(bias_components)
+    gradient_rate = _average(gradient_rates)
+    temperature_delta = _average(bias_values)
+
+    combined = (
+        0.4 * temperature_component
+        + 0.3 * gradient_component
+        + 0.2 * mu_component
+        + 0.1 * bias_component
+    )
+    combined = max(0.0, min(1.0, combined))
+    value = max(0.0, 1.0 - combined)
+
+    return CPHIWheel(
+        value=value,
+        temperature_component=temperature_component,
+        gradient_component=gradient_component,
+        mu_component=mu_component,
+        temperature_delta=temperature_delta,
+        gradient_rate=gradient_rate,
+    )
+
+
+def _cphi_from_samples(
+    samples: Sequence[Mapping[str, tuple[float, float, float, float, float, float, float]]],
+) -> dict[str, CPHIWheel]:
+    per_wheel: dict[str, list[tuple[float, float, float, float, float, float, float]]] = {
+        suffix: [] for suffix in _WHEEL_SUFFIXES
+    }
+    for sample in samples:
+        for suffix in _WHEEL_SUFFIXES:
+            payload = sample.get(suffix)
+            if payload is None:
+                continue
+            per_wheel.setdefault(suffix, []).append(payload)
+    return {
+        suffix: _cphi_wheel_from_samples(series)
+        for suffix, series in per_wheel.items()
+    }
 
 
 @dataclass(frozen=True)
@@ -472,10 +580,6 @@ class WindowMetrics:
     bumpstop_histogram: BumpstopHistogram = field(default_factory=BumpstopHistogram)
     cphi: Mapping[str, CPHIWheel] = field(default_factory=dict)
     phase_cphi: Mapping[str, Mapping[str, CPHIWheel]] = field(default_factory=dict)
-    camber: Mapping[str, CamberEffectiveness] = field(default_factory=dict)
-    phase_camber: Mapping[str, Mapping[str, CamberEffectiveness]] = field(
-        default_factory=dict
-    )
     suspension_velocity_front: SuspensionVelocityBands = field(
         default_factory=SuspensionVelocityBands
     )
@@ -650,8 +754,6 @@ def compute_window_metrics(
             brake_headroom=BrakeHeadroom(),
             cphi={},
             phase_cphi={},
-            camber={},
-            phase_camber={},
             aero_balance_drift=AeroBalanceDrift(),
             phase_delta_nfr_std={},
             phase_nodal_delta_nfr_std={},
@@ -678,6 +780,10 @@ def compute_window_metrics(
         phase_windows = {"active": indices} if indices else {}
 
     primary_phase_indices = next(iter(phase_windows.values()), ())
+
+    wheel_samples: list[
+        dict[str, tuple[float, float, float, float, float, float, float]]
+    ] = []
 
     def _compute_brake_headroom(
         samples: Sequence[TelemetryRecord],
@@ -910,7 +1016,7 @@ def compute_window_metrics(
     rear_mu_long_series: list[float] = []
     throttle_series: list[float] = []
     locking_series: list[float] = []
-    for record in records:
+    for index, record in enumerate(records):
         try:
             throttle_value = float(getattr(record, "throttle", 0.0))
         except (TypeError, ValueError):
@@ -925,6 +1031,47 @@ def compute_window_metrics(
         if not math.isfinite(locking_value):
             locking_value = 0.0
         locking_series.append(max(0.0, min(1.0, locking_value)))
+
+        per_wheel_payload: dict[str, tuple[float, float, float, float, float, float, float]] = {}
+        wheel_loads: dict[str, float | None] = {}
+        for suffix in _WHEEL_SUFFIXES:
+            attr = f"wheel_load_{suffix}"
+            wheel_loads[suffix] = _safe_numeric(getattr(record, attr, None))
+        front_mean = _mean_optional([wheel_loads.get("fl"), wheel_loads.get("fr")])
+        rear_mean = _mean_optional([wheel_loads.get("rl"), wheel_loads.get("rr")])
+        timestamp_value = _safe_numeric(getattr(record, "timestamp", index))
+        if timestamp_value is None:
+            timestamp_value = float(index)
+        for suffix in _WHEEL_SUFFIXES:
+            slip_ratio = _safe_numeric(getattr(record, f"slip_ratio_{suffix}", None))
+            if slip_ratio is None:
+                slip_ratio = _safe_numeric(getattr(record, "slip_ratio", 0.0))
+            slip_angle = _safe_numeric(getattr(record, f"slip_angle_{suffix}", None))
+            if slip_angle is None:
+                slip_angle = _safe_numeric(getattr(record, "slip_angle", 0.0))
+            lateral_force = _safe_numeric(getattr(record, f"wheel_lateral_force_{suffix}", None))
+            longitudinal_force = _safe_numeric(
+                getattr(record, f"wheel_longitudinal_force_{suffix}", None)
+            )
+            load = wheel_loads.get(suffix)
+            if load is None:
+                load = 0.0
+            axle_mean = front_mean if suffix in {"fl", "fr"} else rear_mean
+            if axle_mean is None or axle_mean <= 1e-6:
+                bias = 0.0
+            else:
+                bias = (load - axle_mean) / axle_mean
+            payload = (
+                slip_ratio if slip_ratio is not None else float("nan"),
+                slip_angle if slip_angle is not None else float("nan"),
+                lateral_force if lateral_force is not None else float("nan"),
+                longitudinal_force if longitudinal_force is not None else float("nan"),
+                float(load),
+                bias,
+                float(timestamp_value),
+            )
+            per_wheel_payload[suffix] = payload
+        wheel_samples.append(per_wheel_payload)
 
     context_matrix = load_context_matrix()
 
@@ -1577,9 +1724,6 @@ def compute_window_metrics(
         high_threshold=velocity_high_threshold,
     )
 
-    camber_mapping: dict[str, CamberEffectiveness] = {}
-    phase_camber_mapping: dict[str, dict[str, CamberEffectiveness]] = {}
-
     def _rate_series(series: Sequence[float], stamps: Sequence[float]) -> list[float]:
         rates: list[float] = []
         length = min(len(series), len(stamps))
@@ -1708,8 +1852,21 @@ def compute_window_metrics(
         longitudinal_series,
     )
 
-    cphi_overall: dict[str, CPHIWheel] = {}
+    if wheel_samples:
+        cphi_overall = _cphi_from_samples(wheel_samples)
+    else:
+        cphi_overall = {suffix: CPHIWheel() for suffix in _WHEEL_SUFFIXES}
     phase_cphi: dict[str, Mapping[str, CPHIWheel]] = {}
+    for phase_label, indices in phase_windows.items():
+        selected = [
+            wheel_samples[index]
+            for index in indices
+            if 0 <= index < len(wheel_samples)
+        ]
+        if selected:
+            phase_cphi[phase_label] = _cphi_from_samples(selected)
+        else:
+            phase_cphi[phase_label] = {suffix: CPHIWheel() for suffix in _WHEEL_SUFFIXES}
 
     aero = compute_aero_coherence(records, bundles)
     coherence_values: list[float] = []
@@ -1793,8 +1950,6 @@ def compute_window_metrics(
         brake_headroom=_compute_brake_headroom(records),
         cphi=cphi_overall,
         phase_cphi=phase_cphi,
-        camber=camber_mapping,
-        phase_camber=phase_camber_mapping,
         aero_balance_drift=aero_balance_drift,
         phase_delta_nfr_std=phase_delta_std_map,
         phase_nodal_delta_nfr_std=phase_nodal_std_map,

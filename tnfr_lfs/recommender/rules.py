@@ -2703,13 +2703,13 @@ class ParallelSteerRule:
 
 
 class TyreBalanceRule:
-    """Recommend ΔP and camber tweaks from tyre thermal trends."""
+    """Recommend ΔP and camber tweaks from CPHI telemetry."""
 
     def __init__(
         self,
         priority: int = 18,
-        target_front: float = 82.0,
-        target_rear: float = 80.0,
+        target_front: float = 0.82,
+        target_rear: float = 0.80,
         *,
         dispersion_pressure_baseline: float = 0.5,
         dispersion_camber_baseline: float = 0.35,
@@ -2733,29 +2733,6 @@ class TyreBalanceRule:
         if not microsectors or context is None:
             return []
 
-        telemetry_keys = set(TEMPERATURE_MEAN_KEYS.values())
-        telemetry_keys.update(TEMPERATURE_STD_KEYS.values())
-        telemetry_keys.update(PRESSURE_STD_KEYS.values())
-        telemetry_available = False
-        for microsector in microsectors:
-            measures = getattr(microsector, "filtered_measures", {}) or {}
-            if not isinstance(measures, Mapping):
-                continue
-            for key in telemetry_keys:
-                if key not in measures:
-                    continue
-                try:
-                    value = float(measures[key])
-                except (TypeError, ValueError):
-                    continue
-                if math.isfinite(value) and value > 0.0:
-                    telemetry_available = True
-                    break
-            if telemetry_available:
-                break
-        if not telemetry_available:
-            return []
-
         def _safe_float(value: object) -> float:
             try:
                 return float(value)
@@ -2765,15 +2742,27 @@ class TyreBalanceRule:
         def _average(values: Sequence[float]) -> float:
             return mean(values) if values else 0.0
 
+        def _finite(value: object) -> float | None:
+            numeric = _safe_float(value)
+            return numeric if math.isfinite(numeric) else None
+
+        telemetry_available = False
+        for microsector in microsectors:
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            if not isinstance(measures, Mapping):
+                continue
+            if any(
+                _finite(measures.get(f"cphi_{suffix}")) is not None
+                for suffix in WHEEL_SUFFIXES
+            ):
+                telemetry_available = True
+                break
+        if not telemetry_available:
+            return []
+
         controls: List[TyreBalanceControlOutput] = []
-        front_temps: List[float] = []
-        rear_temps: List[float] = []
         delta_flat_values: List[float] = []
         per_wheel: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
-        front_temp_std_values: List[float] = []
-        rear_temp_std_values: List[float] = []
-        per_wheel_temp_std: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
-        per_wheel_pressure_std: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
         cphi_values: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
         cphi_temperature_components: Dict[str, List[float]] = {
             key: [] for key in WHEEL_SUFFIXES
@@ -2783,6 +2772,7 @@ class TyreBalanceRule:
         }
         cphi_mu_components: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
         cphi_temp_deltas: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
+        cphi_gradient_rates: Dict[str, List[float]] = {key: [] for key in WHEEL_SUFFIXES}
 
         for microsector in microsectors:
             metrics = microsector.filtered_measures
@@ -2793,80 +2783,44 @@ class TyreBalanceRule:
                 offsets=context.tyre_offsets,
             )
             controls.append(control)
-            front_temps.append(
-                _average(
-                    [
-                        _safe_float(metrics.get("tyre_temp_fl")),
-                        _safe_float(metrics.get("tyre_temp_fr")),
-                    ]
-                )
-            )
-            rear_temps.append(
-                _average(
-                    [
-                        _safe_float(metrics.get("tyre_temp_rl")),
-                        _safe_float(metrics.get("tyre_temp_rr")),
-                    ]
-                )
-            )
             delta_flat_values.append(_safe_float(metrics.get("d_nfr_flat")))
             for key, value in control.per_wheel_pressure.items():
                 per_wheel.setdefault(key, []).append(float(value))
-            front_std = _average(
-                [
-                    _safe_float(metrics.get(TEMPERATURE_STD_KEYS["fl"])),
-                    _safe_float(metrics.get(TEMPERATURE_STD_KEYS["fr"])),
-                ]
-            )
-            rear_std = _average(
-                [
-                    _safe_float(metrics.get(TEMPERATURE_STD_KEYS["rl"])),
-                    _safe_float(metrics.get(TEMPERATURE_STD_KEYS["rr"])),
-                ]
-            )
-            if front_std > 0.0:
-                front_temp_std_values.append(front_std)
-            if rear_std > 0.0:
-                rear_temp_std_values.append(rear_std)
-            for suffix in WHEEL_SUFFIXES:
-                temp_std_key = TEMPERATURE_STD_KEYS[suffix]
-                temp_std_value = metrics.get(temp_std_key)
-                if temp_std_value is not None:
-                    per_wheel_temp_std.setdefault(suffix, []).append(
-                        _safe_float(temp_std_value)
-                    )
-                pressure_std_key = PRESSURE_STD_KEYS.get(suffix)
-                if pressure_std_key is None:
-                    continue
-                pressure_std_value = metrics.get(pressure_std_key)
-                if pressure_std_value is not None:
-                    per_wheel_pressure_std.setdefault(suffix, []).append(
-                        _safe_float(pressure_std_value)
-                    )
             for suffix in WHEEL_SUFFIXES:
                 value = metrics.get(f"cphi_{suffix}")
                 if value is not None:
-                    cphi_values.setdefault(suffix, []).append(_safe_float(value))
+                    numeric = _safe_float(value)
+                    if math.isfinite(numeric):
+                        cphi_values.setdefault(suffix, []).append(numeric)
                 temp_component = metrics.get(f"cphi_{suffix}_temperature")
                 if temp_component is not None:
-                    cphi_temperature_components.setdefault(suffix, []).append(
-                        _safe_float(temp_component)
-                    )
+                    numeric = _safe_float(temp_component)
+                    if math.isfinite(numeric):
+                        cphi_temperature_components.setdefault(suffix, []).append(
+                            numeric
+                        )
                 gradient_component = metrics.get(f"cphi_{suffix}_gradient")
                 if gradient_component is not None:
-                    cphi_gradient_components.setdefault(suffix, []).append(
-                        _safe_float(gradient_component)
-                    )
+                    numeric = _safe_float(gradient_component)
+                    if math.isfinite(numeric):
+                        cphi_gradient_components.setdefault(suffix, []).append(
+                            numeric
+                        )
                 mu_component = metrics.get(f"cphi_{suffix}_mu")
                 if mu_component is not None:
-                    cphi_mu_components.setdefault(suffix, []).append(
-                        _safe_float(mu_component)
-                    )
+                    numeric = _safe_float(mu_component)
+                    if math.isfinite(numeric):
+                        cphi_mu_components.setdefault(suffix, []).append(numeric)
                 temp_delta = metrics.get(f"cphi_{suffix}_temp_delta")
                 if temp_delta is not None:
-                    cphi_temp_deltas.setdefault(suffix, []).append(
-                        _safe_float(temp_delta)
-                    )
+                    numeric = _safe_float(temp_delta)
+                    if math.isfinite(numeric):
+                        cphi_temp_deltas.setdefault(suffix, []).append(numeric)
+                gradient_rate = metrics.get(f"cphi_{suffix}_gradient_rate")
+                if gradient_rate is not None:
+                    numeric = _safe_float(gradient_rate)
+                    if math.isfinite(numeric) and numeric > 0.0:
+                        cphi_gradient_rates.setdefault(suffix, []).append(numeric)
 
         if not controls:
             return []
@@ -2876,12 +2830,6 @@ class TyreBalanceRule:
         camber_front = _average([control.camber_delta_front for control in controls])
         camber_rear = _average([control.camber_delta_rear for control in controls])
         per_wheel_avg = {key: _average(values) for key, values in per_wheel.items()}
-        per_wheel_temp_std_avg = {
-            key: _average(values) for key, values in per_wheel_temp_std.items()
-        }
-        per_wheel_pressure_std_avg = {
-            key: _average(values) for key, values in per_wheel_pressure_std.items()
-        }
 
         def _aggregate(source: Mapping[str, Sequence[float]], default: float = 0.0) -> Dict[str, float]:
             return {
@@ -2898,12 +2846,9 @@ class TyreBalanceRule:
         cphi_gradient_average = _aggregate(cphi_gradient_components)
         cphi_mu_average = _aggregate(cphi_mu_components)
         cphi_temp_delta_average = _aggregate(cphi_temp_deltas)
+        cphi_gradient_rate_average = _aggregate(cphi_gradient_rates)
 
-        average_front_temp = _average(front_temps)
-        average_rear_temp = _average(rear_temps)
         avg_delta_flat = _average(delta_flat_values)
-        avg_front_dispersion = _average(front_temp_std_values)
-        avg_rear_dispersion = _average(rear_temp_std_values)
 
         def _scale_delta(delta: float, dispersion: float, baseline: float) -> float:
             if abs(delta) <= 1e-6:
@@ -2919,11 +2864,6 @@ class TyreBalanceRule:
 
         recommendations: List[Recommendation] = []
 
-        base_front_pressure = front_pressure
-        base_rear_pressure = rear_pressure
-        front_pressure = _scale_delta(front_pressure, avg_front_dispersion, self.dispersion_pressure_baseline)
-        rear_pressure = _scale_delta(rear_pressure, avg_rear_dispersion, self.dispersion_pressure_baseline)
-
         def _axle_values(keys: Sequence[str], lookup: Mapping[str, float]) -> List[float]:
             return [lookup.get(suffix, 0.0) for suffix in keys]
 
@@ -2932,6 +2872,15 @@ class TyreBalanceRule:
 
         front_suffixes = ("fl", "fr")
         rear_suffixes = ("rl", "rr")
+        front_gradient_rates = _axle_values(front_suffixes, cphi_gradient_rate_average)
+        rear_gradient_rates = _axle_values(rear_suffixes, cphi_gradient_rate_average)
+        avg_front_dispersion = _avg(front_gradient_rates)
+        avg_rear_dispersion = _avg(rear_gradient_rates)
+
+        base_front_pressure = front_pressure
+        base_rear_pressure = rear_pressure
+        front_pressure = _scale_delta(front_pressure, avg_front_dispersion, self.dispersion_pressure_baseline)
+        rear_pressure = _scale_delta(rear_pressure, avg_rear_dispersion, self.dispersion_pressure_baseline)
         cphi_threshold = 0.78
 
         def _select_action(cphi_value: float, temp: float, gradient: float, mu_component: float) -> str | None:
@@ -3013,17 +2962,9 @@ class TyreBalanceRule:
             per_wheel_scaled[suffix] = value * scale
 
         if abs(front_pressure) > 0.01 or abs(rear_pressure) > 0.01:
-            temp_sigma_segments = [
-                f"{WHEEL_LABELS[suffix]} {per_wheel_temp_std_avg.get(suffix, 0.0):.2f}"
-                for suffix in WHEEL_SUFFIXES
-            ]
-            pressure_sigma_segments = [
-                f"{WHEEL_LABELS[suffix]} {per_wheel_pressure_std_avg.get(suffix, 0.0):.3f}"
-                for suffix in WHEEL_SUFFIXES
-            ]
             pressure_rationale = (
-                f"Temperaturas medias {average_front_temp:.1f}°C / {average_rear_temp:.1f}°C con ΔNFR_flat {avg_delta_flat:+.2f}. "
-                f"σT {' · '.join(temp_sigma_segments)} · σP {' · '.join(pressure_sigma_segments)}. "
+                f"ΔNFR_flat {avg_delta_flat:+.2f}. "
+                f"Dispersion gradiente front {avg_front_dispersion:.3f} · rear {avg_rear_dispersion:.3f}. "
                 f"Per-wheel ΔP {per_wheel_scaled.get('fl', 0.0):+.2f}/{per_wheel_scaled.get('fr', 0.0):+.2f}/"
                 f"{per_wheel_scaled.get('rl', 0.0):+.2f}/{per_wheel_scaled.get('rr', 0.0):+.2f}."
             )
@@ -3077,9 +3018,8 @@ class TyreBalanceRule:
 
         if abs(camber_front) > 0.01 or abs(camber_rear) > 0.01:
             camber_rationale = (
-                f"Gradiente térmico front {base_camber_front:+.2f}·dt y rear {base_camber_rear:+.2f}·dt derivados de dT/dt. "
-                f"σT FL/FR {per_wheel_temp_std_avg.get('fl', 0.0):.2f}/{per_wheel_temp_std_avg.get('fr', 0.0):.2f} · "
-                f"RL/RR {per_wheel_temp_std_avg.get('rl', 0.0):.2f}/{per_wheel_temp_std_avg.get('rr', 0.0):.2f}."
+                f"Gradiente CPHI front {front_gradient_component:.2f} · rear {rear_gradient_component:.2f}. "
+                f"Dispersion gradiente front {avg_front_dispersion:.3f} · rear {avg_rear_dispersion:.3f}."
             )
             cphi_camber_segments: list[str] = []
             if front_action == "camber":

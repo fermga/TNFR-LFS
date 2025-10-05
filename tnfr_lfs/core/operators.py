@@ -9,6 +9,8 @@ from math import sqrt
 from statistics import mean, pvariance
 from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
 
+WHEEL_SUFFIXES: tuple[str, ...] = ("fl", "fr", "rl", "rr")
+
 from .contextual_delta import (
     apply_contextual_delta,
     load_context_matrix,
@@ -732,45 +734,34 @@ def tyre_balance_controller(
     filtered_metrics: Mapping[str, float],
     *,
     delta_nfr_flat: float | None = None,
-    target_front: float = 82.0,
-    target_rear: float = 80.0,
-    pressure_gain: float = 0.02,
-    nfr_gain: float = 0.4,
-    pressure_max_step: float = 0.2,
-    camber_gain: float = 0.12,
+    target_front: float = 0.82,
+    target_rear: float = 0.80,
+    pressure_gain: float = 0.25,
+    nfr_gain: float = 0.2,
+    pressure_max_step: float = 0.16,
+    camber_gain: float = 0.18,
     camber_max_step: float = 0.25,
+    bias_gain: float = 0.04,
     offsets: Mapping[str, float] | None = None,
 ) -> TyreBalanceControlOutput:
-    """Compute ΔP and camber tweaks from filtered tyre metrics.
-
-    The controller applies a simple proportional relationship against the
-    temperature error and ΔNFR_flat trend, clamping the resulting deltas so
-    that they stay within small, actionable steps that can be executed between
-    stints.
-    """
-
-    def _safe_mean(values: Sequence[float]) -> float:
-        numeric = [value for value in values if isinstance(value, (int, float))]
-        if not numeric:
-            return 0.0
-        return float(mean(numeric))
+    """Compute ΔP and camber tweaks from CPHI-derived tyre metrics."""
 
     def _clamp(value: float, minimum: float, maximum: float) -> float:
         return max(minimum, min(value, maximum))
 
-    def _resolve_temperature(key: str) -> float | None:
-        value = filtered_metrics.get(key, float("nan"))
+    def _safe_value(key: str) -> float | None:
+        value = filtered_metrics.get(key)
         try:
             numeric = float(value)
         except (TypeError, ValueError):
             return None
-        if not math.isfinite(numeric) or numeric <= 0.0:
+        if not math.isfinite(numeric):
             return None
         return numeric
 
-    temps = {key: _resolve_temperature(key) for key in WHEEL_TEMPERATURE_KEYS}
-    if not any(value is not None for value in temps.values()):
-        zero_map = {suffix: 0.0 for suffix in ("fl", "fr", "rl", "rr")}
+    cphi_values = {suffix: _safe_value(f"cphi_{suffix}") for suffix in WHEEL_SUFFIXES}
+    if not any(value is not None for value in cphi_values.values()):
+        zero_map = {suffix: 0.0 for suffix in WHEEL_SUFFIXES}
         return TyreBalanceControlOutput(
             pressure_delta_front=0.0,
             pressure_delta_rear=0.0,
@@ -778,23 +769,28 @@ def tyre_balance_controller(
             camber_delta_rear=0.0,
             per_wheel_pressure=zero_map,
         )
+
     delta_flat = (
         float(delta_nfr_flat)
         if delta_nfr_flat is not None
         else float(filtered_metrics.get("d_nfr_flat", 0.0))
     )
-    front_samples = [value for value in (temps["tyre_temp_fl"], temps["tyre_temp_fr"]) if value is not None]
-    rear_samples = [value for value in (temps["tyre_temp_rl"], temps["tyre_temp_rr"]) if value is not None]
 
-    front_temp = mean(front_samples) if front_samples else None
-    rear_temp = mean(rear_samples) if rear_samples else None
+    def _min_value(values: Sequence[float | None]) -> float | None:
+        finite = [value for value in values if value is not None]
+        if not finite:
+            return None
+        return min(finite)
+
+    front_health = _min_value([cphi_values.get("fl"), cphi_values.get("fr")])
+    rear_health = _min_value([cphi_values.get("rl"), cphi_values.get("rr")])
 
     pressure_front = nfr_gain * delta_flat
     pressure_rear = nfr_gain * delta_flat
-    if front_temp is not None:
-        pressure_front += pressure_gain * (target_front - front_temp)
-    if rear_temp is not None:
-        pressure_rear += pressure_gain * (target_rear - rear_temp)
+    if front_health is not None:
+        pressure_front += pressure_gain * (target_front - front_health)
+    if rear_health is not None:
+        pressure_rear += pressure_gain * (target_rear - rear_health)
 
     if offsets:
         pressure_front += float(offsets.get("pressure_front", 0.0))
@@ -803,44 +799,28 @@ def tyre_balance_controller(
     pressure_front = _clamp(pressure_front, -pressure_max_step, pressure_max_step)
     pressure_rear = _clamp(pressure_rear, -pressure_max_step, pressure_max_step)
 
-    def _resolve_gradient(keys: Sequence[str]) -> float:
-        samples: list[float] = []
-        for key in keys:
-            try:
-                value = float(filtered_metrics.get(key, 0.0))
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(value):
-                samples.append(value)
-        return mean(samples) if samples else 0.0
+    def _component_average(suffixes: Sequence[str], key: str) -> float:
+        values = [_safe_value(f"cphi_{suffix}_{key}") for suffix in suffixes]
+        finite = [value for value in values if value is not None]
+        if not finite:
+            return 0.0
+        return float(mean(finite))
 
-    front_gradient = _resolve_gradient(["tyre_temp_fl_dt", "tyre_temp_fr_dt"])
-    rear_gradient = _resolve_gradient(["tyre_temp_rl_dt", "tyre_temp_rr_dt"])
+    front_gradient_component = _component_average(["fl", "fr"], "gradient")
+    rear_gradient_component = _component_average(["rl", "rr"], "gradient")
 
-    camber_front = _clamp(-front_gradient * camber_gain, -camber_max_step, camber_max_step)
-    camber_rear = _clamp(-rear_gradient * camber_gain, -camber_max_step, camber_max_step)
+    camber_front = _clamp(-front_gradient_component * camber_gain, -camber_max_step, camber_max_step)
+    camber_rear = _clamp(-rear_gradient_component * camber_gain, -camber_max_step, camber_max_step)
 
     if offsets:
         camber_front += float(offsets.get("camber_front", 0.0))
         camber_rear += float(offsets.get("camber_rear", 0.0))
 
-    def _split_pressure(front_delta: float, rear_delta: float) -> Mapping[str, float]:
-        if temps["tyre_temp_fl"] is None or temps["tyre_temp_fr"] is None:
-            lateral_bias = 0.0
-        else:
-            lateral_bias = _clamp((temps["tyre_temp_fl"] - temps["tyre_temp_fr"]) * 0.01, -0.05, 0.05)  # type: ignore[arg-type]
-        if temps["tyre_temp_rl"] is None or temps["tyre_temp_rr"] is None:
-            longitudinal_bias = 0.0
-        else:
-            longitudinal_bias = _clamp((temps["tyre_temp_rl"] - temps["tyre_temp_rr"]) * 0.01, -0.05, 0.05)  # type: ignore[arg-type]
-        return {
-            "fl": _clamp(front_delta + lateral_bias, -pressure_max_step, pressure_max_step),
-            "fr": _clamp(front_delta - lateral_bias, -pressure_max_step, pressure_max_step),
-            "rl": _clamp(rear_delta + longitudinal_bias, -pressure_max_step, pressure_max_step),
-            "rr": _clamp(rear_delta - longitudinal_bias, -pressure_max_step, pressure_max_step),
-        }
-
-    per_wheel = _split_pressure(pressure_front, pressure_rear)
+    per_wheel: dict[str, float] = {}
+    for suffix in WHEEL_SUFFIXES:
+        base = pressure_front if suffix in {"fl", "fr"} else pressure_rear
+        bias = _safe_value(f"cphi_{suffix}_temp_delta") or 0.0
+        per_wheel[suffix] = _clamp(base + bias_gain * bias, -pressure_max_step, pressure_max_step)
 
     return TyreBalanceControlOutput(
         pressure_delta_front=pressure_front,

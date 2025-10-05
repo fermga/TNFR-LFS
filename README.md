@@ -31,6 +31,8 @@ El panel alterna tres páginas (estado de curva/fase, contribuciones nodales y p
 
 Todas las métricas e indicadores TNFR (`ΔNFR`, `ΔNFR_lat`, `ν_f`, `C(t)` y derivados) se calculan exclusivamente a partir de la telemetría que exponen OutSim y OutGauge en Live for Speed. Asegúrate de activar ambos broadcasters y de ampliar el bloque de OutSim con `OutSim Opts ff` en `cfg.txt` (o mediante `/outsim Opts ff` seguido de `/outsim 1 …`) para incluir ID de jugador, entradas de piloto y el paquete de ruedas que contiene fuerzas, cargas y deflexiones que consume el fusionador de telemetría del toolkit.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
 
+Los indicadores de set-up (como el Contact Patch Health Index y los ajustes ΔP/Δcamber del operador térmico) se alimentan únicamente de esa telemetría nativa: utilizan los deslizamientos, fuerzas y cargas por rueda que expone OutSim, junto con el estado del motor y de los pedales que transmite OutGauge. No se aplican heurísticas externas ni datos sintéticos, lo que garantiza que cualquier recomendación deriva directamente de lo que transmite Live for Speed en tiempo real.【F:tnfr_lfs/core/metrics.py†L200-L284】【F:tnfr_lfs/core/operators.py†L731-L830】
+
 #### Señales clave por métrica
 
 - **ΔNFR / ΔNFR_lat** – combina las cargas verticales, aceleraciones longitudinales y laterales, fuerzas de rueda y deflexiones de suspensión derivadas del paquete de ruedas OutSim con el régimen del motor, posición de pedal y luces ABS/TC de OutGauge para contextualizar el bloqueo y la referencia longitudinal.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】

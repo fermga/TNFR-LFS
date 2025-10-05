@@ -8,8 +8,10 @@ from tnfr_lfs.core.metrics import (
     AeroBalanceDrift,
     AeroCoherence,
     BrakeHeadroom,
+    BumpstopHistogram,
     LockingWindowScore,
     SlideCatchBudget,
+    SuspensionVelocityBands,
     WindowMetrics,
     compute_aero_coherence,
     compute_window_metrics,
@@ -182,7 +184,6 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
     assert metrics.exit_gear_match == pytest.approx(0.0)
     assert metrics.shift_stability == pytest.approx(1.0)
-    assert metrics.camber == {}
 
 
 def test_compute_window_metrics_variance_and_derivative(
@@ -814,8 +815,14 @@ def test_compute_window_metrics_empty_window() -> None:
         aero_mechanical_coherence=0.0,
         epi_derivative_abs=0.0,
         brake_headroom=BrakeHeadroom(),
-        camber={},
-        phase_camber={},
+        bumpstop_histogram=BumpstopHistogram(),
+        cphi={},
+        phase_cphi={},
+        suspension_velocity_front=SuspensionVelocityBands(),
+        suspension_velocity_rear=SuspensionVelocityBands(),
+        aero_balance_drift=AeroBalanceDrift(),
+        phase_delta_nfr_std={},
+        phase_nodal_delta_nfr_std={},
     )
 
 

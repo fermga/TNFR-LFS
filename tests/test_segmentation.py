@@ -456,8 +456,6 @@ def bottoming_segments(monkeypatch):
         aero_mechanical_coherence=0.5,
         epi_derivative_abs=0.05,
         brake_headroom=BrakeHeadroom(),
-        camber={},
-        phase_camber={},
         suspension_velocity_front=front_velocity_profile,
         suspension_velocity_rear=rear_velocity_profile,
     )
