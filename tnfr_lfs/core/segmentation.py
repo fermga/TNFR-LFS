@@ -156,6 +156,12 @@ class Microsector:
     recursivity_trace: Tuple[Mapping[str, float | str | None], ...]
     last_mutation: Mapping[str, object] | None
     window_occupancy: Mapping[PhaseLiteral, Mapping[str, float]]
+    delta_nfr_std: float = 0.0
+    nodal_delta_nfr_std: float = 0.0
+    phase_delta_nfr_std: Mapping[PhaseLiteral, float] = field(default_factory=dict)
+    phase_nodal_delta_nfr_std: Mapping[PhaseLiteral, float] = field(
+        default_factory=dict
+    )
     phase_axis_targets: Mapping[PhaseLiteral, Mapping[str, float]] = field(
         default_factory=dict
     )
@@ -538,9 +544,19 @@ def segment_microsectors(
         filtered_measures.update(brake_temperature_std)
         filtered_measures.update(wheel_pressures)
         filtered_measures.update(wheel_pressure_std)
+        local_phase_indices = {
+            phase: tuple(
+                index - start
+                for index in indices
+                if start <= index <= end
+            )
+            for phase, indices in phase_samples.items()
+        }
+
         window_metrics = compute_window_metrics(
             records[start : end + 1],
             bundles=recomputed_bundles[start : end + 1],
+            phase_indices=local_phase_indices,
         )
         front_velocity = window_metrics.suspension_velocity_front
         rear_velocity = window_metrics.suspension_velocity_rear
@@ -581,6 +597,8 @@ def segment_microsectors(
                 "bumpstop_rear_energy": window_metrics.bumpstop_histogram.rear_total_energy,
                 "mu_usage_front_ratio": window_metrics.mu_usage_front_ratio,
                 "mu_usage_rear_ratio": window_metrics.mu_usage_rear_ratio,
+                "delta_nfr_std": window_metrics.delta_nfr_std,
+                "nodal_delta_nfr_std": window_metrics.nodal_delta_nfr_std,
                 "exit_gear_match": window_metrics.exit_gear_match,
                 "shift_stability": window_metrics.shift_stability,
                 "suspension_velocity_front_compression_low_ratio": front_velocity.compression_low_ratio,
@@ -654,6 +672,14 @@ def segment_microsectors(
         ventilation_alert = window_metrics.brake_headroom.ventilation_alert
         if ventilation_alert:
             filtered_measures["brake_headroom_ventilation_alert"] = ventilation_alert
+        for phase_label, value in (
+            window_metrics.phase_delta_nfr_std or {}
+        ).items():
+            filtered_measures[f"delta_nfr_std_{phase_label}"] = float(value)
+        for phase_label, value in (
+            window_metrics.phase_nodal_delta_nfr_std or {}
+        ).items():
+            filtered_measures[f"nodal_delta_nfr_std_{phase_label}"] = float(value)
         if isinstance(window_metrics.camber, Mapping):
             for suffix, payload in window_metrics.camber.items():
                 prefix = f"camber_{suffix}"
@@ -987,6 +1013,20 @@ def segment_microsectors(
                 grip_rel=float(filtered_measures.get("grip_rel", grip_rel)),
                 phase_lag=dict(phase_lag_map),
                 phase_alignment=dict(phase_alignment_map),
+                delta_nfr_std=float(window_metrics.delta_nfr_std),
+                nodal_delta_nfr_std=float(window_metrics.nodal_delta_nfr_std),
+                phase_delta_nfr_std={
+                    str(label): float(value)
+                    for label, value in (
+                        (window_metrics.phase_delta_nfr_std or {}).items()
+                    )
+                },
+                phase_nodal_delta_nfr_std={
+                    str(label): float(value)
+                    for label, value in (
+                        (window_metrics.phase_nodal_delta_nfr_std or {}).items()
+                    )
+                },
                 filtered_measures=dict(filtered_measures),
                 recursivity_trace=rec_trace,
                 last_mutation=dict(mutation_details) if mutation_details is not None else None,
