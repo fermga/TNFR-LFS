@@ -570,20 +570,31 @@ class TelemetryFusion:
         if not isinstance(candidate, tuple) or len(candidate) != 4:
             candidate = (0.0, 0.0, 0.0, 0.0)
         fallback = (
-            previous.brake_temp_fl if previous else 0.0,
-            previous.brake_temp_fr if previous else 0.0,
-            previous.brake_temp_rl if previous else 0.0,
-            previous.brake_temp_rr if previous else 0.0,
+            previous.brake_temp_fl if previous else math.nan,
+            previous.brake_temp_fr if previous else math.nan,
+            previous.brake_temp_rl if previous else math.nan,
+            previous.brake_temp_rr if previous else math.nan,
         )
-        resolved: list[float] = []
-        for value, default in zip(candidate, fallback):
+        candidate_values: list[float] = []
+        has_positive = False
+        for value in candidate:
             try:
                 numeric = float(value)
             except (TypeError, ValueError):
-                numeric = float(default)
-            if not math.isfinite(numeric) or numeric <= 0.0:
-                numeric = float(default)
-            resolved.append(numeric)
+                numeric = math.nan
+            if math.isfinite(numeric) and numeric > 0.0:
+                has_positive = True
+            candidate_values.append(numeric)
+        if not has_positive:
+            return (math.nan, math.nan, math.nan, math.nan)
+        resolved: list[float] = []
+        for numeric, default in zip(candidate_values, fallback):
+            resolved_value = numeric
+            if not math.isfinite(resolved_value) or resolved_value <= 0.0:
+                resolved_value = default
+            if not math.isfinite(resolved_value) or resolved_value <= 0.0:
+                resolved_value = math.nan
+            resolved.append(float(resolved_value))
         return tuple(resolved)  # type: ignore[return-value]
 
     def _compute_line_deviation(self, outsim: OutSimPacket, window: int = 25) -> float:

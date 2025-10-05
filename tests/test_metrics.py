@@ -727,6 +727,34 @@ def test_compute_window_metrics_brake_fade_and_ventilation() -> None:
     assert headroom.value < 0.5
 
 
+def test_compute_window_metrics_without_brake_temperature_samples() -> None:
+    base = _record(0.0, 100.0)
+    records = [
+        replace(
+            base,
+            timestamp=index * 0.5,
+            brake_pressure=0.95,
+            longitudinal_accel=-6.0,
+            brake_temp_fl=math.nan,
+            brake_temp_fr=math.nan,
+            brake_temp_rl=math.nan,
+            brake_temp_rr=math.nan,
+        )
+        for index in range(4)
+    ]
+
+    metrics = compute_window_metrics(records)
+    headroom = metrics.brake_headroom
+
+    assert headroom.temperature_available is False
+    assert math.isnan(headroom.temperature_peak)
+    assert math.isnan(headroom.temperature_mean)
+    assert math.isnan(headroom.fade_ratio)
+    assert math.isnan(headroom.fade_slope)
+    assert math.isnan(headroom.ventilation_index)
+    assert headroom.fade_available is False
+
+
 def test_slide_catch_budget_aggregates_components() -> None:
     base = _record(0.0, 100.0)
     records = [

@@ -770,29 +770,58 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
 def _brake_headroom_line(headroom: BrakeHeadroom | None) -> str | None:
     if not isinstance(headroom, BrakeHeadroom):
         return None
+    temperature_available = getattr(headroom, "temperature_available", True)
+    fade_available = getattr(headroom, "fade_available", True)
+    fade_has_value = (
+        fade_available
+        and math.isfinite(headroom.fade_ratio)
+        and headroom.fade_ratio > 0.0
+    )
+    temp_peak_has_value = (
+        temperature_available
+        and math.isfinite(headroom.temperature_peak)
+        and headroom.temperature_peak > 0.0
+    )
+    temp_mean_has_value = (
+        temperature_available
+        and math.isfinite(headroom.temperature_mean)
+        and headroom.temperature_mean > 0.0
+    )
+    ventilation_has_value = (
+        temperature_available
+        and math.isfinite(headroom.ventilation_index)
+        and headroom.ventilation_index > 0.0
+    )
     if (
         headroom.value <= 0.0
-        and headroom.fade_ratio <= 0.0
-        and headroom.temperature_peak <= 0.0
-        and headroom.temperature_mean <= 0.0
+        and not fade_has_value
+        and not temp_peak_has_value
+        and not temp_mean_has_value
         and not headroom.ventilation_alert
-        and headroom.ventilation_index <= 0.0
+        and not ventilation_has_value
+        and temperature_available
     ):
         return None
     segments = [f"HR {headroom.value:.2f}"]
-    if headroom.fade_ratio > 0.0:
+    if fade_has_value:
         fade_segment = f"fade {headroom.fade_ratio * 100:.0f}%"
-        if headroom.fade_slope > 0.0:
+        if fade_available and math.isfinite(headroom.fade_slope) and headroom.fade_slope > 0.0:
             fade_segment += f"/{headroom.fade_slope:.2f}m/s³"
         segments.append(fade_segment)
-    if headroom.temperature_peak > 0.0:
+    elif not fade_available:
+        segments.append("fade sin datos")
+    if temp_peak_has_value:
         segments.append(f"T°max {headroom.temperature_peak:.0f}°C")
-    elif headroom.temperature_mean > 0.0:
+    elif temp_mean_has_value:
         segments.append(f"T°μ {headroom.temperature_mean:.0f}°C")
+    elif not temperature_available:
+        segments.append("T° sin datos")
     if headroom.ventilation_alert:
         segments.append(f"vent {headroom.ventilation_alert}")
-    elif headroom.ventilation_index > 0.0:
+    elif ventilation_has_value:
         segments.append(f"vent {headroom.ventilation_index:.2f}")
+    elif not temperature_available:
+        segments.append("vent sin datos")
     return _truncate_line("Freno " + " · ".join(segments))
 
 

@@ -642,13 +642,33 @@ def segment_microsectors(
                 "brake_headroom_abs_activation": window_metrics.brake_headroom.abs_activation_ratio,
                 "brake_headroom_partial_locking": window_metrics.brake_headroom.partial_locking_ratio,
                 "brake_headroom_sustained_locking": window_metrics.brake_headroom.sustained_locking_ratio,
-                "brake_headroom_fade_slope": window_metrics.brake_headroom.fade_slope,
-                "brake_headroom_fade_ratio": window_metrics.brake_headroom.fade_ratio,
-                "brake_headroom_temperature_peak": window_metrics.brake_headroom.temperature_peak,
-                "brake_headroom_temperature_mean": window_metrics.brake_headroom.temperature_mean,
-                "brake_headroom_ventilation_index": window_metrics.brake_headroom.ventilation_index,
             }
         )
+        headroom = window_metrics.brake_headroom
+        temperature_available = getattr(headroom, "temperature_available", True)
+        fade_available = getattr(headroom, "fade_available", True)
+        if fade_available and math.isfinite(headroom.fade_slope):
+            filtered_measures["brake_headroom_fade_slope"] = headroom.fade_slope
+        else:
+            filtered_measures["brake_headroom_fade_slope"] = None
+        if fade_available and math.isfinite(headroom.fade_ratio):
+            filtered_measures["brake_headroom_fade_ratio"] = headroom.fade_ratio
+        else:
+            filtered_measures["brake_headroom_fade_ratio"] = None
+        if temperature_available and math.isfinite(headroom.temperature_peak):
+            filtered_measures["brake_headroom_temperature_peak"] = headroom.temperature_peak
+        else:
+            filtered_measures["brake_headroom_temperature_peak"] = None
+        if temperature_available and math.isfinite(headroom.temperature_mean):
+            filtered_measures["brake_headroom_temperature_mean"] = headroom.temperature_mean
+        else:
+            filtered_measures["brake_headroom_temperature_mean"] = None
+        if temperature_available and math.isfinite(headroom.ventilation_index):
+            filtered_measures["brake_headroom_ventilation_index"] = headroom.ventilation_index
+        else:
+            filtered_measures["brake_headroom_ventilation_index"] = None
+        filtered_measures["brake_headroom_temperature_available"] = temperature_available
+        filtered_measures["brake_headroom_fade_available"] = fade_available
         if window_metrics.cphi:
             for suffix, wheel in window_metrics.cphi.items():
                 filtered_measures[f"cphi_{suffix}"] = float(wheel.value)
