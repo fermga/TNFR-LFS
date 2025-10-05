@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import math
-
 import pytest
 from typing import Mapping
 
 from tnfr_lfs.core.metrics import (
+    AeroBalanceDrift,
     AeroCoherence,
     BrakeHeadroom,
     CamberEffectiveness,
@@ -147,6 +147,8 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.aero_coherence.high_speed_samples == 0
     assert metrics.aero_coherence.low_speed_samples == 0
     assert metrics.aero_mechanical_coherence == pytest.approx(0.0)
+    assert isinstance(metrics.aero_balance_drift, AeroBalanceDrift)
+    assert metrics.aero_balance_drift.guidance == ""
     expected_variance = pvariance([record.si for record in records])
     assert metrics.si_variance == pytest.approx(expected_variance, rel=1e-6)
     assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
@@ -449,6 +451,90 @@ def test_compute_window_metrics_mu_usage_ratios() -> None:
     assert metrics.mu_usage_rear_ratio == pytest.approx(0.8104912544074854, rel=1e-6)
     assert metrics.phase_mu_usage_front_ratio == pytest.approx(0.9203843968780266, rel=1e-6)
     assert metrics.phase_mu_usage_rear_ratio == pytest.approx(0.8584645893961879, rel=1e-6)
+
+
+def test_compute_window_metrics_aero_balance_drift_bins() -> None:
+    base = _record(0.0, 110.0, si=0.82)
+
+    def _rake_value(pitch: float, front: float, rear: float, wheelbase: float = 2.6) -> float:
+        return pitch + math.atan2(rear - front, wheelbase)
+
+    records = [
+        replace(
+            base,
+            timestamp=0.0,
+            speed=20.0,
+            pitch=0.008,
+            suspension_travel_front=0.015,
+            suspension_travel_rear=0.025,
+            mu_eff_front=1.05,
+            mu_eff_rear=1.08,
+        ),
+        replace(
+            base,
+            timestamp=0.1,
+            speed=40.0,
+            pitch=0.012,
+            suspension_travel_front=0.02,
+            suspension_travel_rear=0.03,
+            mu_eff_front=1.02,
+            mu_eff_rear=0.99,
+        ),
+        replace(
+            base,
+            timestamp=0.2,
+            speed=60.0,
+            pitch=0.018,
+            suspension_travel_front=0.03,
+            suspension_travel_rear=0.05,
+            mu_eff_front=1.1,
+            mu_eff_rear=0.9,
+        ),
+        replace(
+            base,
+            timestamp=0.3,
+            speed=62.0,
+            pitch=0.019,
+            suspension_travel_front=0.028,
+            suspension_travel_rear=0.055,
+            mu_eff_front=1.15,
+            mu_eff_rear=0.88,
+        ),
+    ]
+
+    metrics = compute_window_metrics(records)
+    drift = metrics.aero_balance_drift
+
+    assert isinstance(drift, AeroBalanceDrift)
+    assert drift.low_speed.samples == 1
+    assert drift.medium_speed.samples == 1
+    assert drift.high_speed.samples == 2
+
+    expected_high_rakes = [
+        _rake_value(0.018, 0.03, 0.05),
+        _rake_value(0.019, 0.028, 0.055),
+    ]
+    expected_high_mean = sum(expected_high_rakes) / len(expected_high_rakes)
+    expected_high_std = math.sqrt(pvariance(expected_high_rakes))
+    expected_high_mu_front = (1.1 + 1.15) / 2.0
+    expected_high_mu_rear = (0.9 + 0.88) / 2.0
+    expected_high_delta = expected_high_mu_front - expected_high_mu_rear
+    expected_high_ratio = expected_high_mu_front / expected_high_mu_rear
+
+    assert drift.high_speed.rake_mean == pytest.approx(expected_high_mean, rel=1e-6)
+    assert drift.high_speed.rake_std == pytest.approx(expected_high_std, rel=1e-6)
+    assert drift.high_speed.mu_front_mean == pytest.approx(expected_high_mu_front, rel=1e-6)
+    assert drift.high_speed.mu_rear_mean == pytest.approx(expected_high_mu_rear, rel=1e-6)
+    assert drift.high_speed.mu_delta == pytest.approx(expected_high_delta, rel=1e-6)
+    assert drift.high_speed.mu_ratio == pytest.approx(expected_high_ratio, rel=1e-6)
+
+    dominant = drift.dominant_bin()
+    assert dominant is not None
+    band_label, direction, payload = dominant
+    assert band_label == "alta"
+    assert direction == "delantera"
+    assert payload is drift.high_speed
+    assert "μΔ" in drift.guidance or drift.guidance == ""
 
 
 def test_compute_window_metrics_brake_headroom_components() -> None:

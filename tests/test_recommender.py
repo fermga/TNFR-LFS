@@ -819,6 +819,8 @@ def test_front_wing_balance_rule_targets_front_limited_bias() -> None:
             "aero_high_rear_lateral": 0.22,
             "aero_high_front_longitudinal": 0.04,
             "aero_high_rear_longitudinal": 0.14,
+            "aero_drift_high_mu_delta": -0.18,
+            "aero_drift_mu_tolerance": 0.05,
         },
     )
 

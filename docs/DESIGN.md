@@ -152,6 +152,10 @@ respuesta.  Además se exponen indicadores agregados del apoyo estructural en
 * ``structural_expansion_lateral``/``structural_contraction_lateral`` replican
   la métrica para la componente lateral, revelando apoyos que abren o cierran
   el eje estructural en la ventana.
+* ``aero_balance_drift`` resume el rake medio (pitch + viajes) y la diferencia
+  ``μ_front - μ_rear`` por bandas de velocidad (baja/media/alta), exponiendo
+  cuándo el reparto aerodinámico deriva hacia un eje concreto incluso cuando la
+  coherencia aparente permanece estable.
 
 ## Artefactos generados
 

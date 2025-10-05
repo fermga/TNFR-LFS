@@ -1386,6 +1386,13 @@ class AeroCoherenceRule:
             if am_coherence > self.min_aero_mechanical:
                 continue
 
+            drift_delta = float(measures.get("aero_drift_high_mu_delta", 0.0))
+            drift_tolerance = float(measures.get("aero_drift_mu_tolerance", 0.04))
+            if high_deviation > 0.0 and drift_delta < -drift_tolerance:
+                continue
+            if high_deviation < 0.0 and drift_delta > drift_tolerance:
+                continue
+
             if high_deviation > 0:
                 delta = self.delta_step
                 action = "Incrementa el ángulo del alerón trasero"
@@ -1458,6 +1465,11 @@ class FrontWingBalanceRule:
                 continue
             am_coherence = float(measures.get("aero_mechanical_coherence", 1.0))
             if am_coherence >= self.max_aero_mechanical:
+                continue
+
+            drift_delta = float(measures.get("aero_drift_high_mu_delta", 0.0))
+            drift_tolerance = float(measures.get("aero_drift_mu_tolerance", 0.04))
+            if drift_delta > -drift_tolerance:
                 continue
 
             front_total = float(measures.get("aero_high_front_total", 0.0))

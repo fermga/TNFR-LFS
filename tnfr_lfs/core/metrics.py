@@ -22,6 +22,8 @@ from .resonance import estimate_excitation_frequency
 from .structural_time import resolve_time_axis
 
 __all__ = [
+    "AeroBalanceDrift",
+    "AeroBalanceDriftBin",
     "AeroCoherence",
     "BrakeHeadroom",
     "SlideCatchBudget",
@@ -170,6 +172,59 @@ class AeroCoherence:
     @property
     def high_speed_samples(self) -> int:
         return self.high_speed.samples
+
+
+@dataclass(frozen=True)
+class AeroBalanceDriftBin:
+    """Aggregate rake/μ metrics for a given aerodynamic speed band."""
+
+    speed_min: float = 0.0
+    speed_max: float | None = None
+    samples: int = 0
+    rake_mean: float = 0.0
+    rake_std: float = 0.0
+    mu_front_mean: float = 0.0
+    mu_rear_mean: float = 0.0
+    mu_delta: float = 0.0
+    mu_ratio: float = 1.0
+
+    @property
+    def rake_deg(self) -> float:
+        """Return the mean rake expressed in degrees."""
+
+        return math.degrees(self.rake_mean)
+
+
+@dataclass(frozen=True)
+class AeroBalanceDrift:
+    """Aerodynamic balance drift derived from pitch, travel and μ usage."""
+
+    low_speed: AeroBalanceDriftBin = field(default_factory=AeroBalanceDriftBin)
+    medium_speed: AeroBalanceDriftBin = field(default_factory=AeroBalanceDriftBin)
+    high_speed: AeroBalanceDriftBin = field(default_factory=AeroBalanceDriftBin)
+    mu_tolerance: float = 0.04
+    guidance: str = ""
+
+    def dominant_bin(
+        self, tolerance: float | None = None
+    ) -> tuple[str, str, AeroBalanceDriftBin] | None:
+        """Return the dominant drift bin exceeding ``tolerance`` in μ Δ."""
+
+        effective_tolerance = self.mu_tolerance if tolerance is None else float(tolerance)
+        if effective_tolerance < 0.0:
+            effective_tolerance = 0.0
+        for label, payload in (
+            ("alta", self.high_speed),
+            ("media", self.medium_speed),
+            ("baja", self.low_speed),
+        ):
+            if payload.samples <= 0:
+                continue
+            if abs(payload.mu_delta) <= effective_tolerance:
+                continue
+            direction = "delantera" if payload.mu_delta > 0.0 else "trasera"
+            return label, direction, payload
+        return None
 
 
 @dataclass(frozen=True)
@@ -362,6 +417,7 @@ class WindowMetrics:
     suspension_velocity_rear: SuspensionVelocityBands = field(
         default_factory=SuspensionVelocityBands
     )
+    aero_balance_drift: AeroBalanceDrift = field(default_factory=AeroBalanceDrift)
 
 
 def _compute_bumpstop_histogram(
@@ -525,6 +581,7 @@ def compute_window_metrics(
             phase_cphi={},
             camber={},
             phase_camber={},
+            aero_balance_drift=AeroBalanceDrift(),
         )
 
     if isinstance(phase_indices, Mapping):
@@ -1235,6 +1292,142 @@ def compute_window_metrics(
             ),
         )
 
+    drift_low_threshold = max(
+        0.0, _objective("aero_drift_low_speed_threshold", 35.0)
+    )
+    drift_high_candidate = max(
+        0.0, _objective("aero_drift_high_speed_threshold", 50.0)
+    )
+    if drift_high_candidate <= drift_low_threshold:
+        drift_high_threshold = drift_low_threshold + max(
+            1.0, drift_low_threshold * 0.1 + 1e-6
+        )
+    else:
+        drift_high_threshold = drift_high_candidate
+    drift_mu_tolerance = max(
+        0.0, _objective("aero_drift_mu_tolerance", 0.04)
+    )
+    drift_bins: dict[str, dict[str, list[float]]] = {
+        "low": {"rake": [], "mu_front": [], "mu_rear": []},
+        "medium": {"rake": [], "mu_front": [], "mu_rear": []},
+        "high": {"rake": [], "mu_front": [], "mu_rear": []},
+    }
+
+    def _drift_bin_key(speed_value: float) -> str:
+        if speed_value <= drift_low_threshold:
+            return "low"
+        if speed_value <= drift_high_threshold:
+            return "medium"
+        return "high"
+
+    for record in records:
+        try:
+            speed_value = float(getattr(record, "speed", 0.0))
+        except (TypeError, ValueError):
+            speed_value = 0.0
+        if not math.isfinite(speed_value):
+            speed_value = 0.0
+        bin_key = _drift_bin_key(speed_value)
+        try:
+            pitch_value = float(getattr(record, "pitch", 0.0))
+        except (TypeError, ValueError):
+            pitch_value = 0.0
+        if not math.isfinite(pitch_value):
+            pitch_value = 0.0
+        try:
+            front_travel = float(getattr(record, "suspension_travel_front", 0.0))
+        except (TypeError, ValueError):
+            front_travel = 0.0
+        if not math.isfinite(front_travel):
+            front_travel = 0.0
+        try:
+            rear_travel = float(getattr(record, "suspension_travel_rear", 0.0))
+        except (TypeError, ValueError):
+            rear_travel = 0.0
+        if not math.isfinite(rear_travel):
+            rear_travel = 0.0
+        try:
+            wheelbase = float(getattr(record, "wheelbase", 2.6))
+        except (TypeError, ValueError):
+            wheelbase = 2.6
+        if not math.isfinite(wheelbase) or wheelbase <= 0.0:
+            wheelbase = 2.6
+        travel_delta = rear_travel - front_travel
+        rake_correction = math.atan2(travel_delta, wheelbase)
+        rake_value = pitch_value + rake_correction
+        try:
+            mu_front = float(getattr(record, "mu_eff_front", 0.0))
+        except (TypeError, ValueError):
+            mu_front = 0.0
+        if not math.isfinite(mu_front):
+            mu_front = 0.0
+        try:
+            mu_rear = float(getattr(record, "mu_eff_rear", 0.0))
+        except (TypeError, ValueError):
+            mu_rear = 0.0
+        if not math.isfinite(mu_rear):
+            mu_rear = 0.0
+        bin_payload = drift_bins[bin_key]
+        if math.isfinite(rake_value):
+            bin_payload["rake"].append(rake_value)
+            bin_payload["mu_front"].append(mu_front)
+            bin_payload["mu_rear"].append(mu_rear)
+
+    def _build_drift_bin(
+        key: str, lower: float, upper: float | None
+    ) -> AeroBalanceDriftBin:
+        payload = drift_bins[key]
+        rakes = payload["rake"]
+        mu_front_values = payload["mu_front"]
+        mu_rear_values = payload["mu_rear"]
+        samples = len(rakes)
+        rake_mean = mean(rakes) if rakes else 0.0
+        rake_std = math.sqrt(pvariance(rakes)) if len(rakes) >= 2 else 0.0
+        mu_front_mean = mean(mu_front_values) if mu_front_values else 0.0
+        mu_rear_mean = mean(mu_rear_values) if mu_rear_values else 0.0
+        mu_delta_value = mu_front_mean - mu_rear_mean
+        if abs(mu_rear_mean) > 1e-9:
+            mu_ratio = mu_front_mean / mu_rear_mean
+        else:
+            mu_ratio = 1.0 if abs(mu_front_mean) <= 1e-9 else math.copysign(10.0, mu_front_mean)
+        if not math.isfinite(mu_ratio):
+            mu_ratio = 1.0
+        return AeroBalanceDriftBin(
+            speed_min=lower,
+            speed_max=upper,
+            samples=samples,
+            rake_mean=rake_mean,
+            rake_std=rake_std,
+            mu_front_mean=mu_front_mean,
+            mu_rear_mean=mu_rear_mean,
+            mu_delta=mu_delta_value,
+            mu_ratio=mu_ratio,
+        )
+
+    low_drift = _build_drift_bin("low", 0.0, drift_low_threshold)
+    medium_drift = _build_drift_bin("medium", drift_low_threshold, drift_high_threshold)
+    high_drift = _build_drift_bin("high", drift_high_threshold, None)
+    drift_labels = {"low": "baja", "medium": "media", "high": "alta"}
+    drift_guidance = ""
+    for key, payload in (("high", high_drift), ("medium", medium_drift), ("low", low_drift)):
+        if payload.samples <= 0:
+            continue
+        if abs(payload.mu_delta) <= drift_mu_tolerance:
+            continue
+        direction = "delantera" if payload.mu_delta > 0.0 else "trasera"
+        drift_guidance = (
+            f"{drift_labels[key]} μΔ {payload.mu_delta:+.2f} "
+            f"rake {payload.rake_deg:+.2f}° carga {direction}"
+        )
+        break
+    aero_balance_drift = AeroBalanceDrift(
+        low_speed=low_drift,
+        medium_speed=medium_drift,
+        high_speed=high_drift,
+        mu_tolerance=drift_mu_tolerance,
+        guidance=drift_guidance,
+    )
+
     velocity_low_threshold = max(
         0.0, _objective("suspension_velocity_low_threshold", _SUSPENSION_LOW_SPEED_THRESHOLD)
     )
@@ -1474,6 +1667,7 @@ def compute_window_metrics(
         phase_cphi=phase_cphi,
         camber=camber_mapping,
         phase_camber=phase_camber_mapping,
+        aero_balance_drift=aero_balance_drift,
     )
 
 

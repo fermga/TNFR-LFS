@@ -122,7 +122,10 @@ la carga vertical media) y los pares
 ``structural_expansion_longitudinal``/``structural_contraction_longitudinal`` y
 ``structural_expansion_lateral``/``structural_contraction_lateral`` que
 describen cómo las componentes longitudinal/lateral de ΔNFR expanden o
-comprimen el eje estructural de la ventana analizada.
+comprimen el eje estructural de la ventana analizada.  Además se publica
+``aero_balance_drift``, que agrupa el rake medio (pitch + viajes por eje) y la
+diferencia ``μ_front - μ_rear`` por bandas de velocidad baja/media/alta para
+resaltar deriva aerodinámica cuando ``AeroCoherence`` todavía parece neutra.
 
 Cuando se comparte el ``operator_state`` utilizado por
 ``segment_microsectors``, la orquestación añade el campo ``network_memory`` y
