@@ -22,6 +22,7 @@ class SetupPlan:
 
     car_model: str
     session: str | None
+    sci: float = 0.0
     changes: Sequence[SetupChange] = field(default_factory=tuple)
     rationales: Sequence[str] = field(default_factory=tuple)
     expected_effects: Sequence[str] = field(default_factory=tuple)
@@ -39,7 +40,7 @@ class SetupPlan:
     aero_guidance: str = ""
     aero_metrics: Mapping[str, float] = field(default_factory=dict)
     aero_mechanical_coherence: float = 0.0
-    objective_breakdown: Mapping[str, float] = field(default_factory=dict)
+    sci_breakdown: Mapping[str, float] = field(default_factory=dict)
 
 
 def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
@@ -129,13 +130,12 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
     axis_targets = _normalise_axis_mapping(plan.phase_axis_targets)
     axis_weights = _normalise_axis_mapping(plan.phase_axis_weights)
 
-    ics_breakdown = {
-        str(key): float(value) for key, value in plan.objective_breakdown.items()
-    }
+    sci_breakdown = {str(key): float(value) for key, value in plan.sci_breakdown.items()}
 
-    return {
+    payload = {
         "car_model": plan.car_model,
         "session": plan.session,
+        "sci": float(plan.sci),
         "changes": changes_payload,
         "rationales": rationales,
         "expected_effects": expected_effects,
@@ -154,8 +154,13 @@ def serialise_setup_plan(plan: SetupPlan) -> Dict[str, Any]:
         "aero_guidance": plan.aero_guidance,
         "aero_metrics": {str(key): float(value) for key, value in plan.aero_metrics.items()},
         "aero_mechanical_coherence": float(plan.aero_mechanical_coherence),
-        "ics_breakdown": ics_breakdown,
+        "sci_breakdown": sci_breakdown,
     }
+
+    if sci_breakdown:
+        payload["ics_breakdown"] = sci_breakdown
+
+    return payload
 
 
 __all__ = ["SetupChange", "SetupPlan", "serialise_setup_plan"]

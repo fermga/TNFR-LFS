@@ -59,7 +59,7 @@ class SearchResult:
     """Outcome of the optimisation stage."""
 
     decision_vector: Dict[str, float]
-    objective_value: float
+    sci: float
     iterations: int
     evaluations: int
     telemetry: Sequence[EPIBundle]
@@ -70,14 +70,14 @@ class Plan:
     """Aggregated plan mixing optimisation deltas with explainable rules."""
 
     decision_vector: Dict[str, float]
-    objective_value: float
+    sci: float
     telemetry: Sequence[EPIBundle]
     recommendations: Sequence[Recommendation]
     sensitivities: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     phase_sensitivities: Mapping[str, Mapping[str, Mapping[str, float]]] = field(
         default_factory=dict
     )
-    objective_breakdown: Mapping[str, float] = field(default_factory=dict)
+    sci_breakdown: Mapping[str, float] = field(default_factory=dict)
 
 
 class CoordinateDescentOptimizer:
@@ -644,7 +644,7 @@ class SetupPlanner:
             return _simulate_and_score(vector)[0]
 
         vector, score, iterations, evaluations = self.optimiser.optimise(evaluate, space)
-        _, telemetry, objective_breakdown = _simulate_and_score(vector)
+        _, telemetry, sci_breakdown = _simulate_and_score(vector)
         recommendations = list(self.recommendation_engine.generate(telemetry, microsectors))
         if session_hints:
             extra: list[Recommendation] = []
@@ -691,12 +691,12 @@ class SetupPlanner:
         )
         return Plan(
             decision_vector=vector,
-            objective_value=score,
+            sci=score,
             telemetry=telemetry,
             recommendations=tuple(recommendations),
             sensitivities=sensitivities,
             phase_sensitivities=phase_sensitivities,
-            objective_breakdown=objective_breakdown,
+            sci_breakdown=sci_breakdown,
         )
 
     def _adapt_space(
@@ -769,7 +769,7 @@ class SetupPlanner:
 
         base_mean_si = fmean(bundle.sense_index for bundle in telemetry)
         sensitivities: Dict[str, Dict[str, float]] = {
-            "objective_score": {},
+            "sci": {},
             "sense_index": {},
             "delta_nfr_integral": {},
         }
@@ -840,7 +840,7 @@ class SetupPlanner:
                 integral_plus, phase_plus = _integral_metrics(plus_telemetry)
                 integral_minus, phase_minus = _integral_metrics(minus_telemetry)
                 denom = 2.0 * central_step
-                sensitivities["objective_score"][variable.name] = (plus_score - minus_score) / denom
+                sensitivities["sci"][variable.name] = (plus_score - minus_score) / denom
                 sensitivities["sense_index"][variable.name] = (si_plus - si_minus) / denom
                 sensitivities["delta_nfr_integral"][variable.name] = (
                     (integral_plus - integral_minus) / denom
@@ -858,7 +858,7 @@ class SetupPlanner:
                 plus_score, plus_telemetry = _simulate(plus_clamped)
                 si_plus = fmean(bundle.sense_index for bundle in plus_telemetry)
                 integral_plus, phase_plus = _integral_metrics(plus_telemetry)
-                sensitivities["objective_score"][variable.name] = (plus_score - score) / step
+                sensitivities["sci"][variable.name] = (plus_score - score) / step
                 sensitivities["sense_index"][variable.name] = (si_plus - base_mean_si) / step
                 sensitivities["delta_nfr_integral"][variable.name] = (
                     (integral_plus - base_integral) / step
@@ -878,7 +878,7 @@ class SetupPlanner:
                 minus_score, minus_telemetry = _simulate(minus_clamped)
                 si_minus = fmean(bundle.sense_index for bundle in minus_telemetry)
                 integral_minus, phase_minus = _integral_metrics(minus_telemetry)
-                sensitivities["objective_score"][variable.name] = (score - minus_score) / step
+                sensitivities["sci"][variable.name] = (score - minus_score) / step
                 sensitivities["sense_index"][variable.name] = (base_mean_si - si_minus) / step
                 sensitivities["delta_nfr_integral"][variable.name] = (
                     (base_integral - integral_minus) / step
@@ -891,7 +891,7 @@ class SetupPlanner:
                     variable.name,
                 )
             else:
-                sensitivities["objective_score"][variable.name] = 0.0
+                sensitivities["sci"][variable.name] = 0.0
                 sensitivities["sense_index"][variable.name] = 0.0
                 sensitivities["delta_nfr_integral"][variable.name] = 0.0
 

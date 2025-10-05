@@ -529,8 +529,6 @@ def _render_page_a(
         _truncate_line(
             f"ΔNFR {current_delta:+.2f} obj {goal_delta:+.2f} ±{tolerance:.2f} {gauge}"
         ),
-        f"Δ∥ {long_component:+.2f} obj {goal_long:+.2f} · Δ⊥ {lat_component:+.2f} obj {goal_lat:+.2f}"
-        f" · w∥ {weight_long:.2f} · w⊥ {weight_lat:.2f}",
     ]
     phase_key = str(active.phase)
     phase_sigma = float(
@@ -547,20 +545,17 @@ def _render_page_a(
     candidate = "\n".join((*lines, sigma_line))
     if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
         lines.append(sigma_line)
+    if sense_line:
+        lines.append(sense_line)
     quiet_line: str | None = None
+    quiet_line_added = False
     if quiet_sequences and active is not None:
         quiet_line = _quiet_notice_line(active.microsector, quiet_sequences)
         if quiet_line:
-            candidate = "\n".join((*lines, quiet_line))
-            if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
-                lines.append(quiet_line)
-    gradient_line = _gradient_line(window_metrics)
-    if spark_delta and spark_si:
-        spark_line = _truncate_line(f"Fases Δ{spark_delta} · Si{spark_si}")
-        candidate = "\n".join((*lines, spark_line, gradient_line))
-        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
-            lines.append(spark_line)
-    silence_line = _silence_event_meter(active.microsector)
+            lines.append(quiet_line)
+            quiet_line_added = True
+    gradient_line = _truncate_line(_gradient_line(window_metrics))
+    silence_line = None if quiet_line_added else _silence_event_meter(active.microsector)
     if silence_line:
         candidate = "\n".join((*lines, silence_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
@@ -568,25 +563,17 @@ def _render_page_a(
     brake_line = _brake_event_meter(active.microsector)
     if brake_line:
         lines.append(brake_line)
-    if sense_line:
-        candidate = "\n".join((*lines, sense_line))
-        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
-            lines.append(sense_line)
+    lines.append(gradient_line)
     if coherence_line:
-        candidate = "\n".join((*lines, coherence_line))
-        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
-            lines.append(coherence_line)
+        lines.append(coherence_line)
     if nu_wave:
-        candidate = "\n".join((*lines, nu_wave))
-        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
-            lines.append(nu_wave)
+        lines.append(nu_wave)
     amc_value = float(getattr(window_metrics, "aero_mechanical_coherence", 0.0))
     if amc_value > 0.0:
         amc_line = _truncate_line(f"C(a/m) {amc_value:.2f}")
         candidate = "\n".join((*lines, amc_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(amc_line)
-    lines.append(gradient_line)
     drift_line = _aero_drift_line(window_metrics.aero_balance_drift)
     if drift_line:
         candidate = "\n".join((*lines, drift_line))
@@ -1221,6 +1208,38 @@ def _render_page_c(
         dsi_line = _format_sensitivities(plan.sensitivities.get("sense_index", {}))
         if dsi_line:
             lines.append(_truncate_line(f"dSi {dsi_line}"))
+        sci_value = getattr(plan, "sci", None)
+        try:
+            sci_float = float(sci_value) if sci_value is not None else None
+        except (TypeError, ValueError):
+            sci_float = None
+        if sci_float is not None:
+            lines.append(_truncate_line(f"SCI {sci_float:.3f}"))
+        breakdown_mapping = (
+            getattr(plan, "sci_breakdown", None)
+            or getattr(plan, "objective_breakdown", None)
+            or {}
+        )
+        if breakdown_mapping:
+            order = ("sense", "delta", "udr", "bottoming", "aero", "cphi")
+            parts: List[str] = []
+            for key in order:
+                if key in breakdown_mapping:
+                    value = breakdown_mapping[key]
+                    try:
+                        parts.append(f"{key} {float(value):.3f}")
+                    except (TypeError, ValueError):
+                        parts.append(f"{key} {value}")
+            for key in sorted(breakdown_mapping):
+                if key in order:
+                    continue
+                value = breakdown_mapping[key]
+                try:
+                    parts.append(f"{key} {float(value):.3f}")
+                except (TypeError, ValueError):
+                    parts.append(f"{key} {value}")
+            if parts:
+                lines.append(_truncate_line("SCI → " + " · ".join(parts)))
         aero_guidance = getattr(plan, "aero_guidance", "")
         if aero_guidance:
             lines.append(_truncate_line(f"Aero {aero_guidance}"))
@@ -1682,6 +1701,7 @@ def _build_setup_plan(
     return SetupPlan(
         car_model=car_model,
         session=None,
+        sci=float(getattr(plan, "sci", 0.0)),
         changes=tuple(changes),
         rationales=tuple(unique_rationales),
         expected_effects=tuple(unique_effects),
@@ -1690,6 +1710,7 @@ def _build_setup_plan(
         clamped_parameters=tuple(clamped),
         phase_axis_targets=axis_target_map,
         phase_axis_weights=axis_weight_map,
+        sci_breakdown=getattr(plan, "sci_breakdown", getattr(plan, "objective_breakdown", {})),
     )
 
 

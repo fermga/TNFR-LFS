@@ -300,7 +300,7 @@ def _microsector() -> Microsector:
     )
 
 
-def test_objective_breakdown_matches_score() -> None:
+def test_sci_breakdown_matches_score() -> None:
     results = [
         _rich_bundle(0.0),
         _rich_bundle(0.2),
@@ -455,7 +455,7 @@ def test_setup_planner_converges_and_respects_bounds(car_model: str):
     assert _closeness(plan.decision_vector) > _closeness(initial_vector)
 
     baseline_score = objective_score(baseline, [microsector])
-    assert plan.objective_value > baseline_score
+    assert plan.sci > baseline_score
     assert plan.recommendations  # ensure explainable rules are still available
     assert plan.sensitivities  # gradients are reported
     assert "delta_nfr_integral" in plan.sensitivities
@@ -504,7 +504,7 @@ def test_setup_planner_reports_consistent_sensitivities():
     plan = planner.plan(baseline, [microsector], car_model="generic_gt", simulator=simulator)
 
     mean_si = sum(bundle.sense_index for bundle in plan.telemetry) / len(plan.telemetry)
-    score = objective_score(plan.telemetry, [microsector])
+    sci_score = objective_score(plan.telemetry, [microsector])
     base_integral = _absolute_integral(plan.telemetry)
     base_phase = _phase_integrals(plan.telemetry, [microsector])
 
@@ -527,15 +527,15 @@ def test_setup_planner_reports_consistent_sensitivities():
             minus_results = simulator(space.clamp(minus_vector), baseline)
             si_plus = sum(bundle.sense_index for bundle in plus_results) / len(plus_results)
             si_minus = sum(bundle.sense_index for bundle in minus_results) / len(minus_results)
-            objective_plus = objective_score(plus_results, [microsector])
-            objective_minus = objective_score(minus_results, [microsector])
+            sci_plus = objective_score(plus_results, [microsector])
+            sci_minus = objective_score(minus_results, [microsector])
             integral_plus = _absolute_integral(plus_results)
             integral_minus = _absolute_integral(minus_results)
             phase_plus = _phase_integrals(plus_results, [microsector])
             phase_minus = _phase_integrals(minus_results, [microsector])
             denom = 2.0 * central_step
             expected_si = (si_plus - si_minus) / denom
-            expected_objective = (objective_plus - objective_minus) / denom
+            expected_sci = (sci_plus - sci_minus) / denom
             expected_integral = (integral_plus - integral_minus) / denom
             expected_phase = {
                 phase: (phase_plus.get(phase, 0.0) - phase_minus.get(phase, 0.0)) / denom
@@ -547,9 +547,9 @@ def test_setup_planner_reports_consistent_sensitivities():
             plus_vector[variable.name] = base_value + step
             plus_results = simulator(space.clamp(plus_vector), baseline)
             si_plus = sum(bundle.sense_index for bundle in plus_results) / len(plus_results)
-            objective_plus = objective_score(plus_results, [microsector])
+            sci_plus = objective_score(plus_results, [microsector])
             expected_si = (si_plus - mean_si) / step
-            expected_objective = (objective_plus - score) / step
+            expected_sci = (sci_plus - sci_score) / step
             integral_plus = _absolute_integral(plus_results)
             phase_plus = _phase_integrals(plus_results, [microsector])
             expected_integral = (integral_plus - base_integral) / step
@@ -563,9 +563,9 @@ def test_setup_planner_reports_consistent_sensitivities():
             minus_vector[variable.name] = base_value - step
             minus_results = simulator(space.clamp(minus_vector), baseline)
             si_minus = sum(bundle.sense_index for bundle in minus_results) / len(minus_results)
-            objective_minus = objective_score(minus_results, [microsector])
+            sci_minus = objective_score(minus_results, [microsector])
             expected_si = (mean_si - si_minus) / step
-            expected_objective = (score - objective_minus) / step
+            expected_sci = (sci_score - sci_minus) / step
             integral_minus = _absolute_integral(minus_results)
             phase_minus = _phase_integrals(minus_results, [microsector])
             expected_integral = (base_integral - integral_minus) / step
@@ -575,15 +575,15 @@ def test_setup_planner_reports_consistent_sensitivities():
             }
         else:
             expected_si = 0.0
-            expected_objective = 0.0
+            expected_sci = 0.0
             expected_integral = 0.0
             expected_phase = {}
 
         reported_si = plan.sensitivities["sense_index"][variable.name]
-        reported_objective = plan.sensitivities["objective_score"][variable.name]
+        reported_sci = plan.sensitivities["sci"][variable.name]
         reported_integral = plan.sensitivities["delta_nfr_integral"][variable.name]
         assert reported_si == pytest.approx(expected_si, rel=1e-2, abs=1e-4)
-        assert reported_objective == pytest.approx(expected_objective, rel=1e-2, abs=1e-4)
+        assert reported_sci == pytest.approx(expected_sci, rel=1e-2, abs=1e-4)
         assert reported_integral == pytest.approx(expected_integral, rel=1e-2, abs=1e-4)
         for phase, gradient in expected_phase.items():
             reported_phase = (

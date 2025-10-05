@@ -264,6 +264,7 @@ def test_render_page_c_marks_riesgos(synthetic_records):
     plan = SetupPlan(
         car_model="generic_gt",
         session=None,
+        sci=0.842,
         changes=(
             SetupChange(
                 parameter="front_arb_steps",
@@ -276,11 +277,21 @@ def test_render_page_c_marks_riesgos(synthetic_records):
         expected_effects=(),
         sensitivities={"sense_index": {"front_arb_steps": 0.12}},
         clamped_parameters=("front_arb_steps",),
+        sci_breakdown={
+            "sense": 0.512,
+            "delta": 0.198,
+            "udr": 0.085,
+            "bottoming": 0.025,
+            "aero": 0.012,
+            "cphi": 0.010,
+        },
     )
     output = osd_module._render_page_c(None, plan, thresholds, None)
     assert "riesgos" in output
     assert "front_arb_steps" in output
     assert "dSi" in output
+    assert "SCI 0.842" in output
+    assert "sense 0.512" in output
 
 
 def test_render_page_c_includes_aero_guidance(synthetic_records):
@@ -289,6 +300,7 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
     plan = SetupPlan(
         car_model="generic_gt",
         session=None,
+        sci=0.731,
         changes=(),
         rationales=(),
         expected_effects=(),

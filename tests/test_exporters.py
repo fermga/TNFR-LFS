@@ -108,6 +108,7 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
     return SetupPlan(
         car_model=car_model,
         session="FP1",
+        sci=0.94,
         changes=(
             SetupChange(
                 parameter="brake_bias_pct",
@@ -126,7 +127,7 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
         expected_effects=("Optimised braking and roll balance",),
         sensitivities={
             "sense_index": {"brake_bias_pct": -0.0125, "front_arb_steps": 0.0451},
-            "objective_score": {"brake_bias_pct": 0.0312, "front_arb_steps": -0.0148},
+            "sci": {"brake_bias_pct": 0.0312, "front_arb_steps": -0.0148},
             "delta_nfr_integral": {
                 "brake_bias_pct": -0.021,
                 "front_arb_steps": 0.084,
@@ -160,7 +161,7 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
             "apex": {"longitudinal": 0.2, "lateral": 0.8},
         },
         aero_mechanical_coherence=0.72,
-        objective_breakdown={
+        sci_breakdown={
             "sense": 0.32,
             "delta": 0.18,
             "udr": 0.12,
@@ -175,6 +176,7 @@ def test_serialise_setup_plan_collects_unique_fields():
     plan = build_setup_plan()
     payload = serialise_setup_plan(plan)
     assert payload["car_model"] == "XFG"
+    assert payload["sci"] == pytest.approx(0.94)
     assert len(payload["changes"]) == 2
     assert any("Telemetry indicates" in item for item in payload["rationales"])
     assert any("Optimised braking" in item for item in payload["expected_effects"])
@@ -193,6 +195,7 @@ def test_serialise_setup_plan_collects_unique_fields():
     assert payload["phase_axis_targets"]["entry"]["longitudinal"] == pytest.approx(0.4)
     assert payload["phase_axis_weights"]["apex"]["lateral"] == pytest.approx(0.8)
     assert payload["aero_mechanical_coherence"] == pytest.approx(0.72)
+    assert payload["sci_breakdown"]["sense"] == pytest.approx(0.32)
     assert payload["ics_breakdown"]["sense"] == pytest.approx(0.32)
 
 
@@ -209,7 +212,7 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "**Efectos esperados por fase**" in output
     assert "**Objetivos ΔNFR∥/ΔNFR⊥ por fase**" in output
     assert "C(a/m)" in output
-    assert "**Contribución ICS**" in output
+    assert "**Contribución SCI**" in output
 
 
 def test_lfs_notes_exporter_renders_key_instructions():

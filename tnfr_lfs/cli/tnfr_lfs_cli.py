@@ -997,10 +997,12 @@ def _sense_index_map(
             float(mean(aggregate)) if aggregate else 0.0,
             4,
         )
-        filtered_payload = {
-            key: round(float(value), 4)
-            for key, value in microsector.filtered_measures.items()
-        }
+        filtered_payload: Dict[str, float] = {}
+        for key, value in microsector.filtered_measures.items():
+            try:
+                filtered_payload[key] = round(float(value), 4)
+            except (TypeError, ValueError):
+                continue
         if "grip_rel" not in filtered_payload:
             filtered_payload["grip_rel"] = round(float(microsector.grip_rel), 4)
         entry["filtered_measures"] = filtered_payload
@@ -2627,6 +2629,7 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
     setup_plan = SetupPlan(
         car_model=namespace.car_model,
         session=namespace.session,
+        sci=plan.sci,
         changes=tuple(changes),
         rationales=tuple(aggregated_rationales),
         expected_effects=tuple(aggregated_effects),
@@ -2637,11 +2640,13 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         aero_guidance=aero.guidance,
         aero_metrics=aero_metrics,
         aero_mechanical_coherence=aero_mechanical,
+        sci_breakdown=plan.sci_breakdown,
     )
 
     payload = {
         "setup_plan": setup_plan,
-        "objective_value": plan.objective_value,
+        "sci": plan.sci,
+        "sci_breakdown": plan.sci_breakdown,
         "recommendations": plan.recommendations,
         "series": plan.telemetry,
         "sensitivities": plan.sensitivities,
