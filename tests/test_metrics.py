@@ -459,12 +459,24 @@ def test_compute_window_metrics_empty_window() -> None:
 def test_compute_aero_coherence_splits_bins() -> None:
     records = [
         replace(_record(0.0, 100.0, si=0.8), speed=25.0),
-        replace(_record(1.0, 102.0, si=0.81), speed=60.0),
+        replace(_record(1.0, 101.0, si=0.805), speed=35.0),
+        replace(_record(2.0, 102.0, si=0.81), speed=60.0),
     ]
     bundles = [
         SimpleNamespace(
             delta_breakdown={"tyres": {"mu_eff_front": 0.4, "mu_eff_rear": 0.2}},
             transmission=SimpleNamespace(speed=25.0),
+        ),
+        SimpleNamespace(
+            delta_breakdown={
+                "tyres": {
+                    "mu_eff_front_lateral": 0.3,
+                    "mu_eff_front_longitudinal": 0.1,
+                    "mu_eff_rear_lateral": 0.2,
+                    "mu_eff_rear_longitudinal": 0.05,
+                }
+            },
+            transmission=SimpleNamespace(speed=35.0),
         ),
         SimpleNamespace(
             delta_breakdown={"tyres": {"mu_eff_front": 0.1, "mu_eff_rear": 0.6}},
@@ -475,10 +487,16 @@ def test_compute_aero_coherence_splits_bins() -> None:
     aero = compute_aero_coherence(records, bundles, low_speed_threshold=30.0, high_speed_threshold=40.0)
 
     assert aero.low_speed_samples == 1
+    assert aero.medium_speed_samples == 1
     assert aero.high_speed_samples == 1
     assert aero.low_speed_imbalance == pytest.approx(0.2)
+    assert aero.medium_speed_imbalance == pytest.approx(0.15)
     assert aero.high_speed_imbalance == pytest.approx(-0.5)
-    assert "Aero" in aero.guidance or "Alta velocidad" in aero.guidance
+    assert aero.medium_speed.lateral.front == pytest.approx(0.3)
+    assert aero.medium_speed.lateral.rear == pytest.approx(0.2)
+    assert aero.medium_speed.longitudinal.front == pytest.approx(0.1)
+    assert aero.medium_speed.longitudinal.rear == pytest.approx(0.05)
+    assert "media velocidad" in aero.guidance
 
 
 def test_aero_mechanical_coherence_blends_components() -> None:

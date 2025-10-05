@@ -43,6 +43,11 @@ _REAR_FEATURE_KEYS = {
     "mu_eff_rear_longitudinal",
 }
 
+_FRONT_LATERAL_FEATURE_KEYS = {"mu_eff_front_lateral"}
+_FRONT_LONGITUDINAL_FEATURE_KEYS = {"mu_eff_front_longitudinal"}
+_REAR_LATERAL_FEATURE_KEYS = {"mu_eff_rear_lateral"}
+_REAR_LONGITUDINAL_FEATURE_KEYS = {"mu_eff_rear_longitudinal"}
+
 
 _BRAKE_DECEL_REFERENCE = 10.0
 _PARTIAL_LOCK_LOWER = -0.35
@@ -67,25 +72,93 @@ class SlideCatchBudget:
 
 
 @dataclass(frozen=True)
-class AeroCoherence:
-    """Summarises aero balance deltas split by speed bins."""
+class AeroAxisCoherence:
+    """Front/rear contribution pair for a given aerodynamic axis."""
 
-    low_speed_front: float = 0.0
-    low_speed_rear: float = 0.0
-    low_speed_imbalance: float = 0.0
-    low_speed_samples: int = 0
-    high_speed_front: float = 0.0
-    high_speed_rear: float = 0.0
-    high_speed_imbalance: float = 0.0
-    high_speed_samples: int = 0
+    front: float = 0.0
+    rear: float = 0.0
+
+    @property
+    def imbalance(self) -> float:
+        """Signed imbalance favouring the front when negative."""
+
+        return self.front - self.rear
+
+
+@dataclass(frozen=True)
+class AeroBandCoherence:
+    """Per-speed-band aerodynamic coherence split by axes."""
+
+    total: AeroAxisCoherence = field(default_factory=AeroAxisCoherence)
+    lateral: AeroAxisCoherence = field(default_factory=AeroAxisCoherence)
+    longitudinal: AeroAxisCoherence = field(default_factory=AeroAxisCoherence)
+    samples: int = 0
+
+
+@dataclass(frozen=True)
+class AeroCoherence:
+    """Summarises aero balance deltas split by speed bins and axes."""
+
+    low_speed: AeroBandCoherence = field(default_factory=AeroBandCoherence)
+    medium_speed: AeroBandCoherence = field(default_factory=AeroBandCoherence)
+    high_speed: AeroBandCoherence = field(default_factory=AeroBandCoherence)
     guidance: str = ""
 
     def dominant_axis(self, tolerance: float = 0.05) -> str | None:
         """Return the dominant axle when the imbalance exceeds ``tolerance``."""
 
-        if abs(self.high_speed_imbalance) <= tolerance:
+        imbalance = self.high_speed.total.imbalance
+        if abs(imbalance) <= tolerance:
             return None
-        return "front" if self.high_speed_imbalance < 0.0 else "rear"
+        return "front" if imbalance < 0.0 else "rear"
+
+    @property
+    def low_speed_front(self) -> float:
+        return self.low_speed.total.front
+
+    @property
+    def low_speed_rear(self) -> float:
+        return self.low_speed.total.rear
+
+    @property
+    def low_speed_imbalance(self) -> float:
+        return self.low_speed.total.imbalance
+
+    @property
+    def low_speed_samples(self) -> int:
+        return self.low_speed.samples
+
+    @property
+    def medium_speed_front(self) -> float:
+        return self.medium_speed.total.front
+
+    @property
+    def medium_speed_rear(self) -> float:
+        return self.medium_speed.total.rear
+
+    @property
+    def medium_speed_imbalance(self) -> float:
+        return self.medium_speed.total.imbalance
+
+    @property
+    def medium_speed_samples(self) -> int:
+        return self.medium_speed.samples
+
+    @property
+    def high_speed_front(self) -> float:
+        return self.high_speed.total.front
+
+    @property
+    def high_speed_rear(self) -> float:
+        return self.high_speed.total.rear
+
+    @property
+    def high_speed_imbalance(self) -> float:
+        return self.high_speed.total.imbalance
+
+    @property
+    def high_speed_samples(self) -> int:
+        return self.high_speed.samples
 
 
 @dataclass(frozen=True)
@@ -843,20 +916,35 @@ def compute_aero_coherence(
     if not bundles:
         return AeroCoherence()
 
-    def _aero_components(breakdown: Mapping[str, Mapping[str, float]] | None) -> tuple[float, float]:
+    axis_keys = {
+        "total": (_FRONT_FEATURE_KEYS, _REAR_FEATURE_KEYS),
+        "lateral": (_FRONT_LATERAL_FEATURE_KEYS, _REAR_LATERAL_FEATURE_KEYS),
+        "longitudinal": (
+            _FRONT_LONGITUDINAL_FEATURE_KEYS,
+            _REAR_LONGITUDINAL_FEATURE_KEYS,
+        ),
+    }
+
+    def _aero_components(
+        breakdown: Mapping[str, Mapping[str, float]] | None,
+    ) -> dict[str, tuple[float, float]]:
+        totals = {axis: [0.0, 0.0] for axis in axis_keys}
         if not breakdown:
-            return 0.0, 0.0
-        front = 0.0
-        rear = 0.0
+            return {axis: (0.0, 0.0) for axis in axis_keys}
         for features in breakdown.values():
             if not isinstance(features, Mapping):
                 continue
             for key, value in features.items():
-                if key in _FRONT_FEATURE_KEYS:
-                    front += float(value)
-                elif key in _REAR_FEATURE_KEYS:
-                    rear += float(value)
-        return front, rear
+                try:
+                    contribution = float(value)
+                except (TypeError, ValueError):
+                    continue
+                for axis, (front_keys, rear_keys) in axis_keys.items():
+                    if key in front_keys:
+                        totals[axis][0] += contribution
+                    if key in rear_keys:
+                        totals[axis][1] += contribution
+        return {axis: (front, rear) for axis, (front, rear) in totals.items()}
 
     def _resolve_speed(index: int) -> float | None:
         if 0 <= index < len(records):
@@ -871,47 +959,64 @@ def compute_aero_coherence(
                 return float(speed_value)
         return None
 
-    low_front = 0.0
-    low_rear = 0.0
-    low_samples = 0
-    high_front = 0.0
-    high_rear = 0.0
-    high_samples = 0
+    bands: dict[str, dict[str, list[float] | int]] = {
+        "low": {"total": [0.0, 0.0], "lateral": [0.0, 0.0], "longitudinal": [0.0, 0.0], "samples": 0},
+        "medium": {
+            "total": [0.0, 0.0],
+            "lateral": [0.0, 0.0],
+            "longitudinal": [0.0, 0.0],
+            "samples": 0,
+        },
+        "high": {"total": [0.0, 0.0], "lateral": [0.0, 0.0], "longitudinal": [0.0, 0.0], "samples": 0},
+    }
 
     for index, bundle in enumerate(bundles):
         speed = _resolve_speed(index)
         if speed is None:
             continue
-        front, rear = _aero_components(getattr(bundle, "delta_breakdown", {}))
-        if front == 0.0 and rear == 0.0:
+        components = _aero_components(getattr(bundle, "delta_breakdown", {}))
+        if all(front == 0.0 and rear == 0.0 for front, rear in components.values()):
             continue
         if speed <= low_speed_threshold:
-            low_front += front
-            low_rear += rear
-            low_samples += 1
+            target = bands["low"]
         elif speed >= high_speed_threshold:
-            high_front += front
-            high_rear += rear
-            high_samples += 1
+            target = bands["high"]
+        else:
+            target = bands["medium"]
+        target["samples"] = int(target["samples"]) + 1
+        for axis, (front, rear) in components.items():
+            pair = target[axis]
+            pair[0] += front
+            pair[1] += rear
 
-    if low_samples:
-        avg_low_front = low_front / low_samples
-        avg_low_rear = low_rear / low_samples
-    else:
-        avg_low_front = 0.0
-        avg_low_rear = 0.0
-    if high_samples:
-        avg_high_front = high_front / high_samples
-        avg_high_rear = high_rear / high_samples
-    else:
-        avg_high_front = 0.0
-        avg_high_rear = 0.0
+    def _average_band(payload: dict[str, list[float] | int]) -> AeroBandCoherence:
+        samples = int(payload["samples"])
 
-    low_imbalance = avg_low_front - avg_low_rear
-    high_imbalance = avg_high_front - avg_high_rear
+        def _average_pair(values: list[float]) -> tuple[float, float]:
+            if samples:
+                return values[0] / samples, values[1] / samples
+            return 0.0, 0.0
+
+        total_front, total_rear = _average_pair(payload["total"])
+        lat_front, lat_rear = _average_pair(payload["lateral"])
+        long_front, long_rear = _average_pair(payload["longitudinal"])
+        return AeroBandCoherence(
+            total=AeroAxisCoherence(total_front, total_rear),
+            lateral=AeroAxisCoherence(lat_front, lat_rear),
+            longitudinal=AeroAxisCoherence(long_front, long_rear),
+            samples=samples,
+        )
+
+    low_band = _average_band(bands["low"])
+    medium_band = _average_band(bands["medium"])
+    high_band = _average_band(bands["high"])
+
+    low_imbalance = low_band.total.imbalance
+    medium_imbalance = medium_band.total.imbalance
+    high_imbalance = high_band.total.imbalance
 
     guidance: str
-    if high_samples == 0:
+    if high_band.samples == 0:
         guidance = "Sin datos aero"
     elif abs(high_imbalance) <= imbalance_tolerance:
         guidance = "Aero alta velocidad equilibrado"
@@ -920,19 +1025,17 @@ def compute_aero_coherence(
     else:
         guidance = "Alta velocidad → libera alerón trasero/refuerza delantero"
 
-    if low_samples and abs(low_imbalance) > imbalance_tolerance:
+    if low_band.samples and abs(low_imbalance) > imbalance_tolerance:
         direction = "trasero" if low_imbalance > 0.0 else "delantero"
         guidance += f" · baja velocidad sesgo {direction}"
+    if medium_band.samples and abs(medium_imbalance) > imbalance_tolerance:
+        direction = "trasero" if medium_imbalance > 0.0 else "delantero"
+        guidance += f" · media velocidad sesgo {direction}"
 
     return AeroCoherence(
-        low_speed_front=avg_low_front,
-        low_speed_rear=avg_low_rear,
-        low_speed_imbalance=low_imbalance,
-        low_speed_samples=low_samples,
-        high_speed_front=avg_high_front,
-        high_speed_rear=avg_high_rear,
-        high_speed_imbalance=high_imbalance,
-        high_speed_samples=high_samples,
+        low_speed=low_band,
+        medium_speed=medium_band,
+        high_speed=high_band,
         guidance=guidance,
     )
 
@@ -958,18 +1061,26 @@ def resolve_aero_mechanical_coherence(
     suspension_average = mean(suspension_samples) if suspension_samples else 0.0
     tyre_average = mean(tyre_samples) if tyre_samples else 0.0
 
-    total_samples = max(0, int(aero.high_speed_samples) + int(aero.low_speed_samples))
+    total_samples = max(
+        0,
+        int(aero.high_speed_samples)
+        + int(aero.medium_speed_samples)
+        + int(aero.low_speed_samples),
+    )
     if total_samples > 0:
         high_weight = float(aero.high_speed_samples) / total_samples
+        medium_weight = float(aero.medium_speed_samples) / total_samples
         low_weight = float(aero.low_speed_samples) / total_samples
     else:
-        high_weight = 0.5
-        low_weight = 0.5
+        high_weight = medium_weight = low_weight = 1.0 / 3.0
 
     aero_magnitude = (
         (abs(float(aero.high_speed_front)) + abs(float(aero.high_speed_rear)))
         * 0.5
         * high_weight
+        + (abs(float(aero.medium_speed_front)) + abs(float(aero.medium_speed_rear)))
+        * 0.5
+        * medium_weight
         + (abs(float(aero.low_speed_front)) + abs(float(aero.low_speed_rear)))
         * 0.5
         * low_weight
@@ -1000,6 +1111,7 @@ def resolve_aero_mechanical_coherence(
     imbalance_target = max(0.05, abs(float(target_aero_imbalance)))
     weighted_imbalance = (
         abs(float(aero.high_speed_imbalance)) * high_weight
+        + abs(float(aero.medium_speed_imbalance)) * medium_weight
         + abs(float(aero.low_speed_imbalance)) * low_weight
     )
     aero_factor = max(0.0, 1.0 - min(1.0, weighted_imbalance / imbalance_target))

@@ -47,6 +47,7 @@ def _build_plan() -> SetupPlan:
             SetupChange("gear_5_ratio", 1.00, "", ""),
             SetupChange("gear_6_ratio", 0.88, "", ""),
             SetupChange("rear_wing_angle", 12.0, "", ""),
+            SetupChange("front_wing_angle", 8.0, "", ""),
         ),
     )
 
@@ -111,6 +112,7 @@ def test_encode_native_setup_produces_expected_layout(_enable_native_export):
 
     # Wing angle is stored as a raw byte.
     assert payload[20] == 12
+    assert payload[21] == 8
 
     # Final drive and gear ratios stored as floats.
     assert struct.unpack_from("<f", payload, 28)[0] == pytest.approx(3.72)

@@ -1258,6 +1258,82 @@ class AeroCoherenceRule:
         return recommendations
 
 
+class FrontWingBalanceRule:
+    """Recommend front wing adjustments when high speed balance is front-limited."""
+
+    def __init__(
+        self,
+        *,
+        high_speed_threshold: float = 0.18,
+        min_high_samples: int = 4,
+        max_aero_mechanical: float = 0.65,
+        priority: int = 106,
+        delta_step: float = 0.5,
+        profile_name: str = "race",
+    ) -> None:
+        self.high_speed_threshold = float(high_speed_threshold)
+        self.min_high_samples = int(min_high_samples)
+        self.max_aero_mechanical = float(max_aero_mechanical)
+        self.priority = int(priority)
+        self.delta_step = float(delta_step)
+        self.profile_name = profile_name
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors or context is None:
+            return []
+
+        profiles = getattr(context, "aero_profiles", {}) or {}
+        profile = profiles.get(self.profile_name) or next(iter(profiles.values()), None)
+        target_high = getattr(profile, "high_speed_target", 0.0)
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            high_samples = float(measures.get("aero_high_samples", 0.0))
+            if high_samples < self.min_high_samples:
+                continue
+            high_imbalance = float(measures.get("aero_high_imbalance", 0.0))
+            deviation = high_imbalance - target_high
+            if deviation >= -self.high_speed_threshold:
+                continue
+            am_coherence = float(measures.get("aero_mechanical_coherence", 1.0))
+            if am_coherence >= self.max_aero_mechanical:
+                continue
+
+            front_total = float(measures.get("aero_high_front_total", 0.0))
+            rear_total = float(measures.get("aero_high_rear_total", 0.0))
+            lat_front = float(measures.get("aero_high_front_lateral", 0.0))
+            lat_rear = float(measures.get("aero_high_rear_lateral", 0.0))
+            long_front = float(measures.get("aero_high_front_longitudinal", 0.0))
+            long_rear = float(measures.get("aero_high_rear_longitudinal", 0.0))
+
+            rationale = (
+                f"ΔNFR aero alta velocidad {high_imbalance:+.2f} frente al objetivo {target_high:+.2f} "
+                f"con C(a/m) {am_coherence:.2f}. Reparto total F/R {front_total:+.2f}/{rear_total:+.2f}. "
+                f"Ejes lateral {lat_front:+.2f}/{lat_rear:+.2f}, longitudinal {long_front:+.2f}/{long_rear:+.2f}. "
+                f"Refuerza carga delantera ({MANUAL_REFERENCES['aero']})."
+            )
+            recommendations.append(
+                Recommendation(
+                    category="aero",
+                    message=(
+                        f"Alta velocidad microsector {microsector.index}: incrementa ángulo del alerón delantero"
+                    ),
+                    rationale=rationale,
+                    priority=self.priority,
+                    parameter="front_wing_angle",
+                    delta=self.delta_step,
+                )
+            )
+
+        return recommendations
+
+
 class CoherenceRule:
     """High-level rule that considers the average sense index across a stint."""
 
@@ -3077,6 +3153,7 @@ class RecommendationEngine:
                     reference_key="differential",
                 ),
                 LoadBalanceRule(),
+                FrontWingBalanceRule(),
                 AeroCoherenceRule(),
                 StabilityIndexRule(),
                 CoherenceRule(),

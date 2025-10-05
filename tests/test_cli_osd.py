@@ -9,7 +9,14 @@ from tnfr_lfs.acquisition import ButtonEvent, ButtonLayout, MacroQueue, OverlayM
 from tnfr_lfs.cli import osd as osd_module
 from tnfr_lfs.cli.osd import HUDPager, MacroStatus, OSDController, TelemetryHUD
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
-from tnfr_lfs.core.metrics import AeroCoherence, BrakeHeadroom, SlideCatchBudget, WindowMetrics
+from tnfr_lfs.core.metrics import (
+    AeroAxisCoherence,
+    AeroBandCoherence,
+    AeroCoherence,
+    BrakeHeadroom,
+    SlideCatchBudget,
+    WindowMetrics,
+)
 
 
 def _populate_hud(records) -> TelemetryHUD:
@@ -313,14 +320,14 @@ def test_render_page_a_includes_wave_when_active_phase():
     goal = SimpleNamespace(target_delta_nfr=0.4, target_sense_index=0.8)
     active = osd_module.ActivePhase(microsector=microsector, phase="apex", goal=goal)
     aero = AeroCoherence(
-        low_speed_front=0.12,
-        low_speed_rear=0.18,
-        low_speed_imbalance=-0.06,
-        low_speed_samples=6,
-        high_speed_front=0.22,
-        high_speed_rear=0.08,
-        high_speed_imbalance=0.14,
-        high_speed_samples=9,
+        low_speed=AeroBandCoherence(
+            total=AeroAxisCoherence(0.12, 0.18),
+            samples=6,
+        ),
+        high_speed=AeroBandCoherence(
+            total=AeroAxisCoherence(0.22, 0.08),
+            samples=9,
+        ),
     )
     window_metrics = WindowMetrics(
         si=0.7,
@@ -418,14 +425,14 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
     )
     active = osd_module.ActivePhase(microsector=microsector, phase="entry1", goal=goal)
     aero = AeroCoherence(
-        low_speed_front=0.12,
-        low_speed_rear=0.18,
-        low_speed_imbalance=-0.06,
-        low_speed_samples=6,
-        high_speed_front=0.22,
-        high_speed_rear=0.08,
-        high_speed_imbalance=0.14,
-        high_speed_samples=9,
+        low_speed=AeroBandCoherence(
+            total=AeroAxisCoherence(0.12, 0.18),
+            samples=6,
+        ),
+        high_speed=AeroBandCoherence(
+            total=AeroAxisCoherence(0.22, 0.08),
+            samples=9,
+        ),
     )
     window_metrics = WindowMetrics(
         si=0.72,
