@@ -480,6 +480,10 @@ class TelemetryRecord:
     tyre_pressure_fr: float = 0.0
     tyre_pressure_rl: float = 0.0
     tyre_pressure_rr: float = 0.0
+    brake_temp_fl: float = 0.0
+    brake_temp_fr: float = 0.0
+    brake_temp_rl: float = 0.0
+    brake_temp_rr: float = 0.0
     rpm: float = 0.0
     line_deviation: float = 0.0
     instantaneous_radius: float = 0.0
@@ -1111,6 +1115,18 @@ class DeltaCalculator:
         def node_state(node: str) -> tuple[float, float]:
             return node_evolution.get(node, (0.0, 0.0))
 
+        brake_values = [
+            float(record.brake_temp_fl),
+            float(record.brake_temp_fr),
+            float(record.brake_temp_rl),
+            float(record.brake_temp_rr),
+        ]
+        brake_finite = [
+            value for value in brake_values if math.isfinite(value) and value > 0.0
+        ]
+        brake_peak = max(brake_finite) if brake_finite else 0.0
+        brake_mean = mean(brake_finite) if brake_finite else 0.0
+
         return {
             "tyres": TyresNode(
                 delta_nfr=node_deltas.get("tyres", 0.0),
@@ -1179,6 +1195,12 @@ class DeltaCalculator:
                 dEPI_dt=node_state("brakes")[1],
                 brake_pressure=record.brake_pressure,
                 locking=record.locking,
+                brake_temp_fl=record.brake_temp_fl,
+                brake_temp_fr=record.brake_temp_fr,
+                brake_temp_rl=record.brake_temp_rl,
+                brake_temp_rr=record.brake_temp_rr,
+                brake_temp_peak=brake_peak,
+                brake_temp_mean=brake_mean,
             ),
             "transmission": TransmissionNode(
                 delta_nfr=node_deltas.get("transmission", 0.0),

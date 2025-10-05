@@ -480,6 +480,24 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
     assert "OZ" in page
 
 
+def test_brake_headroom_line_renders_summary() -> None:
+    headroom = BrakeHeadroom(
+        value=0.35,
+        fade_ratio=0.18,
+        fade_slope=0.55,
+        temperature_peak=660.0,
+        temperature_mean=640.0,
+        ventilation_alert="atencion",
+        ventilation_index=0.6,
+    )
+    line = osd_module._brake_headroom_line(headroom)
+    assert line is not None
+    assert line.startswith("Freno")
+    assert "HR 0.35" in line
+    assert "fade" in line
+    assert "vent atencion" in line
+
+
 def test_render_page_a_includes_no_tocar_notice():
     from types import SimpleNamespace
 

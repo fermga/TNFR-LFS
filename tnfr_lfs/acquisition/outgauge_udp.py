@@ -53,6 +53,7 @@ class OutGaugePacket:
     tyre_temps_inner: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     tyre_temps_middle: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     tyre_temps_outer: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    brake_temps: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
     @classmethod
     def from_bytes(cls, payload: bytes) -> "OutGaugePacket":
@@ -91,6 +92,7 @@ class OutGaugePacket:
         extra_inner = (0.0, 0.0, 0.0, 0.0)
         extra_middle = (0.0, 0.0, 0.0, 0.0)
         extra_outer = (0.0, 0.0, 0.0, 0.0)
+        extra_brakes = (0.0, 0.0, 0.0, 0.0)
         extra_offset = _PACK_STRUCT.size
         if len(payload) > extra_offset:
             remainder = memoryview(payload)[extra_offset:]
@@ -106,6 +108,7 @@ class OutGaugePacket:
                     inner = list(extra_inner)
                     middle = list(extra_middle)
                     outer = list(extra_outer)
+                    brakes = list(extra_brakes)
                     for index in range(4):
                         try:
                             value = float(floats[index])
@@ -127,9 +130,17 @@ class OutGaugePacket:
                                 outer[index] = value
                         except (IndexError, TypeError, ValueError):
                             break
+                    for index in range(4):
+                        try:
+                            value = float(floats[12 + index])
+                            if math.isfinite(value):
+                                brakes[index] = value
+                        except (IndexError, TypeError, ValueError):
+                            break
                     extra_inner = tuple(inner)  # type: ignore[assignment]
                     extra_middle = tuple(middle)  # type: ignore[assignment]
                     extra_outer = tuple(outer)  # type: ignore[assignment]
+                    extra_brakes = tuple(brakes)  # type: ignore[assignment]
 
         def _average_layers(index: int) -> float:
             values = [extra_inner[index], extra_middle[index], extra_outer[index]]
@@ -174,6 +185,7 @@ class OutGaugePacket:
             tyre_temps_inner=extra_inner,
             tyre_temps_middle=extra_middle,
             tyre_temps_outer=extra_outer,
+            brake_temps=extra_brakes,
         )
 
 

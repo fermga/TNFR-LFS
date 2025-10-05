@@ -88,6 +88,12 @@ class BrakesNode:
     integrated_epi: float = 0.0
     brake_pressure: float = 0.0
     locking: float = 0.0
+    brake_temp_fl: float = 0.0
+    brake_temp_fr: float = 0.0
+    brake_temp_rl: float = 0.0
+    brake_temp_rr: float = 0.0
+    brake_temp_peak: float = 0.0
+    brake_temp_mean: float = 0.0
 
 
 @dataclass(frozen=True)

@@ -120,6 +120,7 @@ class TelemetryFusion:
             outgauge, previous, layers=tyre_temp_layers
         )
         tyre_pressures = self._resolve_wheel_pressures(outgauge, previous)
+        brake_temps = self._resolve_brake_temperatures(outgauge, previous)
         line_deviation = self._compute_line_deviation(outsim)
 
         record = TelemetryRecord(
@@ -173,6 +174,10 @@ class TelemetryFusion:
             tyre_pressure_fr=tyre_pressures[1],
             tyre_pressure_rl=tyre_pressures[2],
             tyre_pressure_rr=tyre_pressures[3],
+            brake_temp_fl=brake_temps[0],
+            brake_temp_fr=brake_temps[1],
+            brake_temp_rl=brake_temps[2],
+            brake_temp_rr=brake_temps[3],
             rpm=float(outgauge.rpm),
             line_deviation=line_deviation,
         )
@@ -516,6 +521,29 @@ class TelemetryFusion:
                 resolved.append(float(value))
             else:
                 resolved.append(float(default))
+        return tuple(resolved)  # type: ignore[return-value]
+
+    def _resolve_brake_temperatures(
+        self, outgauge: OutGaugePacket, previous: TelemetryRecord | None
+    ) -> tuple[float, float, float, float]:
+        candidate = getattr(outgauge, "brake_temps", (0.0, 0.0, 0.0, 0.0))
+        if not isinstance(candidate, tuple) or len(candidate) != 4:
+            candidate = (0.0, 0.0, 0.0, 0.0)
+        fallback = (
+            previous.brake_temp_fl if previous else 0.0,
+            previous.brake_temp_fr if previous else 0.0,
+            previous.brake_temp_rl if previous else 0.0,
+            previous.brake_temp_rr if previous else 0.0,
+        )
+        resolved: list[float] = []
+        for value, default in zip(candidate, fallback):
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                numeric = float(default)
+            if not math.isfinite(numeric) or numeric <= 0.0:
+                numeric = float(default)
+            resolved.append(numeric)
         return tuple(resolved)  # type: ignore[return-value]
 
     def _compute_line_deviation(self, outsim: OutSimPacket, window: int = 25) -> float:

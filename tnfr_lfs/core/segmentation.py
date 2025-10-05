@@ -286,6 +286,14 @@ def segment_microsectors(
                 wheel_temperatures[key] = avg_value
                 wheel_temperature_dispersion[f"{key}_std"] = spread
 
+        brake_temperatures: Dict[str, float] = {}
+        brake_temperature_dispersion: Dict[str, float] = {}
+        for suffix in ("fl", "fr", "rl", "rr"):
+            key = f"brake_temp_{suffix}"
+            avg_value, spread = _mean_std(key)
+            brake_temperatures[key] = avg_value
+            brake_temperature_dispersion[f"{key}_std"] = spread
+
         wheel_pressures: Dict[str, float] = {}
         wheel_pressure_dispersion: Dict[str, float] = {}
         for suffix in ("fl", "fr", "rl", "rr"):
@@ -325,6 +333,8 @@ def segment_microsectors(
                 "phase_weights": phase_weight_map,
                 "wheel_temperatures": wheel_temperatures,
                 "wheel_temperature_std": wheel_temperature_dispersion,
+                "brake_temperatures": brake_temperatures,
+                "brake_temperature_std": brake_temperature_dispersion,
                 "wheel_pressures": wheel_pressures,
                 "wheel_pressure_std": wheel_pressure_dispersion,
                 "duration": duration,
@@ -506,6 +516,14 @@ def segment_microsectors(
             key: float(value)
             for key, value in spec.get("wheel_temperature_std", {}).items()
         }
+        brake_temperatures = {
+            key: float(value)
+            for key, value in spec.get("brake_temperatures", {}).items()
+        }
+        brake_temperature_std = {
+            key: float(value)
+            for key, value in spec.get("brake_temperature_std", {}).items()
+        }
         wheel_pressures = {
             key: float(value)
             for key, value in spec.get("wheel_pressures", {}).items()
@@ -516,6 +534,8 @@ def segment_microsectors(
         }
         filtered_measures.update(wheel_temperatures)
         filtered_measures.update(wheel_temperature_std)
+        filtered_measures.update(brake_temperatures)
+        filtered_measures.update(brake_temperature_std)
         filtered_measures.update(wheel_pressures)
         filtered_measures.update(wheel_pressure_std)
         window_metrics = compute_window_metrics(
@@ -618,8 +638,16 @@ def segment_microsectors(
                 "brake_headroom_abs_activation": window_metrics.brake_headroom.abs_activation_ratio,
                 "brake_headroom_partial_locking": window_metrics.brake_headroom.partial_locking_ratio,
                 "brake_headroom_sustained_locking": window_metrics.brake_headroom.sustained_locking_ratio,
+                "brake_headroom_fade_slope": window_metrics.brake_headroom.fade_slope,
+                "brake_headroom_fade_ratio": window_metrics.brake_headroom.fade_ratio,
+                "brake_headroom_temperature_peak": window_metrics.brake_headroom.temperature_peak,
+                "brake_headroom_temperature_mean": window_metrics.brake_headroom.temperature_mean,
+                "brake_headroom_ventilation_index": window_metrics.brake_headroom.ventilation_index,
             }
         )
+        ventilation_alert = window_metrics.brake_headroom.ventilation_alert
+        if ventilation_alert:
+            filtered_measures["brake_headroom_ventilation_alert"] = ventilation_alert
         if isinstance(window_metrics.camber, Mapping):
             for suffix, payload in window_metrics.camber.items():
                 prefix = f"camber_{suffix}"
@@ -706,6 +734,8 @@ def segment_microsectors(
             }
             measures.update(wheel_temperatures)
             measures.update(wheel_temperature_std)
+            measures.update(brake_temperatures)
+            measures.update(brake_temperature_std)
             measures.update(wheel_pressures)
             measures.update(wheel_pressure_std)
             rec_info = recursivity_operator(
@@ -795,6 +825,8 @@ def segment_microsectors(
             }
             defaults.update(wheel_temperatures)
             defaults.update(wheel_temperature_std)
+            defaults.update(brake_temperatures)
+            defaults.update(brake_temperature_std)
             defaults.update(wheel_pressures)
             defaults.update(wheel_pressure_std)
             for key, value in defaults.items():
