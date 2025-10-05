@@ -42,6 +42,7 @@ class Car:
     weight_kg: int
     wheel_rotation_group_deg: int
     profile: str
+    lfs_class: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +73,8 @@ def load_cars(cars_dir: str | Path | None = None) -> dict[str, Car]:
         with manifest.open("rb") as buffer:
             payload = tomllib.load(buffer)
 
+        lfs_class = payload.get("lfs_class")
+
         car = Car(
             abbrev=str(payload["abbrev"]),
             name=str(payload["name"]),
@@ -81,6 +84,7 @@ def load_cars(cars_dir: str | Path | None = None) -> dict[str, Car]:
             weight_kg=int(payload["weight_kg"]),
             wheel_rotation_group_deg=int(payload["wheel_rotation_group_deg"]),
             profile=str(payload["profile"]),
+            lfs_class=str(lfs_class) if lfs_class is not None else None,
         )
 
         if car.abbrev in cars:

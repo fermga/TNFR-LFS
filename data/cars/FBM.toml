@@ -6,3 +6,4 @@ drive = "RWD"
 weight_kg = 465
 wheel_rotation_group_deg = 20
 profile = "formula_entry"
+lfs_class = "Single-seaters"
