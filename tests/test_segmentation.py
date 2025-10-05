@@ -2,7 +2,7 @@ import pytest
 
 import math
 from dataclasses import replace
-from statistics import mean
+from statistics import mean, pstdev
 from typing import Mapping, Tuple
 
 from tnfr_lfs.core.archetypes import archetype_phase_targets
@@ -97,7 +97,79 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
                     if isinstance(payload, Mapping):
                         assert "si_variance" in payload
                         assert "epi_derivative_abs" in payload
+                        
 
+def test_segment_microsectors_computes_wheel_dispersion(
+    synthetic_records, synthetic_bundles
+) -> None:
+    base_microsectors = segment_microsectors(synthetic_records, synthetic_bundles)
+    assert base_microsectors, "expected at least one microsector"
+    first = base_microsectors[0]
+    indices: list[int] = sorted(
+        {idx for samples in first.phase_samples.values() for idx in samples}
+    )
+    assert indices, "expected indices for synthetic microsector"
+    records = list(synthetic_records)
+    fl_temps: list[float] = []
+    fr_temps: list[float] = []
+    rl_temps: list[float] = []
+    rr_temps: list[float] = []
+    fl_pressures: list[float] = []
+    fr_pressures: list[float] = []
+    rl_pressures: list[float] = []
+    rr_pressures: list[float] = []
+    for offset, idx in enumerate(indices):
+        record = records[idx]
+        fl = 80.0 + offset
+        fr = 78.5 + offset * 0.6
+        rl = 77.0 + offset * 0.3
+        rr = 76.5 + offset * 0.25
+        pfl = 1.60 + (offset % 3) * 0.02
+        pfr = 1.58 + (offset % 4) * 0.015
+        prl = 1.52 + (offset % 2) * 0.01
+        prr = 1.50 + (offset % 5) * 0.012
+        records[idx] = replace(
+            record,
+            tyre_temp_fl=fl,
+            tyre_temp_fr=fr,
+            tyre_temp_rl=rl,
+            tyre_temp_rr=rr,
+            tyre_pressure_fl=pfl,
+            tyre_pressure_fr=pfr,
+            tyre_pressure_rl=prl,
+            tyre_pressure_rr=prr,
+        )
+        fl_temps.append(fl)
+        fr_temps.append(fr)
+        rl_temps.append(rl)
+        rr_temps.append(rr)
+        fl_pressures.append(pfl)
+        fr_pressures.append(pfr)
+        rl_pressures.append(prl)
+        rr_pressures.append(prr)
+
+    recomputed = segment_microsectors(records, synthetic_bundles)
+    assert recomputed, "expected segmentation with modified records"
+    updated = recomputed[0]
+    measures = updated.filtered_measures
+
+    assert measures["tyre_temp_fl"] == pytest.approx(mean(fl_temps))
+    assert measures["tyre_temp_fr"] == pytest.approx(mean(fr_temps))
+    assert measures["tyre_temp_rl"] == pytest.approx(mean(rl_temps))
+    assert measures["tyre_temp_rr"] == pytest.approx(mean(rr_temps))
+    assert measures["tyre_pressure_fl"] == pytest.approx(mean(fl_pressures))
+    assert measures["tyre_pressure_fr"] == pytest.approx(mean(fr_pressures))
+    assert measures["tyre_pressure_rl"] == pytest.approx(mean(rl_pressures))
+    assert measures["tyre_pressure_rr"] == pytest.approx(mean(rr_pressures))
+
+    assert measures["tyre_temp_fl_std"] == pytest.approx(pstdev(fl_temps))
+    assert measures["tyre_temp_fr_std"] == pytest.approx(pstdev(fr_temps))
+    assert measures["tyre_temp_rl_std"] == pytest.approx(pstdev(rl_temps))
+    assert measures["tyre_temp_rr_std"] == pytest.approx(pstdev(rr_temps))
+    assert measures["tyre_pressure_fl_std"] == pytest.approx(pstdev(fl_pressures))
+    assert measures["tyre_pressure_fr_std"] == pytest.approx(pstdev(fr_pressures))
+    assert measures["tyre_pressure_rl_std"] == pytest.approx(pstdev(rl_pressures))
+    assert measures["tyre_pressure_rr_std"] == pytest.approx(pstdev(rr_pressures))
 
 def test_detect_quiet_microsector_streaks_flags_sequences() -> None:
     def _microsector(index: int, *, quiet: bool) -> Microsector:

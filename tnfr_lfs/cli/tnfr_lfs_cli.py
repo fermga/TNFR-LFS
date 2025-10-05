@@ -89,6 +89,22 @@ DEFAULT_OUTPUT_DIR = Path("out")
 PROFILES_ENV_VAR = "TNFR_LFS_PROFILES"
 DEFAULT_PROFILES_FILENAME = "profiles.toml"
 
+WHEEL_SUFFIXES: Tuple[str, ...] = ("fl", "fr", "rl", "rr")
+WHEEL_LABELS = MappingProxyType({
+    "fl": "FL",
+    "fr": "FR",
+    "rl": "RL",
+    "rr": "RR",
+})
+TEMPERATURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_temp_{suffix}" for suffix in WHEEL_SUFFIXES})
+TEMPERATURE_STD_KEYS = MappingProxyType({
+    suffix: f"{TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
+})
+PRESSURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_pressure_{suffix}" for suffix in WHEEL_SUFFIXES})
+PRESSURE_STD_KEYS = MappingProxyType({
+    suffix: f"{PRESSURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
+})
+
 
 @dataclass(frozen=True, slots=True)
 class ProfilesContext:
@@ -1049,6 +1065,33 @@ def _generate_out_reports(
     breakdown = _delta_breakdown_summary(bundles)
     metrics = dict(metrics or {})
 
+    def _collect_average(
+        entries: Sequence[Mapping[str, Any]],
+        key_map: Mapping[str, str],
+    ) -> Dict[str, float]:
+        samples: Dict[str, List[float]] = {suffix: [] for suffix in WHEEL_SUFFIXES}
+        for entry in entries:
+            measures = entry.get("filtered_measures", {}) if isinstance(entry, Mapping) else {}
+            if not isinstance(measures, Mapping):
+                continue
+            for suffix, key in key_map.items():
+                value = measures.get(key)
+                if value is None:
+                    continue
+                try:
+                    samples[suffix].append(float(value))
+                except (TypeError, ValueError):
+                    continue
+        return {
+            suffix: (sum(values) / len(values) if values else 0.0)
+            for suffix, values in samples.items()
+        }
+
+    avg_temperature = _collect_average(sense_map, TEMPERATURE_MEAN_KEYS)
+    avg_temperature_std = _collect_average(sense_map, TEMPERATURE_STD_KEYS)
+    avg_pressure = _collect_average(sense_map, PRESSURE_MEAN_KEYS)
+    avg_pressure_std = _collect_average(sense_map, PRESSURE_STD_KEYS)
+
     def _floatify(value: Any, *, default: float = 0.0) -> float:
         try:
             return float(value)
@@ -1198,6 +1241,33 @@ def _generate_out_reports(
             f"- Índice de resonancia global: {coupling_payload['global']['resonance_index']:.3f}",
         ]
     )
+    thermal_summary: List[str] = []
+    temp_segments: List[str] = []
+    for suffix in WHEEL_SUFFIXES:
+        mean_value = avg_temperature.get(suffix, 0.0)
+        std_value = avg_temperature_std.get(suffix, 0.0)
+        if not mean_value and not std_value:
+            continue
+        label = WHEEL_LABELS.get(suffix, suffix.upper())
+        temp_segments.append(f"{label} {mean_value:.1f}±{std_value:.1f}")
+    if temp_segments:
+        thermal_summary.append(
+            f"- Temperatura (°C): {' · '.join(temp_segments)}"
+        )
+    pressure_segments: List[str] = []
+    for suffix in WHEEL_SUFFIXES:
+        mean_value = avg_pressure.get(suffix, 0.0)
+        std_value = avg_pressure_std.get(suffix, 0.0)
+        if not mean_value and not std_value:
+            continue
+        label = WHEEL_LABELS.get(suffix, suffix.upper())
+        pressure_segments.append(f"{label} {mean_value:.2f}±{std_value:.3f}")
+    if pressure_segments:
+        thermal_summary.append(
+            f"- Presión (bar): {' · '.join(pressure_segments)}"
+        )
+    if thermal_summary:
+        summary_lines.extend(["", "## Dispersión térmica de neumáticos", *thermal_summary])
     if pairwise_payload:
         summary_lines.append("- Pares analizados:")
         for domain, pairs in sorted(pairwise_payload.items()):
