@@ -101,6 +101,10 @@ class WindowMetrics:
     structural_contraction_lateral: float
     bottoming_ratio_front: float
     bottoming_ratio_rear: float
+    mu_usage_front_ratio: float
+    mu_usage_rear_ratio: float
+    phase_mu_usage_front_ratio: float
+    phase_mu_usage_rear_ratio: float
     frequency_label: str
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
     aero_mechanical_coherence: float = 0.0
@@ -157,6 +161,10 @@ def compute_window_metrics(
             structural_contraction_lateral=0.0,
             bottoming_ratio_front=0.0,
             bottoming_ratio_rear=0.0,
+            mu_usage_front_ratio=0.0,
+            mu_usage_rear_ratio=0.0,
+            phase_mu_usage_front_ratio=0.0,
+            phase_mu_usage_rear_ratio=0.0,
             frequency_label="",
             aero_coherence=AeroCoherence(),
             aero_mechanical_coherence=0.0,
@@ -189,6 +197,10 @@ def compute_window_metrics(
     tyre_series: list[float] = []
     front_travel_series: list[float] = []
     rear_travel_series: list[float] = []
+    front_mu_lat_series: list[float] = []
+    front_mu_long_series: list[float] = []
+    rear_mu_lat_series: list[float] = []
+    rear_mu_long_series: list[float] = []
 
     context_matrix = load_context_matrix()
 
@@ -251,6 +263,19 @@ def compute_window_metrics(
         rear_travel_series = [
             float(getattr(bundle.suspension, "travel_rear", 0.0)) for bundle in bundles
         ]
+        front_mu_lat_series = [
+            float(getattr(bundle.tyres, "mu_eff_front_lateral", 0.0)) for bundle in bundles
+        ]
+        front_mu_long_series = [
+            float(getattr(bundle.tyres, "mu_eff_front_longitudinal", 0.0))
+            for bundle in bundles
+        ]
+        rear_mu_lat_series = [
+            float(getattr(bundle.tyres, "mu_eff_rear_lateral", 0.0)) for bundle in bundles
+        ]
+        rear_mu_long_series = [
+            float(getattr(bundle.tyres, "mu_eff_rear_longitudinal", 0.0)) for bundle in bundles
+        ]
         longitudinal_series = [
             float(getattr(bundle, "delta_nfr_longitudinal", 0.0)) for bundle in bundles
         ]
@@ -299,6 +324,18 @@ def compute_window_metrics(
         ]
         rear_travel_series = [
             float(getattr(record, "suspension_travel_rear", 0.0)) for record in records
+        ]
+        front_mu_lat_series = [
+            float(getattr(record, "mu_eff_front_lateral", 0.0)) for record in records
+        ]
+        front_mu_long_series = [
+            float(getattr(record, "mu_eff_front_longitudinal", 0.0)) for record in records
+        ]
+        rear_mu_lat_series = [
+            float(getattr(record, "mu_eff_rear_lateral", 0.0)) for record in records
+        ]
+        rear_mu_long_series = [
+            float(getattr(record, "mu_eff_rear_longitudinal", 0.0)) for record in records
         ]
     _useful_samples, _high_yaw_samples, udr = compute_useful_dissonance_stats(
         timestamps,
@@ -392,6 +429,67 @@ def compute_window_metrics(
             return 1.0
         return ratio
 
+    def _mu_usage_ratio(
+        lat_series: Sequence[float],
+        long_series: Sequence[float],
+        weights: Sequence[float],
+        mu_max: float,
+    ) -> float:
+        if not lat_series or not long_series:
+            return 0.0
+        magnitudes = [
+            math.hypot(float(lat), float(long))
+            for lat, long in zip(lat_series, long_series)
+        ]
+        average = _weighted_average(magnitudes, weights)
+        if mu_max <= 1e-9:
+            return 0.0
+        ratio = average / mu_max
+        if ratio < 0.0:
+            return 0.0
+        if ratio > 1.0:
+            return 1.0
+        return ratio
+
+    def _phase_mu_usage_ratio(
+        lat_series: Sequence[float],
+        long_series: Sequence[float],
+        mu_max: float,
+    ) -> float:
+        if not phase_indices:
+            return 0.0
+        if not lat_series or not long_series:
+            return 0.0
+        valid_pairs = [
+            (
+                index,
+                math.hypot(float(lat_series[index]), float(long_series[index])),
+            )
+            for index in phase_indices
+            if 0 <= index < len(lat_series) and 0 <= index < len(long_series)
+        ]
+        if not valid_pairs:
+            return 0.0
+        sorted_pairs = sorted(valid_pairs, key=lambda item: item[0])
+        sorted_indices = [index for index, _ in sorted_pairs]
+        sorted_values = [value for _, value in sorted_pairs]
+        weights: list[float] = []
+        if timestamps and len(sorted_indices) > 1:
+            for previous, current in zip(sorted_indices, sorted_indices[1:]):
+                if 0 <= previous < len(timestamps) and 0 <= current < len(timestamps):
+                    weights.append(
+                        max(0.0, float(timestamps[current]) - float(timestamps[previous]))
+                    )
+        average = _weighted_average(sorted_values, weights)
+        if mu_max <= 1e-9:
+            return 0.0
+        ratio = average / mu_max
+        if ratio < 0.0:
+            return 0.0
+        if ratio > 1.0:
+            return 1.0
+        return ratio
+
     support_effective = _weighted_average(support_samples, windows)
     load_support_ratio = (
         support_effective / avg_vertical_load if avg_vertical_load > 1e-6 else 0.0
@@ -401,6 +499,21 @@ def compute_window_metrics(
 
     bottoming_ratio_front = _bottoming_ratio(front_travel_series, bottoming_threshold_front)
     bottoming_ratio_rear = _bottoming_ratio(rear_travel_series, bottoming_threshold_rear)
+
+    mu_max_front = max(1e-6, _objective("mu_max_front", 2.0))
+    mu_max_rear = max(1e-6, _objective("mu_max_rear", 2.0))
+    mu_usage_front_ratio = _mu_usage_ratio(
+        front_mu_lat_series, front_mu_long_series, windows, mu_max_front
+    )
+    mu_usage_rear_ratio = _mu_usage_ratio(
+        rear_mu_lat_series, rear_mu_long_series, windows, mu_max_rear
+    )
+    phase_mu_usage_front_ratio = _phase_mu_usage_ratio(
+        front_mu_lat_series, front_mu_long_series, mu_max_front
+    )
+    phase_mu_usage_rear_ratio = _phase_mu_usage_ratio(
+        rear_mu_lat_series, rear_mu_long_series, mu_max_rear
+    )
 
     aero = compute_aero_coherence(records, bundles)
     coherence_values: list[float] = []
@@ -450,6 +563,10 @@ def compute_window_metrics(
         structural_contraction_lateral=lat_contraction,
         bottoming_ratio_front=bottoming_ratio_front,
         bottoming_ratio_rear=bottoming_ratio_rear,
+        mu_usage_front_ratio=mu_usage_front_ratio,
+        mu_usage_rear_ratio=mu_usage_rear_ratio,
+        phase_mu_usage_front_ratio=phase_mu_usage_front_ratio,
+        phase_mu_usage_rear_ratio=phase_mu_usage_rear_ratio,
         frequency_label=frequency_label,
         aero_coherence=aero,
         aero_mechanical_coherence=aero_mechanical,

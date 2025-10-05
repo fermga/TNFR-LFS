@@ -2375,6 +2375,88 @@ class TyreBalanceRule:
         return recommendations
 
 
+class FootprintEfficiencyRule:
+    """Reduce ΔNFR guidance when the tyre footprint is saturated."""
+
+    def __init__(
+        self,
+        priority: int = 16,
+        *,
+        threshold: float = 0.9,
+        hysteresis: float = 0.1,
+    ) -> None:
+        self.priority = int(priority)
+        self.threshold = float(threshold)
+        self.hysteresis = float(hysteresis)
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors or context is None or not results:
+            return []
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            if not isinstance(measures, Mapping):
+                continue
+            base_front_ratio = float(measures.get("mu_usage_front_ratio", 0.0))
+            base_rear_ratio = float(measures.get("mu_usage_rear_ratio", 0.0))
+            phase_front_ratio = float(
+                measures.get("phase_mu_usage_front_ratio", base_front_ratio)
+            )
+            phase_rear_ratio = float(
+                measures.get("phase_mu_usage_rear_ratio", base_rear_ratio)
+            )
+            front_ratio = phase_front_ratio if phase_front_ratio > 0.0 else base_front_ratio
+            rear_ratio = phase_rear_ratio if phase_rear_ratio > 0.0 else base_rear_ratio
+            if front_ratio < self.threshold and rear_ratio < self.threshold:
+                continue
+            goal = _goal_for_phase(microsector, getattr(microsector, "active_phase", ""))
+            if goal is None:
+                continue
+            indices = list(microsector.phase_indices(goal.phase))
+            samples = _phase_samples(results, indices)
+            if not samples:
+                continue
+            avg_delta = mean(bundle.delta_nfr for bundle in samples)
+            if not math.isfinite(avg_delta):
+                continue
+            tolerance = context.thresholds.tolerance_for_phase(goal.phase)
+            allowable = tolerance * (1.0 + self.hysteresis)
+            deviation = abs(avg_delta - goal.target_delta_nfr)
+            if deviation > allowable:
+                continue
+            category = phase_family(goal.phase)
+            for axle_label, ratio_value, symbol, reference_key in (
+                ("delantero", front_ratio, "F", "antiroll"),
+                ("trasero", rear_ratio, "R", "differential"),
+            ):
+                if ratio_value < self.threshold:
+                    continue
+                reference = MANUAL_REFERENCES[reference_key]
+                message = (
+                    f"Operador huella: aliviar ΔNFR {axle_label} en microsector {microsector.index}"
+                )
+                rationale = (
+                    f"Uso de huella μ{symbol} {ratio_value:.2f} supera el umbral {self.threshold:.2f} "
+                    f"con ΔNFR medio {avg_delta:.2f} (objetivo {goal.target_delta_nfr:.2f}, "
+                    f"tolerancia ±{tolerance:.2f}). Reduce carga axial siguiendo {reference}."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category=category,
+                        message=message,
+                        rationale=rationale,
+                        priority=self.priority,
+                    )
+                )
+        return recommendations
+
+
 class CurbComplianceRule:
     """Analyses support events (pianos) against the ΔNFR target."""
 
@@ -2640,6 +2722,7 @@ class RecommendationEngine:
                 ),
                 ParallelSteerRule(priority=20),
                 TyreBalanceRule(priority=24),
+                FootprintEfficiencyRule(priority=16),
                 BottomingPriorityRule(priority=18),
                 DetuneRatioRule(priority=24),
                 UsefulDissonanceRule(priority=26),
