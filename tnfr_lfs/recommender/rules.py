@@ -8,6 +8,7 @@ import math
 from statistics import mean
 from types import MappingProxyType
 from typing import (
+    Any,
     Dict,
     Iterable,
     List,
@@ -599,6 +600,8 @@ class RuleContext:
     tyre_offsets: Mapping[str, float] = field(default_factory=dict)
     aero_profiles: Mapping[str, "AeroProfile"] = field(default_factory=dict)
     objectives: RuleProfileObjectives = field(default_factory=RuleProfileObjectives)
+    session_weights: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    session_hints: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def profile_label(self) -> str:
@@ -637,6 +640,120 @@ def _freeze_phase_weights(
         elif isinstance(profile, (int, float)):
             frozen[str(phase)] = float(profile)
     return MappingProxyType(frozen)
+
+
+def _coerce_session_weights(
+    payload: Mapping[str, object] | None,
+) -> Mapping[str, Mapping[str, float]]:
+    if not isinstance(payload, Mapping):
+        return MappingProxyType({})
+    weights: Dict[str, Mapping[str, float]] = {}
+    for phase, profile in payload.items():
+        if not isinstance(profile, Mapping):
+            continue
+        entry: Dict[str, float] = {}
+        for node, value in profile.items():
+            try:
+                entry[str(node)] = float(value)
+            except (TypeError, ValueError):
+                continue
+        if entry:
+            weights[str(phase)] = MappingProxyType(entry)
+    return MappingProxyType(weights)
+
+
+def _coerce_session_hints(payload: Mapping[str, object] | None) -> Mapping[str, Any]:
+    if not isinstance(payload, Mapping):
+        return MappingProxyType({})
+    hints: Dict[str, Any] = {}
+    for key, value in payload.items():
+        label = str(key)
+        if isinstance(value, (str, bool)):
+            hints[label] = value
+            continue
+        if isinstance(value, (int, float)):
+            hints[label] = float(value)
+            continue
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            entries: list[Any] = []
+            for item in value:
+                if isinstance(item, (str, bool)):
+                    entries.append(item)
+                elif isinstance(item, (int, float)):
+                    entries.append(float(item))
+            hints[label] = tuple(entries)
+    return MappingProxyType(hints)
+
+
+def _session_weight_profile(
+    weights: Mapping[str, Mapping[str, float]], phase: str
+) -> Mapping[str, float] | None:
+    profile = weights.get(phase)
+    if profile is not None:
+        return profile
+    key = phase_family(phase)
+    return weights.get(key)
+
+
+def _session_priority_scale(
+    context: RuleContext, phase: str, node: str | None = None
+) -> float:
+    weights = getattr(context, "session_weights", {}) or {}
+    if not isinstance(weights, Mapping):
+        return 1.0
+    profile = _session_weight_profile(weights, phase)
+    if not isinstance(profile, Mapping):
+        return 1.0
+    factor: float | None = None
+    if node is not None:
+        candidate = profile.get(node)
+        if isinstance(candidate, (int, float)):
+            factor = float(candidate)
+    if factor is None:
+        candidate = profile.get("__default__")
+        if isinstance(candidate, (int, float)):
+            factor = float(candidate)
+    if factor is None:
+        return 1.0
+    return max(0.4, min(2.5, factor))
+
+
+def _scale_priority_value(value: int, scale: float) -> int:
+    if value == 0 or not math.isfinite(scale) or abs(scale - 1.0) < 1e-9:
+        return value
+    scaled = int(round(value * scale))
+    if value > 0:
+        return max(1, scaled)
+    if value < 0:
+        return min(-1, scaled)
+    return 0
+
+
+def _apply_priority_scale(
+    recommendations: Sequence[Recommendation], scale: float
+) -> None:
+    if not recommendations:
+        return
+    if abs(scale - 1.0) < 1e-9:
+        return
+    for recommendation in recommendations:
+        recommendation.priority = _scale_priority_value(recommendation.priority, scale)
+
+
+def _session_coherence_scale(context: RuleContext) -> float:
+    weights = getattr(context, "session_weights", {}) or {}
+    if not isinstance(weights, Mapping):
+        return 1.0
+    values: list[float] = []
+    for profile in weights.values():
+        if not isinstance(profile, Mapping):
+            continue
+        candidate = profile.get("__default__")
+        if isinstance(candidate, (int, float)):
+            values.append(float(candidate))
+    if not values:
+        return 1.0
+    return max(0.4, min(2.5, mean(values)))
 
 
 def _coerce_float(value: object, default: float) -> float:
@@ -1040,6 +1157,7 @@ class CoherenceRule:
             return []
         average_si = mean(result.sense_index for result in results)
         if average_si < self.min_average_si:
+            priority = _scale_priority_value(120, _session_coherence_scale(context))
             return [
                 Recommendation(
                     category="driver",
@@ -1052,7 +1170,7 @@ class CoherenceRule:
                         f"{average_si:.2f}, below the expected threshold of {self.min_average_si:.2f}. "
                         f"Apóyate en {MANUAL_REFERENCES['driver']} para reforzar hábitos consistentes."
                     ),
-                    priority=120,
+                    priority=priority,
                 )
             ]
         return []
@@ -1544,8 +1662,10 @@ class PhaseDeltaDeviationRule:
             return []
 
         tolerance = context.thresholds.tolerance_for_phase(self.phase)
+        priority_scale = _session_priority_scale(context, self.phase)
         recommendations: List[Recommendation] = []
         for microsector in microsectors:
+            start_index = len(recommendations)
             goal = _goal_for_phase(microsector, self.phase)
             if goal is None:
                 continue
@@ -1827,7 +1947,7 @@ class PhaseDeltaDeviationRule:
                             priority=min(self.priority - 2, self.priority - geometry_urgency),
                         )
                     )
-                    for rec in recommendations:
+                    for rec in recommendations[start_index:]:
                         if rec.parameter and rec.parameter in parameters:
                             rec.priority = min(rec.priority, self.priority - 1)
 
@@ -1852,6 +1972,7 @@ class PhaseDeltaDeviationRule:
                             reference_key=self.reference_key,
                         )
                     )
+            _apply_priority_scale(recommendations[start_index:], priority_scale)
         return recommendations
 
 
@@ -1882,8 +2003,10 @@ class PhaseNodeOperatorRule:
         if not microsectors or context is None:
             return []
 
+        priority_scale = _session_priority_scale(context, self.phase)
         recommendations: List[Recommendation] = []
         for microsector in microsectors:
+            start_index = len(recommendations)
             goal = _goal_for_phase(microsector, self.phase)
             if goal is None:
                 continue
@@ -2069,6 +2192,7 @@ class PhaseNodeOperatorRule:
                         priority=self.priority,
                     )
                 )
+            _apply_priority_scale(recommendations[start_index:], priority_scale)
         return recommendations
 
 
@@ -2555,11 +2679,17 @@ class RecommendationEngine:
         resolved_track = track_name or self.track_name
         base_profile = self._lookup_profile(resolved_car, resolved_track)
         objectives = RuleProfileObjectives()
+        session_weights: Mapping[str, Mapping[str, float]] = MappingProxyType({})
+        session_hints: Mapping[str, Any] = MappingProxyType({})
         if self.profile_manager is not None:
-            snapshot = self.profile_manager.resolve(resolved_car, resolved_track, base_profile)
+            snapshot = self.profile_manager.resolve(
+                resolved_car, resolved_track, base_profile, session=getattr(self, "session", None)
+            )
             profile = snapshot.thresholds
             offsets = snapshot.tyre_offsets
             aero_profiles = snapshot.aero_profiles
+            session_weights = snapshot.session_weights
+            session_hints = snapshot.session_hints
             profile_objectives = getattr(snapshot, "objectives", None)
             if profile_objectives is not None:
                 objectives = RuleProfileObjectives(
@@ -2574,6 +2704,12 @@ class RecommendationEngine:
             profile = base_profile
             offsets = {}
             aero_profiles = {}
+            session_payload = getattr(self, "session", None)
+            if isinstance(session_payload, Mapping):
+                weights_payload = session_payload.get("weights")
+                hints_payload = session_payload.get("hints")
+                session_weights = _coerce_session_weights(weights_payload)
+                session_hints = _coerce_session_hints(hints_payload)
         return RuleContext(
             car_model=resolved_car,
             track_name=resolved_track,
@@ -2581,6 +2717,8 @@ class RecommendationEngine:
             tyre_offsets=offsets,
             aero_profiles=MappingProxyType(dict(aero_profiles)),
             objectives=objectives,
+            session_weights=session_weights,
+            session_hints=session_hints,
         )
 
     def register_plan(
