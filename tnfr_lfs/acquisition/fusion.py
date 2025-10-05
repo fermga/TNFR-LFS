@@ -97,17 +97,29 @@ class TelemetryFusion:
             )
         wheels = wheels_raw[:4]
 
+        wheel_data_present = any(wheel.decoded for wheel in wheels)
         wheel_slip_ratios = tuple(
-            _clamp(_safe_float(wheel.slip_ratio), -1.0, 1.0) for wheel in wheels
+            _clamp(_safe_float(wheel.slip_ratio), -1.0, 1.0)
+            if wheel.decoded
+            else math.nan
+            for wheel in wheels
         )
-        wheel_slip_angles = tuple(_safe_float(wheel.slip_angle) for wheel in wheels)
-        wheel_lateral_forces = tuple(_safe_float(wheel.lateral_force) for wheel in wheels)
+        wheel_slip_angles = tuple(
+            _safe_float(wheel.slip_angle) if wheel.decoded else math.nan for wheel in wheels
+        )
+        wheel_lateral_forces = tuple(
+            _safe_float(wheel.lateral_force) if wheel.decoded else math.nan for wheel in wheels
+        )
         wheel_longitudinal_forces = tuple(
-            _safe_float(wheel.longitudinal_force) for wheel in wheels
+            _safe_float(wheel.longitudinal_force) if wheel.decoded else math.nan
+            for wheel in wheels
         )
-        wheel_loads = tuple(max(0.0, _safe_float(wheel.load)) for wheel in wheels)
+        wheel_loads = tuple(
+            max(0.0, _safe_float(wheel.load)) if wheel.decoded else math.nan for wheel in wheels
+        )
         wheel_deflections = tuple(
-            _safe_float(wheel.suspension_deflection) for wheel in wheels
+            _safe_float(wheel.suspension_deflection) if wheel.decoded else math.nan
+            for wheel in wheels
         )
 
         inputs = getattr(outsim, "inputs", None)
@@ -138,8 +150,11 @@ class TelemetryFusion:
         front_load = vertical_load * front_share
         rear_load = vertical_load * rear_share
 
-        total_wheel_load = sum(wheel_loads)
-        if total_wheel_load > 1e-6:
+        if all(math.isfinite(load) for load in wheel_loads):
+            total_wheel_load = sum(wheel_loads)
+        else:
+            total_wheel_load = math.nan
+        if math.isfinite(total_wheel_load) and total_wheel_load > 1e-6:
             front_load = wheel_loads[0] + wheel_loads[1]
             rear_load = wheel_loads[2] + wheel_loads[3]
             vertical_load = front_load + rear_load
@@ -149,7 +164,10 @@ class TelemetryFusion:
             else:
                 front_share = rear_share = 0.5
 
-        if any(abs(value) > 1e-6 for value in wheel_deflections):
+        finite_deflections = [
+            value for value in wheel_deflections if math.isfinite(value)
+        ]
+        if wheel_data_present and any(abs(value) > 1e-6 for value in finite_deflections):
             travel_front = (wheel_deflections[0] + wheel_deflections[1]) * 0.5
             travel_rear = (wheel_deflections[2] + wheel_deflections[3]) * 0.5
             if previous and dt > 1e-6:
@@ -162,7 +180,7 @@ class TelemetryFusion:
             else:
                 vel_front = 0.0
                 vel_rear = 0.0
-        else:
+        elif wheel_data_present:
             travel_front, vel_front = self._compute_suspension_velocity(
                 "front",
                 front_share,
@@ -177,6 +195,9 @@ class TelemetryFusion:
                 dt,
                 calibration,
             )
+        else:
+            travel_front = travel_rear = math.nan
+            vel_front = vel_rear = math.nan
 
         mu_front, mu_front_lat, mu_front_long = self._compute_mu_eff(
             outsim.accel_y, outsim.accel_x, front_share, calibration

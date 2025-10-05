@@ -28,7 +28,11 @@ streams; the toolkit does not synthesise additional inputs. Enable both
 UDP broadcasters and extend OutSim with `OutSim Opts ff` in `cfg.txt`
 (or run `/outsim Opts ff` before `/outsim 1 …`) so the UDP packets
 include the player identifier, driver inputs and the four-wheel block
-that feeds the telemetry fusion layer.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+that feeds the telemetry fusion layer.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】
+When the wheel payload is disabled the toolkit now surfaces tyre loads,
+slip ratios and suspension metrics as “sin datos” rather than
+fabricating zeroed values, making it obvious that the telemetry stream
+is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_acquisition.py†L229-L288】
 
 ### Metric field checklist
 

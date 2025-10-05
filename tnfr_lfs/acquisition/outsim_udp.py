@@ -51,6 +51,7 @@ class OutSimWheelState:
     lateral_force: float = 0.0
     load: float = 0.0
     suspension_deflection: float = 0.0
+    decoded: bool = False
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,7 @@ class OutSimPacket:
                     lateral_force=lat_force,
                     load=load,
                     suspension_deflection=deflection,
+                    decoded=True,
                 )
             )
             offset += _WHEEL_STRUCT.size
