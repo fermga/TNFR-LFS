@@ -96,6 +96,14 @@ def encode_native_setup(plan: SetupPlan) -> bytes:
         "diff_coast_lock": lambda buf, val: _encode_percentage(buf, 87, val),
         "diff_preload_nm": lambda buf, val: _encode_preload(buf, 83, val),
         "rear_wing_angle": lambda buf, val: _encode_angle(buf, 20, val),
+        "final_drive_ratio": lambda buf, val: _write_float(buf, 28, val),
+        "gear_1_ratio": lambda buf, val: _write_float(buf, 32, val),
+        "gear_2_ratio": lambda buf, val: _write_float(buf, 36, val),
+        "gear_3_ratio": lambda buf, val: _write_float(buf, 40, val),
+        "gear_4_ratio": lambda buf, val: _write_float(buf, 44, val),
+        "gear_5_ratio": lambda buf, val: _write_float(buf, 48, val),
+        "gear_6_ratio": lambda buf, val: _write_float(buf, 72, val),
+        "gear_7_ratio": lambda buf, val: _write_float(buf, 112, val),
     }
 
     for parameter, raw_value in vector.decision_vector.items():

@@ -1,4 +1,6 @@
+import importlib
 import json
+import struct
 import subprocess
 from pathlib import Path
 
@@ -204,6 +206,27 @@ def test_lfs_notes_exporter_renders_key_instructions():
     plan = build_setup_plan()
     output = lfs_notes_exporter({"setup_plan": plan})
     assert "Instrucciones rápidas TNFR" in output
+
+
+def test_native_encoder_writes_gearing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TNFR_LFS_NATIVE_EXPORT", "1")
+    module = importlib.import_module("tnfr_lfs.exporters.lfs_native")
+    importlib.reload(module)
+    plan = SetupPlan(
+        car_model="XFG",
+        session="FP2",
+        changes=(
+            SetupChange("final_drive_ratio", 3.85, "", ""),
+            SetupChange("gear_1_ratio", 3.2, "", ""),
+            SetupChange("gear_2_ratio", 2.05, "", ""),
+            SetupChange("gear_6_ratio", 0.92, "", ""),
+        ),
+    )
+    payload = module.encode_native_setup(plan)
+    assert struct.unpack_from("<f", payload, 28)[0] == pytest.approx(3.85)
+    assert struct.unpack_from("<f", payload, 32)[0] == pytest.approx(3.2)
+    assert struct.unpack_from("<f", payload, 36)[0] == pytest.approx(2.05)
+    assert struct.unpack_from("<f", payload, 72)[0] == pytest.approx(0.92)
 
 
 def test_coherence_map_exporter_produces_track_summary(

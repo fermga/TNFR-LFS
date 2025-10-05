@@ -503,3 +503,12 @@ def test_setup_planner_consults_profile_jacobian(tmp_path: Path) -> None:
         var.step for var in original_space.variables if var.name == "rear_wing_angle"
     )
     assert optimiser.step_by_param["rear_wing_angle"] < original_step
+
+
+def test_decision_spaces_include_gearing_sliders():
+    for car_model in SUPPORTED_CAR_MODELS:
+        space = DEFAULT_DECISION_LIBRARY[car_model]
+        variable_names = {variable.name for variable in space.variables}
+        assert "final_drive_ratio" in variable_names
+        for gear in range(1, 8):
+            assert f"gear_{gear}_ratio" in variable_names

@@ -2697,6 +2697,72 @@ class DetuneRatioRule:
         return recommendations
 
 
+class ShiftStabilityRule:
+    """Escalate gearing guidance when apex→exit shifts destabilise the exit."""
+
+    def __init__(
+        self,
+        priority: int = 28,
+        *,
+        stability_threshold: float = 0.75,
+        gear_match_threshold: float = 0.7,
+    ) -> None:
+        self.priority = priority
+        self.stability_threshold = max(0.0, min(1.0, stability_threshold))
+        self.gear_match_threshold = max(0.0, min(1.0, gear_match_threshold))
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors:
+            return []
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            try:
+                stability = float(measures.get("shift_stability", 1.0))
+                gear_match = float(measures.get("exit_gear_match", 1.0))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(stability) or not math.isfinite(gear_match):
+                continue
+            stability_trigger = stability < self.stability_threshold
+            gear_trigger = gear_match < self.gear_match_threshold
+            if not (stability_trigger or gear_trigger):
+                continue
+            details: List[str] = []
+            if stability_trigger:
+                details.append(
+                    f"estabilidad {stability:.2f} < umbral {self.stability_threshold:.2f}"
+                )
+            if gear_trigger:
+                details.append(
+                    f"acoplamiento {gear_match:.2f} < umbral {self.gear_match_threshold:.2f}"
+                )
+            detail_text = ", ".join(details)
+            message = (
+                f"Operador transmisión: suavizar cambios apex→exit en microsector {microsector.index}"
+            )
+            rationale = (
+                "Las métricas de transmisión señalan pérdidas en la transición vértice→salida: "
+                f"{detail_text}. Ajusta final drive o ratios de marchas para reducir cambios forzados "
+                f"({MANUAL_REFERENCES['differential']})."
+            )
+            recommendations.append(
+                Recommendation(
+                    category="exit",
+                    message=message,
+                    rationale=rationale,
+                    priority=self.priority,
+                )
+            )
+        return recommendations
+
+
 class UsefulDissonanceRule:
     """Adjust axle balance when the Useful Dissonance Ratio drifts."""
 
@@ -2845,6 +2911,7 @@ class RecommendationEngine:
                 FootprintEfficiencyRule(priority=16),
                 BottomingPriorityRule(priority=18),
                 DetuneRatioRule(priority=24),
+                ShiftStabilityRule(priority=28),
                 UsefulDissonanceRule(priority=26),
                 CurbComplianceRule(priority=25),
                 PhaseDeltaDeviationRule(

@@ -544,6 +544,8 @@ def segment_microsectors(
                 "bottoming_ratio_rear": window_metrics.bottoming_ratio_rear,
                 "mu_usage_front_ratio": window_metrics.mu_usage_front_ratio,
                 "mu_usage_rear_ratio": window_metrics.mu_usage_rear_ratio,
+                "exit_gear_match": window_metrics.exit_gear_match,
+                "shift_stability": window_metrics.shift_stability,
                 "aero_low_imbalance": window_metrics.aero_coherence.low_speed_imbalance,
                 "aero_high_imbalance": window_metrics.aero_coherence.high_speed_imbalance,
                 "aero_low_samples": float(window_metrics.aero_coherence.low_speed_samples),

@@ -370,6 +370,8 @@ def bottoming_segments(monkeypatch):
         mu_usage_rear_ratio=0.0,
         phase_mu_usage_front_ratio=0.0,
         phase_mu_usage_rear_ratio=0.0,
+        exit_gear_match=0.0,
+        shift_stability=1.0,
         frequency_label="",
         aero_coherence=aero,
         aero_mechanical_coherence=0.5,
