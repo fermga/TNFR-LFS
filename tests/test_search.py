@@ -116,6 +116,80 @@ def _build_bundle(timestamp: float, delta_nfr: float, si: float) -> EPIBundle:
     )
 
 
+def _rich_bundle(
+    timestamp: float,
+    *,
+    delta_nfr: float = 2.0,
+    si: float = 0.85,
+    yaw_rate: float = 0.1,
+    travel_front: float = 0.04,
+    travel_rear: float = 0.04,
+    temps: tuple[float, float, float, float] = (82.0, 81.5, 79.5, 79.0),
+    mu_front: tuple[float, float] = (1.25, 1.05),
+    mu_rear: tuple[float, float] = (1.15, 0.95),
+) -> EPIBundle:
+    share = delta_nfr / 6
+    tyres = TyresNode(
+        delta_nfr=share,
+        sense_index=si,
+        nu_f=BASE_NU_F["tyres"],
+        mu_eff_front=mu_front[0],
+        mu_eff_rear=mu_rear[0],
+        mu_eff_front_lateral=mu_front[0],
+        mu_eff_front_longitudinal=mu_front[1],
+        mu_eff_rear_lateral=mu_rear[0],
+        mu_eff_rear_longitudinal=mu_rear[1],
+        tyre_temp_fl=temps[0],
+        tyre_temp_fr=temps[1],
+        tyre_temp_rl=temps[2],
+        tyre_temp_rr=temps[3],
+    )
+    suspension = SuspensionNode(
+        delta_nfr=share,
+        sense_index=si,
+        nu_f=BASE_NU_F["suspension"],
+        travel_front=travel_front,
+        travel_rear=travel_rear,
+    )
+    chassis = ChassisNode(
+        delta_nfr=share,
+        sense_index=si,
+        nu_f=BASE_NU_F["chassis"],
+        yaw_rate=yaw_rate,
+    )
+    brakes = BrakesNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["brakes"])
+    transmission = TransmissionNode(
+        delta_nfr=share,
+        sense_index=si,
+        nu_f=BASE_NU_F["transmission"],
+        throttle=0.4,
+        gear=4,
+        speed=140.0,
+    )
+    track = TrackNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["track"], yaw=0.0)
+    driver = DriverNode(
+        delta_nfr=share,
+        sense_index=si,
+        nu_f=BASE_NU_F["driver"],
+        steer=0.1,
+        throttle=0.5,
+        style_index=si,
+    )
+    return EPIBundle(
+        timestamp=timestamp,
+        epi=0.0,
+        delta_nfr=delta_nfr,
+        sense_index=si,
+        tyres=tyres,
+        suspension=suspension,
+        chassis=chassis,
+        brakes=brakes,
+        transmission=transmission,
+        track=track,
+        driver=driver,
+    )
+
+
 def _microsector() -> Microsector:
     window = (-0.2, 0.2)
     yaw_window = (-0.5, 0.5)
@@ -226,6 +300,66 @@ def _microsector() -> Microsector:
     )
 
 
+def test_objective_breakdown_matches_score() -> None:
+    results = [
+        _rich_bundle(0.0),
+        _rich_bundle(0.2),
+        _rich_bundle(0.4),
+        _rich_bundle(0.6),
+    ]
+    breakdown: dict[str, float] = {}
+    score = objective_score(results, breakdown=breakdown)
+    assert set(breakdown) == {"sense", "delta", "udr", "bottoming", "aero", "cphi"}
+    assert score == pytest.approx(sum(breakdown.values()), rel=1e-6)
+    assert all(value >= 0.0 for value in breakdown.values())
+
+
+def test_objective_responds_to_component_variations(monkeypatch: pytest.MonkeyPatch) -> None:
+    base_series = [
+        _rich_bundle(index * 0.2) for index in range(4)
+    ]
+    score_base = objective_score(base_series)
+
+    low_si_series = [_rich_bundle(index * 0.2, si=0.6) for index in range(4)]
+    assert objective_score(low_si_series) < score_base
+
+    high_delta_series = [_rich_bundle(index * 0.2, delta_nfr=12.0) for index in range(4)]
+    assert objective_score(high_delta_series) < score_base
+
+    original_udr = search_module.compute_useful_dissonance_stats
+    monkeypatch.setattr(
+        search_module,
+        "compute_useful_dissonance_stats",
+        lambda *args, **kwargs: (0, 0, 0.9),
+    )
+    score_high_udr = objective_score(base_series)
+    monkeypatch.setattr(
+        search_module,
+        "compute_useful_dissonance_stats",
+        lambda *args, **kwargs: (0, 0, 0.1),
+    )
+    score_low_udr = objective_score(base_series)
+    monkeypatch.setattr(search_module, "compute_useful_dissonance_stats", original_udr)
+    assert score_low_udr < score_high_udr
+
+    bottoming_series = [
+        _rich_bundle(index * 0.2, travel_front=0.0, travel_rear=0.0) for index in range(4)
+    ]
+    assert objective_score(bottoming_series) < score_base
+
+    aero_imbalanced_series = [
+        _rich_bundle(index * 0.2, mu_front=(1.7, 1.3), mu_rear=(0.45, 0.35))
+        for index in range(4)
+    ]
+    assert objective_score(aero_imbalanced_series) < score_base
+
+    overheated_series = [
+        _rich_bundle(index * 0.2, temps=(110.0, 109.5, 105.0, 104.5))
+        for index in range(4)
+    ]
+    assert objective_score(overheated_series) < score_base
+
+
 def test_objective_penalises_delta_nfr_integral():
     results = [
         _build_bundle(0.0, delta_nfr=8.0, si=0.6),
@@ -238,7 +372,7 @@ def test_objective_penalises_delta_nfr_integral():
     microsector = _microsector()
     score_with_micro = objective_score(results, [microsector])
     score_without_micro = objective_score(results, [])
-    assert score_with_micro < score_without_micro
+    assert score_with_micro == pytest.approx(score_without_micro, rel=1e-6)
 
 
 @pytest.mark.parametrize("car_model", SUPPORTED_CAR_MODELS)

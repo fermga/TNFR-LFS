@@ -41,7 +41,7 @@ from .contextual_delta import (
     resolve_microsector_context,
     resolve_series_context,
 )
-from .metrics import compute_window_metrics
+from .metrics import CPHIWheel, compute_window_metrics
 from .operator_detection import detect_al, detect_il, detect_oz, detect_silencio
 from .operators import mutation_operator, recursivity_operator
 from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias, phase_family
@@ -582,6 +582,43 @@ def segment_microsectors(
                 "brake_headroom_sustained_locking": window_metrics.brake_headroom.sustained_locking_ratio,
             }
         )
+        cphi_data = window_metrics.cphi if isinstance(window_metrics.cphi, Mapping) else {}
+        for suffix in ("fl", "fr", "rl", "rr"):
+            wheel = cphi_data.get(suffix)
+            if isinstance(wheel, CPHIWheel):
+                filtered_measures[f"cphi_{suffix}"] = float(wheel.value)
+                filtered_measures[f"cphi_{suffix}_temperature"] = float(
+                    wheel.temperature_component
+                )
+                filtered_measures[f"cphi_{suffix}_gradient"] = float(
+                    wheel.gradient_component
+                )
+                filtered_measures[f"cphi_{suffix}_mu"] = float(wheel.mu_component)
+                filtered_measures[f"cphi_{suffix}_temp_delta"] = float(
+                    wheel.temperature_delta
+                )
+                filtered_measures[f"cphi_{suffix}_gradient_rate"] = float(
+                    wheel.gradient_rate
+                )
+            else:
+                filtered_measures.setdefault(f"cphi_{suffix}", 0.0)
+                filtered_measures.setdefault(f"cphi_{suffix}_temperature", 0.0)
+                filtered_measures.setdefault(f"cphi_{suffix}_gradient", 0.0)
+                filtered_measures.setdefault(f"cphi_{suffix}_mu", 0.0)
+                filtered_measures.setdefault(f"cphi_{suffix}_temp_delta", 0.0)
+                filtered_measures.setdefault(f"cphi_{suffix}_gradient_rate", 0.0)
+        if isinstance(window_metrics.phase_cphi, Mapping):
+            for phase_label, wheels in window_metrics.phase_cphi.items():
+                if not isinstance(wheels, Mapping):
+                    continue
+                label = str(phase_label)
+                for suffix in ("fl", "fr", "rl", "rr"):
+                    wheel = wheels.get(suffix)
+                    key = f"cphi_{label}_{suffix}"
+                    if isinstance(wheel, CPHIWheel):
+                        filtered_measures[key] = float(wheel.value)
+                    else:
+                        filtered_measures.setdefault(key, 0.0)
         histogram = window_metrics.bumpstop_histogram
         for index, _ in enumerate(histogram.depth_bins):
             filtered_measures[f"bumpstop_front_density_bin_{index}"] = histogram.front_density[index]

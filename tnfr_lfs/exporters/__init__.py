@@ -196,6 +196,20 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
                 formatted = str(value)
             lines.append(f"| {parameter} | {formatted} |")
 
+    ics_breakdown = plan.get("ics_breakdown") or plan.get("objective_breakdown")
+    if ics_breakdown:
+        lines.append("")
+        lines.append("**Contribución ICS**")
+        lines.append("| Término | Aporte |")
+        lines.append("| --- | --- |")
+        for term in sorted(ics_breakdown):
+            value = ics_breakdown[term]
+            try:
+                formatted = f"{float(value):.4f}"
+            except (TypeError, ValueError):
+                formatted = str(value)
+            lines.append(f"| {term} | {formatted} |")
+
     phase_dnfr = plan.get("phase_dnfr_integral_dparam", {})
     if phase_dnfr:
         lines.append("")
