@@ -1,0 +1,21 @@
+# Ajustes específicos por clase de LFS que pueden sobrescribir perfiles TNFR.
+# Cada sección define los bloques "targets", "policy" y/o "recommender" que
+# sustituyen a los declarados en el perfil base.
+
+["STD".overrides]
+# Añadir aquí los ajustes comunes de la clase STD.
+
+["TBO".overrides]
+# Añadir aquí los ajustes comunes de la clase TBO.
+
+["LRF".overrides]
+# Añadir aquí los ajustes comunes de la clase LRF.
+
+["GTR".overrides]
+# Añadir aquí los ajustes comunes de la clase GTR.
+
+["FWD GTR".overrides]
+# Añadir aquí los ajustes comunes de la clase FWD GTR.
+
+["Single-seaters".overrides]
+# Añadir aquí los ajustes comunes de la clase Single-seaters.
