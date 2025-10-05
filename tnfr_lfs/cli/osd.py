@@ -19,7 +19,7 @@ from ..acquisition import (
     TelemetryFusion,
 )
 from ..core.epi import EPIExtractor, TelemetryRecord
-from ..core.metrics import WindowMetrics, compute_window_metrics
+from ..core.metrics import AeroBalanceDrift, WindowMetrics, compute_window_metrics
 from ..core.operators import orchestrate_delta_metrics
 from ..core.phases import PHASE_SEQUENCE, phase_family
 from ..core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
@@ -557,6 +557,11 @@ def _render_page_a(
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(amc_line)
     lines.append(gradient_line)
+    drift_line = _aero_drift_line(window_metrics.aero_balance_drift)
+    if drift_line:
+        candidate = "\n".join((*lines, drift_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(drift_line)
     if (
         window_metrics.aero_coherence.high_speed_samples
         or window_metrics.aero_coherence.low_speed_samples
@@ -612,6 +617,21 @@ def _render_page_a(
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(thermal_line)
     return _ensure_limit("\n".join(lines))
+
+
+def _aero_drift_line(aero_drift: AeroBalanceDrift | None) -> str | None:
+    if not isinstance(aero_drift, AeroBalanceDrift):
+        return None
+    candidate = aero_drift.dominant_bin()
+    if candidate is None:
+        return None
+    band_label, direction, payload = candidate
+    ratio_segment = f" μƒ/μr {payload.mu_ratio:.2f}" if payload.mu_ratio else ""
+    return _truncate_line(
+        "Deriva aero "
+        f"{band_label}: μΔ {payload.mu_delta:+.2f}{ratio_segment} "
+        f"rake {payload.rake_deg:+.2f}° → {direction}"
+    )
 
 
 def _gradient_line(window_metrics: WindowMetrics) -> str:

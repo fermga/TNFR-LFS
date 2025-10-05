@@ -16,6 +16,7 @@ from .epi import (
 )
 from .epi_models import EPIBundle
 from .metrics import (
+    AeroBalanceDrift,
     AeroCoherence,
     BrakeHeadroom,
     WindowMetrics,
@@ -68,6 +69,7 @@ __all__ = [
     "resolve_aero_mechanical_coherence",
     "compute_structural_timestamps",
     "resolve_time_axis",
+    "AeroBalanceDrift",
     "AeroCoherence",
     "BrakeHeadroom",
     "WindowMetrics",
