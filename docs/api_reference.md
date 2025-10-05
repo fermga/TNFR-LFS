@@ -203,8 +203,8 @@ explores decision vectors tied to each car model.  The
 :func:`objective_score` helper favours higher Sense Index values while
 penalising ΔNFR integrals, and :class:`SetupPlanner` combines the optimiser
 with the rule-based engine to emit an explainable :class:`Plan` object that
-includes the telemetry trace, recommendations, and the resulting decision
-vector.
+includes the telemetry trace, recommendations, the resulting decision vector,
+and the Sense Control Index (SCI) with its component breakdown.
 
 ## Exporters
 
@@ -228,4 +228,6 @@ payload with deduplicated rationales and expected effects.  The
 ``sensitivities`` mapping now captures both ΔSi/Δp and
 Δ∫|ΔNFR|/Δp entries, while ``phase_sensitivities`` stores the
 per-phase Δ∫|ΔNFR|/Δp gradients used by the optimiser and the
-profile persistence layer.
+profile persistence layer.  The exported mapping also includes the aggregate
+SCI value and a fixed-order SCI breakdown so downstream dashboards can report
+the optimisation balance directly.
