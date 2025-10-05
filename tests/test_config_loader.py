@@ -12,6 +12,7 @@ from tnfr_lfs.config_loader import (
     load_lfs_class_overrides,
     load_profiles,
     resolve_targets,
+    _deep_merge,
 )
 
 
@@ -51,6 +52,22 @@ def config_pack(tmp_path: Path) -> Path:
             wheel_rotation_group_deg = 28
             profile = "missing-profile"
             lfs_class = "Unclassified"
+            """
+        )
+    )
+
+    cars_dir.joinpath("GHI.toml").write_text(
+        dedent(
+            """
+            abbrev = "GHI"
+            name = "Gamma"
+            license = "demo"
+            engine_layout = "rear"
+            drive = "RWD"
+            weight_kg = 950
+            wheel_rotation_group_deg = 32
+            profile = "fallback"
+            lfs_class = "GT"
             """
         )
     )
@@ -96,13 +113,13 @@ def config_pack(tmp_path: Path) -> Path:
         dedent(
             """
             ["STD".overrides.targets.balance]
-            delta_nfr = 0.3
+            delta_nfr = 0.33
 
             ["STD".overrides.policy.steering]
-            aggressiveness = 0.75
+            aggressiveness = 0.8
 
             ["STD".overrides.recommender.steering]
-            kp = 2.5
+            kp = 2.75
             """
         )
     )
@@ -113,10 +130,11 @@ def config_pack(tmp_path: Path) -> Path:
 def test_load_cars_indexed_by_abbrev(config_pack: Path) -> None:
     cars = load_cars(config_pack / "cars")
 
-    assert set(cars) == {"ABC", "DEF"}
+    assert set(cars) == {"ABC", "DEF", "GHI"}
     assert isinstance(cars["ABC"], Car)
     assert cars["ABC"].lfs_class == "STD"
     assert cars["DEF"].lfs_class == "Unclassified"
+    assert cars["GHI"].lfs_class == "GT"
 
 
 def test_load_profiles_prefers_meta_id(config_pack: Path) -> None:
@@ -151,12 +169,52 @@ def test_resolve_targets_applies_class_overrides(config_pack: Path) -> None:
 
     resolved = resolve_targets("ABC", cars, profiles, overrides=overrides)
 
-    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
-    assert resolved["policy"]["steering"]["aggressiveness"] == pytest.approx(0.75)
-    assert resolved["recommender"]["steering"]["kp"] == pytest.approx(2.5)
+    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.33)
+    assert resolved["policy"]["steering"]["aggressiveness"] == pytest.approx(0.8)
+    assert resolved["recommender"]["steering"]["kp"] == pytest.approx(2.75)
+
+
+def test_resolve_targets_keeps_base_when_no_override(config_pack: Path) -> None:
+    cars = load_cars(config_pack / "cars")
+    profiles = load_profiles(config_pack / "profiles")
+    overrides = load_lfs_class_overrides(config_pack / "lfs_class_overrides.toml")
+
+    resolved = resolve_targets("GHI", cars, profiles, overrides=overrides)
+
+    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.2)
 
 
 def test_example_pipeline_accepts_custom_data_root(config_pack: Path) -> None:
     resolved = example_pipeline("ABC", data_root=config_pack)
 
-    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
+    assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.33)
+
+
+def test_deep_merge_handles_nested_mappings() -> None:
+    base = {
+        "targets": {"balance": {"delta_nfr": 0.1}, "tyres": {"slip": 1}},
+        "meta": {"category": "road"},
+    }
+    overlay = {
+        "targets": {"balance": {"delta_nfr": 0.5}, "new": {"value": 3}},
+        "policy": {"steering": {"kp": 2.0}},
+    }
+
+    merged = _deep_merge(base, overlay)
+
+    assert merged["targets"]["balance"]["delta_nfr"] == 0.5
+    assert merged["targets"]["tyres"]["slip"] == 1
+    assert merged["targets"]["new"]["value"] == 3
+    assert merged["policy"]["steering"]["kp"] == 2.0
+    assert merged["meta"]["category"] == "road"
+
+
+def test_deep_merge_does_not_mutate_base_mapping() -> None:
+    base = {"meta": {"category": "race"}}
+    overlay = {"targets": {"balance": {"delta_nfr": 0.25}}}
+
+    merged = _deep_merge(base, overlay)
+
+    assert merged["targets"]["balance"]["delta_nfr"] == 0.25
+    assert "targets" not in base
+    assert base == {"meta": {"category": "race"}}
