@@ -7,10 +7,11 @@ import math
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from statistics import mean
-from typing import Any, Dict, Iterable, Mapping, MutableMapping, Protocol, Sequence
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Protocol, Sequence, Tuple
 
 from ..core.epi_models import EPIBundle
 from .setup_plan import SetupPlan, serialise_setup_plan
+from ..session import format_session_messages
 
 
 CAR_MODEL_PREFIXES = {
@@ -95,6 +96,13 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     """Render a setup plan as a Markdown table with rationales."""
 
     plan = _extract_setup_plan(results)
+    session_messages: Tuple[str, ...] = ()
+    if isinstance(results, Mapping):
+        session_messages = format_session_messages(results.get("session"))
+        if not session_messages:
+            extras = results.get("session_messages")
+            if isinstance(extras, Sequence):
+                session_messages = tuple(str(item) for item in extras if item)
     header = "| Cambio | Ajuste | Racional | Efecto esperado |"
     separator = "| --- | --- | --- | --- |"
     lines = [header, separator]
@@ -241,6 +249,10 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     _extend_mapping_section("**Racionales TNFR por fase**", plan.get("tnfr_rationale_by_phase"))
     _extend_mapping_section("**Efectos esperados por nodo**", plan.get("expected_effects_by_node"))
     _extend_mapping_section("**Efectos esperados por fase**", plan.get("expected_effects_by_phase"))
+    if session_messages:
+        lines.append("")
+        lines.append("**Perfil de sesión**")
+        lines.extend(f"- {message}" for message in session_messages)
 
     return "\n".join(lines)
 
@@ -263,6 +275,13 @@ def lfs_notes_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     """Render TNFR adjustments as F11/F12 instructions for Live for Speed."""
 
     plan = _extract_setup_plan(results)
+    session_messages: Tuple[str, ...] = ()
+    if isinstance(results, Mapping):
+        session_messages = format_session_messages(results.get("session"))
+        if not session_messages:
+            extras = results.get("session_messages")
+            if isinstance(extras, Sequence):
+                session_messages = tuple(str(item) for item in extras if item)
 
     header = "| Cambio | Δ | Acción | Pasos | Racional | Efecto esperado |"
     separator = "| --- | --- | --- | --- | --- | --- |"
@@ -300,6 +319,10 @@ def lfs_notes_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         lines.append("")
         lines.append("**Parámetros bloqueados**")
         lines.extend(f"- {item}" for item in clamped)
+    if session_messages:
+        lines.append("")
+        lines.append("**Perfil de sesión**")
+        lines.extend(f"- {message}" for message in session_messages)
 
     return "\n".join(lines)
 

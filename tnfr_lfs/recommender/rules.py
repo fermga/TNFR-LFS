@@ -2481,6 +2481,7 @@ class RecommendationEngine:
         self.track_name = track_name or "generic"
         self.threshold_library = threshold_library or DEFAULT_THRESHOLD_LIBRARY
         self.profile_manager = profile_manager
+        self.session: Mapping[str, Any] | None = None
         if rules is None:
             self.rules = [
                 PhaseDeltaDeviationRule(

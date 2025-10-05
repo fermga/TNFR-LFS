@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import struct
@@ -15,6 +16,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from statistics import mean, fmean
 from time import monotonic, sleep
+from types import MappingProxyType
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 try:  # Python 3.11+
@@ -60,6 +62,15 @@ from ..io import logs
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
 from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
+from ..session import format_session_messages
+from ..track_loader import (
+    Track,
+    TrackConfig,
+    assemble_session_weights,
+    load_modifiers as load_track_modifiers,
+    load_track as load_track_manifest,
+    load_track_profiles,
+)
 from ..config_loader import (
     Car as PackCar,
     Profile as PackProfile,
@@ -85,6 +96,23 @@ class ProfilesContext:
 
     storage_path: Path
     pack_profiles: Mapping[str, PackProfile]
+
+
+@dataclass(frozen=True, slots=True)
+class TrackSelection:
+    """Normalized representation of a CLI track argument."""
+
+    name: str
+    layout: str | None = None
+    manifest: Track | None = None
+    config: TrackConfig | None = None
+
+    @property
+    def track_profile(self) -> str | None:
+        return self.config.track_profile if self.config is not None else None
+
+
+_LAYOUT_PATTERN = re.compile(r"^([A-Z]{2,})([0-9]{1,2}[A-Z]?)$")
 
 
 def _resolve_pack_root(
@@ -113,12 +141,76 @@ def _pack_data_dir(pack_root: Path | None, name: str) -> Path | None:
 
     if pack_root is None:
         return None
-    candidates = [pack_root / "data" / name, pack_root / name]
+    candidates: list[Path] = []
+    if name == "modifiers":
+        candidates.extend(
+            [
+                pack_root / "modifiers" / "combos",
+                pack_root / "data" / "modifiers" / "combos",
+                pack_root / "modifiers",
+                pack_root / "data" / "modifiers",
+            ]
+        )
+    candidates.extend([pack_root / "data" / name, pack_root / name])
     for candidate in candidates:
         expanded = candidate.expanduser()
         if expanded.exists() and expanded.is_dir():
             return expanded
     return None
+
+
+def _parse_layout_code(value: str) -> tuple[str, str] | None:
+    match = _LAYOUT_PATTERN.fullmatch(value.strip().upper())
+    if match is None:
+        return None
+    slug, suffix = match.groups()
+    return slug, f"{slug}{suffix}"
+
+
+def _load_pack_track_profiles(pack_root: Path | None) -> Mapping[str, Mapping[str, Any]]:
+    profiles_dir = _pack_data_dir(pack_root, "track_profiles")
+    return load_track_profiles(profiles_dir) if profiles_dir is not None else load_track_profiles()
+
+
+def _load_pack_modifiers(pack_root: Path | None) -> Mapping[tuple[str, str], Mapping[str, Any]]:
+    modifiers_dir = _pack_data_dir(pack_root, "modifiers")
+    return (
+        load_track_modifiers(modifiers_dir)
+        if modifiers_dir is not None
+        else load_track_modifiers()
+    )
+
+
+def _load_pack_track(pack_root: Path | None, slug: str) -> Track:
+    tracks_dir = _pack_data_dir(pack_root, "tracks")
+    return (
+        load_track_manifest(slug, tracks_dir)
+        if tracks_dir is not None
+        else load_track_manifest(slug)
+    )
+
+
+def _resolve_track_selection(track: str, *, pack_root: Path | None) -> TrackSelection:
+    candidate = track.strip()
+    if not candidate:
+        return TrackSelection(name="")
+    parsed = _parse_layout_code(candidate)
+    if parsed is None:
+        return TrackSelection(name=candidate)
+    slug, layout_id = parsed
+    try:
+        manifest = _load_pack_track(pack_root, slug)
+    except FileNotFoundError as exc:
+        raise SystemExit(
+            f"No se encontró el manifest de pista '{slug}' en el pack ni en los recursos."
+        ) from exc
+    try:
+        config = manifest.configs[layout_id]
+    except KeyError as exc:
+        raise SystemExit(
+            f"El layout '{layout_id}' no existe en '{manifest.path.name}'."
+        ) from exc
+    return TrackSelection(name=layout_id, layout=layout_id, manifest=manifest, config=config)
 
 
 def _load_pack_profiles(pack_root: Path | None) -> Mapping[str, PackProfile]:
@@ -139,6 +231,18 @@ def _load_pack_cars(pack_root: Path | None) -> Mapping[str, PackCar]:
     return load_pack_cars()
 
 
+def _lookup_car_metadata(car_model: str, cars: Mapping[str, PackCar]) -> PackCar | None:
+    for key in (car_model, car_model.upper(), car_model.lower()):
+        car = cars.get(key)
+        if car is not None:
+            return car
+    lowered = car_model.lower()
+    for car in cars.values():
+        if getattr(car, "abbrev", "").lower() == lowered:
+            return car
+    return None
+
+
 def _serialise_pack_payload(payload: Any) -> Any:
     """Convert pack metadata into JSON-serialisable primitives."""
 
@@ -156,12 +260,55 @@ def _resolve_tnfr_targets(
 ) -> Mapping[str, Any] | None:
     """Return TNFR objectives for ``car_model`` when available."""
 
-    if car_model not in cars:
+    car = _lookup_car_metadata(car_model, cars)
+    if car is None:
         return None
     try:
-        return resolve_pack_targets(car_model, cars, profiles)
+        return resolve_pack_targets(car.abbrev, cars, profiles)
     except KeyError:
         return None
+
+
+def _assemble_session_payload(
+    car_model: str,
+    selection: TrackSelection,
+    *,
+    cars: Mapping[str, PackCar],
+    track_profiles: Mapping[str, Mapping[str, Any]],
+    modifiers: Mapping[tuple[str, str], Mapping[str, Any]] | None,
+) -> Mapping[str, Any] | None:
+    track_profile = selection.track_profile
+    if track_profile is None:
+        return None
+    car_metadata = _lookup_car_metadata(car_model, cars)
+    car_profile = getattr(car_metadata, "profile", None) if car_metadata else None
+    if not car_profile:
+        car_profile = car_model
+    if not track_profiles:
+        return None
+    try:
+        combined = assemble_session_weights(
+            car_profile,
+            track_profile,
+            track_profiles=track_profiles,
+            modifiers=modifiers if modifiers else None,
+        )
+    except KeyError:
+        return None
+    payload: Dict[str, Any] = {
+        "car_model": car_model,
+        "car_profile": car_profile,
+        "track_profile": track_profile,
+        "weights": combined.get("weights", MappingProxyType({})),
+        "hints": combined.get("hints", MappingProxyType({})),
+    }
+    if selection.layout:
+        payload["layout"] = selection.layout
+    if selection.config is not None:
+        payload["layout_name"] = selection.config.name
+        payload["track_length_km"] = selection.config.length_km
+        payload["surface"] = selection.config.surface
+    return MappingProxyType(payload)
 
 
 def _extract_target_objectives(
@@ -280,6 +427,21 @@ def _default_track_name(config: Mapping[str, Any]) -> str:
             if isinstance(candidate, str) and candidate.strip():
                 return candidate
     return "generic"
+
+
+def _resolve_track_argument(
+    track_value: str | None,
+    config: Mapping[str, Any],
+    *,
+    pack_root: Path | None,
+) -> TrackSelection:
+    candidate = str(track_value).strip() if track_value is not None else ""
+    if not candidate:
+        candidate = _default_track_name(config)
+    selection = _resolve_track_selection(candidate, pack_root=pack_root)
+    if not selection.name:
+        return TrackSelection(name=candidate)
+    return selection
 
 
 def _effective_delta_metric(metrics: Mapping[str, Any]) -> float:
@@ -1531,7 +1693,9 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
 
 def _handle_template(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     car_model = str(namespace.car_model or _default_car_model(config))
-    track_name = str(namespace.track or _default_track_name(config))
+    pack_root = _resolve_pack_root(namespace, config)
+    track_selection = _resolve_track_argument(namespace.track, config, pack_root=pack_root)
+    track_name = track_selection.name or _default_track_name(config)
     engine = RecommendationEngine(car_model=car_model, track_name=track_name)
     context = engine._resolve_context(car_model, track_name)
     profile = context.thresholds
@@ -1592,10 +1756,11 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
     resolved_car_model = str(namespace.car_model or _default_car_model(config)).strip()
     if not resolved_car_model:
         resolved_car_model = _default_car_model(config)
-    resolved_track = str(namespace.track or _default_track_name(config)).strip()
-    if not resolved_track:
-        resolved_track = _default_track_name(config)
+    track_selection = _resolve_track_argument(namespace.track, config, pack_root=pack_root)
+    resolved_track = track_selection.name or _default_track_name(config)
     cars = _load_pack_cars(pack_root)
+    track_profiles = _load_pack_track_profiles(pack_root)
+    modifiers = _load_pack_modifiers(pack_root)
     tnfr_targets = _resolve_tnfr_targets(
         resolved_car_model, cars, profiles_ctx.pack_profiles
     )
@@ -1605,6 +1770,15 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         track_name=resolved_track,
         profile_manager=profile_manager,
     )
+    session_payload = _assemble_session_payload(
+        resolved_car_model,
+        track_selection,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+    )
+    if session_payload is not None:
+        engine.session = session_payload
     if pack_delta is not None or pack_si is not None:
         base_profile = engine._lookup_profile(resolved_car_model, resolved_track)
         snapshot = profile_manager.resolve(resolved_car_model, resolved_track, base_profile)
@@ -1618,6 +1792,7 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         car_model=resolved_car_model,
         track_name=resolved_track,
         recommendation_engine=engine,
+        session=session_payload,
     )
     controller = OSDController(
         host=str(namespace.host),
@@ -1797,19 +1972,31 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
     car_model = _default_car_model(config)
-    track_name = _default_track_name(config)
     pack_root = _resolve_pack_root(namespace, config)
+    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
+    track_name = track_selection.name or _default_track_name(config)
     profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
     profile_manager = ProfileManager(profiles_ctx.storage_path)
     cars = _load_pack_cars(pack_root)
+    track_profiles = _load_pack_track_profiles(pack_root)
+    modifiers = _load_pack_modifiers(pack_root)
     tnfr_targets = _resolve_tnfr_targets(car_model, cars, profiles_ctx.pack_profiles)
-    car_metadata = cars.get(car_model)
+    car_metadata = _lookup_car_metadata(car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     engine = RecommendationEngine(
         car_model=car_model,
         track_name=track_name,
         profile_manager=profile_manager,
     )
+    session_payload = _assemble_session_payload(
+        car_model,
+        track_selection,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+    )
+    if session_payload is not None:
+        engine.session = session_payload
     bundles, microsectors, thresholds, snapshot = _compute_insights(
         records,
         car_model=car_model,
@@ -1856,6 +2043,9 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         car_model=car_model,
         track_name=track_name,
     )
+    session_messages = format_session_messages(session_payload)
+    if session_messages:
+        phase_messages.extend(session_messages)
     reports = _generate_out_reports(
         records,
         bundles,
@@ -1881,6 +2071,8 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         "pairwise_coupling": metrics.get("pairwise_coupling"),
         "microsector_variability": metrics.get("microsector_variability", []),
     }
+    if session_payload is not None:
+        summary_metrics["session"] = session_payload
     payload: Dict[str, Any] = {
         "series": bundles,
         "microsectors": microsectors,
@@ -1893,6 +2085,10 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         "phase_messages": phase_messages,
         "reports": reports,
     }
+    if session_payload is not None:
+        payload["session"] = session_payload
+    if session_messages:
+        payload["session_messages"] = session_messages
     if car_metadata is not None:
         payload["car"] = _serialise_pack_payload(car_metadata)
     if tnfr_targets is not None:
@@ -1908,20 +2104,33 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
     profile_manager = ProfileManager(profiles_ctx.storage_path)
     cars = _load_pack_cars(pack_root)
+    track_profiles = _load_pack_track_profiles(pack_root)
+    modifiers = _load_pack_modifiers(pack_root)
     tnfr_targets = _resolve_tnfr_targets(
         namespace.car_model, cars, profiles_ctx.pack_profiles
     )
-    car_metadata = cars.get(namespace.car_model)
+    car_metadata = _lookup_car_metadata(namespace.car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
+    track_selection = _resolve_track_argument(namespace.track, config, pack_root=pack_root)
+    track_name = track_selection.name or _default_track_name(config)
     engine = RecommendationEngine(
         car_model=namespace.car_model,
-        track_name=namespace.track,
+        track_name=track_name,
         profile_manager=profile_manager,
     )
+    session_payload = _assemble_session_payload(
+        namespace.car_model,
+        track_selection,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+    )
+    if session_payload is not None:
+        engine.session = session_payload
     bundles, microsectors, thresholds, snapshot = _compute_insights(
         records,
         car_model=namespace.car_model,
-        track_name=namespace.track,
+        track_name=track_name,
         engine=engine,
         profile_manager=profile_manager,
     )
@@ -1941,7 +2150,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     target_si = float(suggest_cfg.get("target_si", objectives.target_sense_index))
     profile_manager.update_objectives(
         namespace.car_model,
-        namespace.track,
+        track_name,
         target_delta,
         target_si,
     )
@@ -1955,22 +2164,25 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         phase_weights=thresholds.phase_weights,
     )
     recommendations = engine.generate(
-        bundles, microsectors, car_model=namespace.car_model, track_name=namespace.track
+        bundles, microsectors, car_model=namespace.car_model, track_name=track_name
     )
     delta_metric = _effective_delta_metric(metrics)
     engine.register_stint_result(
         sense_index=metrics.get("sense_index", 0.0),
         delta_nfr=delta_metric,
         car_model=namespace.car_model,
-        track_name=namespace.track,
+        track_name=track_name,
     )
     phase_messages = _phase_deviation_messages(
         bundles,
         microsectors,
         config,
         car_model=namespace.car_model,
-        track_name=namespace.track,
+        track_name=track_name,
     )
+    session_messages = format_session_messages(session_payload)
+    if session_messages:
+        phase_messages.extend(session_messages)
     reports = _generate_out_reports(
         records,
         bundles,
@@ -1983,7 +2195,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         "microsectors": microsectors,
         "recommendations": recommendations,
         "car_model": namespace.car_model,
-        "track": namespace.track,
+        "track": track_name,
         "phase_messages": phase_messages,
         "reports": reports,
     }
@@ -2001,21 +2213,40 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
             "pairwise_coupling": metrics.get("pairwise_coupling"),
             "dissonance_breakdown": metrics.get("dissonance_breakdown"),
         }
+        if session_payload is not None:
+            payload["metrics"]["session"] = session_payload
+    if session_payload is not None:
+        payload["session"] = session_payload
+    if session_messages:
+        payload["session_messages"] = session_messages
     return _render_payload(payload, _resolve_exports(namespace))
 
 
 def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records = _load_records(namespace.telemetry)
     car_model = _default_car_model(config)
-    track_name = _default_track_name(config)
     pack_root = _resolve_pack_root(namespace, config)
     profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
     profile_manager = ProfileManager(profiles_ctx.storage_path)
+    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
+    track_name = track_selection.name or _default_track_name(config)
+    cars = _load_pack_cars(pack_root)
+    track_profiles = _load_pack_track_profiles(pack_root)
+    modifiers = _load_pack_modifiers(pack_root)
     engine = RecommendationEngine(
         car_model=car_model,
         track_name=track_name,
         profile_manager=profile_manager,
     )
+    session_payload = _assemble_session_payload(
+        car_model,
+        track_selection,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+    )
+    if session_payload is not None:
+        engine.session = session_payload
     bundles, microsectors, thresholds, snapshot = _compute_insights(
         records,
         car_model=car_model,
@@ -2081,6 +2312,11 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         },
         "stages": metrics.get("stages"),
     }
+    if session_payload is not None:
+        payload["session"] = session_payload
+    session_messages = format_session_messages(session_payload)
+    if session_messages:
+        payload["session_messages"] = session_messages
     phase_templates = _phase_templates_from_config(config, "report")
     if phase_templates:
         payload["phase_templates"] = phase_templates
@@ -2099,17 +2335,29 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
     profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
     profile_manager = ProfileManager(profiles_ctx.storage_path)
     cars = _load_pack_cars(pack_root)
+    track_profiles = _load_pack_track_profiles(pack_root)
+    modifiers = _load_pack_modifiers(pack_root)
     tnfr_targets = _resolve_tnfr_targets(
         namespace.car_model, cars, profiles_ctx.pack_profiles
     )
-    car_metadata = cars.get(namespace.car_model)
+    car_metadata = _lookup_car_metadata(namespace.car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
-    track_name = _default_track_name(config)
+    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
+    track_name = track_selection.name or _default_track_name(config)
     engine = RecommendationEngine(
         car_model=namespace.car_model,
         track_name=track_name,
         profile_manager=profile_manager,
     )
+    session_payload = _assemble_session_payload(
+        namespace.car_model,
+        track_selection,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+    )
+    if session_payload is not None:
+        engine.session = session_payload
     bundles, microsectors, thresholds, snapshot = _compute_insights(
         records,
         car_model=namespace.car_model,
@@ -2255,6 +2503,11 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         "sensitivities": plan.sensitivities,
         "set_output": namespace.set_output,
     }
+    if session_payload is not None:
+        payload["session"] = session_payload
+    session_messages = format_session_messages(session_payload)
+    if session_messages:
+        payload["session_messages"] = session_messages
     if car_metadata is not None:
         payload["car"] = _serialise_pack_payload(car_metadata)
     if tnfr_targets is not None:
