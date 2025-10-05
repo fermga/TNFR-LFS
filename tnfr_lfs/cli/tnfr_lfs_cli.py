@@ -2705,14 +2705,17 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
                 rear_travel = 0.0
             if not math.isfinite(rear_travel):
                 rear_travel = 0.0
-            wheelbase_value = getattr(bundle, "wheelbase", 2.6)
-            try:
-                wheelbase = float(wheelbase_value)
-            except (TypeError, ValueError):
-                wheelbase = 2.6
-            if not math.isfinite(wheelbase) or wheelbase <= 0.0:
-                wheelbase = 2.6
-            rake_value = pitch_value + math.atan2(rear_travel - front_travel, wheelbase)
+            travel_delta = rear_travel - front_travel
+            if abs(front_travel) > 1e-9:
+                travel_ratio = rear_travel / front_travel
+            elif abs(rear_travel) > 1e-9:
+                travel_ratio = math.copysign(10.0, rear_travel)
+            else:
+                travel_ratio = 1.0
+            if not math.isfinite(travel_ratio):
+                travel_ratio = 1.0
+            travel_ratio = max(-10.0, min(10.0, travel_ratio))
+            rake_value = pitch_value + math.atan2(travel_delta, travel_ratio)
             if not math.isfinite(rake_value):
                 continue
             bin_payload = bins[bin_key]
