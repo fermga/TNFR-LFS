@@ -317,6 +317,8 @@ class BrakeHeadroom:
     temperature_mean: float = 0.0
     ventilation_alert: str = ""
     ventilation_index: float = 0.0
+    temperature_available: bool = True
+    fade_available: bool = True
 
 
 @dataclass(frozen=True)
@@ -795,6 +797,7 @@ def compute_window_metrics(
         temperature_samples: list[float] = []
         segment_temperatures: list[float] = []
         temperature_peak = 0.0
+        temperature_available = False
         fade_slopes: list[float] = []
         fade_ratios: list[float] = []
         current_segment: list[tuple[float, float, float, float]] = []
@@ -889,6 +892,7 @@ def compute_window_metrics(
                 avg_temp = sum(brake_temps) / len(brake_temps)
                 temperature_samples.append(avg_temp)
                 temperature_peak = max(temperature_peak, max(brake_temps))
+                temperature_available = True
             try:
                 timestamp = float(getattr(record, "timestamp", 0.0))
             except (TypeError, ValueError):
@@ -932,40 +936,71 @@ def compute_window_metrics(
         sustained_ratio = max(sustained_from_abs, sustained_from_slip)
         stress = 0.7 * abs_activation + 0.25 * partial_locking + 0.15 * sustained_ratio
         stress = max(0.0, min(1.0, stress))
-        temperature_mean = mean(temperature_samples) if temperature_samples else 0.0
-        segment_peak = max(segment_temperatures) if segment_temperatures else 0.0
-        temperature_peak = max(temperature_peak, segment_peak)
-        fade_slope = max(fade_slopes) if fade_slopes else 0.0
-        fade_ratio = max(fade_ratios) if fade_ratios else 0.0
-        ventilation_index = 0.0
+        if segment_temperatures:
+            temperature_available = True
+        if temperature_available:
+            temperature_mean = mean(temperature_samples) if temperature_samples else 0.0
+            segment_peak = max(segment_temperatures) if segment_temperatures else 0.0
+            temperature_peak = max(temperature_peak, segment_peak)
+        else:
+            temperature_mean = math.nan
+            temperature_peak = math.nan
+        fade_available = temperature_available
+        if fade_available:
+            fade_slope = max(fade_slopes) if fade_slopes else 0.0
+            fade_ratio = max(fade_ratios) if fade_ratios else 0.0
+        else:
+            fade_slope = math.nan
+            fade_ratio = math.nan
         ventilation_alert = ""
-        if temperature_peak > 0.0 or fade_ratio > 0.0 or fade_slope > 0.0:
-            temp_component = 0.0
-            if temperature_peak > _VENT_TEMP_WARNING:
-                temp_component = (temperature_peak - _VENT_TEMP_WARNING) / max(
-                    _VENT_TEMP_CRITICAL - _VENT_TEMP_WARNING, 1e-6
-                )
-            ratio_component = fade_ratio / max(_FADE_RATIO_CRITICAL, 1e-6)
-            slope_component = fade_slope / max(_FADE_SLOPE_CRITICAL, 1e-6)
-            ventilation_index = max(temp_component, ratio_component, slope_component)
-            ventilation_index = max(0.0, min(1.0, ventilation_index))
+        if temperature_available:
+            ventilation_index = 0.0
+            temp_peak_value = (
+                temperature_peak if math.isfinite(temperature_peak) else 0.0
+            )
+            fade_ratio_value = (
+                fade_ratio if fade_available and math.isfinite(fade_ratio) else 0.0
+            )
+            fade_slope_value = (
+                fade_slope if fade_available and math.isfinite(fade_slope) else 0.0
+            )
             if (
-                temperature_peak >= _VENT_TEMP_CRITICAL
-                or fade_ratio >= _FADE_RATIO_CRITICAL
-                or fade_slope >= _FADE_SLOPE_CRITICAL
-                or ventilation_index >= 0.9
+                temp_peak_value > 0.0
+                or fade_ratio_value > 0.0
+                or fade_slope_value > 0.0
             ):
-                ventilation_alert = "critica"
-            elif (
-                temperature_peak >= _VENT_TEMP_WARNING
-                or fade_ratio >= _FADE_RATIO_WARNING
-                or ventilation_index >= 0.45
-            ):
-                ventilation_alert = "atencion"
+                temp_component = 0.0
+                if temp_peak_value > _VENT_TEMP_WARNING:
+                    temp_component = (temp_peak_value - _VENT_TEMP_WARNING) / max(
+                        _VENT_TEMP_CRITICAL - _VENT_TEMP_WARNING, 1e-6
+                    )
+                ratio_component = fade_ratio_value / max(_FADE_RATIO_CRITICAL, 1e-6)
+                slope_component = fade_slope_value / max(_FADE_SLOPE_CRITICAL, 1e-6)
+                ventilation_index = max(
+                    temp_component, ratio_component, slope_component
+                )
+                ventilation_index = max(0.0, min(1.0, ventilation_index))
+                if (
+                    temp_peak_value >= _VENT_TEMP_CRITICAL
+                    or fade_ratio_value >= _FADE_RATIO_CRITICAL
+                    or fade_slope_value >= _FADE_SLOPE_CRITICAL
+                    or ventilation_index >= 0.9
+                ):
+                    ventilation_alert = "critica"
+                elif (
+                    temp_peak_value >= _VENT_TEMP_WARNING
+                    or fade_ratio_value >= _FADE_RATIO_WARNING
+                    or ventilation_index >= 0.45
+                ):
+                    ventilation_alert = "atencion"
+        else:
+            ventilation_index = math.nan
         value = (1.0 - normalized_peak) * (1.0 - stress)
-        fade_penalty = min(0.6, fade_ratio)
+        fade_penalty = 0.0
+        if fade_available and math.isfinite(fade_ratio):
+            fade_penalty = min(0.6, max(0.0, fade_ratio))
         value *= max(0.0, 1.0 - fade_penalty)
-        if ventilation_index > 0.0:
+        if temperature_available and math.isfinite(ventilation_index) and ventilation_index > 0.0:
             value *= max(0.0, 1.0 - 0.5 * ventilation_index)
         value = max(0.0, min(1.0, value))
         return BrakeHeadroom(
@@ -980,6 +1015,8 @@ def compute_window_metrics(
             temperature_mean=temperature_mean,
             ventilation_alert=ventilation_alert,
             ventilation_index=ventilation_index,
+            temperature_available=temperature_available,
+            fade_available=fade_available,
         )
 
     def _objective(name: str, default: float) -> float:

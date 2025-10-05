@@ -998,12 +998,19 @@ def _sense_index_map(
             float(mean(aggregate)) if aggregate else 0.0,
             4,
         )
-        filtered_payload: Dict[str, float] = {}
+        filtered_payload: Dict[str, Any] = {}
         for key, value in microsector.filtered_measures.items():
+            if isinstance(value, bool) or value is None:
+                filtered_payload[key] = value
+                continue
             try:
-                filtered_payload[key] = round(float(value), 4)
+                numeric = float(value)
             except (TypeError, ValueError):
                 continue
+            if not math.isfinite(numeric):
+                filtered_payload[key] = None
+                continue
+            filtered_payload[key] = round(numeric, 4)
         if "grip_rel" not in filtered_payload:
             filtered_payload["grip_rel"] = round(float(microsector.grip_rel), 4)
         entry["filtered_measures"] = filtered_payload
@@ -1300,6 +1307,47 @@ def _generate_out_reports(
         )
     if thermal_summary:
         summary_lines.extend(["", "## Dispersión térmica de neumáticos", *thermal_summary])
+    brake_summary: List[str] = []
+    if sense_map:
+        ventilation_values: List[float] = []
+        fade_values: List[float] = []
+        peak_values: List[float] = []
+        missing_temperature = False
+        for entry in sense_map:
+            measures = entry.get("filtered_measures", {}) if isinstance(entry, Mapping) else {}
+            if not isinstance(measures, Mapping):
+                continue
+            available_flag = measures.get("brake_headroom_temperature_available")
+            if available_flag is False:
+                missing_temperature = True
+            index_value = measures.get("brake_headroom_ventilation_index")
+            if isinstance(index_value, (int, float)) and math.isfinite(index_value):
+                ventilation_values.append(float(index_value))
+            fade_value = measures.get("brake_headroom_fade_ratio")
+            if isinstance(fade_value, (int, float)) and math.isfinite(fade_value):
+                fade_values.append(float(fade_value))
+            peak_value = measures.get("brake_headroom_temperature_peak")
+            if isinstance(peak_value, (int, float)) and math.isfinite(peak_value):
+                peak_values.append(float(peak_value))
+        if ventilation_values:
+            avg_vent = mean(ventilation_values)
+            brake_summary.append(
+                f"- Ventilación frenos: índice medio {avg_vent:.3f} (pico {max(ventilation_values):.3f})"
+            )
+        elif missing_temperature:
+            brake_summary.append(
+                "- Ventilación frenos: sin datos (requiere T° de OutGauge)"
+            )
+        if peak_values:
+            brake_summary.append(
+                f"- Temperatura máx. freno: {max(peak_values):.0f}°C"
+            )
+        if ventilation_values and fade_values:
+            brake_summary.append(
+                f"- Fade detectado: caída máxima {max(fade_values) * 100:.0f}%"
+            )
+    if brake_summary:
+        summary_lines.extend(["", "## Frenos", *brake_summary])
     if pairwise_payload:
         summary_lines.append("- Pares analizados:")
         for domain, pairs in sorted(pairwise_payload.items()):

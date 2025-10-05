@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Tuple
 from types import SimpleNamespace
 
@@ -569,6 +570,22 @@ def test_brake_headroom_line_renders_summary() -> None:
     assert "HR 0.35" in line
     assert "fade" in line
     assert "vent atencion" in line
+
+
+def test_brake_headroom_line_with_missing_temperature_data() -> None:
+    headroom = BrakeHeadroom(
+        value=0.42,
+        fade_ratio=math.nan,
+        fade_slope=math.nan,
+        temperature_peak=math.nan,
+        temperature_mean=math.nan,
+        ventilation_index=math.nan,
+        temperature_available=False,
+        fade_available=False,
+    )
+    line = osd_module._brake_headroom_line(headroom)
+    assert line is not None
+    assert "sin datos" in line
 
 
 def test_render_page_a_includes_no_tocar_notice():
