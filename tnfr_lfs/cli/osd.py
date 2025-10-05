@@ -19,7 +19,12 @@ from ..acquisition import (
     TelemetryFusion,
 )
 from ..core.epi import EPIExtractor, TelemetryRecord
-from ..core.metrics import AeroBalanceDrift, WindowMetrics, compute_window_metrics
+from ..core.metrics import (
+    AeroBalanceDrift,
+    BrakeHeadroom,
+    WindowMetrics,
+    compute_window_metrics,
+)
 from ..core.operators import orchestrate_delta_metrics
 from ..core.phases import PHASE_SEQUENCE, phase_family
 from ..core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
@@ -49,6 +54,10 @@ WHEEL_LABELS = {
 TEMPERATURE_MEAN_KEYS = {suffix: f"tyre_temp_{suffix}" for suffix in WHEEL_SUFFIXES}
 TEMPERATURE_STD_KEYS = {
     suffix: f"{TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
+}
+BRAKE_TEMPERATURE_MEAN_KEYS = {suffix: f"brake_temp_{suffix}" for suffix in WHEEL_SUFFIXES}
+BRAKE_TEMPERATURE_STD_KEYS = {
+    suffix: f"{BRAKE_TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
 }
 PRESSURE_MEAN_KEYS = {suffix: f"tyre_pressure_{suffix}" for suffix in WHEEL_SUFFIXES}
 PRESSURE_STD_KEYS = {
@@ -611,6 +620,11 @@ def _render_page_a(
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(damper_line)
 
+    brake_headroom_line = _brake_headroom_line(window_metrics.brake_headroom)
+    if brake_headroom_line:
+        candidate = "\n".join((*lines, brake_headroom_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(brake_headroom_line)
     thermal_lines = _thermal_dispersion_lines(active.microsector)
     for thermal_line in thermal_lines:
         candidate = "\n".join((*lines, thermal_line))
@@ -707,6 +721,16 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     )
     if temp_line:
         lines.append(temp_line)
+    brake_temp_line = _format_dispersion_line(
+        measures,
+        BRAKE_TEMPERATURE_MEAN_KEYS,
+        BRAKE_TEMPERATURE_STD_KEYS,
+        prefix="T° freno",
+        mean_format="{:.1f}",
+        std_format="{:.1f}",
+    )
+    if brake_temp_line:
+        lines.append(brake_temp_line)
     pressure_line = _format_dispersion_line(
         measures,
         PRESSURE_MEAN_KEYS,
@@ -718,6 +742,35 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     if pressure_line:
         lines.append(pressure_line)
     return tuple(lines)
+
+
+def _brake_headroom_line(headroom: BrakeHeadroom | None) -> str | None:
+    if not isinstance(headroom, BrakeHeadroom):
+        return None
+    if (
+        headroom.value <= 0.0
+        and headroom.fade_ratio <= 0.0
+        and headroom.temperature_peak <= 0.0
+        and headroom.temperature_mean <= 0.0
+        and not headroom.ventilation_alert
+        and headroom.ventilation_index <= 0.0
+    ):
+        return None
+    segments = [f"HR {headroom.value:.2f}"]
+    if headroom.fade_ratio > 0.0:
+        fade_segment = f"fade {headroom.fade_ratio * 100:.0f}%"
+        if headroom.fade_slope > 0.0:
+            fade_segment += f"/{headroom.fade_slope:.2f}m/s³"
+        segments.append(fade_segment)
+    if headroom.temperature_peak > 0.0:
+        segments.append(f"T°max {headroom.temperature_peak:.0f}°C")
+    elif headroom.temperature_mean > 0.0:
+        segments.append(f"T°μ {headroom.temperature_mean:.0f}°C")
+    if headroom.ventilation_alert:
+        segments.append(f"vent {headroom.ventilation_alert}")
+    elif headroom.ventilation_index > 0.0:
+        segments.append(f"vent {headroom.ventilation_index:.2f}")
+    return _truncate_line("Freno " + " · ".join(segments))
 
 
 def _phase_sparkline(

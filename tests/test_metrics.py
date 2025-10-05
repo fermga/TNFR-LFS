@@ -63,6 +63,10 @@ def _record(timestamp: float, nfr: float, si: float = 0.8) -> TelemetryRecord:
         suspension_travel_rear=0.0,
         suspension_velocity_front=0.0,
         suspension_velocity_rear=0.0,
+        brake_temp_fl=0.0,
+        brake_temp_fr=0.0,
+        brake_temp_rl=0.0,
+        brake_temp_rr=0.0,
     )
 
 
@@ -568,6 +572,51 @@ def test_compute_window_metrics_brake_headroom_components() -> None:
     assert headroom.partial_locking_ratio == pytest.approx(0.6, rel=1e-6)
     assert headroom.sustained_locking_ratio == pytest.approx(0.4, rel=1e-6)
     assert headroom.value == pytest.approx(0.08324, rel=1e-5)
+
+
+def test_compute_window_metrics_brake_fade_and_ventilation() -> None:
+    base = _record(0.0, 100.0)
+    timestamps = [0.0, 0.4, 0.8, 1.2]
+    decels = [9.0, 8.6, 8.2, 7.0]
+    brake_profiles = [
+        (620.0, 625.0, 610.0, 615.0),
+        (650.0, 655.0, 640.0, 645.0),
+        (680.0, 685.0, 670.0, 675.0),
+        (710.0, 715.0, 700.0, 705.0),
+    ]
+    records = []
+    for idx, timestamp in enumerate(timestamps):
+        temps = brake_profiles[idx]
+        records.append(
+            replace(
+                base,
+                timestamp=timestamp,
+                longitudinal_accel=-decels[idx],
+                brake_pressure=0.92,
+                brake_temp_fl=temps[0],
+                brake_temp_fr=temps[1],
+                brake_temp_rl=temps[2],
+                brake_temp_rr=temps[3],
+            )
+        )
+
+    metrics = compute_window_metrics(records)
+    headroom = metrics.brake_headroom
+
+    duration = timestamps[-1] - timestamps[0]
+    drop = decels[0] - decels[-1]
+    expected_slope = drop / duration
+    expected_ratio = drop / decels[0]
+    expected_peak = max(temp for profile in brake_profiles for temp in profile)
+    expected_mean = sum(sum(profile) / len(profile) for profile in brake_profiles) / len(brake_profiles)
+
+    assert headroom.fade_slope == pytest.approx(expected_slope, rel=1e-6)
+    assert headroom.fade_ratio == pytest.approx(expected_ratio, rel=1e-6)
+    assert headroom.temperature_peak == pytest.approx(expected_peak, rel=1e-6)
+    assert headroom.temperature_mean == pytest.approx(expected_mean, rel=1e-6)
+    assert headroom.ventilation_alert == "critica"
+    assert headroom.ventilation_index == pytest.approx(1.0, rel=1e-6)
+    assert headroom.value < 0.5
 
 
 def test_slide_catch_budget_aggregates_components() -> None:

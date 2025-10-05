@@ -67,6 +67,17 @@ _PARTIAL_LOCK_LOWER = -0.35
 _PARTIAL_LOCK_UPPER = -0.06
 _SEVERE_LOCK_THRESHOLD = -0.45
 _SUSTAINED_LOCK_ACTIVATION = 0.75
+_FADE_PRESSURE_THRESHOLD = 0.6
+_FADE_PRESSURE_VARIATION = 0.12
+_FADE_MIN_DURATION = 0.35
+_FADE_MAX_GAP = 0.6
+_FADE_MIN_START_DECEL = 3.0
+_FADE_MIN_DROP_RATIO = 0.05
+_VENT_TEMP_WARNING = 600.0
+_VENT_TEMP_CRITICAL = 720.0
+_FADE_RATIO_WARNING = 0.12
+_FADE_RATIO_CRITICAL = 0.22
+_FADE_SLOPE_CRITICAL = 0.75
 _WHEEL_SUFFIXES = ("fl", "fr", "rl", "rr")
 
 
@@ -236,6 +247,12 @@ class BrakeHeadroom:
     abs_activation_ratio: float = 0.0
     partial_locking_ratio: float = 0.0
     sustained_locking_ratio: float = 0.0
+    fade_slope: float = 0.0
+    fade_ratio: float = 0.0
+    temperature_peak: float = 0.0
+    temperature_mean: float = 0.0
+    ventilation_alert: str = ""
+    ventilation_index: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -613,13 +630,60 @@ def compute_window_metrics(
         locking_values: list[float] = []
         partial_samples: list[float] = []
         severe_samples: list[float] = []
+        temperature_samples: list[float] = []
+        segment_temperatures: list[float] = []
+        temperature_peak = 0.0
+        fade_slopes: list[float] = []
+        fade_ratios: list[float] = []
+        current_segment: list[tuple[float, float, float, float]] = []
+        last_timestamp: float | None = None
+
+        def _flush_segment() -> None:
+            nonlocal current_segment
+            if len(current_segment) < 3:
+                current_segment.clear()
+                return
+            times = [entry[0] for entry in current_segment]
+            duration = times[-1] - times[0]
+            if duration < _FADE_MIN_DURATION:
+                current_segment.clear()
+                return
+            pressures = [entry[1] for entry in current_segment]
+            if max(pressures) - min(pressures) > _FADE_PRESSURE_VARIATION:
+                current_segment.clear()
+                return
+            decels = [entry[2] for entry in current_segment]
+            start_decel = decels[0]
+            end_decel = decels[-1]
+            if start_decel <= _FADE_MIN_START_DECEL:
+                current_segment.clear()
+                return
+            drop = max(0.0, start_decel - end_decel)
+            if drop <= 0.0:
+                current_segment.clear()
+                return
+            ratio = drop / max(start_decel, 1e-6)
+            if ratio < _FADE_MIN_DROP_RATIO:
+                current_segment.clear()
+                return
+            slope = drop / max(duration, 1e-6)
+            fade_slopes.append(slope)
+            fade_ratios.append(ratio)
+            temps = [entry[3] for entry in current_segment if math.isfinite(entry[3]) and entry[3] > 0.0]
+            if temps:
+                segment_temperatures.append(max(temps))
+            current_segment.clear()
+
         for record in samples:
             try:
                 long_accel = float(getattr(record, "longitudinal_accel", 0.0))
             except (TypeError, ValueError):
                 long_accel = 0.0
             if math.isfinite(long_accel):
-                decel_values.append(max(0.0, -long_accel))
+                decel = max(0.0, -long_accel)
+                decel_values.append(decel)
+            else:
+                decel = 0.0
             try:
                 locking = float(getattr(record, "locking", 0.0))
             except (TypeError, ValueError):
@@ -648,6 +712,47 @@ def compute_window_metrics(
                 wheel_total = len(slip_values)
                 partial_samples.append(partial_count / wheel_total)
                 severe_samples.append(severe_count / wheel_total)
+            brake_temps: list[float] = []
+            for suffix in _WHEEL_SUFFIXES:
+                attr = f"brake_temp_{suffix}"
+                try:
+                    temp_value = float(getattr(record, attr))
+                except (TypeError, ValueError, AttributeError):
+                    continue
+                if not math.isfinite(temp_value) or temp_value <= 0.0:
+                    continue
+                brake_temps.append(temp_value)
+            avg_temp = 0.0
+            if brake_temps:
+                avg_temp = sum(brake_temps) / len(brake_temps)
+                temperature_samples.append(avg_temp)
+                temperature_peak = max(temperature_peak, max(brake_temps))
+            try:
+                timestamp = float(getattr(record, "timestamp", 0.0))
+            except (TypeError, ValueError):
+                timestamp = 0.0
+            if not math.isfinite(timestamp):
+                timestamp = 0.0
+            try:
+                pressure = float(getattr(record, "brake_pressure", 0.0))
+            except (TypeError, ValueError):
+                pressure = 0.0
+            if not math.isfinite(pressure):
+                pressure = 0.0
+            pressure = max(0.0, min(1.0, pressure))
+            if pressure >= _FADE_PRESSURE_THRESHOLD:
+                if (
+                    current_segment
+                    and last_timestamp is not None
+                    and timestamp - last_timestamp > _FADE_MAX_GAP
+                ):
+                    _flush_segment()
+                current_segment.append((timestamp, pressure, decel, avg_temp))
+            elif current_segment:
+                _flush_segment()
+            last_timestamp = timestamp
+        if current_segment:
+            _flush_segment()
         if not decel_values:
             return BrakeHeadroom()
         peak_decel = max(decel_values)
@@ -665,17 +770,54 @@ def compute_window_metrics(
         sustained_ratio = max(sustained_from_abs, sustained_from_slip)
         stress = 0.7 * abs_activation + 0.25 * partial_locking + 0.15 * sustained_ratio
         stress = max(0.0, min(1.0, stress))
+        temperature_mean = mean(temperature_samples) if temperature_samples else 0.0
+        segment_peak = max(segment_temperatures) if segment_temperatures else 0.0
+        temperature_peak = max(temperature_peak, segment_peak)
+        fade_slope = max(fade_slopes) if fade_slopes else 0.0
+        fade_ratio = max(fade_ratios) if fade_ratios else 0.0
+        ventilation_index = 0.0
+        ventilation_alert = ""
+        if temperature_peak > 0.0 or fade_ratio > 0.0 or fade_slope > 0.0:
+            temp_component = 0.0
+            if temperature_peak > _VENT_TEMP_WARNING:
+                temp_component = (temperature_peak - _VENT_TEMP_WARNING) / max(
+                    _VENT_TEMP_CRITICAL - _VENT_TEMP_WARNING, 1e-6
+                )
+            ratio_component = fade_ratio / max(_FADE_RATIO_CRITICAL, 1e-6)
+            slope_component = fade_slope / max(_FADE_SLOPE_CRITICAL, 1e-6)
+            ventilation_index = max(temp_component, ratio_component, slope_component)
+            ventilation_index = max(0.0, min(1.0, ventilation_index))
+            if (
+                temperature_peak >= _VENT_TEMP_CRITICAL
+                or fade_ratio >= _FADE_RATIO_CRITICAL
+                or fade_slope >= _FADE_SLOPE_CRITICAL
+                or ventilation_index >= 0.9
+            ):
+                ventilation_alert = "critica"
+            elif (
+                temperature_peak >= _VENT_TEMP_WARNING
+                or fade_ratio >= _FADE_RATIO_WARNING
+                or ventilation_index >= 0.45
+            ):
+                ventilation_alert = "atencion"
         value = (1.0 - normalized_peak) * (1.0 - stress)
-        if value < 0.0:
-            value = 0.0
-        if value > 1.0:
-            value = 1.0
+        fade_penalty = min(0.6, fade_ratio)
+        value *= max(0.0, 1.0 - fade_penalty)
+        if ventilation_index > 0.0:
+            value *= max(0.0, 1.0 - 0.5 * ventilation_index)
+        value = max(0.0, min(1.0, value))
         return BrakeHeadroom(
             value=value,
             peak_decel=peak_decel,
             abs_activation_ratio=abs_activation,
             partial_locking_ratio=partial_locking,
             sustained_locking_ratio=sustained_ratio,
+            fade_slope=fade_slope,
+            fade_ratio=fade_ratio,
+            temperature_peak=temperature_peak,
+            temperature_mean=temperature_mean,
+            ventilation_alert=ventilation_alert,
+            ventilation_index=ventilation_index,
         )
 
     def _objective(name: str, default: float) -> float:
