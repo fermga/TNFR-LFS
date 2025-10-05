@@ -561,6 +561,12 @@ def segment_microsectors(
                 "slide_catch_budget_yaw": window_metrics.slide_catch_budget.yaw_acceleration_ratio,
                 "slide_catch_budget_steer": window_metrics.slide_catch_budget.steer_velocity_ratio,
                 "slide_catch_budget_overshoot": window_metrics.slide_catch_budget.overshoot_ratio,
+                "locking_window_score": window_metrics.locking_window_score.value,
+                "locking_window_score_on": window_metrics.locking_window_score.on_throttle,
+                "locking_window_score_off": window_metrics.locking_window_score.off_throttle,
+                "locking_window_transitions": float(
+                    window_metrics.locking_window_score.transition_samples
+                ),
                 "support_effective": window_metrics.support_effective,
                 "load_support_ratio": window_metrics.load_support_ratio,
                 "structural_expansion_longitudinal": window_metrics.structural_expansion_longitudinal,
@@ -812,6 +818,12 @@ def segment_microsectors(
                 "phase_lag_window": window_metrics.phase_lag,
                 "phase_alignment_window": window_metrics.phase_alignment,
                 "coherence_index": window_metrics.coherence_index,
+                "locking_window_score": window_metrics.locking_window_score.value,
+                "locking_window_score_on": window_metrics.locking_window_score.on_throttle,
+                "locking_window_score_off": window_metrics.locking_window_score.off_throttle,
+                "locking_window_transitions": float(
+                    window_metrics.locking_window_score.transition_samples
+                ),
                 "support_effective": window_metrics.support_effective,
                 "load_support_ratio": window_metrics.load_support_ratio,
                 "structural_expansion_longitudinal": window_metrics.structural_expansion_longitudinal,

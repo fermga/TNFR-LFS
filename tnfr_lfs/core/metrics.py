@@ -27,6 +27,7 @@ __all__ = [
     "AeroCoherence",
     "BrakeHeadroom",
     "SlideCatchBudget",
+    "LockingWindowScore",
     "BumpstopHistogram",
     "CPHIWheel",
     "WindowMetrics",
@@ -84,6 +85,13 @@ _WHEEL_SUFFIXES = ("fl", "fr", "rl", "rr")
 _STEER_VELOCITY_THRESHOLD = 3.5
 _ACKERMANN_OVERSHOOT_REFERENCE = 0.18
 
+_LOCKING_TRANSITION_DELTA = 0.15
+_LOCKING_TRANSITION_LOW = 0.25
+_LOCKING_TRANSITION_HIGH = 0.55
+_LOCKING_YAW_REFERENCE = 1.0
+_LOCKING_LONGITUDINAL_REFERENCE = 260.0
+_LOCKING_THROTTLE_REFERENCE = 0.5
+
 
 @dataclass(frozen=True)
 class SlideCatchBudget:
@@ -93,6 +101,16 @@ class SlideCatchBudget:
     yaw_acceleration_ratio: float = 0.0
     steer_velocity_ratio: float = 0.0
     overshoot_ratio: float = 0.0
+
+
+@dataclass(frozen=True)
+class LockingWindowScore:
+    """Aggregated stability score around throttle locking transitions."""
+
+    value: float = 1.0
+    on_throttle: float = 1.0
+    off_throttle: float = 1.0
+    transition_samples: int = 0
 
 
 @dataclass(frozen=True)
@@ -417,6 +435,7 @@ class WindowMetrics:
     exit_gear_match: float
     shift_stability: float
     frequency_label: str
+    locking_window_score: LockingWindowScore = field(default_factory=LockingWindowScore)
     aero_coherence: AeroCoherence = field(default_factory=AeroCoherence)
     aero_mechanical_coherence: float = 0.0
     epi_derivative_abs: float = 0.0
@@ -574,6 +593,7 @@ def compute_window_metrics(
             coherence_index=0.0,
             ackermann_parallel_index=0.0,
             slide_catch_budget=SlideCatchBudget(),
+            locking_window_score=LockingWindowScore(),
             support_effective=0.0,
             load_support_ratio=0.0,
             structural_expansion_longitudinal=0.0,
@@ -859,6 +879,24 @@ def compute_window_metrics(
         suffix: {"inner": [], "middle": [], "outer": []} for suffix in _WHEEL_SUFFIXES
     }
     wheel_slip_series: dict[str, list[float]] = {suffix: [] for suffix in _WHEEL_SUFFIXES}
+
+    throttle_series: list[float] = []
+    locking_series: list[float] = []
+    for record in records:
+        try:
+            throttle_value = float(getattr(record, "throttle", 0.0))
+        except (TypeError, ValueError):
+            throttle_value = 0.0
+        if not math.isfinite(throttle_value):
+            throttle_value = 0.0
+        throttle_series.append(max(0.0, min(1.0, throttle_value)))
+        try:
+            locking_value = float(getattr(record, "locking", 0.0))
+        except (TypeError, ValueError):
+            locking_value = 0.0
+        if not math.isfinite(locking_value):
+            locking_value = 0.0
+        locking_series.append(max(0.0, min(1.0, locking_value)))
 
     context_matrix = load_context_matrix()
 
@@ -1624,6 +1662,85 @@ def compute_window_metrics(
             return 1.0
         return ratio
 
+    def _locking_window_score_from_series(
+        throttle: Sequence[float],
+        locking: Sequence[float],
+        yaw: Sequence[float],
+        longitudinal: Sequence[float],
+    ) -> LockingWindowScore:
+        sample_count = min(len(throttle), len(locking))
+        if sample_count < 2:
+            return LockingWindowScore()
+        transitions: list[tuple[str, float]] = []
+        yaw_count = len(yaw)
+        long_count = len(longitudinal)
+        for index in range(1, sample_count):
+            prev = float(throttle[index - 1])
+            curr = float(throttle[index])
+            if not (math.isfinite(prev) and math.isfinite(curr)):
+                continue
+            delta = curr - prev
+            transition: str | None = None
+            if delta >= _LOCKING_TRANSITION_DELTA or (
+                prev <= _LOCKING_TRANSITION_LOW and curr >= _LOCKING_TRANSITION_HIGH
+            ):
+                if delta > 0.0:
+                    transition = "on"
+            elif delta <= -_LOCKING_TRANSITION_DELTA or (
+                prev >= _LOCKING_TRANSITION_HIGH and curr <= _LOCKING_TRANSITION_LOW
+            ):
+                if delta < 0.0:
+                    transition = "off"
+            if transition is None:
+                continue
+            lock_value = locking[index] if index < len(locking) else locking[-1]
+            yaw_value = 0.0
+            if yaw_count:
+                yaw_index = index if index < yaw_count else yaw_count - 1
+                yaw_value = float(yaw[yaw_index])
+            long_value = 0.0
+            if long_count:
+                long_index = index if index < long_count else long_count - 1
+                long_value = float(longitudinal[long_index])
+            throttle_change = abs(delta)
+            locking_component = max(0.0, min(1.0, float(lock_value)))
+            yaw_component = _normalised_ratio(abs(yaw_value), _LOCKING_YAW_REFERENCE)
+            longitudinal_component = _normalised_ratio(
+                abs(long_value), _LOCKING_LONGITUDINAL_REFERENCE
+            )
+            throttle_component = _normalised_ratio(
+                throttle_change, _LOCKING_THROTTLE_REFERENCE
+            )
+            penalty = (
+                0.4 * locking_component
+                + 0.3 * yaw_component
+                + 0.2 * longitudinal_component
+                + 0.1 * throttle_component
+            )
+            if penalty > 1.0:
+                penalty = 1.0
+            transitions.append((transition, penalty))
+        if not transitions:
+            return LockingWindowScore()
+
+        def _score(values: Sequence[float]) -> float:
+            if not values:
+                return 1.0
+            mean_penalty = sum(values) / len(values)
+            if not math.isfinite(mean_penalty):
+                mean_penalty = 1.0
+            return max(0.0, 1.0 - mean_penalty)
+
+        on_penalties = [value for label, value in transitions if label == "on"]
+        off_penalties = [value for label, value in transitions if label == "off"]
+        overall_penalties = [value for _, value in transitions]
+        return LockingWindowScore(
+            value=_score(overall_penalties),
+            on_throttle=_score(on_penalties),
+            off_throttle=_score(off_penalties),
+            transition_samples=len(transitions),
+        )
+
     target_front_temperature = float(_objective("target_front_temperature", 82.0))
     target_rear_temperature = float(_objective("target_rear_temperature", 80.0))
     temperature_tolerance = max(
@@ -1729,6 +1846,13 @@ def compute_window_metrics(
         overshoot_ratio=overshoot_ratio,
     )
 
+    locking_window_score = _locking_window_score_from_series(
+        throttle_series,
+        locking_series,
+        yaw_rates,
+        longitudinal_series,
+    )
+
     cphi_overall = _compute_cphi_for_indices(
         None, mu_usage_front_ratio, mu_usage_rear_ratio
     )
@@ -1782,6 +1906,7 @@ def compute_window_metrics(
         coherence_index=normalised_coherence,
         ackermann_parallel_index=ackermann_parallel,
         slide_catch_budget=slide_catch_budget,
+        locking_window_score=locking_window_score,
         support_effective=support_effective,
         load_support_ratio=load_support_ratio,
         structural_expansion_longitudinal=long_expansion,

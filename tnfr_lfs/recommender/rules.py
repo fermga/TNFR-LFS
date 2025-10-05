@@ -3324,6 +3324,94 @@ class ShiftStabilityRule:
         return recommendations
 
 
+class LockingWindowRule:
+    """Tighten differential guidance based on locking transition stability."""
+
+    def __init__(
+        self,
+        priority: int = 27,
+        *,
+        on_threshold: float = 0.7,
+        off_threshold: float = 0.75,
+        min_transitions: int = 2,
+        power_lock_step: float = 5.0,
+        preload_step: float = 40.0,
+    ) -> None:
+        self.priority = int(priority)
+        self.on_threshold = float(on_threshold)
+        self.off_threshold = float(off_threshold)
+        self.min_transitions = max(0, int(min_transitions))
+        self.power_lock_step = abs(float(power_lock_step))
+        self.preload_step = abs(float(preload_step))
+
+    def evaluate(
+        self,
+        results: Sequence[EPIBundle],
+        microsectors: Sequence[Microsector] | None = None,
+        context: RuleContext | None = None,
+    ) -> Iterable[Recommendation]:
+        if not microsectors:
+            return []
+
+        recommendations: List[Recommendation] = []
+        for microsector in microsectors:
+            phase = getattr(microsector, "active_phase", "")
+            if phase_family(phase) != "exit":
+                continue
+            measures = getattr(microsector, "filtered_measures", {}) or {}
+            transitions = float(measures.get("locking_window_transitions", 0.0))
+            if transitions < self.min_transitions:
+                continue
+            on_score = float(measures.get("locking_window_score_on", 1.0))
+            off_score = float(measures.get("locking_window_score_off", 1.0))
+            base_score = float(measures.get("locking_window_score", 1.0))
+            transition_count = int(transitions)
+
+            if on_score < self.on_threshold:
+                delta = -self.power_lock_step
+                message = (
+                    f"Operador LSD: abrir bloqueo de potencia en microsector {microsector.index}"
+                )
+                rationale = (
+                    f"LockingWindowScore on-throttle {on_score:.2f} < umbral "
+                    f"{self.on_threshold:.2f} con {transition_count} transiciones (score global {base_score:.2f}). "
+                    f"Reduce el bloqueo de aceleración siguiendo {MANUAL_REFERENCES['differential']}."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category="exit",
+                        message=message,
+                        rationale=rationale,
+                        priority=self.priority,
+                        parameter="diff_power_lock",
+                        delta=delta,
+                    )
+                )
+
+            if off_score < self.off_threshold:
+                delta = -self.preload_step
+                message = (
+                    f"Operador LSD: reducir precarga en microsector {microsector.index}"
+                )
+                rationale = (
+                    f"LockingWindowScore off-throttle {off_score:.2f} < umbral "
+                    f"{self.off_threshold:.2f} con {transition_count} transiciones (score global {base_score:.2f}). "
+                    f"Disminuye la precarga del diferencial según {MANUAL_REFERENCES['differential']}."
+                )
+                recommendations.append(
+                    Recommendation(
+                        category="exit",
+                        message=message,
+                        rationale=rationale,
+                        priority=self.priority + 1,
+                        parameter="diff_preload_nm",
+                        delta=delta,
+                    )
+                )
+
+        return recommendations
+
+
 class UsefulDissonanceRule:
     """Adjust axle balance when the Useful Dissonance Ratio drifts."""
 
@@ -3475,6 +3563,7 @@ class RecommendationEngine:
                 SuspensionVelocityRule(priority=18),
                 DetuneRatioRule(priority=24),
                 ShiftStabilityRule(priority=28),
+                LockingWindowRule(priority=27),
                 UsefulDissonanceRule(priority=26),
                 CurbComplianceRule(priority=25),
                 PhaseDeltaDeviationRule(

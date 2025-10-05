@@ -9,6 +9,7 @@ from tnfr_lfs.core.metrics import (
     AeroCoherence,
     BrakeHeadroom,
     CamberEffectiveness,
+    LockingWindowScore,
     SlideCatchBudget,
     WindowMetrics,
     compute_aero_coherence,
@@ -637,6 +638,37 @@ def test_slide_catch_budget_aggregates_components() -> None:
     assert budget.value == pytest.approx(max(0.0, 1.0 - expected_combined), rel=1e-3)
 
 
+def test_locking_window_score_detects_throttle_transitions() -> None:
+    base = _record(0.0, 120.0)
+    def _sample(ts: float, throttle: float, locking: float, yaw_rate: float, delta_long: float):
+        record = replace(
+            base,
+            timestamp=ts,
+            throttle=throttle,
+            locking=locking,
+            yaw_rate=yaw_rate,
+        )
+        object.__setattr__(record, "delta_nfr_longitudinal", delta_long)
+        return record
+
+    records = [
+        _sample(0.0, 0.05, 0.1, 0.1, 20.0),
+        _sample(0.4, 0.1, 0.2, 0.3, 30.0),
+        _sample(0.8, 0.6, 0.8, 0.8, 200.0),
+        _sample(1.2, 0.7, 0.7, 1.0, 210.0),
+        _sample(1.6, 0.2, 0.6, 0.5, 180.0),
+        _sample(2.0, 0.05, 0.2, 0.2, 40.0),
+    ]
+
+    metrics = compute_window_metrics(records)
+    score = metrics.locking_window_score
+
+    assert score.transition_samples == 3
+    assert score.on_throttle == pytest.approx(0.186154, rel=1e-6)
+    assert score.off_throttle == pytest.approx(0.585385, rel=1e-6)
+    assert score.value == pytest.approx(0.452308, rel=1e-6)
+
+
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
     assert metrics == WindowMetrics(
@@ -655,6 +687,7 @@ def test_compute_window_metrics_empty_window() -> None:
         coherence_index=0.0,
         ackermann_parallel_index=0.0,
         slide_catch_budget=SlideCatchBudget(),
+        locking_window_score=LockingWindowScore(),
         support_effective=0.0,
         load_support_ratio=0.0,
         structural_expansion_longitudinal=0.0,
