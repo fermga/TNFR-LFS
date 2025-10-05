@@ -53,6 +53,8 @@ MANUAL_REFERENCES = {
     "aero": "Basic Setup Guide · Balance aerodinámico [BAS-AER]",
     "driver": "Basic Setup Guide · Constancia de pilotaje [BAS-DRV]",
     "tyre_balance": "Advanced Setup Guide · Presiones y caídas [ADV-TYR]",
+    "dampers": "Advanced Setup Guide · Amortiguadores [ADV-DMP]",
+    "springs": "Advanced Setup Guide · Rigidez de muelles [ADV-SPR]",
 }
 
 WHEEL_SUFFIXES: Tuple[str, ...] = ("fl", "fr", "rl", "rr")
@@ -982,12 +984,45 @@ class BottomingPriorityRule:
         smooth_surface_cutoff: float = 1.05,
         ride_height_delta: float = 1.0,
         bump_delta: float = 2.0,
+        spring_delta: float = 8.0,
+        energy_compression_threshold: float = 0.35,
+        energy_spring_threshold: float = 0.85,
+        density_bias: float = 0.2,
     ) -> None:
         self.priority = int(priority)
         self.ratio_threshold = float(ratio_threshold)
         self.smooth_surface_cutoff = float(smooth_surface_cutoff)
         self.ride_height_delta = float(ride_height_delta)
         self.bump_delta = float(bump_delta)
+        self.spring_delta = float(spring_delta)
+        self.energy_compression_threshold = float(energy_compression_threshold)
+        self.energy_spring_threshold = float(energy_spring_threshold)
+        self.density_bias = float(density_bias)
+
+    def _resolve_adjustment(
+        self,
+        phase_category: str,
+        *,
+        energy: float,
+        density: float,
+        is_rough: bool,
+        ride_param: str,
+        bump_param: str,
+        spring_param: str,
+    ) -> Tuple[str, float, str, str]:
+        if energy >= self.energy_spring_threshold:
+            if phase_category == "apex":
+                return spring_param, self.spring_delta, "reforzar muelle", "springs"
+            if phase_category == "exit":
+                return ride_param, self.ride_height_delta, "elevar altura", "ride_height"
+            return bump_param, self.bump_delta, "endurecer compresión", "dampers"
+        if energy >= self.energy_compression_threshold:
+            if phase_category == "entry":
+                return bump_param, self.bump_delta, "endurecer compresión", "dampers"
+            return spring_param, self.spring_delta, "reforzar muelle", "springs"
+        if is_rough or density >= self.density_bias:
+            return bump_param, self.bump_delta, "endurecer compresión", "dampers"
+        return ride_param, self.ride_height_delta, "elevar altura", "ride_height"
 
     def evaluate(
         self,
@@ -1012,29 +1047,49 @@ class BottomingPriorityRule:
             is_rough = surface_factor >= self.smooth_surface_cutoff
             category = phase_family(getattr(microsector, "active_phase", "apex"))
             for axle, ratio, ride_param, bump_param in (
-                ("delantero", front_ratio, "front_ride_height", "front_compression_clicks"),
-                ("trasero", rear_ratio, "rear_ride_height", "rear_compression_clicks"),
+                (
+                    "delantero",
+                    front_ratio,
+                    "front_ride_height",
+                    "front_compression_clicks",
+                ),
+                (
+                    "trasero",
+                    rear_ratio,
+                    "rear_ride_height",
+                    "rear_compression_clicks",
+                ),
             ):
                 if ratio < self.ratio_threshold:
                     continue
-                if is_rough:
-                    parameter = bump_param
-                    delta = self.bump_delta
-                    focus = "endurecer compresión"
-                    reference = MANUAL_REFERENCES["antiroll"]
-                else:
-                    parameter = ride_param
-                    delta = self.ride_height_delta
-                    focus = "elevar altura"
-                    reference = MANUAL_REFERENCES["ride_height"]
+                position = "front" if axle == "delantero" else "rear"
+                density = max(
+                    0.0,
+                    min(1.0, float(measures.get(f"bumpstop_{position}_density", ratio))),
+                )
+                energy = max(0.0, float(measures.get(f"bumpstop_{position}_energy", 0.0)))
+                spring_param = (
+                    "front_spring_stiffness" if position == "front" else "rear_spring_stiffness"
+                )
+                parameter, delta, focus, reference_key = self._resolve_adjustment(
+                    category,
+                    energy=energy,
+                    density=density,
+                    is_rough=is_rough,
+                    ride_param=ride_param,
+                    bump_param=bump_param,
+                    spring_param=spring_param,
+                )
+                reference = MANUAL_REFERENCES[reference_key]
                 surface_label = "bacheada" if is_rough else "lisa"
                 message = (
                     f"Operador bottoming: {focus} {axle} en microsector {microsector.index}"
                 )
                 rationale = (
                     f"Índice de bottoming {ratio:.2f} en el eje {axle} coincide con picos de ΔNFR∥ "
-                    f"en microsector {microsector.index}. Superficie {surface_label}"
-                    f" (factor {surface_factor:.2f}) → prioriza {focus}. {reference}."
+                    f"en microsector {microsector.index}. Densidad bump stop {density:.2f} y "
+                    f"energía {energy:.2f} ΔNFR. Superficie {surface_label} (factor {surface_factor:.2f})"
+                    f" → prioriza {focus}. {reference}."
                 )
                 recommendations.append(
                     Recommendation(

@@ -22,7 +22,13 @@ from tnfr_lfs.core.epi import (
     resolve_nu_f_by_node,
 )
 from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias, phase_family
-from tnfr_lfs.core.metrics import AeroCoherence, BrakeHeadroom, SlideCatchBudget, WindowMetrics
+from tnfr_lfs.core.metrics import (
+    AeroCoherence,
+    BrakeHeadroom,
+    BumpstopHistogram,
+    SlideCatchBudget,
+    WindowMetrics,
+)
 from tnfr_lfs.core.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
@@ -345,6 +351,26 @@ def bottoming_segments(monkeypatch):
     bundles = EPIExtractor().extract(records)
 
     aero = AeroCoherence()
+    smooth_histogram = BumpstopHistogram(
+        front_density=(0.08, 0.04, 0.0, 0.0),
+        rear_density=(0.02, 0.03, 0.0, 0.0),
+        front_energy=(0.12, 0.06, 0.0, 0.0),
+        rear_energy=(0.03, 0.05, 0.0, 0.0),
+        front_total_density=0.12,
+        rear_total_density=0.05,
+        front_total_energy=0.18,
+        rear_total_energy=0.08,
+    )
+    rough_histogram = BumpstopHistogram(
+        front_density=(0.03, 0.06, 0.09, 0.0),
+        rear_density=(0.04, 0.07, 0.11, 0.0),
+        front_energy=(0.05, 0.08, 0.11, 0.0),
+        rear_energy=(0.06, 0.09, 0.13, 0.0),
+        front_total_density=0.18,
+        rear_total_density=0.22,
+        front_total_energy=0.24,
+        rear_total_energy=0.28,
+    )
     smooth_metrics = WindowMetrics(
         si=0.8,
         si_variance=0.0004,
@@ -369,6 +395,7 @@ def bottoming_segments(monkeypatch):
         structural_contraction_lateral=0.02,
         bottoming_ratio_front=0.6,
         bottoming_ratio_rear=0.12,
+        bumpstop_histogram=smooth_histogram,
         mu_usage_front_ratio=0.0,
         mu_usage_rear_ratio=0.0,
         phase_mu_usage_front_ratio=0.0,
@@ -387,6 +414,7 @@ def bottoming_segments(monkeypatch):
         bottoming_ratio_rear=0.68,
         useful_dissonance_ratio=0.46,
         useful_dissonance_percentage=46.0,
+        bumpstop_histogram=rough_histogram,
     )
     metric_sequence = iter([smooth_metrics, rough_metrics])
 
@@ -496,8 +524,12 @@ def test_segment_microsectors_exposes_bottoming_ratios(bottoming_segments) -> No
     smooth, rough = microsectors[:2]
     assert smooth.filtered_measures["bottoming_ratio_front"] == pytest.approx(0.6)
     assert smooth.context_factors.get("surface") == pytest.approx(0.95)
+    assert smooth.filtered_measures["bumpstop_front_density"] == pytest.approx(0.12)
+    assert smooth.filtered_measures["bumpstop_front_energy_bin_0"] == pytest.approx(0.12)
     assert rough.filtered_measures["bottoming_ratio_rear"] == pytest.approx(0.68)
     assert rough.context_factors.get("surface") == pytest.approx(1.25)
+    assert rough.filtered_measures["bumpstop_rear_density"] == pytest.approx(0.22)
+    assert rough.filtered_measures["bumpstop_rear_energy_bin_1"] == pytest.approx(0.09)
 
 
 def _yaw_rate(records: list[TelemetryRecord], index: int) -> float:
