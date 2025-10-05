@@ -27,6 +27,7 @@ from tnfr_lfs.recommender.rules import (
     BrakeHeadroomRule,
     BottomingPriorityRule,
     DetuneRatioRule,
+    LockingWindowRule,
     MANUAL_REFERENCES,
     PhaseDeltaDeviationRule,
     PhaseNodeOperatorRule,
@@ -718,6 +719,72 @@ def test_parallel_steer_rule_recommends_lock_when_budget_limited() -> None:
     assert parallel_rec.delta == pytest.approx(0.1)
     assert lock_rec.delta == pytest.approx(0.75)
     assert "steering lock" in lock_rec.message.lower()
+
+
+def test_locking_window_rule_recommends_opening_power_lock() -> None:
+    rule = LockingWindowRule(
+        priority=27,
+        on_threshold=0.7,
+        off_threshold=0.6,
+        min_transitions=1,
+        power_lock_step=6.0,
+    )
+    microsector = SimpleNamespace(
+        index=4,
+        active_phase="exit",
+        filtered_measures={
+            "locking_window_score": 0.35,
+            "locking_window_score_on": 0.4,
+            "locking_window_score_off": 0.82,
+            "locking_window_transitions": 3,
+        },
+    )
+    recommendations = list(rule.evaluate([], [microsector], None))
+    assert recommendations
+    power_rec = recommendations[0]
+    assert power_rec.parameter == "diff_power_lock"
+    assert power_rec.delta == pytest.approx(-6.0)
+    assert "lsd" in power_rec.message.lower()
+
+
+def test_locking_window_rule_recommends_reducing_preload() -> None:
+    rule = LockingWindowRule(
+        priority=29,
+        on_threshold=0.5,
+        off_threshold=0.7,
+        min_transitions=2,
+        preload_step=50.0,
+    )
+    microsector = SimpleNamespace(
+        index=6,
+        active_phase="exit",
+        filtered_measures={
+            "locking_window_score": 0.42,
+            "locking_window_score_on": 0.72,
+            "locking_window_score_off": 0.55,
+            "locking_window_transitions": 4,
+        },
+    )
+    recommendations = list(rule.evaluate([], [microsector], None))
+    assert recommendations
+    preload_rec = next(rec for rec in recommendations if rec.parameter == "diff_preload_nm")
+    assert preload_rec.delta == pytest.approx(-50.0)
+    assert "precarga" in preload_rec.message.lower()
+
+
+def test_locking_window_rule_requires_transitions() -> None:
+    rule = LockingWindowRule(min_transitions=3)
+    microsector = SimpleNamespace(
+        index=2,
+        active_phase="exit",
+        filtered_measures={
+            "locking_window_score": 0.3,
+            "locking_window_score_on": 0.4,
+            "locking_window_score_off": 0.45,
+            "locking_window_transitions": 1,
+        },
+    )
+    assert list(rule.evaluate([], [microsector], None)) == []
 
 
 def test_recommendation_engine_suppresses_when_quiet_sequence():

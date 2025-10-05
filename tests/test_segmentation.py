@@ -26,6 +26,7 @@ from tnfr_lfs.core.metrics import (
     AeroCoherence,
     BrakeHeadroom,
     BumpstopHistogram,
+    LockingWindowScore,
     SlideCatchBudget,
     SuspensionVelocityBands,
     WindowMetrics,
@@ -58,6 +59,10 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
             "structural_expansion_lateral",
             "structural_contraction_lateral",
             "ackermann_parallel_index",
+            "locking_window_score",
+            "locking_window_score_on",
+            "locking_window_score_off",
+            "locking_window_transitions",
         }
         assert "si_variance" in microsector.filtered_measures
         assert "epi_derivative_abs" in microsector.filtered_measures
@@ -406,6 +411,7 @@ def bottoming_segments(monkeypatch):
         coherence_index=0.5,
         ackermann_parallel_index=0.0,
         slide_catch_budget=SlideCatchBudget(),
+        locking_window_score=LockingWindowScore(),
         support_effective=0.12,
         load_support_ratio=0.00003,
         structural_expansion_longitudinal=0.1,
