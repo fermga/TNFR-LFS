@@ -24,6 +24,7 @@ from .metrics import (
     compute_aero_coherence,
     compute_window_metrics,
     resolve_aero_mechanical_coherence,
+    phase_synchrony_index,
 )
 from .operators import (
     DissonanceBreakdown,
@@ -68,6 +69,7 @@ __all__ = [
     "compute_window_metrics",
     "compute_aero_coherence",
     "resolve_aero_mechanical_coherence",
+    "phase_synchrony_index",
     "compute_structural_timestamps",
     "resolve_time_axis",
     "AeroBalanceDrift",

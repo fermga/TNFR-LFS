@@ -41,7 +41,12 @@ from .contextual_delta import (
     resolve_microsector_context,
     resolve_series_context,
 )
-from .metrics import CamberEffectiveness, CPHIWheel, compute_window_metrics
+from .metrics import (
+    CamberEffectiveness,
+    CPHIWheel,
+    compute_window_metrics,
+    phase_synchrony_index,
+)
 from .operator_detection import detect_al, detect_il, detect_oz, detect_silencio
 from .operators import mutation_operator, recursivity_operator
 from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias, phase_family
@@ -113,6 +118,8 @@ class Goal:
     target_phase_alignment: float
     measured_phase_lag: float
     measured_phase_alignment: float
+    target_phase_synchrony: float = field(init=False)
+    measured_phase_synchrony: float = field(init=False)
     slip_lat_window: Tuple[float, float]
     slip_long_window: Tuple[float, float]
     yaw_rate_window: Tuple[float, float]
@@ -130,6 +137,18 @@ class Goal:
         default_factory=lambda: {"longitudinal": 0.5, "lateral": 0.5}
     )
     track_gradient: float = 0.0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "target_phase_synchrony",
+            phase_synchrony_index(self.target_phase_lag, self.target_phase_alignment),
+        )
+        object.__setattr__(
+            self,
+            "measured_phase_synchrony",
+            phase_synchrony_index(self.measured_phase_lag, self.measured_phase_alignment),
+        )
 
 
 @dataclass(frozen=True)
@@ -152,10 +171,13 @@ class Microsector:
     grip_rel: float
     phase_lag: Mapping[PhaseLiteral, float]
     phase_alignment: Mapping[PhaseLiteral, float]
-    filtered_measures: Mapping[str, float]
-    recursivity_trace: Tuple[Mapping[str, float | str | None], ...]
-    last_mutation: Mapping[str, object] | None
-    window_occupancy: Mapping[PhaseLiteral, Mapping[str, float]]
+    phase_synchrony: Mapping[PhaseLiteral, float] = field(default_factory=dict)
+    filtered_measures: Mapping[str, float] = field(default_factory=dict)
+    recursivity_trace: Tuple[Mapping[str, float | str | None], ...] = ()
+    last_mutation: Mapping[str, object] | None = None
+    window_occupancy: Mapping[PhaseLiteral, Mapping[str, float]] = field(
+        default_factory=dict
+    )
     delta_nfr_std: float = 0.0
     nodal_delta_nfr_std: float = 0.0
     phase_delta_nfr_std: Mapping[PhaseLiteral, float] = field(default_factory=dict)
@@ -571,6 +593,7 @@ def segment_microsectors(
                 "udr": window_metrics.useful_dissonance_ratio,
                 "phase_lag_window": window_metrics.phase_lag,
                 "phase_alignment_window": window_metrics.phase_alignment,
+                "phase_synchrony_window": window_metrics.phase_synchrony_index,
                 "coherence_index": window_metrics.coherence_index,
                 "ackermann_parallel_index": window_metrics.ackermann_parallel_index,
                 "slide_catch_budget": window_metrics.slide_catch_budget.value,
@@ -860,6 +883,7 @@ def segment_microsectors(
                 "mu_usage_rear_ratio": window_metrics.mu_usage_rear_ratio,
                 "si_variance": window_metrics.si_variance,
                 "epi_derivative_abs": window_metrics.epi_derivative_abs,
+                "phase_synchrony_window": window_metrics.phase_synchrony_index,
             }
             defaults.update(wheel_temperatures)
             defaults.update(wheel_temperature_std)
@@ -895,6 +919,9 @@ def segment_microsectors(
         phase_alignment_map = {
             goal.phase: float(goal.measured_phase_alignment) for goal in goals
         }
+        phase_synchrony_map = {
+            goal.phase: float(goal.measured_phase_synchrony) for goal in goals
+        }
         for legacy, phases in LEGACY_PHASE_MAP.items():
             lag_values = [phase_lag_map.get(candidate) for candidate in phases if candidate in phase_lag_map]
             align_values = [
@@ -902,11 +929,20 @@ def segment_microsectors(
                 for candidate in phases
                 if candidate in phase_alignment_map
             ]
+            synchrony_values = [
+                phase_synchrony_map.get(candidate)
+                for candidate in phases
+                if candidate in phase_synchrony_map
+            ]
             if lag_values:
                 phase_lag_map[legacy] = float(mean(value for value in lag_values if value is not None))
             if align_values:
                 phase_alignment_map[legacy] = float(
                     mean(value for value in align_values if value is not None)
+                )
+            if synchrony_values:
+                phase_synchrony_map[legacy] = float(
+                    mean(value for value in synchrony_values if value is not None)
                 )
         operator_events: Dict[str, Tuple[Mapping[str, object], ...]] = {}
         silence_window = max(6, min(len(record_window), 25))
@@ -1013,6 +1049,7 @@ def segment_microsectors(
                 grip_rel=float(filtered_measures.get("grip_rel", grip_rel)),
                 phase_lag=dict(phase_lag_map),
                 phase_alignment=dict(phase_alignment_map),
+                phase_synchrony=dict(phase_synchrony_map),
                 delta_nfr_std=float(window_metrics.delta_nfr_std),
                 nodal_delta_nfr_std=float(window_metrics.nodal_delta_nfr_std),
                 phase_delta_nfr_std={

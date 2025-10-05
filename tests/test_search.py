@@ -216,6 +216,7 @@ def _microsector() -> Microsector:
     }
     phase_lag = {"entry": 0.0, "apex": 0.0, "exit": 0.0}
     phase_alignment = {"entry": 1.0, "apex": 1.0, "exit": 1.0}
+    phase_synchrony = {"entry": 1.0, "apex": 1.0, "exit": 1.0}
     return Microsector(
         index=0,
         start_time=0.0,
@@ -292,6 +293,7 @@ def _microsector() -> Microsector:
         grip_rel=1.0,
         phase_lag=phase_lag,
         phase_alignment=phase_alignment,
+        phase_synchrony=phase_synchrony,
         filtered_measures=filtered_measures,
         recursivity_trace=(),
         last_mutation=None,

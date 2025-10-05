@@ -78,6 +78,7 @@ _ALIGNMENT_LAG_GAP = 0.3
 _ALIGNMENT_THRESHOLD = 0.05
 _LAG_THRESHOLD = 0.05
 _COHERENCE_THRESHOLD = 0.05
+_SYNCHRONY_THRESHOLD = 0.08
 
 
 _GEOMETRY_PARAMETERS = {
@@ -92,16 +93,19 @@ _GEOMETRY_PARAMETERS = {
 _GEOMETRY_METRIC_NODES: Mapping[str, Mapping[str, str]] = {
     "entry": {
         "phase_alignment": "suspension",
+        "phase_synchrony_index": "suspension",
         "phase_lag": "suspension",
         "coherence_index": "tyres",
     },
     "apex": {
         "phase_alignment": "suspension",
+        "phase_synchrony_index": "suspension",
         "phase_lag": "suspension",
         "coherence_index": "tyres",
     },
     "exit": {
         "phase_alignment": "suspension",
+        "phase_synchrony_index": "tyres",
         "phase_lag": "tyres",
         "coherence_index": "tyres",
     },
@@ -1753,6 +1757,17 @@ def _geometry_snapshot(
     target_alignment = _safe_float(
         getattr(goal, "target_phase_alignment", measured_alignment), measured_alignment
     )
+    measured_synchrony = _safe_float(
+        (microsector.phase_synchrony or {}).get(
+            goal.phase, getattr(goal, "measured_phase_synchrony", 1.0)
+        ),
+        _safe_float(getattr(goal, "measured_phase_synchrony", 1.0), 1.0),
+    )
+    if not math.isfinite(measured_synchrony):
+        measured_synchrony = _safe_float(filtered.get("phase_synchrony_window"), 1.0)
+    target_synchrony = _safe_float(
+        getattr(goal, "target_phase_synchrony", measured_synchrony), measured_synchrony
+    )
     measured_lag = _safe_float(
         microsector.phase_lag.get(
             goal.phase, getattr(goal, "measured_phase_lag", 0.0)
@@ -1776,12 +1791,17 @@ def _geometry_snapshot(
     )
     alignment_delta = target_alignment - measured_alignment
     lag_delta = measured_lag - target_lag
+    synchrony_delta = target_synchrony - measured_synchrony
     coherence_delta = target_coherence - average_coherence
     return {
         "measured_alignment": measured_alignment,
         "target_alignment": target_alignment,
         "alignment_delta": alignment_delta,
         "alignment_gap": abs(alignment_delta),
+        "measured_synchrony": measured_synchrony,
+        "target_synchrony": target_synchrony,
+        "synchrony_delta": synchrony_delta,
+        "synchrony_gap": abs(synchrony_delta),
         "measured_lag": measured_lag,
         "target_lag": target_lag,
         "lag_delta": lag_delta,
@@ -1796,10 +1816,13 @@ def _geometry_snapshot(
 def _geometry_urgency(snapshot: Mapping[str, float]) -> int:
     urgency = 0
     alignment_gap = float(snapshot.get("alignment_gap", 0.0))
+    synchrony_gap = float(snapshot.get("synchrony_gap", 0.0))
     lag_gap = float(snapshot.get("lag_gap", 0.0))
     coherence_gap = float(snapshot.get("coherence_gap", 0.0))
     if alignment_gap > _ALIGNMENT_THRESHOLD:
         urgency = max(urgency, 3 if alignment_gap > _ALIGNMENT_THRESHOLD * 2 else 2)
+    if synchrony_gap > _SYNCHRONY_THRESHOLD:
+        urgency = max(urgency, 3 if synchrony_gap > _SYNCHRONY_THRESHOLD * 1.75 else 2)
     if lag_gap > _LAG_THRESHOLD:
         urgency = max(urgency, 3 if lag_gap > _LAG_THRESHOLD * 2 else 2)
     if coherence_gap > _COHERENCE_THRESHOLD:
@@ -2097,6 +2120,30 @@ class PhaseDeltaDeviationRule:
                     )
                     geometry_actions_map = _merge_recommendations_by_parameter(
                         geometry_actions_map, alignment_actions
+                    )
+
+            if geometry_snapshot["synchrony_gap"] > _SYNCHRONY_THRESHOLD:
+                synchrony_rationale = (
+                    f"{phase_summary} Φsync objetivo {geometry_snapshot['target_synchrony']:.2f} "
+                    f"frente al medido {geometry_snapshot['measured_synchrony']:.2f} "
+                    f"({geometry_snapshot['synchrony_delta']:+.2f})."
+                )
+                synchrony_node = geometry_nodes.get("phase_synchrony_index") or geometry_nodes.get(
+                    "phase_alignment"
+                )
+                if synchrony_node:
+                    synchrony_actions = _phase_action_recommendations(
+                        phase=self.phase,
+                        category=self.category,
+                        metric="phase_synchrony_index",
+                        raw_value=geometry_snapshot["synchrony_delta"],
+                        base_rationale=synchrony_rationale,
+                        priority=self.priority - 1,
+                        reference_key=self.reference_key,
+                        node=synchrony_node,
+                    )
+                    geometry_actions_map = _merge_recommendations_by_parameter(
+                        geometry_actions_map, synchrony_actions
                     )
 
             if geometry_snapshot["lag_gap"] > _LAG_THRESHOLD:

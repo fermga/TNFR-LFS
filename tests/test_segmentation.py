@@ -113,15 +113,19 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
             assert goal.dominant_nodes == microsector.dominant_nodes[goal.phase]
             assert -math.pi <= goal.target_phase_lag <= math.pi
             assert -1.0 <= goal.target_phase_alignment <= 1.0
+            assert 0.0 <= goal.target_phase_synchrony <= 1.0
             assert -math.pi <= goal.measured_phase_lag <= math.pi
             assert -1.0 <= goal.measured_phase_alignment <= 1.0
+            assert 0.0 <= goal.measured_phase_synchrony <= 1.0
             indices = list(microsector.phase_indices(goal.phase))
             if indices:
                 assert goal.dominant_nodes
         assert microsector.phase_lag
         assert microsector.phase_alignment
+        assert microsector.phase_synchrony
         assert set(microsector.phase_lag) >= set(PHASE_SEQUENCE)
         assert set(microsector.phase_alignment) >= set(PHASE_SEQUENCE)
+        assert set(microsector.phase_synchrony) >= set(PHASE_SEQUENCE)
         if microsector.operator_events:
             for payloads in microsector.operator_events.values():
                 for payload in payloads:
@@ -423,6 +427,7 @@ def bottoming_segments(monkeypatch):
         rho=0.85,
         phase_lag=0.0,
         phase_alignment=0.95,
+        phase_synchrony_index=0.97,
         useful_dissonance_ratio=0.4,
         useful_dissonance_percentage=40.0,
         coherence_index=0.5,

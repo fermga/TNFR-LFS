@@ -82,6 +82,7 @@ def _brake_headroom_microsector(
         grip_rel=1.0,
         phase_lag={},
         phase_alignment={},
+        phase_synchrony={},
         filtered_measures={
             "brake_headroom": headroom,
             "brake_headroom_peak_decel": peak,
@@ -235,6 +236,7 @@ def _udr_microsector(
         grip_rel=1.0,
         phase_lag={goal.phase: goal.measured_phase_lag},
         phase_alignment={goal.phase: goal.measured_phase_alignment},
+        phase_synchrony={goal.phase: goal.measured_phase_synchrony},
         filtered_measures=measures,
         recursivity_trace=(),
         last_mutation=None,
@@ -357,6 +359,7 @@ def test_tyre_balance_rule_generates_guidance():
         grip_rel=1.0,
         phase_lag={"apex": 0.0},
         phase_alignment={"apex": 0.9},
+        phase_synchrony={"apex": goal.measured_phase_synchrony},
         filtered_measures={
             "thermal_load": 5150.0,
             "style_index": 0.82,

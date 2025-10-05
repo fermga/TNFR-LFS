@@ -150,6 +150,7 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.rho == pytest.approx(0.0)
     assert metrics.phase_lag == pytest.approx(0.0)
     assert metrics.phase_alignment == pytest.approx(1.0)
+    assert metrics.phase_synchrony_index == pytest.approx(1.0)
     assert metrics.useful_dissonance_ratio == pytest.approx(0.0)
     assert metrics.useful_dissonance_percentage == pytest.approx(0.0)
     assert metrics.coherence_index == pytest.approx(0.0)
@@ -792,6 +793,7 @@ def test_compute_window_metrics_empty_window() -> None:
         rho=0.0,
         phase_lag=0.0,
         phase_alignment=1.0,
+        phase_synchrony_index=1.0,
         useful_dissonance_ratio=0.0,
         useful_dissonance_percentage=0.0,
         coherence_index=0.0,
