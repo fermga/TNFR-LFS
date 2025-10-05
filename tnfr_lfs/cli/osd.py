@@ -35,7 +35,12 @@ from ..core.segmentation import (
     microsector_stability_metrics,
     segment_microsectors,
 )
-from ..exporters.setup_plan import SetupChange, SetupPlan
+from ..exporters.setup_plan import (
+    SetupChange,
+    SetupPlan,
+    compute_phase_axis_summary,
+    phase_axis_summary_lines,
+)
 from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObjectives
 from ..session import format_session_messages
@@ -1201,6 +1206,27 @@ def _render_page_c(
     else:
         lines.append("Plan en preparación…")
     if plan:
+        summary_map = getattr(plan, "phase_axis_summary", {}) or {}
+        suggestions = tuple(getattr(plan, "phase_axis_suggestions", ()))
+        if (not summary_map or not suggestions) and (
+            getattr(plan, "phase_axis_targets", None) or getattr(plan, "phase_axis_weights", None)
+        ):
+            computed_summary, computed_suggestions = compute_phase_axis_summary(
+                getattr(plan, "phase_axis_targets", {}),
+                getattr(plan, "phase_axis_weights", {}),
+            )
+            if not summary_map:
+                summary_map = computed_summary
+            if not suggestions:
+                suggestions = computed_suggestions
+        summary_lines = phase_axis_summary_lines(summary_map)
+        if summary_lines:
+            lines.append("Mapa ΔNFR fases")
+            for summary_line in summary_lines:
+                lines.append(_truncate_line(summary_line))
+        for hint in suggestions:
+            if hint:
+                lines.append(_truncate_line(f"→ {hint}"))
         if getattr(plan, "clamped_parameters", ()):  # compatibility with older plans
             riesgos = _format_riesgos(plan.clamped_parameters)
             if riesgos:
@@ -1698,6 +1724,10 @@ def _build_setup_plan(
             "lateral": weight_entry["lateral"] / count,
         }
 
+    summary_map, axis_suggestions = compute_phase_axis_summary(
+        axis_target_map, axis_weight_map
+    )
+
     return SetupPlan(
         car_model=car_model,
         session=None,
@@ -1710,6 +1740,8 @@ def _build_setup_plan(
         clamped_parameters=tuple(clamped),
         phase_axis_targets=axis_target_map,
         phase_axis_weights=axis_weight_map,
+        phase_axis_summary=summary_map,
+        phase_axis_suggestions=axis_suggestions,
         sci_breakdown=getattr(plan, "sci_breakdown", getattr(plan, "objective_breakdown", {})),
     )
 
