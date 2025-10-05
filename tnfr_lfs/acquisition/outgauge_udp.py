@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import socket
 import struct
 import time
@@ -12,6 +13,7 @@ __all__ = ["OutGaugePacket", "OutGaugeUDPClient"]
 
 
 _PACK_STRUCT = struct.Struct("<I4s16s8s6s6sHBBfffffffIIfff16s16sI")
+_FLOAT_STRUCT = struct.Struct("<f")
 
 
 def _decode_string(value: bytes) -> str:
@@ -48,6 +50,9 @@ class OutGaugePacket:
     packet_id: int
     tyre_temps: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     tyre_pressures: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    tyre_temps_inner: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    tyre_temps_middle: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    tyre_temps_outer: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
     @classmethod
     def from_bytes(cls, payload: bytes) -> "OutGaugePacket":
@@ -82,6 +87,63 @@ class OutGaugePacket:
             display2,
             packet_id,
         ) = unpacked
+
+        extra_inner = (0.0, 0.0, 0.0, 0.0)
+        extra_middle = (0.0, 0.0, 0.0, 0.0)
+        extra_outer = (0.0, 0.0, 0.0, 0.0)
+        extra_offset = _PACK_STRUCT.size
+        if len(payload) > extra_offset:
+            remainder = memoryview(payload)[extra_offset:]
+            float_count = len(remainder) // _FLOAT_STRUCT.size
+            if float_count > 0:
+                try:
+                    floats = struct.unpack(
+                        "<" + "f" * float_count, remainder[: float_count * _FLOAT_STRUCT.size]
+                    )
+                except struct.error:
+                    floats = ()
+                if floats:
+                    inner = list(extra_inner)
+                    middle = list(extra_middle)
+                    outer = list(extra_outer)
+                    for index in range(4):
+                        try:
+                            value = float(floats[index])
+                            if math.isfinite(value):
+                                inner[index] = value
+                        except (IndexError, TypeError, ValueError):
+                            break
+                    for index in range(4):
+                        try:
+                            value = float(floats[4 + index])
+                            if math.isfinite(value):
+                                middle[index] = value
+                        except (IndexError, TypeError, ValueError):
+                            break
+                    for index in range(4):
+                        try:
+                            value = float(floats[8 + index])
+                            if math.isfinite(value):
+                                outer[index] = value
+                        except (IndexError, TypeError, ValueError):
+                            break
+                    extra_inner = tuple(inner)  # type: ignore[assignment]
+                    extra_middle = tuple(middle)  # type: ignore[assignment]
+                    extra_outer = tuple(outer)  # type: ignore[assignment]
+
+        def _average_layers(index: int) -> float:
+            values = [extra_inner[index], extra_middle[index], extra_outer[index]]
+            finite = [value for value in values if math.isfinite(value) and value > 0.0]
+            if not finite:
+                return 0.0
+            return float(sum(finite) / len(finite))
+
+        averaged = (
+            _average_layers(0),
+            _average_layers(1),
+            _average_layers(2),
+            _average_layers(3),
+        )
         return cls(
             time=time_value,
             car=_decode_string(car),
@@ -107,8 +169,11 @@ class OutGaugePacket:
             display1=_decode_string(display1),
             display2=_decode_string(display2),
             packet_id=packet_id,
-            tyre_temps=(0.0, 0.0, 0.0, 0.0),
+            tyre_temps=averaged,
             tyre_pressures=(0.0, 0.0, 0.0, 0.0),
+            tyre_temps_inner=extra_inner,
+            tyre_temps_middle=extra_middle,
+            tyre_temps_outer=extra_outer,
         )
 
 

@@ -364,6 +364,8 @@ def test_render_page_a_includes_wave_when_active_phase():
         aero_mechanical_coherence=0.64,
         epi_derivative_abs=0.12,
         brake_headroom=BrakeHeadroom(),
+        camber={},
+        phase_camber={},
     )
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
     curve_label = f"Curva {microsector.index + 1}"
@@ -469,6 +471,8 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
         aero_mechanical_coherence=0.58,
         epi_derivative_abs=0.09,
         brake_headroom=BrakeHeadroom(),
+        camber={},
+        phase_camber={},
     )
     page = osd_module._render_page_a(active, bundles[0], 0.2, window_metrics, bundles)
     assert "ΔNFR frenada" in page
@@ -543,6 +547,8 @@ def test_render_page_a_includes_no_tocar_notice():
         aero_mechanical_coherence=0.4,
         epi_derivative_abs=0.05,
         brake_headroom=BrakeHeadroom(),
+        camber={},
+        phase_camber={},
     )
     page = osd_module._render_page_a(
         active,

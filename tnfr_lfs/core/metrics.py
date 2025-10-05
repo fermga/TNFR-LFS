@@ -28,6 +28,7 @@ __all__ = [
     "BumpstopHistogram",
     "CPHIWheel",
     "WindowMetrics",
+    "CamberEffectiveness",
     "compute_window_metrics",
     "compute_aero_coherence",
     "resolve_aero_mechanical_coherence",
@@ -209,6 +210,18 @@ class CPHIWheel:
 
 
 @dataclass(frozen=True)
+class CamberEffectiveness:
+    """Per-wheel camber efficacy metrics derived from IMO gradients."""
+
+    gradient_im: float = 0.0
+    gradient_mo: float = 0.0
+    gradient_io: float = 0.0
+    corr_delta_perp: float = 0.0
+    corr_slip_angle: float = 0.0
+    index: float = 0.0
+
+
+@dataclass(frozen=True)
 class WindowMetrics:
     """Aggregated metrics derived from a telemetry window.
 
@@ -262,6 +275,10 @@ class WindowMetrics:
     bumpstop_histogram: BumpstopHistogram = field(default_factory=BumpstopHistogram)
     cphi: Mapping[str, CPHIWheel] = field(default_factory=dict)
     phase_cphi: Mapping[str, Mapping[str, CPHIWheel]] = field(default_factory=dict)
+    camber: Mapping[str, CamberEffectiveness] = field(default_factory=dict)
+    phase_camber: Mapping[str, Mapping[str, CamberEffectiveness]] = field(
+        default_factory=dict
+    )
 
 
 def _compute_bumpstop_histogram(
@@ -423,6 +440,8 @@ def compute_window_metrics(
             brake_headroom=BrakeHeadroom(),
             cphi={},
             phase_cphi={},
+            camber={},
+            phase_camber={},
         )
 
     if isinstance(phase_indices, Mapping):
@@ -552,6 +571,10 @@ def compute_window_metrics(
     wheel_temperature_series: dict[str, list[float]] = {
         suffix: [] for suffix in _WHEEL_SUFFIXES
     }
+    wheel_temperature_layers: dict[str, dict[str, list[float]]] = {
+        suffix: {"inner": [], "middle": [], "outer": []} for suffix in _WHEEL_SUFFIXES
+    }
+    wheel_slip_series: dict[str, list[float]] = {suffix: [] for suffix in _WHEEL_SUFFIXES}
 
     context_matrix = load_context_matrix()
 
@@ -632,11 +655,21 @@ def compute_window_metrics(
         for suffix in _WHEEL_SUFFIXES:
             attribute = f"tyre_temp_{suffix}"
             series = wheel_temperature_series[suffix]
+            layer_map = wheel_temperature_layers[suffix]
             for bundle in bundles:
                 try:
-                    series.append(float(getattr(bundle.tyres, attribute, 0.0)))
+                    value = float(getattr(bundle.tyres, attribute, 0.0))
                 except (TypeError, ValueError):
-                    series.append(0.0)
+                    value = 0.0
+                series.append(value)
+                for layer_name in ("inner", "middle", "outer"):
+                    layer_attribute = f"{attribute}_{layer_name}"
+                    layer_series = layer_map[layer_name]
+                    try:
+                        layer_value = float(getattr(bundle.tyres, layer_attribute, 0.0))
+                    except (TypeError, ValueError):
+                        layer_value = 0.0
+                    layer_series.append(layer_value)
         longitudinal_series = [
             float(getattr(bundle, "delta_nfr_longitudinal", 0.0)) for bundle in bundles
         ]
@@ -702,11 +735,36 @@ def compute_window_metrics(
         for suffix in _WHEEL_SUFFIXES:
             attribute = f"tyre_temp_{suffix}"
             series = wheel_temperature_series[suffix]
+            layer_map = wheel_temperature_layers[suffix]
             for record in records:
                 try:
-                    series.append(float(getattr(record, attribute, 0.0)))
+                    value = float(getattr(record, attribute, 0.0))
                 except (TypeError, ValueError):
-                    series.append(0.0)
+                    value = 0.0
+                series.append(value)
+                for layer_name in ("inner", "middle", "outer"):
+                    layer_attribute = f"{attribute}_{layer_name}"
+                    layer_series = layer_map[layer_name]
+                    try:
+                        layer_value = float(getattr(record, layer_attribute, 0.0))
+                    except (TypeError, ValueError):
+                        layer_value = 0.0
+                    layer_series.append(layer_value)
+    for suffix in _WHEEL_SUFFIXES:
+        attribute = f"slip_angle_{suffix}"
+        slip_series = wheel_slip_series[suffix]
+        for record in records:
+            try:
+                slip_value = float(getattr(record, attribute))
+            except (TypeError, ValueError, AttributeError):
+                try:
+                    slip_value = float(getattr(record, "slip_angle", 0.0))
+                except (TypeError, ValueError):
+                    slip_value = 0.0
+            if not math.isfinite(slip_value):
+                slip_value = 0.0
+            slip_series.append(slip_value)
+
     _useful_samples, _high_yaw_samples, udr = compute_useful_dissonance_stats(
         timestamps,
         delta_series,
@@ -861,6 +919,104 @@ def compute_window_metrics(
             return 1.0
         return ratio
 
+    def _pearson_correlation(a: Sequence[float], b: Sequence[float]) -> float:
+        if len(a) != len(b) or len(a) < 2:
+            return 0.0
+        mean_a = mean(a)
+        mean_b = mean(b)
+        num = 0.0
+        sum_sq_a = 0.0
+        sum_sq_b = 0.0
+        for value_a, value_b in zip(a, b):
+            da = float(value_a) - mean_a
+            db = float(value_b) - mean_b
+            num += da * db
+            sum_sq_a += da * da
+            sum_sq_b += db * db
+        denom = math.sqrt(sum_sq_a * sum_sq_b)
+        if denom <= 1e-12:
+            return 0.0
+        coeff = num / denom
+        if coeff > 1.0:
+            return 1.0
+        if coeff < -1.0:
+            return -1.0
+        return coeff
+
+    def _camber_index(gradient_mean: float, corr_perp: float, corr_slip: float) -> float:
+        gradient_strength = min(1.0, math.tanh(abs(gradient_mean) / 12.5))
+        alignment = 0.6 * abs(corr_perp) + 0.4 * abs(corr_slip)
+        orientation = 1.0 if corr_perp * gradient_mean >= 0.0 else 0.0
+        slip_alignment = 1.0 if corr_slip * gradient_mean >= 0.0 else 0.0
+        value = gradient_strength * alignment * orientation * slip_alignment
+        if value < 0.0:
+            return 0.0
+        if value > 1.0:
+            return 1.0
+        return value
+
+    def _select_series(series: Sequence[float], indices: Sequence[int] | None) -> list[float]:
+        if not indices:
+            return [float(value) for value in series]
+        selected: list[float] = []
+        for index in indices:
+            if 0 <= index < len(series):
+                try:
+                    value = float(series[index])
+                except (TypeError, ValueError):
+                    value = 0.0
+                if not math.isfinite(value):
+                    value = 0.0
+                selected.append(value)
+        return selected
+
+    def _camber_metrics_for_suffix(
+        suffix: str, indices: Sequence[int] | None = None
+    ) -> CamberEffectiveness:
+        layer_map = wheel_temperature_layers.get(suffix, {})
+        inner_series = _select_series(layer_map.get("inner", []), indices)
+        middle_series = _select_series(layer_map.get("middle", []), indices)
+        outer_series = _select_series(layer_map.get("outer", []), indices)
+        slip_series = _select_series(wheel_slip_series.get(suffix, []), indices)
+        perp_series = _select_series(lateral_series, indices)
+        if not inner_series or not middle_series or not outer_series:
+            return CamberEffectiveness()
+        length = min(len(inner_series), len(middle_series), len(outer_series), len(perp_series), len(slip_series))
+        if length < 2:
+            return CamberEffectiveness(
+                gradient_im=inner_series[0] - middle_series[0] if length else 0.0,
+                gradient_mo=middle_series[0] - outer_series[0] if length else 0.0,
+                gradient_io=inner_series[0] - outer_series[0] if length else 0.0,
+            )
+        gradients_im: list[float] = []
+        gradients_mo: list[float] = []
+        gradients_io: list[float] = []
+        perp_adjusted: list[float] = []
+        slip_adjusted: list[float] = []
+        for index in range(length):
+            inner = inner_series[index]
+            middle = middle_series[index]
+            outer = outer_series[index]
+            gradients_im.append(inner - middle)
+            gradients_mo.append(middle - outer)
+            gradients_io.append(inner - outer)
+            slip = slip_series[index]
+            slip_sign = math.copysign(1.0, slip) if abs(slip) > 1e-6 else 1.0
+            perp_adjusted.append(perp_series[index] * slip_sign)
+            slip_adjusted.append(slip)
+        corr_perp = _pearson_correlation(gradients_io, perp_adjusted)
+        corr_slip = _pearson_correlation(gradients_io, slip_adjusted)
+        gradient_mean = mean(gradients_io)
+        index_value = _camber_index(gradient_mean, corr_perp, corr_slip)
+        return CamberEffectiveness(
+            gradient_im=mean(gradients_im),
+            gradient_mo=mean(gradients_mo),
+            gradient_io=gradient_mean,
+            corr_delta_perp=corr_perp,
+            corr_slip_angle=corr_slip,
+            index=index_value,
+        )
+
     support_effective = _weighted_average(support_samples, windows)
     load_support_ratio = (
         support_effective / avg_vertical_load if avg_vertical_load > 1e-6 else 0.0
@@ -981,6 +1137,15 @@ def compute_window_metrics(
                 rear_mu_lat_series, rear_mu_long_series, mu_max_rear, indices
             ),
         )
+
+    camber_mapping: dict[str, CamberEffectiveness] = {}
+    for suffix in _WHEEL_SUFFIXES:
+        camber_mapping[suffix] = _camber_metrics_for_suffix(suffix)
+    phase_camber_mapping: dict[str, dict[str, CamberEffectiveness]] = {}
+    for phase_label, indices in phase_windows.items():
+        phase_camber_mapping[phase_label] = {
+            suffix: _camber_metrics_for_suffix(suffix, indices) for suffix in _WHEEL_SUFFIXES
+        }
 
     def _rate_series(series: Sequence[float], stamps: Sequence[float]) -> list[float]:
         rates: list[float] = []
@@ -1186,6 +1351,8 @@ def compute_window_metrics(
         brake_headroom=_compute_brake_headroom(records),
         cphi=cphi_overall,
         phase_cphi=phase_cphi,
+        camber=camber_mapping,
+        phase_camber=phase_camber_mapping,
     )
 
 

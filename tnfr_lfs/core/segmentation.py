@@ -41,7 +41,7 @@ from .contextual_delta import (
     resolve_microsector_context,
     resolve_series_context,
 )
-from .metrics import CPHIWheel, compute_window_metrics
+from .metrics import CamberEffectiveness, CPHIWheel, compute_window_metrics
 from .operator_detection import detect_al, detect_il, detect_oz, detect_silencio
 from .operators import mutation_operator, recursivity_operator
 from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias, phase_family
@@ -280,10 +280,11 @@ def segment_microsectors(
         wheel_temperatures: Dict[str, float] = {}
         wheel_temperature_dispersion: Dict[str, float] = {}
         for suffix in ("fl", "fr", "rl", "rr"):
-            key = f"tyre_temp_{suffix}"
-            avg_value, spread = _mean_std(key)
-            wheel_temperatures[key] = avg_value
-            wheel_temperature_dispersion[f"{key}_std"] = spread
+            for layer in ("", "_inner", "_middle", "_outer"):
+                key = f"tyre_temp_{suffix}{layer}"
+                avg_value, spread = _mean_std(key)
+                wheel_temperatures[key] = avg_value
+                wheel_temperature_dispersion[f"{key}_std"] = spread
 
         wheel_pressures: Dict[str, float] = {}
         wheel_pressure_dispersion: Dict[str, float] = {}
@@ -582,6 +583,34 @@ def segment_microsectors(
                 "brake_headroom_sustained_locking": window_metrics.brake_headroom.sustained_locking_ratio,
             }
         )
+        if isinstance(window_metrics.camber, Mapping):
+            for suffix, payload in window_metrics.camber.items():
+                prefix = f"camber_{suffix}"
+                if isinstance(payload, CamberEffectiveness):
+                    filtered_measures[f"{prefix}_gradient_im"] = float(payload.gradient_im)
+                    filtered_measures[f"{prefix}_gradient_mo"] = float(payload.gradient_mo)
+                    filtered_measures[f"{prefix}_gradient_io"] = float(payload.gradient_io)
+                    filtered_measures[f"{prefix}_corr_delta_perp"] = float(
+                        payload.corr_delta_perp
+                    )
+                    filtered_measures[f"{prefix}_corr_slip"] = float(
+                        payload.corr_slip_angle
+                    )
+                    filtered_measures[f"{prefix}_index"] = float(payload.index)
+                else:
+                    filtered_measures.setdefault(f"{prefix}_index", 0.0)
+        if isinstance(window_metrics.phase_camber, Mapping):
+            for phase_label, wheels in window_metrics.phase_camber.items():
+                if not isinstance(wheels, Mapping):
+                    continue
+                label = str(phase_label)
+                for suffix in ("fl", "fr", "rl", "rr"):
+                    payload = wheels.get(suffix)
+                    key_prefix = f"camber_{label}_{suffix}"
+                    if isinstance(payload, CamberEffectiveness):
+                        filtered_measures[f"{key_prefix}_index"] = float(payload.index)
+                    else:
+                        filtered_measures.setdefault(f"{key_prefix}_index", 0.0)
         cphi_data = window_metrics.cphi if isinstance(window_metrics.cphi, Mapping) else {}
         for suffix in ("fl", "fr", "rl", "rr"):
             wheel = cphi_data.get(suffix)

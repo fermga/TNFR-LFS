@@ -3,10 +3,12 @@ from __future__ import annotations
 import math
 
 import pytest
+from typing import Mapping
 
 from tnfr_lfs.core.metrics import (
     AeroCoherence,
     BrakeHeadroom,
+    CamberEffectiveness,
     SlideCatchBudget,
     WindowMetrics,
     compute_aero_coherence,
@@ -150,6 +152,11 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
     assert metrics.exit_gear_match == pytest.approx(0.0)
     assert metrics.shift_stability == pytest.approx(1.0)
+    assert isinstance(metrics.camber, Mapping)
+    for suffix in ("fl", "fr", "rl", "rr"):
+        camber_metrics = metrics.camber.get(suffix)
+        assert isinstance(camber_metrics, CamberEffectiveness)
+        assert camber_metrics.index >= 0.0
 
 
 def test_compute_window_metrics_variance_and_derivative(
@@ -496,6 +503,8 @@ def test_compute_window_metrics_empty_window() -> None:
         aero_mechanical_coherence=0.0,
         epi_derivative_abs=0.0,
         brake_headroom=BrakeHeadroom(),
+        camber={},
+        phase_camber={},
     )
 
 
