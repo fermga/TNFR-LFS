@@ -14,6 +14,9 @@ __all__ = ["OutGaugePacket", "OutGaugeUDPClient"]
 
 _PACK_STRUCT = struct.Struct("<I4s16s8s6s6sHBBfffffffIIfff16s16sI")
 _FLOAT_STRUCT = struct.Struct("<f")
+_EXTENDED_BLOCKS = 5
+_EXTENDED_BLOCK_WIDTH = 4
+_MAX_DATAGRAM_SIZE = _PACK_STRUCT.size + _EXTENDED_BLOCKS * _EXTENDED_BLOCK_WIDTH * _FLOAT_STRUCT.size
 
 
 def _decode_string(value: bytes) -> str:
@@ -209,7 +212,7 @@ class OutGaugeUDPClient:
     def recv(self) -> Optional[OutGaugePacket]:
         for _ in range(self._retries):
             try:
-                payload, _ = self._socket.recvfrom(_PACK_STRUCT.size)
+                payload, _ = self._socket.recvfrom(_MAX_DATAGRAM_SIZE)
             except BlockingIOError:
                 time.sleep(self._timeout)
                 continue
