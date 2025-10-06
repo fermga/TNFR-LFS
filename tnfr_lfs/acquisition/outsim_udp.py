@@ -17,6 +17,7 @@ import time
 from typing import Optional, Tuple
 
 __all__ = [
+    "OUTSIM_MAX_PACKET_SIZE",
     "OutSimDriverInputs",
     "OutSimPacket",
     "OutSimUDPClient",
@@ -28,6 +29,13 @@ _BASE_STRUCT = struct.Struct("<I15f")
 _ID_STRUCT = struct.Struct("<I15fI")
 _INPUT_STRUCT = struct.Struct("<5f")
 _WHEEL_STRUCT = struct.Struct("<6f")
+
+OUTSIM_MAX_PACKET_SIZE = (
+    _BASE_STRUCT.size
+    + struct.calcsize("<I")
+    + _INPUT_STRUCT.size
+    + 4 * _WHEEL_STRUCT.size
+)
 
 
 @dataclass(frozen=True)
@@ -182,7 +190,7 @@ class OutSimUDPClient:
 
         for _ in range(self._retries):
             try:
-                payload, _ = self._socket.recvfrom(_ID_STRUCT.size)
+                payload, _ = self._socket.recvfrom(OUTSIM_MAX_PACKET_SIZE)
             except BlockingIOError:
                 time.sleep(self._timeout)
                 continue

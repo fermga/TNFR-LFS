@@ -26,6 +26,7 @@ from ..acquisition import (
     DEFAULT_TIMEOUT,
     InSimClient,
     OverlayManager,
+    OUTSIM_MAX_PACKET_SIZE,
     OutGaugeUDPClient,
     OutSimClient,
     OutSimUDPClient,
@@ -1025,7 +1026,7 @@ def _coerce_int(value: Any) -> int | None:
         return None
 
 
-_OUTSIM_PING_SIZE = struct.calcsize("<I15f")
+_OUTSIM_PING_SIZE = OUTSIM_MAX_PACKET_SIZE
 _OUTGAUGE_PING_SIZE = struct.calcsize("<I4s16s8s6s6sHBBfffffffIIfff16s16sI")
 
 
