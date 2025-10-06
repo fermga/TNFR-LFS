@@ -56,13 +56,22 @@ session = assemble_session_weights(
 
 Reads OutSim-style telemetry from CSV sources and returns a list of
 :class:`tnfr_lfs.core.epi.TelemetryRecord` objects.  By default the
-client validates the column order and converts values to floats.
+client validates the column order, converts values to floats, and keeps
+any optional column that is missing in the source as ``math.nan`` instead
+of fabricating estimates.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
+This allows downstream exporters to surface "sin datos" when Live for
+Speed does not broadcast the extra wheel block.
 
 ```
+from math import isnan
+
 from tnfr_lfs.acquisition import OutSimClient
 
 client = OutSimClient()
 records = client.ingest("stint.csv")
+# Optional columns remain math.nan when the CSV omits them, so
+# downstream metrics can flag "sin datos".
+isnan(records[0].tyre_temp_fl)
 ```
 
 ## Core Analytics

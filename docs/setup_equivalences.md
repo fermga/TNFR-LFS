@@ -13,6 +13,9 @@ y `slip_angle` globales de TNFR × LFS se derivan directamente del
 promedio ponderado de los canales por rueda del bloque OutSim y solo
 recurren a un cálculo cinemático de respaldo cuando la señal llega
 incompleta.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】【F:tnfr_lfs/acquisition/fusion.py†L242-L291】
+Si la captura proviene de CSV, el lector conserva esas columnas faltantes
+como `math.nan` para que los indicadores se muestren como “sin datos” en
+vez de asumir lecturas inventadas.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
 
 ## Señales necesarias por métrica
 
