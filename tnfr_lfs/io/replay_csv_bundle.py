@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 import math
 import zipfile
 
 from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 from ..core.epi import TelemetryRecord
 
@@ -186,28 +188,36 @@ class ReplayCSVBundleReader:
         merged = pd.concat(frames, axis=1).sort_index().reset_index()
         merged.rename(columns={"index": "distance"}, inplace=True)
 
-        if "timestamp" in merged.columns:
-            merged["timestamp"] = merged["timestamp"].apply(_to_float)
+        def _coerce_numeric_columns(columns: Sequence[str]) -> None:
+            existing = [column for column in columns if column in merged.columns]
+            if not existing:
+                return
+
+            data = merged[existing].to_numpy(copy=True)
+            numeric = pd.to_numeric(data.reshape(-1), errors="coerce")
+            values = np.asarray(numeric).reshape(data.shape)
+            values[~np.isfinite(values)] = np.nan
+
+            coerced = pd.DataFrame(values, columns=existing, index=merged.index)
+            merged[existing] = coerced
+
+        _coerce_numeric_columns(["timestamp"])
 
         if "speed_kmh" in merged.columns:
-            merged["speed"] = merged["speed_kmh"].apply(_to_float) * _KMH_TO_MS
+            _coerce_numeric_columns(["speed_kmh"])
+            merged["speed"] = merged["speed_kmh"] * _KMH_TO_MS
 
-        if "lateral_accel_g" in merged.columns:
-            merged["lateral_accel_g"] = merged["lateral_accel_g"].apply(_to_float)
+        _coerce_numeric_columns(["lateral_accel_g", "longitudinal_accel_g", "drift_angle_deg"])
+        _coerce_numeric_columns(["distance"])
 
-        if "longitudinal_accel_g" in merged.columns:
-            merged["longitudinal_accel_g"] = merged["longitudinal_accel_g"].apply(_to_float)
-
-        if "drift_angle_deg" in merged.columns:
-            merged["drift_angle_deg"] = merged["drift_angle_deg"].apply(_to_float)
-
-        for column in merged.columns:
-            if column == "distance":
-                merged[column] = merged[column].apply(_to_float)
-            elif column.startswith("wheel_") or column.startswith("suspension_"):
-                merged[column] = merged[column].apply(_to_float)
-            elif column.endswith(("_input", "_force", "_load", "_ratio")):
-                merged[column] = merged[column].apply(_to_float)
+        telemetry_columns = {
+            column
+            for column in merged.columns
+            if column.startswith("wheel_")
+            or column.startswith("suspension_")
+            or column.endswith(("_input", "_force", "_load", "_ratio"))
+        }
+        _coerce_numeric_columns(sorted(telemetry_columns))
 
         self._frame_cache = merged
         return merged.copy()
@@ -216,12 +226,12 @@ class ReplayCSVBundleReader:
         """Convert the bundle contents into :class:`TelemetryRecord` samples."""
 
         frame = self.to_dataframe()
-        records: list[TelemetryRecord] = []
+        column_index = {name: position for position, name in enumerate(frame.columns)}
 
-        for row in frame.to_dict(orient="records"):
-            records.append(self._row_to_record(row))
-
-        return records
+        return [
+            self._row_to_record(row, column_index)
+            for row in frame.itertuples(index=False, name=None)
+        ]
 
     def _iter_entries(self) -> Iterator[tuple[str, pd.DataFrame]]:
         pd = _get_pandas()
@@ -242,15 +252,28 @@ class ReplayCSVBundleReader:
 
         raise ValueError(f"Unsupported bundle path: {path}")
 
-    def _row_to_record(self, data: Mapping[str, object]) -> TelemetryRecord:
+    def _row_to_record(
+        self, row: Sequence[object], column_index: Mapping[str, int]
+    ) -> TelemetryRecord:
+        def _has_column(key: str) -> bool:
+            return key in column_index
+
+        def _get_value(key: str) -> object:
+            position = column_index.get(key)
+            if position is None:
+                return None
+            return row[position]
+
         def _get_float(key: str) -> float:
-            return _to_float(data.get(key))
+            return _to_float(_get_value(key))
 
         def _sum_columns(columns: tuple[str, ...]) -> float:
-            return _sum(_get_float(column) for column in columns if column in data)
+            return _sum(_get_float(column) for column in columns if _has_column(column))
 
         def _mean_columns(columns: tuple[str, ...]) -> float:
-            return _mean(_get_float(column) for column in columns if column in data)
+            return _mean(
+                _get_float(column) for column in columns if _has_column(column)
+            )
 
         lateral_g = _get_float("lateral_accel_g")
         longitudinal_g = _get_float("longitudinal_accel_g")
@@ -349,7 +372,7 @@ class ReplayCSVBundleReader:
             "suspension_deflection_rl",
             "suspension_deflection_rr",
         ):
-            if column in data:
+            if _has_column(column):
                 optional_fields[column] = _get_float(column)
 
         slip_ratio_columns = {
@@ -359,7 +382,7 @@ class ReplayCSVBundleReader:
             "slip_ratio_rr",
         }
         for column in slip_ratio_columns:
-            if column in data:
+            if _has_column(column):
                 optional_fields[column] = _get_float(column)
 
         return replace(record, **optional_fields)
