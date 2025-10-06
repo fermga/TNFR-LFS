@@ -10,7 +10,11 @@ import pytest
 
 from tnfr_lfs.acquisition.fusion import TelemetryFusion
 from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket
-from tnfr_lfs.acquisition.outsim_client import DEFAULT_SCHEMA, OutSimClient
+from tnfr_lfs.acquisition.outsim_client import (
+    DEFAULT_SCHEMA,
+    OPTIONAL_SCHEMA_COLUMNS,
+    OutSimClient,
+)
 from tnfr_lfs.acquisition.outsim_udp import OutSimPacket
 
 
@@ -169,6 +173,64 @@ def test_outsim_ingest_captures_per_wheel_slip_and_radius() -> None:
     assert record.instantaneous_radius == pytest.approx(14.0)
     assert record.front_track_width == pytest.approx(1.46)
     assert record.wheelbase == pytest.approx(2.74)
+
+
+def test_outsim_ingest_sets_nan_for_missing_optional_columns() -> None:
+    schema = DEFAULT_SCHEMA
+    required_columns = [
+        column for column in schema.columns if column not in OPTIONAL_SCHEMA_COLUMNS
+    ]
+    header = ",".join(required_columns)
+    values = {
+        "timestamp": "0.2",
+        "vertical_load": "4800",
+        "slip_ratio": "0.015",
+        "lateral_accel": "1.2",
+        "longitudinal_accel": "-0.1",
+        "yaw": "0.04",
+        "pitch": "0.005",
+        "roll": "0.0",
+        "brake_pressure": "10.5",
+        "locking": "0.0",
+        "nfr": "500.0",
+        "si": "0.8",
+        "speed": "50.0",
+        "yaw_rate": "0.2",
+        "slip_angle": "0.07",
+        "steer": "0.1",
+        "throttle": "0.25",
+        "gear": "4",
+        "vertical_load_front": "2400",
+        "vertical_load_rear": "2400",
+        "mu_eff_front": "1.1",
+        "mu_eff_rear": "1.05",
+        "mu_eff_front_lateral": "1.12",
+        "mu_eff_front_longitudinal": "1.03",
+        "mu_eff_rear_lateral": "1.07",
+        "mu_eff_rear_longitudinal": "0.98",
+        "suspension_travel_front": "0.025",
+        "suspension_travel_rear": "0.03",
+        "suspension_velocity_front": "0.45",
+        "suspension_velocity_rear": "0.35",
+    }
+    payload = ",".join(values[column] for column in required_columns)
+    buffer = StringIO(f"{header}\n{payload}\n")
+    client = OutSimClient(schema=schema)
+    record = client.ingest(buffer)[0]
+
+    assert math.isnan(record.slip_ratio_fl)
+    assert math.isnan(record.slip_ratio_rr)
+    assert math.isnan(record.slip_angle_fl)
+    assert math.isnan(record.slip_angle_rr)
+    assert math.isnan(record.tyre_temp_fl)
+    assert math.isnan(record.tyre_temp_rr)
+    assert math.isnan(record.tyre_pressure_fl)
+    assert math.isnan(record.tyre_pressure_rr)
+    assert math.isnan(record.instantaneous_radius)
+    assert math.isnan(record.front_track_width)
+    assert math.isnan(record.wheelbase)
+    assert math.isnan(record.rpm)
+    assert math.isnan(record.line_deviation)
 
 
 def test_outsim_packet_from_bytes_parses_extended_layout(extended_outsim_packet: OutSimPacket) -> None:

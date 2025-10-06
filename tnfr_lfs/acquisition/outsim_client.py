@@ -10,6 +10,7 @@ unit-tested while staying faithful to the OutSim schema.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, List, Sequence, TextIO
@@ -334,10 +335,10 @@ class OutSimClient:
                         ),
                         vertical_load=float(value_map["vertical_load"]),
                         slip_ratio=float(value_map["slip_ratio"]),
-                        slip_ratio_fl=float(value_map.get("slip_ratio_fl", value_map["slip_ratio"])),
-                        slip_ratio_fr=float(value_map.get("slip_ratio_fr", value_map["slip_ratio"])),
-                        slip_ratio_rl=float(value_map.get("slip_ratio_rl", value_map["slip_ratio"])),
-                        slip_ratio_rr=float(value_map.get("slip_ratio_rr", value_map["slip_ratio"])),
+                        slip_ratio_fl=self._optional_float(value_map, "slip_ratio_fl"),
+                        slip_ratio_fr=self._optional_float(value_map, "slip_ratio_fr"),
+                        slip_ratio_rl=self._optional_float(value_map, "slip_ratio_rl"),
+                        slip_ratio_rr=self._optional_float(value_map, "slip_ratio_rr"),
                         lateral_accel=float(value_map["lateral_accel"]),
                         longitudinal_accel=float(value_map["longitudinal_accel"]),
                         yaw=float(value_map["yaw"]),
@@ -350,10 +351,10 @@ class OutSimClient:
                         speed=float(value_map["speed"]),
                         yaw_rate=float(value_map["yaw_rate"]),
                         slip_angle=float(value_map["slip_angle"]),
-                        slip_angle_fl=float(value_map.get("slip_angle_fl", value_map["slip_angle"])),
-                        slip_angle_fr=float(value_map.get("slip_angle_fr", value_map["slip_angle"])),
-                        slip_angle_rl=float(value_map.get("slip_angle_rl", value_map["slip_angle"])),
-                        slip_angle_rr=float(value_map.get("slip_angle_rr", value_map["slip_angle"])),
+                        slip_angle_fl=self._optional_float(value_map, "slip_angle_fl"),
+                        slip_angle_fr=self._optional_float(value_map, "slip_angle_fr"),
+                        slip_angle_rl=self._optional_float(value_map, "slip_angle_rl"),
+                        slip_angle_rr=self._optional_float(value_map, "slip_angle_rr"),
                         steer=float(value_map["steer"]),
                         throttle=float(value_map["throttle"]),
                         gear=int(float(value_map["gear"])),
@@ -369,19 +370,19 @@ class OutSimClient:
                         suspension_travel_rear=float(value_map["suspension_travel_rear"]),
                         suspension_velocity_front=float(value_map["suspension_velocity_front"]),
                         suspension_velocity_rear=float(value_map["suspension_velocity_rear"]),
-                        tyre_temp_fl=float(value_map.get("tyre_temp_fl", 0.0)),
-                        tyre_temp_fr=float(value_map.get("tyre_temp_fr", 0.0)),
-                        tyre_temp_rl=float(value_map.get("tyre_temp_rl", 0.0)),
-                        tyre_temp_rr=float(value_map.get("tyre_temp_rr", 0.0)),
-                        tyre_pressure_fl=float(value_map.get("tyre_pressure_fl", 0.0)),
-                        tyre_pressure_fr=float(value_map.get("tyre_pressure_fr", 0.0)),
-                        tyre_pressure_rl=float(value_map.get("tyre_pressure_rl", 0.0)),
-                        tyre_pressure_rr=float(value_map.get("tyre_pressure_rr", 0.0)),
-                        rpm=float(value_map.get("rpm", 0.0)),
-                        line_deviation=float(value_map.get("line_deviation", 0.0)),
-                        instantaneous_radius=float(value_map.get("instantaneous_radius", 0.0)),
-                        front_track_width=float(value_map.get("front_track_width", LEGACY_DEFAULTS["front_track_width"])),
-                        wheelbase=float(value_map.get("wheelbase", LEGACY_DEFAULTS["wheelbase"])),
+                        tyre_temp_fl=self._optional_float(value_map, "tyre_temp_fl"),
+                        tyre_temp_fr=self._optional_float(value_map, "tyre_temp_fr"),
+                        tyre_temp_rl=self._optional_float(value_map, "tyre_temp_rl"),
+                        tyre_temp_rr=self._optional_float(value_map, "tyre_temp_rr"),
+                        tyre_pressure_fl=self._optional_float(value_map, "tyre_pressure_fl"),
+                        tyre_pressure_fr=self._optional_float(value_map, "tyre_pressure_fr"),
+                        tyre_pressure_rl=self._optional_float(value_map, "tyre_pressure_rl"),
+                        tyre_pressure_rr=self._optional_float(value_map, "tyre_pressure_rr"),
+                        rpm=self._optional_float(value_map, "rpm"),
+                        line_deviation=self._optional_float(value_map, "line_deviation"),
+                        instantaneous_radius=self._optional_float(value_map, "instantaneous_radius"),
+                        front_track_width=self._optional_float(value_map, "front_track_width"),
+                        wheelbase=self._optional_float(value_map, "wheelbase"),
                         lap=lap_value,
                     )
             except ValueError as exc:  # pragma: no cover - defensive branch
@@ -392,6 +393,15 @@ class OutSimClient:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+    @staticmethod
+    def _optional_float(value_map: dict[str, str], column: str, *, default: float = math.nan) -> float:
+        value = value_map.get(column)
+        if value is None:
+            return default
+        if value == "":
+            return default
+        return float(value)
+
     def _open_source(self, source: str | Path | TextIO | Iterable[str]) -> Iterator[str]:
         if isinstance(source, (str, Path)):
             with open(source, "r", encoding="utf8") as handle:
