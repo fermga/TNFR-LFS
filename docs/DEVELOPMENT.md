@@ -22,7 +22,11 @@ pytest
 
 - ``ruff`` aplica las reglas de estilo y limpieza del código definidas en
   ``pyproject.toml``.
-- ``mypy --strict`` verifica los objetivos tipados incluidos en ``typing_targets``.
+- ``mypy --strict`` analiza ``tnfr_lfs`` y el resto de rutas añadidas al
+  proyecto (por ejemplo ``typing_targets``). Si necesitas pasar las rutas de
+  forma explícita puedes ejecutar ``mypy --strict tnfr_lfs typing_targets``;
+  ten en cuenta que el análisis estricto sobre todo ``tnfr_lfs`` tarda algo más
+  que el conjunto reducido anterior.
 - ``pytest`` ejecuta la batería de pruebas unitaria e integración, incluida la
   verificación de los datasets de ejemplo ``data/BL1_XFG_baseline.csv`` y el
   RAF ``data/test1.raf``.
