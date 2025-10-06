@@ -15,6 +15,7 @@ from .setup_plan import (
     phase_axis_summary_lines,
     serialise_setup_plan,
 )
+from .report_extended import html_exporter
 from ..session import format_session_messages
 
 
@@ -1185,6 +1186,7 @@ exporters_registry = {
     "markdown": markdown_exporter,
     "set": lfs_set_exporter,
     "lfs-notes": lfs_notes_exporter,
+    "html_ext": html_exporter,
     "coherence-map": coherence_map_exporter,
     "operator-trajectory": operator_trajectory_exporter,
     "delta-bifurcation": delta_bifurcation_exporter,
@@ -1203,6 +1205,7 @@ __all__ = [
     "coherence_map_exporter",
     "operator_trajectory_exporter",
     "delta_bifurcation_exporter",
+    "html_exporter",
     "json_exporter",
     "csv_exporter",
     "markdown_exporter",
