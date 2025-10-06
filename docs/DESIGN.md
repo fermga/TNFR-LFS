@@ -166,6 +166,14 @@ respuesta.  Además se exponen indicadores agregados del apoyo estructural en
   por OutSim, de modo que la deriva aerodinámica responde directamente a la
   telemetría nativa de LFS incluso cuando la coherencia aparente permanece
   estable.
+* ``delta_nfr_entropy`` y ``node_entropy`` cuantifican con una escala normalizada
+  [0, 1] lo repartido que está el ΔNFR entre fases y nodos respectivamente; los
+  valores cercanos a cero implican concentración en un único grupo mientras que
+  los cercanos a uno indican una ventana equilibrada.  Los mapas
+  ``phase_delta_nfr_entropy``/``phase_node_entropy`` exponen las probabilidades
+  estructurales por fase y la entropía Shannon nodal por fase, replicando los
+  alias heredados para que los tableros compacten la información sin perder
+  granularidad.
 
 ## Artefactos generados
 

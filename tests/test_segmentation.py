@@ -70,6 +70,8 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         assert "aero_high_front_total" in microsector.filtered_measures
         assert "delta_nfr_std" in microsector.filtered_measures
         assert "nodal_delta_nfr_std" in microsector.filtered_measures
+        assert "delta_nfr_entropy" in microsector.filtered_measures
+        assert "node_entropy" in microsector.filtered_measures
         assert microsector.delta_nfr_std == pytest.approx(
             float(microsector.filtered_measures["delta_nfr_std"]), rel=1e-6
         )
@@ -78,6 +80,8 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         )
         assert microsector.phase_delta_nfr_std
         assert microsector.phase_nodal_delta_nfr_std
+        assert microsector.phase_delta_nfr_entropy
+        assert microsector.phase_node_entropy
         assert any(
             key.startswith("delta_nfr_std_") for key in microsector.filtered_measures
         )
@@ -99,6 +103,14 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
         assert {
             "nodal_delta_nfr_std_entry1",
             "nodal_delta_nfr_std_entry",
+        }.issubset(microsector.filtered_measures)
+        assert {
+            "delta_nfr_entropy_entry1",
+            "delta_nfr_entropy_entry",
+        }.issubset(microsector.filtered_measures)
+        assert {
+            "node_entropy_entry1",
+            "node_entropy_entry",
         }.issubset(microsector.filtered_measures)
         assert isinstance(microsector.recursivity_trace, tuple)
         assert microsector.last_mutation is None
