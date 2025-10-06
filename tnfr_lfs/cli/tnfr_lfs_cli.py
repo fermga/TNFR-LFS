@@ -61,7 +61,13 @@ from ..exporters import (
     render_operator_trajectories,
 )
 from ..exporters.setup_plan import SetupChange, SetupPlan
-from ..io import load_playbook, logs, raf_to_telemetry_records, read_raf
+from ..io import (
+    ReplayCSVBundleReader,
+    load_playbook,
+    logs,
+    raf_to_telemetry_records,
+    read_raf,
+)
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
 from ..recommender import Plan, RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
@@ -336,7 +342,7 @@ def _load_pack_modifiers(pack_root: Path | None) -> Mapping[tuple[str, str], Map
 def _compute_setup_plan(
     namespace: argparse.Namespace, *, config: Mapping[str, Any]
 ) -> SetupPlanContext:
-    records = _load_records(namespace.telemetry)
+    records, _ = _load_records_from_namespace(namespace)
     pack_root = _resolve_pack_root(namespace, config)
     profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
     profile_manager = ProfileManager(profiles_ctx.storage_path)
@@ -2442,7 +2448,20 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     analyze_parser.add_argument(
         "telemetry",
         type=Path,
-        help="Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet).",
+        nargs="?",
+        help=(
+            "Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet). "
+            "Required unless --replay-csv-bundle is provided."
+        ),
+    )
+    analyze_parser.add_argument(
+        "--replay-csv-bundle",
+        dest="replay_csv_bundle",
+        type=Path,
+        default=None,
+        help=(
+            "Directory or ZIP bundle with CSV telemetry exported from the replay analyzer."
+        ),
     )
     _add_export_argument(
         analyze_parser,
@@ -2483,7 +2502,20 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     suggest_parser.add_argument(
         "telemetry",
         type=Path,
-        help="Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet).",
+        nargs="?",
+        help=(
+            "Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet). "
+            "Required unless --replay-csv-bundle is provided."
+        ),
+    )
+    suggest_parser.add_argument(
+        "--replay-csv-bundle",
+        dest="replay_csv_bundle",
+        type=Path,
+        default=None,
+        help=(
+            "Directory or ZIP bundle with CSV telemetry exported from the replay analyzer."
+        ),
     )
     _add_export_argument(
         suggest_parser,
@@ -2510,7 +2542,20 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     report_parser.add_argument(
         "telemetry",
         type=Path,
-        help="Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet).",
+        nargs="?",
+        help=(
+            "Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet). "
+            "Required unless --replay-csv-bundle is provided."
+        ),
+    )
+    report_parser.add_argument(
+        "--replay-csv-bundle",
+        dest="replay_csv_bundle",
+        type=Path,
+        default=None,
+        help=(
+            "Directory or ZIP bundle with CSV telemetry exported from the replay analyzer."
+        ),
     )
     _add_export_argument(
         report_parser,
@@ -2561,7 +2606,20 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     write_set_parser.add_argument(
         "telemetry",
         type=Path,
-        help="Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet).",
+        nargs="?",
+        help=(
+            "Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet). "
+            "Required unless --replay-csv-bundle is provided."
+        ),
+    )
+    write_set_parser.add_argument(
+        "--replay-csv-bundle",
+        dest="replay_csv_bundle",
+        type=Path,
+        default=None,
+        help=(
+            "Directory or ZIP bundle with CSV telemetry exported from the replay analyzer."
+        ),
     )
     _add_export_argument(
         write_set_parser,
@@ -2881,7 +2939,7 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
 
 def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    records = _load_records(namespace.telemetry)
+    records, telemetry_path = _load_records_from_namespace(namespace)
     car_model = _default_car_model(config)
     pack_root = _resolve_pack_root(namespace, config)
     track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
@@ -2969,7 +3027,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         records,
         bundles,
         microsectors,
-        _resolve_output_dir(config) / namespace.telemetry.stem,
+        _resolve_output_dir(config) / telemetry_path.stem,
         microsector_variability=metrics.get("microsector_variability"),
         metrics=metrics,
         artifact_format=getattr(namespace, "report_format", "json"),
@@ -3046,7 +3104,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 
 
 def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    records = _load_records(namespace.telemetry)
+    records, telemetry_path = _load_records_from_namespace(namespace)
     pack_root = _resolve_pack_root(namespace, config)
     profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
     profile_manager = ProfileManager(profiles_ctx.storage_path)
@@ -3140,7 +3198,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         records,
         bundles,
         microsectors,
-        _resolve_output_dir(config) / namespace.telemetry.stem,
+        _resolve_output_dir(config) / telemetry_path.stem,
         metrics=metrics,
     )
     payload = {
@@ -3181,7 +3239,7 @@ def _handle_compare(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 
 def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
 
-    records = _load_records(namespace.telemetry)
+    records, telemetry_path = _load_records_from_namespace(namespace)
     car_model = _default_car_model(config)
     pack_root = _resolve_pack_root(namespace, config)
     profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
@@ -3245,7 +3303,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         records,
         bundles,
         microsectors,
-        _resolve_output_dir(config) / namespace.telemetry.stem,
+        _resolve_output_dir(config) / telemetry_path.stem,
         microsector_variability=metrics.get("microsector_variability"),
         metrics=metrics,
         artifact_format=getattr(namespace, "report_format", "json"),
@@ -3459,6 +3517,29 @@ def _persist_records(records: Records, destination: Path, fmt: str) -> None:
             return
 
     raise ValueError(f"Unsupported format '{fmt}'.")
+
+
+def _load_replay_bundle(source: Path) -> Records:
+    if not source.exists():
+        raise FileNotFoundError(f"Replay CSV bundle {source} does not exist")
+    reader = ReplayCSVBundleReader(source)
+    return reader.to_records()
+
+
+def _load_records_from_namespace(namespace: argparse.Namespace) -> tuple[Records, Path]:
+    replay_bundle = getattr(namespace, "replay_csv_bundle", None)
+    telemetry_path = getattr(namespace, "telemetry", None)
+    if replay_bundle is not None:
+        bundle_path = Path(replay_bundle)
+        records = _load_replay_bundle(bundle_path)
+        namespace.telemetry = bundle_path
+        return records, bundle_path
+    if telemetry_path is None:
+        raise SystemExit(
+            "A telemetry baseline path is required unless --replay-csv-bundle is provided."
+        )
+    records = _load_records(telemetry_path)
+    return records, telemetry_path
 
 
 def _load_records(source: Path) -> Records:

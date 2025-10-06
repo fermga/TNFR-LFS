@@ -162,11 +162,14 @@ class ReplayCSVBundleReader:
         pd = _get_pandas()
 
         frames: list[Any] = []
+        timestamp_present = False
         for name, frame in self._iter_entries():
             if "d" not in frame.columns:
                 raise ValueError(f"Bundle entry {name!r} does not contain a distance column")
             value_column = _extract_value_column(frame)
             signal_name = _normalise_signal_name(name)
+            if signal_name == "timestamp":
+                timestamp_present = True
             cleaned = frame.rename(columns={"d": "distance", value_column: signal_name})[
                 ["distance", signal_name]
             ]
@@ -174,6 +177,11 @@ class ReplayCSVBundleReader:
 
         if not frames:
             raise ValueError("Bundle does not contain any CSV telemetry signals")
+
+        if not timestamp_present:
+            raise ValueError(
+                f"Replay CSV bundle {self._path} must contain a time.csv entry"
+            )
 
         merged = pd.concat(frames, axis=1).sort_index().reset_index()
         merged.rename(columns={"index": "distance"}, inplace=True)
