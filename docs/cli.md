@@ -376,6 +376,14 @@ highlighting ΔNFR↓ deviations in ``phase_messages``.
 
 When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config/global.toml`` together with ``data/cars`` and ``data/profiles``) the CLI resolves car metadata and TNFR objectives from that bundle. The ``--pack-root`` flag overrides the configured value for a single invocation.
 
+### Brake thermal proxy modes
+
+The brake thermal proxy honours the ``mode`` declared in ``[thermal.brakes]`` and can be overridden per session with the ``TNFR_LFS_BRAKE_THERMAL`` environment variable. The accepted values are ``auto`` (default), ``off`` and ``force``.【F:tnfr_lfs/acquisition/fusion.py†L616-L733】【F:tnfr_lfs/acquisition/fusion.py†L1064-L1126】
+
+- ``auto`` – consumes OutGauge brake temperatures whenever Live for Speed broadcasts plausible values, seeding the estimator with them. When the stream is disabled or sends the ``0 °C`` marker, the proxy keeps integrating brake energy so fade indicators remain continuous.【F:tnfr_lfs/acquisition/fusion.py†L1078-L1107】
+- ``off`` – bypasses the proxy and returns the raw OutGauge values (or their last valid samples) even if the feed drops; useful when validating cars with hardware sensors or external thermal models.【F:tnfr_lfs/acquisition/fusion.py†L1107-L1117】
+- ``force`` – ignores OutGauge entirely and relies on the estimator for all wheels, ideal for legacy cars without brake sensors or synthetic runs where only OutSim loads are present.【F:tnfr_lfs/acquisition/fusion.py†L1117-L1126】
+
 ### Preparing ``cfg.txt``
 
 Before running the CLI against Live for Speed you must enable the telemetry broadcasters inside

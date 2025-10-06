@@ -48,6 +48,9 @@ temperatures, their three-layer profile and pressures; set at least the
 20-float block (inner/middle/outer layers, pressure ring and brake discs)
 is broadcast. Otherwise the HUD and CLI will surface those entries as “sin
 datos”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
+
+!!! note "Brake temperature estimation"
+    Live for Speed only publishes real brake temperatures when the extended OutGauge payload is enabled; otherwise the stream exposes `0 °C` placeholders. TNFR × LFS consumes those native readings whenever they arrive and seamlessly falls back to the brake thermal proxy to keep fade metrics alive, integrating brake work and convective cooling until fresh data shows up again.【F:tnfr_lfs/acquisition/fusion.py†L248-L321】【F:tnfr_lfs/acquisition/fusion.py†L1064-L1126】
 The CSV reader mirrors that philosophy by preserving optional columns as
 `math.nan` when OutSim leaves them out, preventing artificial estimates
 from leaking into the metrics pipeline.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
@@ -123,3 +126,4 @@ imbalance aerodinámico).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 - [Tutorials](tutorials.md)
 - [Setup equivalences](setup_equivalences.md)
 - [Preset workflow](presets.md)
+- [Brake thermal proxy](brake_thermal_proxy.md)
