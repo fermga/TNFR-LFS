@@ -22,6 +22,7 @@ from tnfr_lfs.exporters import (
     coherence_map_exporter,
     csv_exporter,
     delta_bifurcation_exporter,
+    html_exporter,
     json_exporter,
     lfs_notes_exporter,
     lfs_set_exporter,
@@ -249,6 +250,73 @@ def test_lfs_notes_exporter_renders_key_instructions():
     plan = build_setup_plan()
     output = lfs_notes_exporter({"setup_plan": plan})
     assert "Instrucciones rápidas TNFR" in output
+
+
+def test_html_exporter_renders_extended_sections() -> None:
+    abtest = ABResult(
+        metric="sense_index",
+        baseline_laps=(0.61, 0.62),
+        variant_laps=(0.66, 0.67),
+        baseline_mean=0.615,
+        variant_mean=0.665,
+        mean_difference=0.05,
+        bootstrap_low=0.045,
+        bootstrap_high=0.055,
+        permutation_p_value=0.0125,
+        estimated_power=0.84,
+        alpha=0.05,
+    )
+    variability_entry = {
+        "microsector": 0,
+        "label": "Curva 1",
+        "overall": {
+            "samples": 5,
+            "delta_nfr": {"stdev": 0.12},
+            "sense_index": {"stdev": 0.08, "stability_score": 0.75},
+        },
+    }
+    payload = {
+        "delta_nfr": -12.3,
+        "sense_index": 0.78,
+        "dissonance": 0.12,
+        "coupling": 0.43,
+        "resonance": 0.31,
+        "objectives": {
+            "target_delta_nfr": -11.0,
+            "target_sense_index": 0.82,
+        },
+        "microsector_variability": [variability_entry],
+        "recursive_trace": [0.2, 0.3, 0.4],
+        "pairwise_coupling": {"delta_nfr": {"tyres↔suspension": 0.12}},
+        "pareto_points": [
+            {"score": 0.91, "breakdown": {"delta_nfr": 0.32, "sense_index": 0.18}}
+        ],
+        "session": {
+            "car_model": "XFG",
+            "track_profile": "BL1",
+            "session": "FP1",
+            "abtest": abtest,
+            "pareto": [
+                {"score": 0.77, "breakdown": {"delta_nfr": 0.28, "sense_index": 0.22}}
+            ],
+            "playbook_suggestions": ["Priorizar apex medio"],
+        },
+        "session_messages": ("Sesión con viento lateral",),
+    }
+    html = html_exporter(payload)
+    assert "Métricas globales" in html
+    assert "Robustez" in html
+    assert "Frente Pareto" in html
+    assert "Comparación A/B" in html
+    assert "Priorizar apex medio" in html
+    assert "Sesión con viento lateral" in html
+
+
+def test_html_exporter_handles_missing_optional_sections() -> None:
+    html = html_exporter({"delta_nfr": 0.0})
+    assert "Métricas globales" in html
+    assert "Frente Pareto" not in html
+    assert "Comparación A/B" not in html
 
 
 def test_native_encoder_writes_gearing(monkeypatch: pytest.MonkeyPatch) -> None:
