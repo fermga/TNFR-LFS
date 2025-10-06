@@ -63,7 +63,13 @@ from ..exporters import (
 from ..exporters.setup_plan import SetupChange, SetupPlan
 from ..io import logs
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
-from ..recommender import RecommendationEngine, SetupPlanner
+from ..recommender import (
+    Plan,
+    RecommendationEngine,
+    SetupPlanner,
+    pareto_front,
+    sweep_candidates,
+)
 from ..recommender.rules import ThresholdProfile
 from ..session import format_session_messages
 from ..track_loader import (
@@ -132,6 +138,38 @@ class TrackSelection:
         return self.config.track_profile if self.config is not None else None
 
 
+@dataclass(frozen=True, slots=True)
+class SetupPlanContext:
+    """Container storing the artefacts required to build setup outputs."""
+
+    plan: Plan
+    planner: SetupPlanner
+    engine: RecommendationEngine
+    bundles: Bundles
+    microsectors: Sequence[Microsector]
+    metrics: Mapping[str, Any]
+    delta_metric: float
+    session_payload: Mapping[str, Any] | None
+    track_selection: TrackSelection
+    track_name: str
+    profile_manager: ProfileManager
+    thresholds: ThresholdProfile
+    snapshot: ProfileSnapshot | None
+    objectives: ProfileObjectives
+    tnfr_targets: Mapping[str, Any] | None
+    car_metadata: Mapping[str, Any] | None
+    pack_delta: float | None
+    pack_si: float | None
+    lap_segments: List[Records]
+    records: Records
+    cars: Mapping[str, PackCar]
+    track_profiles: Mapping[str, Mapping[str, Any]]
+    modifiers: Mapping[tuple[str, str], Mapping[str, Any]]
+    class_overrides: Mapping[str, Any]
+    profiles_ctx: ProfilesContext
+    pack_root: Path | None
+
+
 _LAYOUT_PATTERN = re.compile(r"^([A-Z]{2,})([0-9]{1,2}[A-Z]?)$")
 
 
@@ -198,6 +236,127 @@ def _load_pack_modifiers(pack_root: Path | None) -> Mapping[tuple[str, str], Map
         load_track_modifiers(modifiers_dir)
         if modifiers_dir is not None
         else load_track_modifiers()
+    )
+
+
+def _compute_setup_plan(
+    namespace: argparse.Namespace, *, config: Mapping[str, Any]
+) -> SetupPlanContext:
+    records = _load_records(namespace.telemetry)
+    pack_root = _resolve_pack_root(namespace, config)
+    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
+    profile_manager = ProfileManager(profiles_ctx.storage_path)
+    cars = _load_pack_cars(pack_root)
+    track_profiles = _load_pack_track_profiles(pack_root)
+    modifiers = _load_pack_modifiers(pack_root)
+    class_overrides = _load_pack_lfs_class_overrides(pack_root)
+    tnfr_targets = _resolve_tnfr_targets(
+        namespace.car_model,
+        cars,
+        profiles_ctx.pack_profiles,
+        overrides=class_overrides,
+    )
+    car_metadata = _lookup_car_metadata(namespace.car_model, cars)
+    pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
+    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
+    track_name = track_selection.name or _default_track_name(config)
+    engine = RecommendationEngine(
+        car_model=namespace.car_model,
+        track_name=track_name,
+        profile_manager=profile_manager,
+    )
+    session_payload = _assemble_session_payload(
+        namespace.car_model,
+        track_selection,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+    )
+    if session_payload is not None:
+        engine.session = session_payload
+    bundles, microsectors, thresholds, snapshot = _compute_insights(
+        records,
+        car_model=namespace.car_model,
+        track_name=track_name,
+        engine=engine,
+        profile_manager=profile_manager,
+    )
+    objectives = snapshot.objectives if snapshot else ProfileObjectives()
+    if snapshot is None and pack_delta is not None:
+        objectives = ProfileObjectives(
+            target_delta_nfr=float(pack_delta),
+            target_sense_index=(
+                float(pack_si)
+                if pack_si is not None
+                else objectives.target_sense_index
+            ),
+        )
+    profile_manager.update_objectives(
+        namespace.car_model,
+        track_name,
+        objectives.target_delta_nfr,
+        objectives.target_sense_index,
+    )
+    lap_segments = _group_records_by_lap(records)
+    metrics = orchestrate_delta_metrics(
+        lap_segments,
+        objectives.target_delta_nfr,
+        objectives.target_sense_index,
+        coherence_window=3,
+        recursion_decay=0.4,
+        microsectors=microsectors,
+        phase_weights=thresholds.phase_weights,
+    )
+    delta_metric = _effective_delta_metric(metrics)
+    engine.register_stint_result(
+        sense_index=metrics.get("sense_index", 0.0),
+        delta_nfr=delta_metric,
+        car_model=namespace.car_model,
+        track_name=track_name,
+    )
+    planner = SetupPlanner(recommendation_engine=engine)
+    plan = planner.plan(
+        bundles,
+        microsectors,
+        car_model=namespace.car_model,
+        track_name=track_name,
+    )
+    engine.register_plan(
+        plan.recommendations,
+        car_model=namespace.car_model,
+        track_name=track_name,
+        baseline_sense_index=metrics.get("sense_index", 0.0),
+        baseline_delta_nfr=delta_metric,
+        jacobian=plan.sensitivities,
+        phase_jacobian=plan.phase_sensitivities,
+    )
+    return SetupPlanContext(
+        plan=plan,
+        planner=planner,
+        engine=engine,
+        bundles=bundles,
+        microsectors=microsectors,
+        metrics=metrics,
+        delta_metric=delta_metric,
+        session_payload=session_payload,
+        track_selection=track_selection,
+        track_name=track_name,
+        profile_manager=profile_manager,
+        thresholds=thresholds,
+        snapshot=snapshot,
+        objectives=objectives,
+        tnfr_targets=tnfr_targets,
+        car_metadata=car_metadata,
+        pack_delta=pack_delta,
+        pack_si=pack_si,
+        lap_segments=lap_segments,
+        records=records,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+        class_overrides=class_overrides,
+        profiles_ctx=profiles_ctx,
+        pack_root=pack_root,
     )
 
 
@@ -374,6 +533,216 @@ def _extract_target_objectives(
         if isinstance(sense_value, (int, float)):
             sense_target = float(sense_value)
     return delta_target, sense_target
+
+
+def _build_setup_plan_payload(
+    context: SetupPlanContext,
+    namespace: argparse.Namespace,
+) -> Mapping[str, Any]:
+    plan = context.plan
+    metrics = context.metrics
+    delta_metric = context.delta_metric
+    bundles = context.bundles
+    microsectors = context.microsectors
+    session_payload = context.session_payload
+    engine = context.engine
+    thresholds = context.thresholds
+    tnfr_targets = context.tnfr_targets
+    car_metadata = context.car_metadata
+
+    action_recommendations = [
+        rec for rec in plan.recommendations if rec.parameter and rec.delta is not None
+    ]
+
+    aggregated_rationales = [rec.rationale for rec in plan.recommendations if rec.rationale]
+    aggregated_effects = [rec.message for rec in plan.recommendations if rec.message]
+
+    if action_recommendations:
+        ordered_actions = sorted(
+            action_recommendations,
+            key=lambda rec: (rec.priority, -abs(rec.delta or 0.0)),
+        )
+        changes = [
+            SetupChange(
+                parameter=rec.parameter or "",
+                delta=float(rec.delta or 0.0),
+                rationale=rec.rationale or "",
+                expected_effect=rec.message,
+            )
+            for rec in ordered_actions
+        ]
+        if not aggregated_rationales:
+            aggregated_rationales = [rec.rationale for rec in ordered_actions if rec.rationale]
+        if not aggregated_effects:
+            aggregated_effects = [rec.message for rec in ordered_actions if rec.message]
+    else:
+        default_rationales = aggregated_rationales or ["Optimización de objetivo Si/ΔNFR"]
+        default_effects = aggregated_effects or ["Mejora equilibrada del coche"]
+        changes = [
+            SetupChange(
+                parameter=name,
+                delta=value,
+                rationale="; ".join(default_rationales),
+                expected_effect="; ".join(default_effects),
+            )
+            for name, value in sorted(plan.decision_vector.items())
+        ]
+        aggregated_rationales = default_rationales
+        aggregated_effects = default_effects
+
+    aero = compute_aero_coherence((), plan.telemetry)
+
+    def _rake_velocity_profile_from_bundles(
+        bundles: Sequence[Any],
+        *,
+        low_threshold: float = 35.0,
+        high_threshold: float = 50.0,
+    ) -> list[tuple[float, int]]:
+        bins = {
+            "low": {"sum": 0.0, "count": 0},
+            "medium": {"sum": 0.0, "count": 0},
+            "high": {"sum": 0.0, "count": 0},
+        }
+        for bundle in bundles:
+            transmission = getattr(bundle, "transmission", None)
+            try:
+                speed_value = float(getattr(transmission, "speed", 0.0))
+            except (TypeError, ValueError):
+                speed_value = 0.0
+            if not math.isfinite(speed_value):
+                speed_value = 0.0
+            if speed_value <= low_threshold:
+                bin_key = "low"
+            elif speed_value <= high_threshold:
+                bin_key = "medium"
+            else:
+                bin_key = "high"
+            chassis = getattr(bundle, "chassis", None)
+            suspension = getattr(bundle, "suspension", None)
+            if chassis is None or suspension is None:
+                continue
+            try:
+                pitch_value = float(getattr(chassis, "pitch", 0.0))
+            except (TypeError, ValueError):
+                pitch_value = 0.0
+            if not math.isfinite(pitch_value):
+                pitch_value = 0.0
+            try:
+                front_travel = float(getattr(suspension, "travel_front", 0.0))
+            except (TypeError, ValueError):
+                front_travel = 0.0
+            if not math.isfinite(front_travel):
+                front_travel = 0.0
+            try:
+                rear_travel = float(getattr(suspension, "travel_rear", 0.0))
+            except (TypeError, ValueError):
+                rear_travel = 0.0
+            if not math.isfinite(rear_travel):
+                rear_travel = 0.0
+            travel_delta = rear_travel - front_travel
+            if abs(front_travel) > 1e-9:
+                travel_ratio = rear_travel / front_travel
+            elif abs(rear_travel) > 1e-9:
+                travel_ratio = math.copysign(10.0, rear_travel)
+            else:
+                travel_ratio = 1.0
+            if not math.isfinite(travel_ratio):
+                travel_ratio = 1.0
+            travel_ratio = max(-10.0, min(10.0, travel_ratio))
+            rake_value = pitch_value + math.atan2(travel_delta, travel_ratio)
+            if not math.isfinite(rake_value):
+                continue
+            bin_payload = bins[bin_key]
+            bin_payload["sum"] += rake_value
+            bin_payload["count"] += 1
+        profile: list[tuple[float, int]] = []
+        for key in ("low", "medium", "high"):
+            payload = bins[key]
+            count = int(payload["count"])
+            if count > 0:
+                average = payload["sum"] / count
+            else:
+                average = 0.0
+            profile.append((average, count))
+        return profile
+
+    suspension_deltas = [
+        float(getattr(getattr(bundle, "suspension", None), "delta_nfr", 0.0))
+        for bundle in plan.telemetry
+    ]
+    tyre_deltas = [
+        float(getattr(getattr(bundle, "tyres", None), "delta_nfr", 0.0))
+        for bundle in plan.telemetry
+    ]
+    coherence_series = [float(getattr(bundle, "coherence_index", 0.0)) for bundle in plan.telemetry]
+    avg_coherence = mean(coherence_series) if coherence_series else 0.0
+    ackermann_values = [
+        float(getattr(bundle, "ackermann_parallel_index", 0.0))
+        for bundle in plan.telemetry
+    ]
+    ackermann_clean = [value for value in ackermann_values if math.isfinite(value)]
+    ackermann_parallel = fmean(ackermann_clean) if ackermann_clean else 0.0
+    ackermann_samples = len(ackermann_clean)
+    rake_velocity_profile = _rake_velocity_profile_from_bundles(plan.telemetry)
+    aero_mechanical = resolve_aero_mechanical_coherence(
+        avg_coherence,
+        aero,
+        suspension_deltas=suspension_deltas,
+        tyre_deltas=tyre_deltas,
+        rake_velocity_profile=rake_velocity_profile,
+        ackermann_parallel_index=ackermann_parallel,
+        ackermann_parallel_samples=ackermann_samples,
+    )
+    aero_metrics = {
+        "low_speed_imbalance": aero.low_speed_imbalance,
+        "high_speed_imbalance": aero.high_speed_imbalance,
+        "low_speed_samples": float(aero.low_speed_samples),
+        "high_speed_samples": float(aero.high_speed_samples),
+        "aero_mechanical_coherence": aero_mechanical,
+    }
+
+    setup_plan = SetupPlan(
+        car_model=namespace.car_model,
+        session=getattr(namespace, "session", None),
+        sci=plan.sci,
+        changes=tuple(changes),
+        rationales=tuple(aggregated_rationales),
+        expected_effects=tuple(aggregated_effects),
+        sensitivities=plan.sensitivities,
+        clamped_parameters=tuple(),
+        phase_axis_targets={},
+        phase_axis_weights={},
+        aero_guidance=aero.guidance,
+        aero_metrics=aero_metrics,
+        aero_mechanical_coherence=aero_mechanical,
+        sci_breakdown=plan.sci_breakdown,
+    )
+
+    payload: Dict[str, Any] = {
+        "setup_plan": setup_plan,
+        "sci": plan.sci,
+        "sci_breakdown": plan.sci_breakdown,
+        "recommendations": plan.recommendations,
+        "series": plan.telemetry,
+        "sensitivities": plan.sensitivities,
+        "set_output": getattr(namespace, "set_output", None),
+    }
+    if session_payload is not None:
+        payload["session"] = session_payload
+    session_messages = format_session_messages(session_payload)
+    if session_messages:
+        payload["session_messages"] = session_messages
+    if car_metadata is not None:
+        payload["car"] = _serialise_pack_payload(car_metadata)
+    if tnfr_targets is not None:
+        payload["tnfr_targets"] = _serialise_pack_payload(tnfr_targets)
+    payload["thresholds"] = thresholds
+    payload["metrics"] = metrics
+    payload["delta_metric"] = delta_metric
+    payload["bundles"] = bundles
+    payload["microsectors"] = microsectors
+    payload["engine"] = engine
+    return payload
 
 
 def _validated_export(value: Any, *, fallback: str) -> str:
@@ -2108,6 +2477,38 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     )
     write_set_parser.set_defaults(handler=_handle_write_set)
 
+    pareto_parser = subparsers.add_parser(
+        "pareto",
+        help="Evalúa candidatos de setup y exporta el frente de Pareto resultante.",
+    )
+    pareto_parser.add_argument(
+        "telemetry", type=Path, help="Ruta al archivo o CSV con la telemetría base."
+    )
+    _add_export_argument(
+        pareto_parser,
+        default=_validated_export(write_set_cfg.get("export"), fallback="markdown"),
+        help_text="Exporter usado para representar el frente Pareto (default: markdown).",
+    )
+    pareto_parser.add_argument(
+        "--car-model",
+        default=str(write_set_cfg.get("car_model", _default_car_model(config))),
+        help="Modelo de coche utilizado para resolver el espacio de decisiones.",
+    )
+    pareto_parser.add_argument(
+        "--session",
+        default=None,
+        help="Etiqueta opcional de sesión que acompañará a los resultados.",
+    )
+    pareto_parser.add_argument(
+        "--radius",
+        type=int,
+        default=int(write_set_cfg.get("pareto_radius", 1)),
+        help=(
+            "Número de pasos +/- por parámetro en el barrido de candidatos (default: 1)."
+        ),
+    )
+    pareto_parser.set_defaults(handler=_handle_pareto)
+
     return parser
 
 
@@ -2798,282 +3199,62 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         raise SystemExit("Debe proporcionar un --car-model válido para generar el setup.")
     if namespace.set_output:
         namespace.set_output = normalise_set_output_name(namespace.set_output, namespace.car_model)
+    context = _compute_setup_plan(namespace, config=config)
+    payload = _build_setup_plan_payload(context, namespace)
+    return _render_payload(payload, _resolve_exports(namespace))
 
-    records = _load_records(namespace.telemetry)
-    pack_root = _resolve_pack_root(namespace, config)
-    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
-    profile_manager = ProfileManager(profiles_ctx.storage_path)
-    cars = _load_pack_cars(pack_root)
-    track_profiles = _load_pack_track_profiles(pack_root)
-    modifiers = _load_pack_modifiers(pack_root)
-    class_overrides = _load_pack_lfs_class_overrides(pack_root)
-    tnfr_targets = _resolve_tnfr_targets(
+
+def _handle_pareto(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+    namespace.car_model = str(namespace.car_model or _default_car_model(config)).strip()
+    if not namespace.car_model:
+        raise SystemExit("Debe proporcionar un --car-model válido para evaluar el frente Pareto.")
+    context = _compute_setup_plan(namespace, config=config)
+    payload = _build_setup_plan_payload(context, namespace)
+
+    planner = context.planner
+    space = planner._adapt_space(
+        planner._space_for_car(namespace.car_model),
         namespace.car_model,
-        cars,
-        profiles_ctx.pack_profiles,
-        overrides=class_overrides,
+        context.track_name,
     )
-    car_metadata = _lookup_car_metadata(namespace.car_model, cars)
-    pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
-    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
-    track_name = track_selection.name or _default_track_name(config)
-    engine = RecommendationEngine(
-        car_model=namespace.car_model,
-        track_name=track_name,
-        profile_manager=profile_manager,
-    )
-    session_payload = _assemble_session_payload(
-        namespace.car_model,
-        track_selection,
-        cars=cars,
-        track_profiles=track_profiles,
-        modifiers=modifiers,
-    )
-    if session_payload is not None:
-        engine.session = session_payload
-    bundles, microsectors, thresholds, snapshot = _compute_insights(
-        records,
-        car_model=namespace.car_model,
-        track_name=track_name,
-        engine=engine,
-        profile_manager=profile_manager,
-    )
-    objectives = snapshot.objectives if snapshot else ProfileObjectives()
-    if snapshot is None and pack_delta is not None:
-        objectives = ProfileObjectives(
-            target_delta_nfr=float(pack_delta),
-            target_sense_index=(
-                float(pack_si)
-                if pack_si is not None
-                else objectives.target_sense_index
-            ),
-        )
-    profile_manager.update_objectives(
-        namespace.car_model,
-        track_name,
-        objectives.target_delta_nfr,
-        objectives.target_sense_index,
-    )
-    lap_segments = _group_records_by_lap(records)
-    metrics = orchestrate_delta_metrics(
-        lap_segments,
-        objectives.target_delta_nfr,
-        objectives.target_sense_index,
-        coherence_window=3,
-        recursion_decay=0.4,
-        microsectors=microsectors,
-        phase_weights=thresholds.phase_weights,
-    )
-    delta_metric = _effective_delta_metric(metrics)
-    engine.register_stint_result(
-        sense_index=metrics.get("sense_index", 0.0),
-        delta_nfr=delta_metric,
-        car_model=namespace.car_model,
-        track_name=track_name,
-    )
-    planner = SetupPlanner(recommendation_engine=engine)
-    plan = planner.plan(
-        bundles,
-        microsectors,
-        car_model=namespace.car_model,
-        track_name=track_name,
-    )
-    engine.register_plan(
-        plan.recommendations,
-        car_model=namespace.car_model,
-        track_name=track_name,
-        baseline_sense_index=metrics.get("sense_index", 0.0),
-        baseline_delta_nfr=delta_metric,
-        jacobian=plan.sensitivities,
-        phase_jacobian=plan.phase_sensitivities,
-    )
+    centre_vector: Mapping[str, float] = context.plan.decision_vector or space.initial_guess()
 
-    action_recommendations = [
-        rec for rec in plan.recommendations if rec.parameter and rec.delta is not None
-    ]
+    session_weights: Mapping[str, Mapping[str, float]] | None = None
+    session_hints: Mapping[str, object] | None = None
+    if isinstance(context.session_payload, Mapping):
+        weights_candidate = context.session_payload.get("weights")
+        if isinstance(weights_candidate, Mapping):
+            session_weights = weights_candidate  # type: ignore[assignment]
+        hints_candidate = context.session_payload.get("hints")
+        if isinstance(hints_candidate, Mapping):
+            session_hints = hints_candidate  # type: ignore[assignment]
 
-    aggregated_rationales = [rec.rationale for rec in plan.recommendations if rec.rationale]
-    aggregated_effects = [rec.message for rec in plan.recommendations if rec.message]
+    radius = max(0, int(getattr(namespace, "radius", 1)))
+    candidates = sweep_candidates(
+        space,
+        centre_vector,
+        context.bundles,
+        microsectors=context.microsectors,
+        simulator=None,
+        session_weights=session_weights,
+        session_hints=session_hints,
+        radius=radius,
+        include_centre=True,
+    )
+    front = pareto_front(candidates)
+    pareto_payload = [dict(point.as_dict()) for point in front]
 
-    if action_recommendations:
-        ordered_actions = sorted(
-            action_recommendations,
-            key=lambda rec: (rec.priority, -abs(rec.delta or 0.0)),
-        )
-        changes = [
-            SetupChange(
-                parameter=rec.parameter or "",
-                delta=float(rec.delta or 0.0),
-                rationale=rec.rationale or "",
-                expected_effect=rec.message,
-            )
-            for rec in ordered_actions
-        ]
-        if not aggregated_rationales:
-            aggregated_rationales = [rec.rationale for rec in ordered_actions if rec.rationale]
-        if not aggregated_effects:
-            aggregated_effects = [rec.message for rec in ordered_actions if rec.message]
+    session_section: Mapping[str, Any] | None = payload.get("session")  # type: ignore[assignment]
+    if isinstance(session_section, Mapping):
+        updated_session = dict(session_section)
+    elif isinstance(context.session_payload, Mapping):
+        updated_session = dict(context.session_payload)
     else:
-        default_rationales = aggregated_rationales or ["Optimización de objetivo Si/ΔNFR"]
-        default_effects = aggregated_effects or ["Mejora equilibrada del coche"]
-        changes = [
-            SetupChange(
-                parameter=name,
-                delta=value,
-                rationale="; ".join(default_rationales),
-                expected_effect="; ".join(default_effects),
-            )
-            for name, value in sorted(plan.decision_vector.items())
-        ]
-        aggregated_rationales = default_rationales
-        aggregated_effects = default_effects
-
-    aero = compute_aero_coherence((), plan.telemetry)
-
-    def _rake_velocity_profile_from_bundles(
-        bundles: Sequence[Any],
-        *,
-        low_threshold: float = 35.0,
-        high_threshold: float = 50.0,
-    ) -> list[tuple[float, int]]:
-        bins = {
-            "low": {"sum": 0.0, "count": 0},
-            "medium": {"sum": 0.0, "count": 0},
-            "high": {"sum": 0.0, "count": 0},
-        }
-        for bundle in bundles:
-            transmission = getattr(bundle, "transmission", None)
-            try:
-                speed_value = float(getattr(transmission, "speed", 0.0))
-            except (TypeError, ValueError):
-                speed_value = 0.0
-            if not math.isfinite(speed_value):
-                speed_value = 0.0
-            if speed_value <= low_threshold:
-                bin_key = "low"
-            elif speed_value <= high_threshold:
-                bin_key = "medium"
-            else:
-                bin_key = "high"
-            chassis = getattr(bundle, "chassis", None)
-            suspension = getattr(bundle, "suspension", None)
-            if chassis is None or suspension is None:
-                continue
-            try:
-                pitch_value = float(getattr(chassis, "pitch", 0.0))
-            except (TypeError, ValueError):
-                pitch_value = 0.0
-            if not math.isfinite(pitch_value):
-                pitch_value = 0.0
-            try:
-                front_travel = float(getattr(suspension, "travel_front", 0.0))
-            except (TypeError, ValueError):
-                front_travel = 0.0
-            if not math.isfinite(front_travel):
-                front_travel = 0.0
-            try:
-                rear_travel = float(getattr(suspension, "travel_rear", 0.0))
-            except (TypeError, ValueError):
-                rear_travel = 0.0
-            if not math.isfinite(rear_travel):
-                rear_travel = 0.0
-            travel_delta = rear_travel - front_travel
-            if abs(front_travel) > 1e-9:
-                travel_ratio = rear_travel / front_travel
-            elif abs(rear_travel) > 1e-9:
-                travel_ratio = math.copysign(10.0, rear_travel)
-            else:
-                travel_ratio = 1.0
-            if not math.isfinite(travel_ratio):
-                travel_ratio = 1.0
-            travel_ratio = max(-10.0, min(10.0, travel_ratio))
-            rake_value = pitch_value + math.atan2(travel_delta, travel_ratio)
-            if not math.isfinite(rake_value):
-                continue
-            bin_payload = bins[bin_key]
-            bin_payload["sum"] += rake_value
-            bin_payload["count"] += 1
-        profile: list[tuple[float, int]] = []
-        for key in ("low", "medium", "high"):
-            payload = bins[key]
-            count = int(payload["count"])
-            if count > 0:
-                average = payload["sum"] / count
-            else:
-                average = 0.0
-            profile.append((average, count))
-        return profile
-
-    suspension_deltas = [
-        float(getattr(getattr(bundle, "suspension", None), "delta_nfr", 0.0))
-        for bundle in plan.telemetry
-    ]
-    tyre_deltas = [
-        float(getattr(getattr(bundle, "tyres", None), "delta_nfr", 0.0))
-        for bundle in plan.telemetry
-    ]
-    coherence_series = [float(getattr(bundle, "coherence_index", 0.0)) for bundle in plan.telemetry]
-    avg_coherence = mean(coherence_series) if coherence_series else 0.0
-    ackermann_values = [
-        float(getattr(bundle, "ackermann_parallel_index", 0.0))
-        for bundle in plan.telemetry
-    ]
-    ackermann_clean = [value for value in ackermann_values if math.isfinite(value)]
-    ackermann_parallel = fmean(ackermann_clean) if ackermann_clean else 0.0
-    ackermann_samples = len(ackermann_clean)
-    rake_velocity_profile = _rake_velocity_profile_from_bundles(plan.telemetry)
-    aero_mechanical = resolve_aero_mechanical_coherence(
-        avg_coherence,
-        aero,
-        suspension_deltas=suspension_deltas,
-        tyre_deltas=tyre_deltas,
-        rake_velocity_profile=rake_velocity_profile,
-        ackermann_parallel_index=ackermann_parallel,
-        ackermann_parallel_samples=ackermann_samples,
-    )
-    aero_metrics = {
-        "low_speed_imbalance": aero.low_speed_imbalance,
-        "high_speed_imbalance": aero.high_speed_imbalance,
-        "low_speed_samples": float(aero.low_speed_samples),
-        "high_speed_samples": float(aero.high_speed_samples),
-        "aero_mechanical_coherence": aero_mechanical,
-    }
-
-    setup_plan = SetupPlan(
-        car_model=namespace.car_model,
-        session=namespace.session,
-        sci=plan.sci,
-        changes=tuple(changes),
-        rationales=tuple(aggregated_rationales),
-        expected_effects=tuple(aggregated_effects),
-        sensitivities=plan.sensitivities,
-        clamped_parameters=tuple(),
-        phase_axis_targets={},
-        phase_axis_weights={},
-        aero_guidance=aero.guidance,
-        aero_metrics=aero_metrics,
-        aero_mechanical_coherence=aero_mechanical,
-        sci_breakdown=plan.sci_breakdown,
-    )
-
-    payload = {
-        "setup_plan": setup_plan,
-        "sci": plan.sci,
-        "sci_breakdown": plan.sci_breakdown,
-        "recommendations": plan.recommendations,
-        "series": plan.telemetry,
-        "sensitivities": plan.sensitivities,
-        "set_output": namespace.set_output,
-    }
-    if session_payload is not None:
-        payload["session"] = session_payload
-    session_messages = format_session_messages(session_payload)
-    if session_messages:
-        payload["session_messages"] = session_messages
-    if car_metadata is not None:
-        payload["car"] = _serialise_pack_payload(car_metadata)
-    if tnfr_targets is not None:
-        payload["tnfr_targets"] = _serialise_pack_payload(tnfr_targets)
+        updated_session = {}
+    updated_session["pareto"] = pareto_payload
+    payload["session"] = updated_session
+    payload["pareto_points"] = pareto_payload
+    payload["pareto_radius"] = radius
     return _render_payload(payload, _resolve_exports(namespace))
 
 
