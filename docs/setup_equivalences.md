@@ -35,6 +35,11 @@ telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
 - **Temperaturas/presiones de neumáticos** – sólo aparecen cuando
   OutGauge envía el payload extendido; de lo contrario HUD y exportadores
   señalan `"sin datos"` para evitar asumir valores ficticios.
+- **CPHI (Contact Patch Health Index)** – necesita `slip_ratio`,
+  `slip_angle`, fuerzas laterales/longitudinales y cargas de rueda del
+  paquete extendido de OutSim. Sin esas señales TNFR × LFS etiqueta la
+  salud del parche como `"sin datos"`, por lo que el planificador no
+  aplicará ajustes de balance de neumáticos.
 
 ## Subsistema aerodinámico
 
