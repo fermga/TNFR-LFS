@@ -54,6 +54,9 @@ vez de asumir lecturas inventadas.【F:tnfr_lfs/acquisition/outsim_client.py†L
   paquete extendido de OutSim. Sin esas señales TNFR × LFS etiqueta la
   salud del parche como `"sin datos"`, por lo que el planificador no
   aplicará ajustes de balance de neumáticos.
+  Los informes y el HUD comparten umbrales rojo/ámbar/verde (0.62/0.78/0.90)
+  para marcar cuándo conviene intervenir o cuándo el parche está listo para
+  stints de ataque.
 
 ## Subsistema aerodinámico
 

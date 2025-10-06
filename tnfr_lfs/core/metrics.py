@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field
 from statistics import mean, pvariance, pstdev
 from typing import Iterable, Mapping, Sequence
@@ -30,6 +31,9 @@ __all__ = [
     "LockingWindowScore",
     "BumpstopHistogram",
     "CPHIWheel",
+    "CPHIWheelComponents",
+    "CPHIThresholds",
+    "CPHIReport",
     "WindowMetrics",
     "SuspensionVelocityBands",
     "compute_window_metrics",
@@ -340,15 +344,144 @@ class BumpstopHistogram:
 
 
 @dataclass(frozen=True)
+class CPHIWheelComponents:
+    """Normalised contributions to the Contact Patch Health Index."""
+
+    temperature: float = 0.0
+    gradient: float = 0.0
+    mu: float = 0.0
+
+
+@dataclass(frozen=True)
+class CPHIThresholds:
+    """Traffic-light thresholds for the Contact Patch Health Index.
+
+    Values below ``red`` demand immediate intervention, measurements between
+    ``red`` and ``amber`` indicate marginal tyre health, and readings equal
+    or above ``green`` describe an optimal contact patch ready for push laps.
+    """
+
+    red: float = 0.62
+    amber: float = 0.78
+    green: float = 0.9
+
+    def classify(self, value: float) -> str:
+        if not math.isfinite(value):
+            return "unknown"
+        if value < self.red:
+            return "red"
+        if value < self.amber:
+            return "amber"
+        return "green"
+
+    def is_optimal(self, value: float) -> bool:
+        return math.isfinite(value) and value >= self.green
+
+
+@dataclass(frozen=True)
 class CPHIWheel:
     """Contact Patch Health Index components for a single wheel."""
 
     value: float = 1.0
-    temperature_component: float = 0.0
-    gradient_component: float = 0.0
-    mu_component: float = 0.0
+    components: CPHIWheelComponents = field(default_factory=CPHIWheelComponents)
     temperature_delta: float = 0.0
     gradient_rate: float = 0.0
+
+    @property
+    def temperature_component(self) -> float:
+        return self.components.temperature
+
+    @property
+    def gradient_component(self) -> float:
+        return self.components.gradient
+
+    @property
+    def mu_component(self) -> float:
+        return self.components.mu
+
+    def as_dict(self, *, thresholds: CPHIThresholds | None = None) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "value": self.value,
+            "components": {
+                "temperature": self.components.temperature,
+                "gradient": self.components.gradient,
+                "mu": self.components.mu,
+            },
+            "temperature_delta": self.temperature_delta,
+            "gradient_rate": self.gradient_rate,
+        }
+        if thresholds is not None:
+            payload["status"] = thresholds.classify(self.value)
+            payload["optimal"] = thresholds.is_optimal(self.value)
+        return payload
+
+
+@dataclass(frozen=True)
+class CPHIReport(MappingABC[str, CPHIWheel]):
+    """Aggregate CPHI values and expose shared thresholds.
+
+    The mapping behaves like ``{suffix: CPHIWheel}`` while ``as_legacy_mapping``
+    preserves the historical flat keys consumed by exporters and rule engines.
+    """
+
+    wheels: Mapping[str, CPHIWheel] = field(default_factory=dict)
+    thresholds: CPHIThresholds = field(default_factory=CPHIThresholds)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "wheels", {str(key): value for key, value in self.wheels.items()})
+
+    def __iter__(self):  # type: ignore[override]
+        return iter(self.wheels)
+
+    def __len__(self) -> int:  # type: ignore[override]
+        return len(self.wheels)
+
+    def __getitem__(self, key: str) -> CPHIWheel:  # type: ignore[override]
+        return self.wheels[key]
+
+    def classification(self, value: float) -> str:
+        return self.thresholds.classify(value)
+
+    def classification_for(self, suffix: str) -> str:
+        wheel = self.wheels.get(suffix)
+        return self.thresholds.classify(wheel.value) if wheel is not None else "unknown"
+
+    def is_optimal(self, value: float) -> bool:
+        return self.thresholds.is_optimal(value)
+
+    def is_optimal_for(self, suffix: str) -> bool:
+        wheel = self.wheels.get(suffix)
+        return self.thresholds.is_optimal(wheel.value) if wheel is not None else False
+
+    def as_dict(
+        self, *, include_thresholds: bool = True, include_status: bool = True
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "wheels": {
+                suffix: wheel.as_dict(
+                    thresholds=self.thresholds if include_status else None
+                )
+                for suffix, wheel in self.wheels.items()
+            }
+        }
+        if include_thresholds:
+            payload["thresholds"] = {
+                "red": self.thresholds.red,
+                "amber": self.thresholds.amber,
+                "green": self.thresholds.green,
+            }
+        return payload
+
+    def as_legacy_mapping(self) -> dict[str, float]:
+        legacy: dict[str, float] = {}
+        for suffix, wheel in self.wheels.items():
+            legacy[f"cphi_{suffix}"] = wheel.value
+            legacy[f"cphi_{suffix}_temperature"] = wheel.temperature_component
+            legacy[f"cphi_{suffix}_gradient"] = wheel.gradient_component
+            legacy[f"cphi_{suffix}_mu"] = wheel.mu_component
+            legacy[f"cphi_{suffix}_temp_delta"] = wheel.temperature_delta
+            legacy[f"cphi_{suffix}_gradient_rate"] = wheel.gradient_rate
+        return legacy
 
 
 def _cphi_wheel_from_samples(
@@ -356,11 +489,14 @@ def _cphi_wheel_from_samples(
 ) -> CPHIWheel:
     if not samples:
         sentinel = math.nan
+        components = CPHIWheelComponents(
+            temperature=sentinel,
+            gradient=sentinel,
+            mu=sentinel,
+        )
         return CPHIWheel(
             value=sentinel,
-            temperature_component=sentinel,
-            gradient_component=sentinel,
-            mu_component=sentinel,
+            components=components,
             temperature_delta=sentinel,
             gradient_rate=sentinel,
         )
@@ -413,11 +549,14 @@ def _cphi_wheel_from_samples(
     has_slip_or_force_samples = bool(slip_components or angle_components or mu_components)
     if not has_slip_or_force_samples:
         sentinel = math.nan
+        components = CPHIWheelComponents(
+            temperature=sentinel,
+            gradient=sentinel,
+            mu=sentinel,
+        )
         return CPHIWheel(
             value=sentinel,
-            temperature_component=sentinel,
-            gradient_component=sentinel,
-            mu_component=sentinel,
+            components=components,
             temperature_delta=sentinel,
             gradient_rate=sentinel,
         )
@@ -441,11 +580,14 @@ def _cphi_wheel_from_samples(
     combined = max(0.0, min(1.0, combined))
     value = max(0.0, 1.0 - combined)
 
+    components = CPHIWheelComponents(
+        temperature=temperature_component,
+        gradient=gradient_component,
+        mu=mu_component,
+    )
     return CPHIWheel(
         value=value,
-        temperature_component=temperature_component,
-        gradient_component=gradient_component,
-        mu_component=mu_component,
+        components=components,
         temperature_delta=temperature_delta,
         gradient_rate=gradient_rate,
     )
@@ -453,7 +595,7 @@ def _cphi_wheel_from_samples(
 
 def _cphi_from_samples(
     samples: Sequence[Mapping[str, tuple[float, float, float, float, float, float, float]]],
-) -> dict[str, CPHIWheel]:
+) -> CPHIReport:
     per_wheel: dict[str, list[tuple[float, float, float, float, float, float, float]]] = {
         suffix: [] for suffix in _WHEEL_SUFFIXES
     }
@@ -463,10 +605,11 @@ def _cphi_from_samples(
             if payload is None:
                 continue
             per_wheel.setdefault(suffix, []).append(payload)
-    return {
+    wheels = {
         suffix: _cphi_wheel_from_samples(series)
         for suffix, series in per_wheel.items()
     }
+    return CPHIReport(wheels=wheels)
 
 
 @dataclass(frozen=True)
@@ -605,8 +748,8 @@ class WindowMetrics:
     epi_derivative_abs: float = 0.0
     brake_headroom: BrakeHeadroom = field(default_factory=BrakeHeadroom)
     bumpstop_histogram: BumpstopHistogram = field(default_factory=BumpstopHistogram)
-    cphi: Mapping[str, CPHIWheel] = field(default_factory=dict)
-    phase_cphi: Mapping[str, Mapping[str, CPHIWheel]] = field(default_factory=dict)
+    cphi: CPHIReport = field(default_factory=CPHIReport)
+    phase_cphi: Mapping[str, CPHIReport] = field(default_factory=dict)
     suspension_velocity_front: SuspensionVelocityBands = field(
         default_factory=SuspensionVelocityBands
     )
@@ -781,7 +924,7 @@ def compute_window_metrics(
             aero_mechanical_coherence=0.0,
             epi_derivative_abs=0.0,
             brake_headroom=BrakeHeadroom(),
-            cphi={},
+            cphi=CPHIReport(),
             phase_cphi={},
             aero_balance_drift=AeroBalanceDrift(),
             phase_delta_nfr_std={},
@@ -2057,9 +2200,14 @@ def compute_window_metrics(
 
     if wheel_samples:
         cphi_overall = _cphi_from_samples(wheel_samples)
+        base_thresholds = cphi_overall.thresholds
     else:
-        cphi_overall = {suffix: CPHIWheel() for suffix in _WHEEL_SUFFIXES}
-    phase_cphi: dict[str, Mapping[str, CPHIWheel]] = {}
+        base_thresholds = CPHIThresholds()
+        cphi_overall = CPHIReport(
+            wheels={suffix: CPHIWheel() for suffix in _WHEEL_SUFFIXES},
+            thresholds=base_thresholds,
+        )
+    phase_cphi: dict[str, CPHIReport] = {}
     for phase_label, indices in phase_windows.items():
         selected = [
             wheel_samples[index]
@@ -2067,9 +2215,16 @@ def compute_window_metrics(
             if 0 <= index < len(wheel_samples)
         ]
         if selected:
-            phase_cphi[phase_label] = _cphi_from_samples(selected)
+            phase_report = _cphi_from_samples(selected)
+            phase_cphi[phase_label] = CPHIReport(
+                wheels=dict(phase_report.items()),
+                thresholds=base_thresholds,
+            )
         else:
-            phase_cphi[phase_label] = {suffix: CPHIWheel() for suffix in _WHEEL_SUFFIXES}
+            phase_cphi[phase_label] = CPHIReport(
+                wheels={suffix: CPHIWheel() for suffix in _WHEEL_SUFFIXES},
+                thresholds=base_thresholds,
+            )
 
     aero = compute_aero_coherence(records, bundles)
     coherence_values: list[float] = []

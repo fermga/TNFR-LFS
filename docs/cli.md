@@ -86,6 +86,9 @@ The HUD cycles through three pages (press the button to advance):
   Si la racha de microsectores silenciosos se extiende durante varios segmentos
   consecutivos, la cabecera añade un aviso «no tocar» reutilizando el detector
   ``detect_silencio`` para subrayar que conviene mantener los reglajes actuales.
+  Bajo los indicadores de amortiguación se añade ahora la línea «CPHI»,
+  que colorea cada rueda con 🟢/🟠/🔴 según los umbrales compartidos y añade
+  un «+» cuando el valor supera el objetivo verde para atacar la vuelta.
 * **Página B** – encabezado con la etiqueta de banda ``ν_f`` y su clasificación,
   junto a la barra de coherencia ``C(t)`` y la onda ``ν_f~`` agregada para la
   última vuelta.  Debajo se listan las top‑3 contribuciones nodales a
@@ -210,6 +213,12 @@ persists ``out/<baseline-stem>/sense_index_map.json`` and
 ``out/<baseline-stem>/modal_resonance.json`` (configurable via the
 ``paths.output_dir`` setting) so external tooling can reuse the Sense
 Index heatmap and modal resonance analysis without re-running the CLI.
+
+Each microsector entry under ``filtered_measures`` now embeds a nested ``cphi``
+block mirroring the :class:`~tnfr_lfs.core.metrics.CPHIReport`. The export
+includes the red/amber/green thresholds and the ``optimal`` flag so downstream
+dashboards can reuse the same tyre-health semantics shown in the HUD without
+deriving bands manually.
 
 When a configuration pack is available the JSON exporter also emits
 ``car`` and ``tnfr_targets`` sections. The former mirrors the metadata

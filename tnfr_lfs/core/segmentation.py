@@ -170,7 +170,7 @@ class Microsector:
     phase_lag: Mapping[PhaseLiteral, float]
     phase_alignment: Mapping[PhaseLiteral, float]
     phase_synchrony: Mapping[PhaseLiteral, float] = field(default_factory=dict)
-    filtered_measures: Mapping[str, float] = field(default_factory=dict)
+    filtered_measures: Mapping[str, object] = field(default_factory=dict)
     recursivity_trace: Tuple[Mapping[str, float | str | None], ...] = ()
     last_mutation: Mapping[str, object] | None = None
     window_occupancy: Mapping[PhaseLiteral, Mapping[str, float]] = field(
@@ -515,7 +515,7 @@ def segment_microsectors(
         else:
             base_delta_threshold = abs(delta_signature)
         delta_threshold = max(0.05, base_delta_threshold * surface_factor)
-        filtered_measures: Dict[str, float] = {
+        filtered_measures: Dict[str, object] = {
             "thermal_load": avg_vertical_load,
             "style_index": avg_si,
             "grip_rel": grip_rel,
@@ -731,6 +731,7 @@ def segment_microsectors(
                 filtered_measures[f"cphi_{suffix}_gradient_rate"] = (
                     gradient_rate if math.isfinite(gradient_rate) else None
                 )
+        filtered_measures["cphi"] = window_metrics.cphi.as_dict()
         ventilation_alert = window_metrics.brake_headroom.ventilation_alert
         if ventilation_alert:
             filtered_measures["brake_headroom_ventilation_alert"] = ventilation_alert

@@ -9,6 +9,8 @@ from tnfr_lfs.core.metrics import (
     AeroCoherence,
     BrakeHeadroom,
     BumpstopHistogram,
+    CPHIReport,
+    CPHIThresholds,
     LockingWindowScore,
     SlideCatchBudget,
     SuspensionVelocityBands,
@@ -1047,7 +1049,7 @@ def test_compute_window_metrics_empty_window() -> None:
         epi_derivative_abs=0.0,
         brake_headroom=BrakeHeadroom(),
         bumpstop_histogram=BumpstopHistogram(),
-        cphi={},
+        cphi=CPHIReport(),
         phase_cphi={},
         suspension_velocity_front=SuspensionVelocityBands(),
         suspension_velocity_rear=SuspensionVelocityBands(),
@@ -1180,3 +1182,93 @@ def test_aero_mechanical_coherence_blends_components() -> None:
         ackermann_parallel_samples=len(ackermann_clean),
     )
     assert metrics.aero_mechanical_coherence == pytest.approx(expected)
+
+
+def test_cphi_report_structure_and_legacy_mapping() -> None:
+    base = _record(
+        0.0,
+        100.0,
+        slip_ratio=0.0,
+        slip_angle=0.0,
+        slip_ratio_fl=0.04,
+        slip_ratio_fr=0.05,
+        slip_ratio_rl=0.03,
+        slip_ratio_rr=0.03,
+        slip_angle_fl=0.04,
+        slip_angle_fr=0.05,
+        slip_angle_rl=0.03,
+        slip_angle_rr=0.03,
+        wheel_load_fl=3200.0,
+        wheel_load_fr=3150.0,
+        wheel_load_rl=3000.0,
+        wheel_load_rr=3050.0,
+        wheel_lateral_force_fl=2400.0,
+        wheel_lateral_force_fr=2350.0,
+        wheel_lateral_force_rl=2100.0,
+        wheel_lateral_force_rr=2050.0,
+        wheel_longitudinal_force_fl=1500.0,
+        wheel_longitudinal_force_fr=1450.0,
+        wheel_longitudinal_force_rl=1200.0,
+        wheel_longitudinal_force_rr=1150.0,
+    )
+    records = [
+        base,
+        replace(
+            base,
+            timestamp=0.1,
+            slip_angle=0.02,
+            slip_angle_fl=0.05,
+            slip_angle_fr=0.06,
+            slip_angle_rl=0.04,
+            slip_angle_rr=0.035,
+        ),
+        replace(
+            base,
+            timestamp=0.2,
+            slip_angle=0.03,
+            slip_angle_fl=0.06,
+            slip_angle_fr=0.07,
+            slip_angle_rl=0.05,
+            slip_angle_rr=0.045,
+        ),
+    ]
+
+    metrics = compute_window_metrics(records)
+    report = metrics.cphi
+
+    assert isinstance(report, CPHIReport)
+    legacy = report.as_legacy_mapping()
+    structured = report.as_dict()
+
+    for suffix in ("fl", "fr", "rl", "rr"):
+        wheel = report[suffix]
+        assert legacy[f"cphi_{suffix}"] == pytest.approx(wheel.value)
+        assert legacy[f"cphi_{suffix}_temperature"] == pytest.approx(
+            wheel.temperature_component
+        )
+        assert legacy[f"cphi_{suffix}_gradient"] == pytest.approx(
+            wheel.gradient_component
+        )
+        assert legacy[f"cphi_{suffix}_mu"] == pytest.approx(wheel.mu_component)
+        assert legacy[f"cphi_{suffix}_temp_delta"] == pytest.approx(wheel.temperature_delta)
+        assert legacy[f"cphi_{suffix}_gradient_rate"] == pytest.approx(wheel.gradient_rate)
+
+        wheel_payload = structured["wheels"][suffix]
+        assert wheel_payload["value"] == pytest.approx(wheel.value)
+        assert wheel_payload["status"] == report.classification_for(suffix)
+        assert wheel_payload["optimal"] == report.is_optimal_for(suffix)
+
+    assert structured["thresholds"]["red"] == pytest.approx(report.thresholds.red)
+    assert structured["thresholds"]["amber"] == pytest.approx(report.thresholds.amber)
+    assert structured["thresholds"]["green"] == pytest.approx(report.thresholds.green)
+
+
+def test_cphi_thresholds_classification() -> None:
+    thresholds = CPHIThresholds(red=0.5, amber=0.75, green=0.9)
+
+    assert thresholds.classify(0.3) == "red"
+    assert thresholds.classify(0.7) == "amber"
+    assert thresholds.classify(0.95) == "green"
+    assert thresholds.classify(float("nan")) == "unknown"
+    assert not thresholds.is_optimal(0.82)
+    assert thresholds.is_optimal(0.93)
