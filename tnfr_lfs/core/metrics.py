@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field
 from statistics import mean, pvariance, pstdev
@@ -16,7 +17,7 @@ from .contextual_delta import (
     resolve_context_from_record,
 )
 from .dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
-from .epi import TelemetryRecord
+from .epi import TelemetryRecord, delta_nfr_by_node
 from .epi_models import EPIBundle
 from .phases import replicate_phase_aliases
 from .spectrum import phase_alignment
@@ -119,6 +120,114 @@ def _mean_optional(values: Sequence[float | None]) -> float | None:
     if not finite:
         return None
     return sum(finite) / len(finite)
+
+
+def _normalised_weights(weights: Mapping[str, float]) -> dict[str, float]:
+    """Return the normalised probability distribution for ``weights``."""
+
+    positive: dict[str, float] = {}
+    for key, raw_value in weights.items():
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(value):
+            continue
+        if value <= 0.0:
+            continue
+        positive[str(key)] = positive.get(str(key), 0.0) + value
+    total = sum(positive.values())
+    if total <= 0.0:
+        return {}
+    return {key: value / total for key, value in positive.items()}
+
+
+def _shannon_entropy(probabilities: Iterable[float]) -> float:
+    """Return the Shannon entropy normalised to the [0, 1] range."""
+
+    filtered = [float(value) for value in probabilities if isinstance(value, (int, float))]
+    filtered = [value for value in filtered if value > 0.0 and math.isfinite(value)]
+    if len(filtered) <= 1:
+        return 0.0
+    entropy = -sum(value * math.log(value) for value in filtered)
+    max_entropy = math.log(len(filtered)) if len(filtered) > 1 else 0.0
+    if max_entropy <= 0.0:
+        return 0.0
+    normalised = entropy / max_entropy
+    if normalised < 0.0:
+        return 0.0
+    if normalised > 1.0:
+        return 1.0
+    return normalised
+
+
+def _aggregate_node_delta(
+    records: Sequence[TelemetryRecord],
+    indices: Sequence[int] | None = None,
+) -> dict[str, float]:
+    """Return absolute ΔNFR contributions aggregated per node."""
+
+    weights: defaultdict[str, float] = defaultdict(float)
+    if indices is None:
+        iterator: Iterable[int] = range(len(records))
+    else:
+        iterator = indices
+    for index in iterator:
+        if not 0 <= index < len(records):
+            continue
+        distribution = delta_nfr_by_node(records[index])
+        for node, contribution in distribution.items():
+            try:
+                magnitude = abs(float(contribution))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(magnitude) or magnitude <= 0.0:
+                continue
+            key = str(node)
+            weights[key] += magnitude
+    return dict(weights)
+
+
+def _phase_delta_distribution(
+    records: Sequence[TelemetryRecord],
+    phase_windows: Mapping[str, Sequence[int]] | None,
+) -> tuple[dict[str, float], float]:
+    """Return the phase-normalised ΔNFR profile and its entropy."""
+
+    if not phase_windows:
+        return {}, 0.0
+    phase_totals: dict[str, float] = {}
+    for label, indices in phase_windows.items():
+        weights = _aggregate_node_delta(records, indices)
+        total = sum(weights.values())
+        phase_totals[str(label)] = total
+    if not phase_totals:
+        return {}, 0.0
+    positive_total = sum(value for value in phase_totals.values() if value > 0.0)
+    if positive_total <= 0.0:
+        return {key: 0.0 for key in phase_totals}, 0.0
+    probabilities = {
+        key: (value / positive_total) if value > 0.0 else 0.0
+        for key, value in phase_totals.items()
+    }
+    entropy = _shannon_entropy(probabilities.values())
+    return probabilities, entropy
+
+
+def _phase_node_entropy_map(
+    records: Sequence[TelemetryRecord],
+    phase_windows: Mapping[str, Sequence[int]] | None,
+) -> dict[str, float]:
+    """Return the per-phase Shannon entropy of nodal ΔNFR distributions."""
+
+    if not phase_windows:
+        return {}
+    entropy_map: dict[str, float] = {}
+    for label, indices in phase_windows.items():
+        weights = _aggregate_node_delta(records, indices)
+        probabilities = _normalised_weights(weights)
+        entropy_map[str(label)] = _shannon_entropy(probabilities.values())
+    return entropy_map
 
 
 def phase_synchrony_index(lag: float, alignment: float) -> float:
@@ -740,6 +849,8 @@ class WindowMetrics:
     mu_symmetry: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     delta_nfr_std: float = 0.0
     nodal_delta_nfr_std: float = 0.0
+    delta_nfr_entropy: float = 0.0
+    node_entropy: float = 0.0
     exit_gear_match: float = 0.0
     shift_stability: float = 0.0
     frequency_label: str = ""
@@ -760,6 +871,8 @@ class WindowMetrics:
     aero_balance_drift: AeroBalanceDrift = field(default_factory=AeroBalanceDrift)
     phase_delta_nfr_std: Mapping[str, float] = field(default_factory=dict)
     phase_nodal_delta_nfr_std: Mapping[str, float] = field(default_factory=dict)
+    phase_delta_nfr_entropy: Mapping[str, float] = field(default_factory=dict)
+    phase_node_entropy: Mapping[str, float] = field(default_factory=dict)
 
 
 def _compute_bumpstop_histogram(
@@ -918,6 +1031,8 @@ def compute_window_metrics(
             mu_symmetry={},
             delta_nfr_std=0.0,
             nodal_delta_nfr_std=0.0,
+            delta_nfr_entropy=0.0,
+            node_entropy=0.0,
             exit_gear_match=0.0,
             shift_stability=0.0,
             frequency_label="",
@@ -930,6 +1045,8 @@ def compute_window_metrics(
             aero_balance_drift=AeroBalanceDrift(),
             phase_delta_nfr_std={},
             phase_nodal_delta_nfr_std={},
+            phase_delta_nfr_entropy={},
+            phase_node_entropy={},
         )
 
     if isinstance(phase_indices, Mapping):
@@ -1656,6 +1773,16 @@ def compute_window_metrics(
     phase_nodal_std_map = replicate_phase_aliases(
         _phase_standard_deviation_map(support_samples)
     )
+    phase_delta_profile, phase_entropy_value = _phase_delta_distribution(
+        records,
+        phase_windows,
+    )
+    phase_delta_entropy_map = replicate_phase_aliases(phase_delta_profile)
+    phase_node_entropy_map = replicate_phase_aliases(
+        _phase_node_entropy_map(records, phase_windows)
+    )
+    node_profile = _normalised_weights(_aggregate_node_delta(records))
+    node_entropy_value = _shannon_entropy(node_profile.values())
 
     support_effective = _weighted_average(support_samples, windows)
     load_support_ratio = (
@@ -2305,6 +2432,8 @@ def compute_window_metrics(
         mu_symmetry=mu_symmetry,
         delta_nfr_std=delta_std,
         nodal_delta_nfr_std=nodal_std,
+        delta_nfr_entropy=phase_entropy_value,
+        node_entropy=node_entropy_value,
         exit_gear_match=exit_gear_match,
         shift_stability=shift_stability,
         suspension_velocity_front=front_velocity_profile,
@@ -2320,6 +2449,8 @@ def compute_window_metrics(
         aero_balance_drift=aero_balance_drift,
         phase_delta_nfr_std=phase_delta_std_map,
         phase_nodal_delta_nfr_std=phase_nodal_std_map,
+        phase_delta_nfr_entropy=phase_delta_entropy_map,
+        phase_node_entropy=phase_node_entropy_map,
     )
 
 

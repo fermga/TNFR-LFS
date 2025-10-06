@@ -142,6 +142,8 @@ bandas de velocidad baja/media/alta.  El rake se evalúa únicamente con el
 que la deriva aerodinámica refleja directamente los datos nativos incluso si
 ``AeroCoherence`` todavía parece neutra.
 
+``WindowMetrics`` también publica la entropía de ΔNFR. ``delta_nfr_entropy`` resume el reparto estructural por fases (0 ≙ energía concentrada en una sola fase, 1 ≙ ventana equilibrada entre todas las fases presentes) mientras que ``node_entropy`` cuantifica la diversidad nodal global con el mismo rango normalizado [0, 1]. El mapa ``phase_delta_nfr_entropy`` contiene las probabilidades normalizadas por fase (suman 1.0) utilizadas para calcular la entropía y ``phase_node_entropy`` detalla la entropía Shannon por fase a partir de las contribuciones nodales. Los valores de ambos mapas permanecen en el intervalo [0, 1] y replican los alias de fases heredados para facilitar su consumo en HUDs y CLI.
+
 ``WindowMetrics.cphi`` now yields a :class:`~tnfr_lfs.core.metrics.CPHIReport` with per-wheel :class:`~tnfr_lfs.core.metrics.CPHIWheel` data and the shared :class:`~tnfr_lfs.core.metrics.CPHIThresholds`. The thresholds follow a red/amber/green traffic-light scheme so HUD pages and CLI reports colour tyre health consistently. Consumers that require the historical flat keys can rely on :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_legacy_mapping`.
 
 Cuando se comparte el ``operator_state`` utilizado por

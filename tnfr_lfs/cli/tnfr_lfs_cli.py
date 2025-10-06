@@ -1319,6 +1319,18 @@ def _generate_out_reports(
                 "label": label,
                 "phase_delta_nfr_std": delta_map,
                 "phase_nodal_delta_nfr_std": nodal_map,
+                "delta_nfr_entropy": _floatify(
+                    getattr(microsector, "delta_nfr_entropy", 0.0)
+                ),
+                "node_entropy": _floatify(
+                    getattr(microsector, "node_entropy", 0.0)
+                ),
+                "phase_delta_nfr_entropy": _serialise_phase_float_map(
+                    getattr(microsector, "phase_delta_nfr_entropy", {}) or {}
+                ),
+                "phase_node_entropy": _serialise_phase_float_map(
+                    getattr(microsector, "phase_node_entropy", {}) or {}
+                ),
             }
         )
 

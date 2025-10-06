@@ -295,6 +295,10 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.nodal_delta_nfr_std == pytest.approx(0.0, abs=1e-9)
     assert metrics.phase_delta_nfr_std == {}
     assert metrics.phase_nodal_delta_nfr_std == {}
+    assert metrics.delta_nfr_entropy == pytest.approx(0.0)
+    assert metrics.node_entropy == pytest.approx(0.0)
+    assert metrics.phase_delta_nfr_entropy == {}
+    assert metrics.phase_node_entropy == {}
     assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
     assert metrics.exit_gear_match == pytest.approx(0.0)
     assert metrics.shift_stability == pytest.approx(1.0)
@@ -376,6 +380,87 @@ def test_compute_window_metrics_phase_std_with_bundles(
             expected_phase, rel=1e-6
         )
 
+
+def test_compute_window_metrics_entropy_maps(monkeypatch) -> None:
+    records = [
+        _record(0.0, 100.0),
+        _record(0.5, 101.0),
+        _record(1.0, 102.0),
+        _record(1.5, 103.0),
+    ]
+
+    def _fake_distribution(record: TelemetryRecord) -> Mapping[str, float]:
+        if record.timestamp < 1.0:
+            return {"tyres": 2.0, "brakes": 1.0}
+        return {"tyres": 1.0, "suspension": 3.0}
+
+    monkeypatch.setattr(
+        "tnfr_lfs.core.metrics.delta_nfr_by_node",
+        _fake_distribution,
+    )
+
+    phase_indices = {"entry1": (0, 1), "exit4": (2, 3)}
+    metrics = compute_window_metrics(records, phase_indices=phase_indices)
+
+    phase_totals = {"entry1": 6.0, "exit4": 8.0}
+    total = sum(phase_totals.values())
+
+    def _entropy(probabilities: Mapping[str, float]) -> float:
+        values = [value for value in probabilities.values() if value > 0.0]
+        if len(values) <= 1:
+            return 0.0
+        entropy = -sum(value * math.log(value) for value in values)
+        max_entropy = math.log(len(values))
+        return entropy / max_entropy
+
+    expected_phase_distribution = {
+        key: value / total for key, value in phase_totals.items()
+    }
+    assert metrics.phase_delta_nfr_entropy["entry1"] == pytest.approx(
+        expected_phase_distribution["entry1"],
+        rel=1e-6,
+    )
+    assert metrics.phase_delta_nfr_entropy["exit4"] == pytest.approx(
+        expected_phase_distribution["exit4"],
+        rel=1e-6,
+    )
+    assert metrics.phase_delta_nfr_entropy["entry"] == pytest.approx(
+        expected_phase_distribution["entry1"],
+        rel=1e-6,
+    )
+    assert metrics.delta_nfr_entropy == pytest.approx(
+        _entropy(expected_phase_distribution),
+        rel=1e-6,
+    )
+
+    entry_weights = {"tyres": 4.0, "brakes": 2.0}
+    exit_weights = {"tyres": 2.0, "suspension": 6.0}
+
+    def _node_probabilities(weights: Mapping[str, float]) -> Mapping[str, float]:
+        weight_sum = sum(weights.values())
+        return {key: value / weight_sum for key, value in weights.items()}
+
+    expected_entry_entropy = _entropy(_node_probabilities(entry_weights))
+    expected_exit_entropy = _entropy(_node_probabilities(exit_weights))
+    assert metrics.phase_node_entropy["entry1"] == pytest.approx(
+        expected_entry_entropy,
+        rel=1e-6,
+    )
+    assert metrics.phase_node_entropy["exit4"] == pytest.approx(
+        expected_exit_entropy,
+        rel=1e-6,
+    )
+    assert metrics.phase_node_entropy["entry"] == pytest.approx(
+        expected_entry_entropy,
+        rel=1e-6,
+    )
+
+    combined_weights = {"tyres": 6.0, "brakes": 2.0, "suspension": 6.0}
+    expected_node_entropy = _entropy(_node_probabilities(combined_weights))
+    assert metrics.node_entropy == pytest.approx(
+        expected_node_entropy,
+        rel=1e-6,
+    )
 
 def test_compute_window_metrics_handles_small_windows() -> None:
     single = _record(0.0, 120.0)

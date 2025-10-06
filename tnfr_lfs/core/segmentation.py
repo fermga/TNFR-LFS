@@ -188,6 +188,12 @@ class Microsector:
     phase_nodal_delta_nfr_std: Mapping[PhaseLiteral, float] = field(
         default_factory=dict
     )
+    delta_nfr_entropy: float = 0.0
+    node_entropy: float = 0.0
+    phase_delta_nfr_entropy: Mapping[PhaseLiteral, float] = field(
+        default_factory=dict
+    )
+    phase_node_entropy: Mapping[PhaseLiteral, float] = field(default_factory=dict)
     phase_axis_targets: Mapping[PhaseLiteral, Mapping[str, float]] = field(
         default_factory=dict
     )
@@ -759,6 +765,18 @@ def segment_microsectors(
             window_metrics.phase_nodal_delta_nfr_std or {}
         ).items():
             filtered_measures[f"nodal_delta_nfr_std_{phase_label}"] = float(value)
+        filtered_measures["delta_nfr_entropy"] = float(
+            window_metrics.delta_nfr_entropy
+        )
+        filtered_measures["node_entropy"] = float(window_metrics.node_entropy)
+        for phase_label, value in (
+            window_metrics.phase_delta_nfr_entropy or {}
+        ).items():
+            filtered_measures[f"delta_nfr_entropy_{phase_label}"] = float(value)
+        for phase_label, value in (
+            window_metrics.phase_node_entropy or {}
+        ).items():
+            filtered_measures[f"node_entropy_{phase_label}"] = float(value)
         histogram = window_metrics.bumpstop_histogram
         for index, _ in enumerate(histogram.depth_bins):
             filtered_measures[f"bumpstop_front_density_bin_{index}"] = histogram.front_density[index]
@@ -1056,6 +1074,22 @@ def segment_microsectors(
                 )
             }
         )
+        phase_entropy_payload = replicate_phase_aliases(
+            {
+                str(label): float(value)
+                for label, value in (
+                    (window_metrics.phase_delta_nfr_entropy or {}).items()
+                )
+            }
+        )
+        phase_node_entropy_payload = replicate_phase_aliases(
+            {
+                str(label): float(value)
+                for label, value in (
+                    (window_metrics.phase_node_entropy or {}).items()
+                )
+            }
+        )
 
         microsectors.append(
             Microsector(
@@ -1080,6 +1114,10 @@ def segment_microsectors(
                 nodal_delta_nfr_std=float(window_metrics.nodal_delta_nfr_std),
                 phase_delta_nfr_std=phase_delta_payload,
                 phase_nodal_delta_nfr_std=phase_nodal_payload,
+                delta_nfr_entropy=float(window_metrics.delta_nfr_entropy),
+                node_entropy=float(window_metrics.node_entropy),
+                phase_delta_nfr_entropy=phase_entropy_payload,
+                phase_node_entropy=phase_node_entropy_payload,
                 filtered_measures=dict(filtered_measures),
                 recursivity_trace=rec_trace,
                 last_mutation=dict(mutation_details) if mutation_details is not None else None,

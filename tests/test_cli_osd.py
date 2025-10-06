@@ -948,3 +948,9 @@ def test_generate_out_reports_includes_phase_aliases(
     phase_metrics = metrics_payload[0]["phase_delta_nfr_std"]
     assert "entry1" in phase_metrics
     assert "entry" in phase_metrics
+    phase_entropy = metrics_payload[0]["phase_delta_nfr_entropy"]
+    assert "entry1" in phase_entropy
+    assert "entry" in phase_entropy
+    phase_node_entropy = metrics_payload[0]["phase_node_entropy"]
+    assert "entry1" in phase_node_entropy
+    assert "entry" in phase_node_entropy
