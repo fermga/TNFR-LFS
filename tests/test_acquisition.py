@@ -196,6 +196,11 @@ def test_fusion_consumes_extended_outsim_packet(
 ) -> None:
     fusion = TelemetryFusion()
     record = fusion.fuse(extended_outsim_packet, sample_outgauge_packet)
+    wheel_slip_ratios = [
+        wheel.slip_ratio for wheel in extended_outsim_packet.wheels[:4] if wheel.decoded
+    ]
+    expected_slip_ratio = sum(wheel_slip_ratios) / len(wheel_slip_ratios)
+    assert record.slip_ratio == pytest.approx(expected_slip_ratio)
     assert record.throttle == pytest.approx(0.72)
     assert record.brake_pressure == pytest.approx(0.2)
     assert record.brake_input == pytest.approx(0.35)
