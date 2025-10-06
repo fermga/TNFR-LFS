@@ -24,6 +24,7 @@ from tnfr_lfs.core.metrics import (
     WindowMetrics,
     compute_window_metrics,
 )
+from tnfr_lfs.recommender.rules import RuleProfileObjectives
 from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
@@ -493,6 +494,44 @@ def test_render_page_c_includes_phase_axis_summary_map(synthetic_records):
     assert "Mapa ΔNFR fases" in output
     assert "⇈+0.40" in output
     assert "Entrada ∥ ⇈+0.40" in output
+
+
+def test_render_page_c_adds_operational_checklist(synthetic_records):
+    hud = _populate_hud(synthetic_records[:60])
+    thresholds = hud._thresholds
+    plan = SetupPlan(car_model="generic_gt", session=None)
+    sense_state = {"average": 0.78}
+    window_metrics = SimpleNamespace(
+        brake_headroom=SimpleNamespace(value=0.35),
+        aero_coherence=SimpleNamespace(high_speed_imbalance=0.18),
+    )
+    bundles = [
+        SimpleNamespace(delta_nfr=3.0, sense_index=0.72, timestamp=0.0),
+        SimpleNamespace(delta_nfr=2.5, sense_index=0.82, timestamp=1.0),
+    ]
+    objectives = RuleProfileObjectives(
+        target_delta_nfr=0.0,
+        target_sense_index=0.75,
+        target_brake_headroom=0.4,
+    )
+    session_hints = {"delta_reference": 6.0, "aero_reference": 0.12}
+    output = osd_module._render_page_c(
+        None,
+        plan,
+        thresholds,
+        None,
+        sense_state=sense_state,
+        window_metrics=window_metrics,
+        objectives=objectives,
+        session_hints=session_hints,
+        bundles=bundles,
+    )
+    assert "Checklist" in output
+    assert "Si.78≥.75" in output
+    assert "Δ∫5.5≤6" in output
+    assert "Hd.35≥.4" in output
+    assert "Δμ.18≤.12" in output
+    assert output.count("⚠️") >= 1
 
 
 def test_build_setup_plan_includes_phase_axis_summary() -> None:

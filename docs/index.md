@@ -70,6 +70,27 @@ is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_a
   sample or `"sin datos"` so downstream tooling does not fabricate
   temperatures.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
 
+## Checklist operativo
+
+La revisión previa a una tanda se apoya en un checklist compacto que
+evalúa cuatro objetivos cuantitativos:
+
+1. **Sense Index medio ≥ 0.75** – objetivo base de perfil para el
+   operador, usado por el motor de reglas y persistido en
+   `RuleProfileObjectives`.【F:tnfr_lfs/recommender/rules.py†L604-L615】
+2. **Densidad ΔNFR ≤ 6.00 kN·s⁻¹** – referencia por defecto utilizada
+   para calcular la integral absoluta de ΔNFR al evaluar la puntuación
+   de objetivos.【F:tnfr_lfs/recommender/search.py†L210-L236】
+3. **Headroom de freno ≥ 0.40** – margen mínimo recomendado antes de que
+   las intervenciones en reparto o ventilación sean obligadas.【F:tnfr_lfs/recommender/rules.py†L604-L615】
+4. **Δμ aerodinámico ≤ 0.12** – tolerancia con la que se normaliza la
+   coherencia aero-mecánica y las alertas de drift.【F:tnfr_lfs/core/metrics.py†L2558-L2575】
+
+El HUD/CLI resume estos objetivos en una línea “Checklist” que marca con
+✅ los objetivos cumplidos y con ⚠️ los que requieran atención, usando
+las métricas en tiempo real (media de Si, integral ΔNFR, headroom y
+imbalance aerodinámico).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
+
 ## Branding and terminology
 
 - **TNFR theory** describes the conceptual framework and vocabulary.
