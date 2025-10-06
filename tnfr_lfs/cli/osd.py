@@ -223,8 +223,12 @@ class TelemetryHUD:
             car_model, track_name
         )
         self._thresholds: ThresholdProfile = context.thresholds
+        self._hud_thresholds: Mapping[str, float] = context.thresholds.hud_thresholds
         self._profile_objectives: RuleProfileObjectives = context.objectives
         self._session_hints: Mapping[str, object] = context.session_hints
+        self._lap_integrals: Tuple[float, ...] = ()
+        self._integral_cov: float | None = None
+        self._integral_cov_lap_count: int = 0
 
     def append(self, record: TelemetryRecord) -> None:
         self._records.append(record)
@@ -254,6 +258,7 @@ class TelemetryHUD:
             self.car_model, self.track_name
         )
         self._thresholds = context.thresholds
+        self._hud_thresholds = context.thresholds.hud_thresholds
         self._profile_objectives = context.objectives
         self._session_hints = context.session_hints
         self._session_messages = tuple(
@@ -273,6 +278,9 @@ class TelemetryHUD:
             self._frequency_classification = "sin datos"
             self._sense_state = {"series": (), "memory": (), "average": 0.0}
             self._quiet_sequences = ()
+            self._lap_integrals = ()
+            self._integral_cov = None
+            self._integral_cov_lap_count = 0
             self._dirty = False
             return
 
@@ -283,6 +291,9 @@ class TelemetryHUD:
             self._frequency_classification = "sin datos"
             self._sense_state = {"series": (), "memory": (), "average": 0.0}
             self._quiet_sequences = ()
+            self._lap_integrals = ()
+            self._integral_cov = None
+            self._integral_cov_lap_count = 0
             self._dirty = False
             return
 
@@ -314,6 +325,24 @@ class TelemetryHUD:
         if staged_bundles:
             bundles = staged_bundles
         self._bundles = bundles
+        lap_integrals = _lap_integral_series(records, bundles)
+        self._lap_integrals = tuple(lap_integrals)
+        self._integral_cov_lap_count = len(lap_integrals)
+        min_laps = max(
+            2,
+            int(round(_hud_threshold_value(self._hud_thresholds, "integral_cov_min_laps", 3.0))),
+        )
+        if self._integral_cov_lap_count >= min_laps and lap_integrals:
+            mean_value = sum(lap_integrals) / self._integral_cov_lap_count
+            if mean_value > 1e-9:
+                variance = sum(
+                    (value - mean_value) ** 2 for value in lap_integrals
+                ) / self._integral_cov_lap_count
+                self._integral_cov = math.sqrt(variance) / mean_value
+            else:
+                self._integral_cov = 0.0
+        else:
+            self._integral_cov = None
         coherence_series = metrics_state.get("coherence_index_series", ()) if metrics_state else ()
         self._coherence_series = tuple(float(value) for value in coherence_series)
         self._coherence_index = float(metrics_state.get("coherence_index", 0.0)) if metrics_state else 0.0
@@ -431,6 +460,9 @@ class TelemetryHUD:
                 frequency_classification=self._frequency_classification,
                 sense_state=self._sense_state,
                 quiet_sequences=self._quiet_sequences,
+                hud_thresholds=self._hud_thresholds,
+                integral_cov=self._integral_cov,
+                integral_lap_count=self._integral_cov_lap_count,
             ),
             _render_page_b(
                 bundle,
@@ -486,6 +518,9 @@ def _render_page_a(
     frequency_classification: str = "",
     sense_state: Mapping[str, object] | None = None,
     quiet_sequences: Sequence[Sequence[int]] | None = None,
+    hud_thresholds: Mapping[str, float] | None = None,
+    integral_cov: float | None = None,
+    integral_lap_count: int = 0,
 ) -> str:
     coherence_value = (
         float(coherence_index)
@@ -499,6 +534,8 @@ def _render_page_a(
     classification_segment = (
         f" · ν_f {frequency_classification}" if frequency_classification else ""
     )
+    entropy_line = _entropy_indicator_line(window_metrics, hud_thresholds)
+    integral_line = _integral_cov_line(integral_cov, integral_lap_count, hud_thresholds)
     if not active:
         lines = [
             _truncate_line(f"Sin microsector activo{classification_segment}"),
@@ -519,15 +556,26 @@ def _render_page_a(
             candidate = "\n".join((*lines, sense_line))
             if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
                 lines.append(sense_line)
-        if coherence_line:
-            candidate = "\n".join((*lines, coherence_line))
+        if entropy_line:
+            candidate = "\n".join((*lines, entropy_line))
             if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
-                lines.append(coherence_line)
-        if nu_wave:
-            candidate = "\n".join((*lines, nu_wave))
+                lines.append(entropy_line)
+        gradient_entry = _truncate_line(
+            (
+                f"Si {window_metrics.si:.2f}"
+                f" · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
+                f" · C(t) {coherence_value:.2f}"
+                f" · τmot {window_metrics.motor_latency_ms:.0f}ms"
+            ),
+            limit=56,
+        )
+        candidate = "\n".join((*lines, gradient_entry))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(gradient_entry)
+        if integral_line:
+            candidate = "\n".join((*lines, integral_line))
             if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
-                lines.append(nu_wave)
-        lines.append(_gradient_line(window_metrics))
+                lines.append(integral_line)
         coupling_alert = _coupling_alert_line(
             window_metrics,
             longitudinal_delta=float(
@@ -539,10 +587,6 @@ def _render_page_a(
             candidate = "\n".join((*lines, coupling_alert))
             if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
                 lines.append(coupling_alert)
-        if motor_latency_line:
-            candidate = "\n".join((*lines, motor_latency_line))
-            if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
-                lines.append(motor_latency_line)
         return _ensure_limit("\n".join(lines))
 
     curve_label = f"Curva {active.microsector.index + 1}"
@@ -604,6 +648,10 @@ def _render_page_a(
     if brake_line:
         lines.append(brake_line)
     lines.append(gradient_line)
+    if integral_line:
+        candidate = "\n".join((*lines, integral_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(integral_line)
     coupling_alert = _coupling_alert_line(
         window_metrics,
         longitudinal_delta=long_component,
@@ -617,6 +665,10 @@ def _render_page_a(
         lines.append(coherence_line)
     if nu_wave:
         lines.append(nu_wave)
+    if entropy_line:
+        candidate = "\n".join((*lines, entropy_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(entropy_line)
     if motor_latency_line:
         candidate = "\n".join((*lines, motor_latency_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
@@ -1522,6 +1574,21 @@ def _hint_float(hints: Mapping[str, object] | None, key: str, default: float) ->
     return value
 
 
+def _hud_threshold_value(
+    thresholds: Mapping[str, float] | None, key: str, default: float
+) -> float:
+    if not isinstance(thresholds, Mapping):
+        return default
+    value = thresholds.get(key, default)
+    try:
+        numeric = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(numeric):
+        return default
+    return numeric
+
+
 def _sense_average(
     sense_state: Mapping[str, object] | None,
     bundles: Sequence[object] | None,
@@ -1570,6 +1637,111 @@ def _delta_density(bundles: Sequence[object] | None) -> float | None:
     if not math.isfinite(duration) or duration <= 0.0:
         duration = 1.0
     return total / duration
+
+
+def _entropy_indicator_line(
+    window_metrics: WindowMetrics, thresholds: Mapping[str, float] | None
+) -> str | None:
+    delta_entropy = _safe_float(getattr(window_metrics, "delta_nfr_entropy", None))
+    node_entropy = _safe_float(getattr(window_metrics, "node_entropy", None))
+    if delta_entropy is None or node_entropy is None:
+        return None
+
+    delta_green = _hud_threshold_value(thresholds, "delta_entropy_green", 0.65)
+    delta_amber = _hud_threshold_value(thresholds, "delta_entropy_amber", 0.45)
+    node_green = _hud_threshold_value(thresholds, "node_entropy_green", 0.6)
+    node_amber = _hud_threshold_value(thresholds, "node_entropy_amber", 0.4)
+    if delta_green < delta_amber:
+        delta_green = delta_amber
+    if node_green < node_amber:
+        node_green = node_amber
+
+    def _classify(value: float, amber: float, green: float) -> int:
+        if value >= green:
+            return 2
+        if value >= amber:
+            return 1
+        return 0
+
+    delta_rank = _classify(delta_entropy, delta_amber, delta_green)
+    node_rank = _classify(node_entropy, node_amber, node_green)
+    severity = min(delta_rank, node_rank)
+    marker = {2: "🟢", 1: "🟠", 0: "🔴"}.get(severity, "⬜")
+    coherence_value = _safe_float(getattr(window_metrics, "coherence_index", None), 0.0) or 0.0
+    payload = (
+        f"ENTR Δ {marker}{delta_entropy:.2f} · nod {node_entropy:.2f}"
+        f" · C(t) {coherence_value:.2f}"
+    )
+    return _truncate_line(payload)
+
+
+def _lap_integral_series(
+    records: Sequence[TelemetryRecord], bundles: Sequence[object]
+) -> Tuple[float, ...]:
+    if not records or not bundles:
+        return ()
+    limit = min(len(records), len(bundles))
+    if limit < 2:
+        return ()
+
+    integrals: Dict[str, float] = {}
+    order: List[str] = []
+    prev_record = records[0]
+    prev_bundle = bundles[0]
+    prev_structural = _safe_float(getattr(prev_record, "structural_timestamp", None))
+    prev_timestamp = _safe_float(getattr(prev_record, "timestamp", None), 0.0) or 0.0
+
+    for index in range(1, limit):
+        record = records[index]
+        structural_ts = _safe_float(getattr(record, "structural_timestamp", None))
+        timestamp = _safe_float(getattr(record, "timestamp", None), prev_timestamp) or prev_timestamp
+        if structural_ts is not None and prev_structural is not None:
+            dt = structural_ts - prev_structural
+        else:
+            dt = timestamp - prev_timestamp
+        if dt < 0.0:
+            dt = 0.0
+        lap_label = getattr(prev_record, "lap", None)
+        if lap_label is not None and dt > 0.0:
+            lap_key = str(lap_label)
+            magnitude = _safe_float(getattr(prev_bundle, "delta_nfr", None), 0.0) or 0.0
+            magnitude = abs(magnitude)
+            if magnitude > 0.0:
+                if lap_key not in integrals:
+                    integrals[lap_key] = 0.0
+                    order.append(lap_key)
+                integrals[lap_key] += magnitude * dt
+        prev_record = record
+        if index < len(bundles):
+            prev_bundle = bundles[index]
+        prev_timestamp = timestamp
+        prev_structural = structural_ts if structural_ts is not None else None
+
+    values = [integrals[key] for key in order if integrals.get(key, 0.0) > 1e-9]
+    return tuple(values)
+
+
+def _integral_cov_line(
+    cov_value: float | None,
+    lap_count: int,
+    thresholds: Mapping[str, float] | None,
+) -> str | None:
+    if cov_value is None:
+        return None
+    green_limit = _hud_threshold_value(thresholds, "integral_cov_green", 0.25)
+    amber_limit = _hud_threshold_value(thresholds, "integral_cov_amber", 0.45)
+    if amber_limit < green_limit:
+        amber_limit = green_limit
+
+    if cov_value <= green_limit:
+        severity = 2
+    elif cov_value <= amber_limit:
+        severity = 1
+    else:
+        severity = 0
+    marker = {2: "🟢", 1: "🟠", 0: "🔴"}.get(severity, "⬜")
+    payload = f"CoV ∫|Δ| {marker}{cov_value:.2f} · n {lap_count}"
+    return _truncate_line(payload)
 
 
 def _format_check_entry(

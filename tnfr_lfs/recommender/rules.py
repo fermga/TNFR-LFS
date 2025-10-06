@@ -563,6 +563,7 @@ class ThresholdProfile:
         default_factory=dict
     )
     robustness: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    hud_thresholds: Mapping[str, float] = field(default_factory=dict)
 
     def tolerance_for_phase(self, phase: str) -> float:
         mapping = {
@@ -602,6 +603,18 @@ class ThresholdProfile:
         if table is None:
             table = self.archetype_phase_targets.get(ARCHETYPE_MEDIUM, {})
         return table
+
+    def hud_threshold(self, key: str, default: float | None = None) -> float | None:
+        value = self.hud_thresholds.get(key)
+        if value is None:
+            return default
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return default
+        if not math.isfinite(numeric):
+            return default
+        return numeric
 
 
 @dataclass(frozen=True)
@@ -947,6 +960,7 @@ def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
     robustness = _build_robustness_thresholds(
         payload.get("robustness"), defaults=_BASELINE_ROBUSTNESS_THRESHOLDS
     )
+    hud_thresholds = _freeze_metric_thresholds(payload.get("hud", {}))
     return ThresholdProfile(
         entry_delta_tolerance=float(payload.get("entry_delta_tolerance", defaults["entry_delta_tolerance"])),
         apex_delta_tolerance=float(payload.get("apex_delta_tolerance", defaults["apex_delta_tolerance"])),
@@ -957,6 +971,7 @@ def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
         phase_weights=phase_weights,
         archetype_phase_targets=_BASELINE_ARCHETYPE_TARGETS,
         robustness=robustness,
+        hud_thresholds=hud_thresholds,
     )
 
 
