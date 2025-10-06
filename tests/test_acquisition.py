@@ -80,6 +80,14 @@ def extended_outsim_packet() -> OutSimPacket:
 
 
 @pytest.fixture
+def zero_deflection_outsim_packet(extended_outsim_packet: OutSimPacket) -> OutSimPacket:
+    zero_wheels = tuple(
+        replace(wheel, suspension_deflection=0.0) for wheel in extended_outsim_packet.wheels
+    )
+    return replace(extended_outsim_packet, wheels=zero_wheels)
+
+
+@pytest.fixture
 def sample_outgauge_packet() -> OutGaugePacket:
     return OutGaugePacket(
         time=0,
@@ -175,6 +183,28 @@ def test_outsim_ingest_captures_per_wheel_slip_and_radius() -> None:
     assert record.instantaneous_radius == pytest.approx(14.0)
     assert record.front_track_width == pytest.approx(1.46)
     assert record.wheelbase == pytest.approx(2.74)
+
+
+def test_fusion_preserves_zero_suspension_deflection(
+    zero_deflection_outsim_packet: OutSimPacket,
+    sample_outgauge_packet: OutGaugePacket,
+) -> None:
+    fusion = TelemetryFusion()
+    record = fusion.fuse(zero_deflection_outsim_packet, sample_outgauge_packet)
+
+    assert record.suspension_travel_front == pytest.approx(0.0)
+    assert record.suspension_travel_rear == pytest.approx(0.0)
+
+    front_velocity = record.suspension_velocity_front
+    rear_velocity = record.suspension_velocity_rear
+    if math.isnan(front_velocity):
+        assert True
+    else:
+        assert front_velocity == pytest.approx(0.0)
+    if math.isnan(rear_velocity):
+        assert True
+    else:
+        assert rear_velocity == pytest.approx(0.0)
 
 
 def test_outsim_ingest_sets_nan_for_missing_optional_columns() -> None:

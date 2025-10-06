@@ -201,23 +201,30 @@ class TelemetryFusion:
             else:
                 front_share = rear_share = 0.5
 
-        finite_deflections = [
-            value for value in wheel_deflections if math.isfinite(value)
-        ]
-        if wheel_data_present and any(abs(value) > 1e-6 for value in finite_deflections):
-            travel_front = (wheel_deflections[0] + wheel_deflections[1]) * 0.5
-            travel_rear = (wheel_deflections[2] + wheel_deflections[3]) * 0.5
-            if previous and dt > 1e-6:
-                vel_front = _clamp(
-                    (travel_front - previous.suspension_travel_front) / dt, -5.0, 5.0
-                )
-                vel_rear = _clamp(
-                    (travel_rear - previous.suspension_travel_rear) / dt, -5.0, 5.0
-                )
-            else:
-                vel_front = 0.0
-                vel_rear = 0.0
-        elif wheel_data_present:
+        wheel_payload_missing = not wheel_data_present
+
+        def _mean_deflection(indices: tuple[int, int]) -> float:
+            values = [wheel_deflections[index] for index in indices]
+            finite = [value for value in values if math.isfinite(value)]
+            if not finite:
+                return math.nan
+            return sum(finite) / len(finite)
+
+        def _resolve_velocity(travel: float, previous_value: float | None) -> float:
+            if not math.isfinite(travel):
+                return math.nan
+            if previous_value is None or not math.isfinite(previous_value) or dt <= 1e-6:
+                return 0.0
+            return _clamp((travel - previous_value) / dt, -5.0, 5.0)
+
+        if not wheel_payload_missing:
+            travel_front = _mean_deflection((0, 1))
+            travel_rear = _mean_deflection((2, 3))
+            previous_front = previous.suspension_travel_front if previous else None
+            previous_rear = previous.suspension_travel_rear if previous else None
+            vel_front = _resolve_velocity(travel_front, previous_front)
+            vel_rear = _resolve_velocity(travel_rear, previous_rear)
+        else:
             travel_front, vel_front = self._compute_suspension_velocity(
                 "front",
                 front_share,
@@ -232,9 +239,6 @@ class TelemetryFusion:
                 dt,
                 calibration,
             )
-        else:
-            travel_front = travel_rear = math.nan
-            vel_front = vel_rear = math.nan
 
         mu_front, mu_front_lat, mu_front_long = self._compute_mu_eff(
             outsim.accel_y, outsim.accel_x, front_share, calibration
@@ -563,17 +567,7 @@ class TelemetryFusion:
         dt: float,
         calibration: FusionCalibration,
     ) -> tuple[float, float]:
-        filtered_accel = self._filtered_vertical_accel(calibration.suspension_window)
-        g_force = filtered_accel + 9.81
-        load_factor = _clamp(g_force / 9.81, 0.0, 2.5)
-        base_weight = calibration.axle_weight_front if axle == "front" else calibration.axle_weight_rear
-        normalised_share = _clamp(share, 0.05, 0.95)
-        travel = _clamp(normalised_share * load_factor + base_weight * 0.1, 0.0, 1.5)
-        if previous is None or dt <= 1e-6:
-            velocity = 0.0
-        else:
-            velocity = _clamp((travel - previous) / dt, -5.0, 5.0)
-        return travel, velocity
+        return math.nan, math.nan
 
     def _compute_mu_eff(
         self,
