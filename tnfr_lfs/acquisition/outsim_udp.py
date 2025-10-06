@@ -170,14 +170,28 @@ class OutSimUDPClient:
         timeout: float = 0.05,
         retries: int = 5,
     ) -> None:
-        self._address: Tuple[str, int] = (host, port)
+        """Create a UDP client bound to the local host.
+
+        Parameters
+        ----------
+        host:
+            Remote host expected to provide the OutSim datagrams.  The client
+            still binds locally, accepting packets from all interfaces unless a
+            remote host is provided, in which case only datagrams originating
+            from that host are processed.
+        port:
+            UDP port for both binding locally and filtering remote packets.
+        """
+
+        self._remote_host = host
+        self._remote_addresses = self._resolve_remote_addresses(host)
         self._timeout = timeout
         self._retries = retries
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._socket.setblocking(False)
-        self._socket.bind(self._address)
-        # When port 0 is used, store the real port assigned by the OS.
-        self._address = (host, self._socket.getsockname()[1])
+        self._socket.bind(("", port))
+        local_host, local_port = self._socket.getsockname()
+        self._address: Tuple[str, int] = (local_host, local_port)
 
     @property
     def address(self) -> Tuple[str, int]:
@@ -190,14 +204,27 @@ class OutSimUDPClient:
 
         for _ in range(self._retries):
             try:
-                payload, _ = self._socket.recvfrom(OUTSIM_MAX_PACKET_SIZE)
+                payload, source = self._socket.recvfrom(OUTSIM_MAX_PACKET_SIZE)
             except BlockingIOError:
                 time.sleep(self._timeout)
                 continue
             if not payload:
                 continue
+            if self._remote_addresses and source[0] not in self._remote_addresses:
+                continue
             return OutSimPacket.from_bytes(payload)
         return None
+
+    @staticmethod
+    def _resolve_remote_addresses(host: str) -> set[str]:
+        if not host or host in {"", "0.0.0.0"}:
+            return set()
+        try:
+            info = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_DGRAM)
+        except socket.gaierror:
+            return {host}
+        addresses = {record[4][0] for record in info if record[0] == socket.AF_INET}
+        return addresses or {host}
 
     def close(self) -> None:
         """Close the underlying socket."""

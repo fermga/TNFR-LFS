@@ -11,7 +11,7 @@ import struct
 import pytest
 
 from tnfr_lfs.acquisition.fusion import TelemetryFusion
-from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket
+from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket, OutGaugeUDPClient
 from tnfr_lfs.acquisition.outsim_client import (
     DEFAULT_SCHEMA,
     LEGACY_COLUMNS,
@@ -389,7 +389,7 @@ def test_udp_client_preserves_extended_payload_for_fusion(
     client = OutSimUDPClient(host="127.0.0.1", port=0, timeout=0.01, retries=20)
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        sender.sendto(extended_outsim_payload, client.address)
+        sender.sendto(extended_outsim_payload, ("127.0.0.1", client.address[1]))
         packet = client.recv()
         assert packet is not None
         assert packet.inputs is not None
@@ -407,6 +407,26 @@ def test_udp_client_preserves_extended_payload_for_fusion(
         assert record.suspension_deflection_rr == pytest.approx(0.05)
     finally:
         sender.close()
+        client.close()
+
+
+def test_outsim_udp_client_allows_remote_host_binding() -> None:
+    client = OutSimUDPClient(host="203.0.113.1", port=0)
+    try:
+        host, port = client.address
+        assert host == "0.0.0.0"
+        assert port > 0
+    finally:
+        client.close()
+
+
+def test_outgauge_udp_client_allows_remote_host_binding() -> None:
+    client = OutGaugeUDPClient(host="198.51.100.1", port=0)
+    try:
+        host, port = client.address
+        assert host == "0.0.0.0"
+        assert port > 0
+    finally:
         client.close()
 
 
