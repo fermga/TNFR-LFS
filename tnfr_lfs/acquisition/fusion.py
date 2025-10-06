@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
 from importlib import resources
+from pathlib import Path
 from typing import Dict, List, Mapping, Tuple
 
 try:  # Python 3.11+
@@ -12,6 +14,11 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
+from ..analysis.brake_thermal import (
+    BrakeThermalConfig,
+    BrakeThermalEstimator,
+    merge_brake_config,
+)
 from ..core.epi import EPIExtractor, EPIBundle, TelemetryRecord
 from .outsim_udp import OutSimPacket, OutSimWheelState
 from .outgauge_udp import OutGaugePacket
@@ -66,12 +73,32 @@ class TelemetryFusion:
     )
     _vertical_history: List[float] = field(default_factory=list, init=False, repr=False)
     _line_history: List[Tuple[float, float]] = field(default_factory=list, init=False, repr=False)
+    _brake_thermal_defaults: BrakeThermalConfig = field(init=False, repr=False)
+    _brake_thermal_mode: str = field(init=False, repr=False)
+    _brake_thermal_car_profiles: Dict[str, Tuple[BrakeThermalConfig, str | None]] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    _brake_thermal_estimator: BrakeThermalEstimator | None = field(
+        default=None, init=False, repr=False
+    )
+    _brake_thermal_active_config: BrakeThermalConfig | None = field(
+        default=None, init=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         self._calibration_table = self._load_calibration_table()
         self._calibration_cache = {}
         self._vertical_history = []
         self._line_history = []
+        (
+            self._brake_thermal_defaults,
+            self._brake_thermal_mode,
+            self._brake_thermal_car_profiles,
+        ) = self._load_brake_thermal_profiles()
+        self._brake_thermal_estimator = BrakeThermalEstimator(
+            self._brake_thermal_defaults
+        )
+        self._brake_thermal_active_config = self._brake_thermal_defaults
 
     def reset(self) -> None:
         """Clear the internal telemetry history."""
@@ -79,6 +106,8 @@ class TelemetryFusion:
         self._records.clear()
         self._vertical_history.clear()
         self._line_history.clear()
+        if self._brake_thermal_estimator is not None:
+            self._brake_thermal_estimator.reset()
 
     def fuse(self, outsim: OutSimPacket, outgauge: OutGaugePacket) -> TelemetryRecord:
         """Return a :class:`TelemetryRecord` derived from both UDP sources."""
@@ -252,7 +281,16 @@ class TelemetryFusion:
             outgauge, previous, layers=tyre_temp_layers
         )
         tyre_pressures = self._resolve_wheel_pressures(outgauge, previous)
-        brake_temps = self._resolve_brake_temperatures(outgauge, previous)
+        deceleration = max(0.0, -outsim.accel_x)
+        brake_temps = self._resolve_brake_temperatures(
+            dt,
+            speed,
+            deceleration,
+            brake_input,
+            wheel_loads,
+            outgauge,
+            previous,
+        )
         line_deviation = self._compute_line_deviation(outsim)
 
         record = TelemetryRecord(
@@ -360,6 +398,132 @@ class TelemetryFusion:
                 return tomllib.load(handle)
         except FileNotFoundError:  # pragma: no cover - optional resource
             return {"defaults": {}}
+
+    def _resolve_brake_pack_root(self) -> Path | None:
+        candidates: list[Path] = []
+        env_root = os.environ.get("TNFR_LFS_PACK_ROOT")
+        if env_root:
+            candidates.append(Path(env_root).expanduser())
+        cwd = Path.cwd()
+        candidates.append(cwd)
+        package_root = Path(__file__).resolve().parents[2]
+        if package_root not in candidates:
+            candidates.append(package_root)
+
+        for root in candidates:
+            config_path = root / "config" / "global.toml"
+            cars_dir = root / "data" / "cars"
+            if config_path.exists() or cars_dir.exists():
+                return root
+        return None
+
+    def _load_toml_mapping(self, path: Path) -> Mapping[str, object] | None:
+        try:
+            with path.open("rb") as buffer:
+                payload = tomllib.load(buffer)
+        except FileNotFoundError:
+            return None
+        except (OSError, tomllib.TOMLDecodeError):  # pragma: no cover - invalid file
+            return None
+        return payload if isinstance(payload, Mapping) else None
+
+    def _extract_brake_section(
+        self, payload: Mapping[str, object]
+    ) -> Mapping[str, object] | None:
+        thermal = payload.get("thermal")
+        if not isinstance(thermal, Mapping):
+            return None
+        brakes = thermal.get("brakes")
+        if not isinstance(brakes, Mapping):
+            return None
+        return brakes
+
+    def _normalise_brake_mode(self, value: object, fallback: str | None = None) -> str | None:
+        if not isinstance(value, str):
+            return fallback
+        candidate = value.strip().lower()
+        if candidate in {"auto", "off", "force"}:
+            return candidate
+        return fallback
+
+    def _load_brake_thermal_profiles(
+        self,
+    ) -> tuple[
+        BrakeThermalConfig,
+        str,
+        Dict[str, Tuple[BrakeThermalConfig, str | None]],
+    ]:
+        defaults = BrakeThermalConfig()
+        mode = "auto"
+        overrides: Dict[str, Tuple[BrakeThermalConfig, str | None]] = {}
+
+        pack_root = self._resolve_brake_pack_root()
+        if pack_root is None:
+            return defaults, mode, overrides
+
+        global_payload = self._load_toml_mapping(pack_root / "config" / "global.toml")
+        if global_payload:
+            section = self._extract_brake_section(global_payload)
+            if section:
+                defaults = merge_brake_config(defaults, section)
+                mode_override = self._normalise_brake_mode(section.get("mode"), None)
+                if mode_override:
+                    mode = mode_override
+
+        cars_dir = pack_root / "data" / "cars"
+        if cars_dir.exists():
+            for manifest in sorted(cars_dir.glob("*.toml")):
+                payload = self._load_toml_mapping(manifest)
+                if not payload:
+                    continue
+                car_abbrev = payload.get("abbrev")
+                if not isinstance(car_abbrev, str) or not car_abbrev:
+                    continue
+                section = self._extract_brake_section(payload)
+                if not section:
+                    continue
+                config = merge_brake_config(defaults, section)
+                mode_override = self._normalise_brake_mode(section.get("mode"), None)
+                overrides[car_abbrev] = (config, mode_override)
+
+        return defaults, mode, overrides
+
+    def _select_brake_thermal_profile(
+        self, car: str | None
+    ) -> tuple[BrakeThermalConfig, str]:
+        config = self._brake_thermal_defaults
+        mode = self._brake_thermal_mode
+        if car:
+            profile = self._brake_thermal_car_profiles.get(car)
+            if profile:
+                config = profile[0]
+                if profile[1]:
+                    mode = profile[1]
+        env_override = self._normalise_brake_mode(
+            os.environ.get("TNFR_LFS_BRAKE_THERMAL"), None
+        )
+        if env_override:
+            mode = env_override
+        return config, mode
+
+    def _ensure_brake_estimator(
+        self, config: BrakeThermalConfig, previous: TelemetryRecord | None
+    ) -> BrakeThermalEstimator:
+        estimator = self._brake_thermal_estimator
+        if estimator is None or self._brake_thermal_active_config != config:
+            estimator = BrakeThermalEstimator(config)
+            if previous is not None:
+                estimator.seed(
+                    (
+                        previous.brake_temp_fl,
+                        previous.brake_temp_fr,
+                        previous.brake_temp_rl,
+                        previous.brake_temp_rr,
+                    )
+                )
+            self._brake_thermal_estimator = estimator
+            self._brake_thermal_active_config = config
+        return estimator
 
     def _select_calibration(self, outgauge: OutGaugePacket) -> FusionCalibration:
         car = outgauge.car or "__default__"
@@ -734,8 +898,19 @@ class TelemetryFusion:
         return tuple(resolved)  # type: ignore[return-value]
 
     def _resolve_brake_temperatures(
-        self, outgauge: OutGaugePacket, previous: TelemetryRecord | None
+        self,
+        dt: float,
+        speed: float,
+        deceleration: float,
+        brake_input: float,
+        wheel_loads: tuple[float, float, float, float],
+        outgauge: OutGaugePacket,
+        previous: TelemetryRecord | None,
     ) -> tuple[float, float, float, float]:
+        config, mode = self._select_brake_thermal_profile(outgauge.car)
+        estimator = self._ensure_brake_estimator(config, previous)
+        estimated = estimator.step(dt, speed, deceleration, brake_input, wheel_loads)
+
         candidate = getattr(outgauge, "brake_temps", (0.0, 0.0, 0.0, 0.0))
         if not isinstance(candidate, tuple) or len(candidate) != 4:
             candidate = (0.0, 0.0, 0.0, 0.0)
@@ -745,27 +920,36 @@ class TelemetryFusion:
             previous.brake_temp_rl if previous else math.nan,
             previous.brake_temp_rr if previous else math.nan,
         )
-        candidate_values: list[float] = []
-        has_positive = False
-        for value in candidate:
+
+        gauge_values: list[float] = []
+        gauge_valid = False
+        for raw, default in zip(candidate, fallback):
             try:
-                numeric = float(value)
+                numeric = float(raw)
             except (TypeError, ValueError):
                 numeric = math.nan
             if math.isfinite(numeric) and numeric > 0.0:
-                has_positive = True
-            candidate_values.append(numeric)
-        if not has_positive:
-            return (math.nan, math.nan, math.nan, math.nan)
-        resolved: list[float] = []
-        for numeric, default in zip(candidate_values, fallback):
-            resolved_value = numeric
-            if not math.isfinite(resolved_value) or resolved_value <= 0.0:
-                resolved_value = default
-            if not math.isfinite(resolved_value) or resolved_value <= 0.0:
-                resolved_value = math.nan
-            resolved.append(float(resolved_value))
-        return tuple(resolved)  # type: ignore[return-value]
+                gauge_valid = True
+                gauge_values.append(float(numeric))
+            else:
+                replacement = default if math.isfinite(default) and default > 0.0 else math.nan
+                gauge_values.append(float(replacement))
+
+        if gauge_valid:
+            estimator.observe(gauge_values)
+            if mode != "force":
+                return tuple(estimator.temperatures)
+
+        env_mode = mode
+        if env_mode == "off":
+            return tuple(gauge_values)
+        if env_mode == "force":
+            return estimated
+
+        if gauge_valid:
+            return tuple(estimator.temperatures)
+
+        return estimated
 
     def _compute_line_deviation(self, outsim: OutSimPacket, window: int = 25) -> float:
         position = (float(outsim.pos_x), float(outsim.pos_y))

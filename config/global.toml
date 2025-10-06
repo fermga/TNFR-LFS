@@ -15,3 +15,12 @@ delta_nfr = [-0.80, 0.80]
 nu_f = [0.18, 0.42]
 slip_lat = [-0.55, 0.55]
 slip_long = [-0.45, 0.45]
+
+[thermal.brakes]
+mode = "auto"
+ambient = 25.0
+heat_capacity = 18000.0
+heating_efficiency = 0.35
+convective_coefficient = 0.06
+still_air_coefficient = 0.012
+minimum_brake_input = 0.02
