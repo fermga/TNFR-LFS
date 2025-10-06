@@ -661,16 +661,28 @@ def segment_microsectors(
                 "aero_drift_low_rake": window_metrics.aero_balance_drift.low_speed.rake_mean,
                 "aero_drift_low_rake_deg": window_metrics.aero_balance_drift.low_speed.rake_deg,
                 "aero_drift_low_samples": float(window_metrics.aero_balance_drift.low_speed.samples),
+                "aero_drift_low_mu_balance_slope": window_metrics.aero_balance_drift.low_speed.mu_balance_slope,
+                "aero_drift_low_mu_balance_sign_change": (
+                    window_metrics.aero_balance_drift.low_speed.mu_balance_sign_change
+                ),
                 "aero_drift_medium_mu_delta": window_metrics.aero_balance_drift.medium_speed.mu_delta,
                 "aero_drift_medium_mu_ratio": window_metrics.aero_balance_drift.medium_speed.mu_ratio,
                 "aero_drift_medium_rake": window_metrics.aero_balance_drift.medium_speed.rake_mean,
                 "aero_drift_medium_rake_deg": window_metrics.aero_balance_drift.medium_speed.rake_deg,
                 "aero_drift_medium_samples": float(window_metrics.aero_balance_drift.medium_speed.samples),
+                "aero_drift_medium_mu_balance_slope": window_metrics.aero_balance_drift.medium_speed.mu_balance_slope,
+                "aero_drift_medium_mu_balance_sign_change": (
+                    window_metrics.aero_balance_drift.medium_speed.mu_balance_sign_change
+                ),
                 "aero_drift_high_mu_delta": window_metrics.aero_balance_drift.high_speed.mu_delta,
                 "aero_drift_high_mu_ratio": window_metrics.aero_balance_drift.high_speed.mu_ratio,
                 "aero_drift_high_rake": window_metrics.aero_balance_drift.high_speed.rake_mean,
                 "aero_drift_high_rake_deg": window_metrics.aero_balance_drift.high_speed.rake_deg,
                 "aero_drift_high_samples": float(window_metrics.aero_balance_drift.high_speed.samples),
+                "aero_drift_high_mu_balance_slope": window_metrics.aero_balance_drift.high_speed.mu_balance_slope,
+                "aero_drift_high_mu_balance_sign_change": (
+                    window_metrics.aero_balance_drift.high_speed.mu_balance_sign_change
+                ),
                 "si_variance": window_metrics.si_variance,
                 "epi_derivative_abs": window_metrics.epi_derivative_abs,
                 "brake_headroom": window_metrics.brake_headroom.value,
