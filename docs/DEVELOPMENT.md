@@ -2,7 +2,8 @@
 
 Este repositorio utiliza herramientas de linting, tipado y pruebas para mantener
 el toolkit TNFR × LFS en un estado saludable. Tras clonar el proyecto instala
-las dependencias de desarrollo:
+las dependencias de desarrollo (esto incluye `numpy>=1.24,<2.0` y
+`pandas>=1.5,<3.0`, requeridos por las pruebas y los pipelines de análisis):
 
 ```bash
 pip install .[dev]

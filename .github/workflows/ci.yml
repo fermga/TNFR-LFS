@@ -15,7 +15,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install .[dev]
+        run: |
+          # Install project + dev extras (brings in numpy/pandas before pytest)
+          pip install .[dev]
       - name: Ruff
         run: ruff check .
       - name: Mypy

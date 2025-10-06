@@ -6,6 +6,9 @@ TNFR × LFS es el toolkit de análisis y automatización que operacionaliza la p
 
 ### Requisitos previos
 - Python 3.9 o superior instalado y disponible en el PATH.
+- Dependencias científicas: `numpy>=1.24,<2.0` y `pandas>=1.5,<3.0`. Se instalan
+  automáticamente al ejecutar `pip install .[dev]`, pero verifica que tu entorno
+  pueda compilar/instalar ruedas para ambos paquetes.
 - Un dataset de telemetría en `data/`. El repositorio incluye el CSV sintético `data/BL1_XFG_baseline.csv`, la captura real en RAF `data/test1.raf` y el bundle exportado desde Replay Analyzer `data/test1.zip`, de modo que puedes ensayar flujos con cualquiera de los formatos soportados.
 
 ### Ejecución

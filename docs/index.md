@@ -20,6 +20,18 @@ apply those ideas in racing telemetry pipelines:
 The project ships with a CLI (`tnfr-lfs`) as well as examples and unit
 tests to illustrate the workflow.
 
+## Installation
+
+Install the toolkit (including its scientific dependencies
+`numpy>=1.24,<2.0` and `pandas>=1.5,<3.0`) with:
+
+```bash
+pip install .[dev]
+```
+
+If your environment cannot consume pre-built wheels, ensure build tools for
+NumPy and pandas are available before running the verification pipeline.
+
 ## Telemetry requirements
 
 All TNFR metrics (`ΔNFR`, the nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)` and related
