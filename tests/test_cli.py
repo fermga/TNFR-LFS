@@ -152,6 +152,91 @@ def test_template_command_emits_phase_presets() -> None:
     assert report_templates["apex"]["yaw_rate_window"][1] == pytest.approx(0.24, rel=1e-3)
 
 
+def test_compare_command_attaches_abtest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    baseline_path = tmp_path / "baseline.csv"
+    variant_path = tmp_path / "variant.csv"
+    baseline_path.write_text("", encoding="utf8")
+    variant_path.write_text("", encoding="utf8")
+
+    class DummyBundle:
+        def __init__(self, value: float) -> None:
+            self.sense_index = value
+            self.delta_nfr = value
+            self.coherence_index = value
+            self.delta_nfr_longitudinal = value
+            self.delta_nfr_lateral = value
+
+    metrics_a = {
+        "stages": {
+            "coherence": {
+                "bundles": [
+                    DummyBundle(0.60),
+                    DummyBundle(0.62),
+                    DummyBundle(0.61),
+                    DummyBundle(0.63),
+                ]
+            },
+            "recepcion": {"lap_indices": [0, 0, 1, 1]},
+        }
+    }
+    metrics_b = {
+        "stages": {
+            "coherence": {
+                "bundles": [
+                    DummyBundle(0.65),
+                    DummyBundle(0.67),
+                    DummyBundle(0.66),
+                    DummyBundle(0.68),
+                ]
+            },
+            "recepcion": {"lap_indices": [0, 0, 1, 1]},
+        }
+    }
+    metrics_iter = iter([metrics_a, metrics_b])
+
+    monkeypatch.setattr(cli_module, "_load_records", lambda path: [])
+    monkeypatch.setattr(cli_module, "_group_records_by_lap", lambda records: [[], []])
+    monkeypatch.setattr(
+        cli_module,
+        "orchestrate_delta_metrics",
+        lambda *args, **kwargs: next(metrics_iter),
+    )
+    monkeypatch.setattr(cli_module, "_load_pack_cars", lambda pack: {})
+    monkeypatch.setattr(cli_module, "_load_pack_track_profiles", lambda pack: {})
+    monkeypatch.setattr(cli_module, "_load_pack_modifiers", lambda pack: {})
+    monkeypatch.setattr(
+        cli_module,
+        "_assemble_session_payload",
+        lambda *args, **kwargs: {
+            "car_model": "XFG",
+            "track_profile": "generic",
+            "weights": {},
+            "hints": {},
+        },
+    )
+
+    output = run_cli(
+        [
+            "compare",
+            str(baseline_path),
+            str(variant_path),
+            "--metric",
+            "sense_index",
+            "--export",
+            "json",
+        ]
+    )
+    payload = json.loads(output)
+    session = payload["session"]
+    assert "abtest" in session
+    abtest = session["abtest"]
+    assert abtest["metric"] == "sense_index"
+    assert abtest["baseline_laps"]
+    assert abtest["variant_laps"]
+
+
 def test_track_argument_resolves_session_payload(mini_track_pack) -> None:
     config: dict[str, object] = {}
     selection = cli_module._resolve_track_argument(

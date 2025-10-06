@@ -101,12 +101,22 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
 
     plan = _extract_setup_plan(results)
     session_messages: Tuple[str, ...] = ()
+    abtest_payload: Dict[str, Any] | None = None
     if isinstance(results, Mapping):
         session_messages = format_session_messages(results.get("session"))
         if not session_messages:
             extras = results.get("session_messages")
             if isinstance(extras, Sequence):
                 session_messages = tuple(str(item) for item in extras if item)
+        session_section = results.get("session")
+        if isinstance(session_section, Mapping):
+            abtest_candidate = session_section.get("abtest")
+            if is_dataclass(abtest_candidate):
+                abtest_payload = asdict(abtest_candidate)
+            elif isinstance(abtest_candidate, Mapping):
+                abtest_payload = dict(abtest_candidate)
+    else:
+        session_messages = ()
     header = "| Cambio | Ajuste | Racional | Efecto esperado |"
     separator = "| --- | --- | --- | --- |"
     lines = [header, separator]
@@ -133,6 +143,63 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         lines.append("")
         lines.append("**Efectos esperados**")
         lines.extend(f"- {item}" for item in expected_effects)
+
+    def _fmt(value: Any, *, signed: bool = False, decimals: int = 4) -> str:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return "-"
+        if not math.isfinite(numeric):
+            return "-"
+        template = f"{{:+.{decimals}f}}" if signed else f"{{:.{decimals}f}}"
+        return template.format(numeric)
+
+    if abtest_payload:
+        lines.append("")
+        lines.append("**Comparación A/B**")
+        metric_label = abtest_payload.get("metric")
+        if metric_label:
+            lines.append(f"Métrica: `{metric_label}`")
+        lines.append("| Estadística | Baseline | Variante | Δ / detalle |")
+        lines.append("| --- | --- | --- | --- |")
+        lines.append(
+            "| Media | {baseline} | {variant} | {delta} |".format(
+                baseline=_fmt(abtest_payload.get("baseline_mean")),
+                variant=_fmt(abtest_payload.get("variant_mean")),
+                delta=_fmt(abtest_payload.get("mean_difference"), signed=True),
+            )
+        )
+        alpha = float(abtest_payload.get("alpha", 0.05))
+        ci_low = _fmt(abtest_payload.get("bootstrap_low"), signed=True)
+        ci_high = _fmt(abtest_payload.get("bootstrap_high"), signed=True)
+        interval = f"[{ci_low}, {ci_high}]"
+        confidence_label = f"IC {int(round((1.0 - alpha) * 100))}%"
+        lines.append(f"| {confidence_label} | - | - | {interval} |")
+        lines.append(
+            "| p (perm) | - | - | {value} |".format(
+                value=_fmt(abtest_payload.get("permutation_p_value"), decimals=4)
+            )
+        )
+        lines.append(
+            "| Potencia | - | - | {value} |".format(
+                value=_fmt(abtest_payload.get("estimated_power"), decimals=3)
+            )
+        )
+        baseline_laps = abtest_payload.get("baseline_laps")
+        variant_laps = abtest_payload.get("variant_laps")
+        if isinstance(baseline_laps, Sequence) or isinstance(variant_laps, Sequence):
+            baseline_count = len(baseline_laps) if isinstance(baseline_laps, Sequence) else 0
+            variant_count = len(variant_laps) if isinstance(variant_laps, Sequence) else 0
+            lines.append(
+                f"| Laps | {baseline_count} | {variant_count} | - |"
+            )
+        if isinstance(baseline_laps, Sequence) and baseline_laps:
+            formatted = ", ".join(_fmt(value) for value in baseline_laps)
+            lines.append("")
+            lines.append(f"Baseline laps: {formatted}")
+        if isinstance(variant_laps, Sequence) and variant_laps:
+            formatted = ", ".join(_fmt(value) for value in variant_laps)
+            lines.append(f"Variante laps: {formatted}")
 
     aero_guidance = plan.get("aero_guidance")
     aero_metrics = plan.get("aero_metrics", {}) or {}

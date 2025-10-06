@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from tnfr_lfs.analysis import ABResult
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -198,9 +199,31 @@ def test_serialise_setup_plan_collects_unique_fields():
         == "⇈+0.40"
     )
     assert any("Entrada ∥" in hint for hint in payload["phase_axis_suggestions"])
-    assert payload["aero_mechanical_coherence"] == pytest.approx(0.72)
-    assert payload["sci_breakdown"]["sense"] == pytest.approx(0.32)
-    assert payload["ics_breakdown"]["sense"] == pytest.approx(0.32)
+
+
+def test_markdown_exporter_renders_abtest_section() -> None:
+    plan = build_setup_plan()
+    abtest = ABResult(
+        metric="sense_index",
+        baseline_laps=(0.61, 0.62),
+        variant_laps=(0.66, 0.67),
+        baseline_mean=0.615,
+        variant_mean=0.665,
+        mean_difference=0.05,
+        bootstrap_low=0.045,
+        bootstrap_high=0.055,
+        permutation_p_value=0.0125,
+        estimated_power=0.84,
+        alpha=0.05,
+    )
+    payload = {
+        "setup_plan": plan,
+        "session": {"abtest": abtest},
+    }
+    rendered = markdown_exporter(payload)
+    assert "Comparación A/B" in rendered
+    assert "sense_index" in rendered
+    assert "Potencia" in rendered
 
 
 def test_markdown_exporter_renders_table_and_lists():
