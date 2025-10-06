@@ -29,6 +29,9 @@ UDP broadcasters and extend OutSim with `OutSim Opts ff` in `cfg.txt`
 (or run `/outsim Opts ff` before `/outsim 1 …`) so the UDP packets
 include the player identifier, driver inputs and the four-wheel block
 that feeds the telemetry fusion layer.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】
+The CSV reader mirrors that philosophy by preserving optional columns as
+`math.nan` when OutSim leaves them out, preventing artificial estimates
+from leaking into the metrics pipeline.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
 When the wheel payload is disabled the toolkit now surfaces tyre loads,
 slip ratios and suspension metrics as “sin datos” rather than
 fabricating zeroed values, making it obvious that the telemetry stream
