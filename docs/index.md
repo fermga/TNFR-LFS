@@ -31,8 +31,11 @@ include the player identifier, driver inputs and the four-wheel block
 that feeds the telemetry fusion layer.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】
 Likewise, enable the extended OutGauge payload (via `OutGauge Opts …` in
 `cfg.txt` or `/outgauge Opts …`) so the simulator transmits tyre
-temperatures, their three-layer profile and pressures; otherwise the HUD
-and CLI will surface those entries as “sin datos”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
+temperatures, their three-layer profile and pressures; set at least the
+`OG_EXT_TYRE_TEMP`, `OG_EXT_TYRE_PRESS` and `OG_EXT_BRAKE_TEMP` flags so the
+20-float block (inner/middle/outer layers, pressure ring and brake discs)
+is broadcast. Otherwise the HUD and CLI will surface those entries as “sin
+datos”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
 The CSV reader mirrors that philosophy by preserving optional columns as
 `math.nan` when OutSim leaves them out, preventing artificial estimates
 from leaking into the metrics pipeline.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】

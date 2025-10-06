@@ -374,6 +374,77 @@ def test_fusion_consumes_extended_outsim_packet(
     assert math.isnan(record.tyre_pressure_rr)
 
 
+def test_outgauge_from_bytes_decodes_extended_tyre_payload(
+    extended_outsim_packet: OutSimPacket,
+) -> None:
+    def _pad(value: str, size: int) -> bytes:
+        encoded = value.encode("latin-1")
+        if len(encoded) > size:
+            raise AssertionError("value too long for OutGauge field")
+        return encoded + b"\x00" * (size - len(encoded))
+
+    base_payload = struct.pack(
+        "<I4s16s8s6s6sHBBfffffffIIfff16s16sI",
+        43210,
+        _pad("XFG", 4),
+        _pad("Driver", 16),
+        _pad("123", 8),
+        _pad("BL1", 6),
+        _pad("", 6),
+        0,
+        3,
+        0,
+        22.5,
+        5150.0,
+        0.0,
+        92.0,
+        40.5,
+        4.2,
+        80.0,
+        0,
+        0,
+        0.41,
+        0.12,
+        0.02,
+        _pad("FUEL", 16),
+        _pad("TEMP", 16),
+        77,
+    )
+    inner = (95.0, 94.0, 88.5, 87.5)
+    middle = (90.0, 89.0, 84.0, 83.0)
+    outer = (85.0, 84.0, 79.0, 78.0)
+    pressures = (1.58, 1.56, 1.48, 1.46)
+    brakes = (420.0, 410.0, 400.0, 395.0)
+    extras = struct.pack("<20f", *(inner + middle + outer + pressures + brakes))
+
+    packet = OutGaugePacket.from_bytes(base_payload + extras)
+
+    for value, expected in zip(packet.tyre_temps_inner, inner):
+        assert value == pytest.approx(expected)
+    for value, expected in zip(packet.tyre_temps_middle, middle):
+        assert value == pytest.approx(expected)
+    for value, expected in zip(packet.tyre_temps_outer, outer):
+        assert value == pytest.approx(expected)
+    for value, expected in zip(packet.tyre_pressures, pressures):
+        assert value == pytest.approx(expected)
+    for value, expected in zip(packet.brake_temps, brakes):
+        assert value == pytest.approx(expected)
+
+    expected_average = tuple(
+        (inner[idx] + middle[idx] + outer[idx]) / 3.0 for idx in range(4)
+    )
+    for value, expected in zip(packet.tyre_temps, expected_average):
+        assert value == pytest.approx(expected)
+
+    fusion = TelemetryFusion()
+    record = fusion.fuse(extended_outsim_packet, packet)
+
+    assert record.tyre_pressure_fl == pytest.approx(pressures[0])
+    assert record.tyre_pressure_fr == pytest.approx(pressures[1])
+    assert record.tyre_pressure_rl == pytest.approx(pressures[2])
+    assert record.tyre_pressure_rr == pytest.approx(pressures[3])
+
+
 def test_fusion_uses_outgauge_tyre_temperatures(
     extended_outsim_packet: OutSimPacket, sample_outgauge_packet: OutGaugePacket
 ) -> None:

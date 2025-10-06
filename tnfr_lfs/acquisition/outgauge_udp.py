@@ -92,6 +92,7 @@ class OutGaugePacket:
         extra_inner = (0.0, 0.0, 0.0, 0.0)
         extra_middle = (0.0, 0.0, 0.0, 0.0)
         extra_outer = (0.0, 0.0, 0.0, 0.0)
+        extra_pressures = (0.0, 0.0, 0.0, 0.0)
         extra_brakes = (0.0, 0.0, 0.0, 0.0)
         extra_offset = _PACK_STRUCT.size
         if len(payload) > extra_offset:
@@ -105,42 +106,32 @@ class OutGaugePacket:
                 except struct.error:
                     floats = ()
                 if floats:
-                    inner = list(extra_inner)
-                    middle = list(extra_middle)
-                    outer = list(extra_outer)
-                    brakes = list(extra_brakes)
-                    for index in range(4):
-                        try:
-                            value = float(floats[index])
-                            if math.isfinite(value):
-                                inner[index] = value
-                        except (IndexError, TypeError, ValueError):
-                            break
-                    for index in range(4):
-                        try:
-                            value = float(floats[4 + index])
-                            if math.isfinite(value):
-                                middle[index] = value
-                        except (IndexError, TypeError, ValueError):
-                            break
-                    for index in range(4):
-                        try:
-                            value = float(floats[8 + index])
-                            if math.isfinite(value):
-                                outer[index] = value
-                        except (IndexError, TypeError, ValueError):
-                            break
-                    for index in range(4):
-                        try:
-                            value = float(floats[12 + index])
-                            if math.isfinite(value):
-                                brakes[index] = value
-                        except (IndexError, TypeError, ValueError):
-                            break
-                    extra_inner = tuple(inner)  # type: ignore[assignment]
-                    extra_middle = tuple(middle)  # type: ignore[assignment]
-                    extra_outer = tuple(outer)  # type: ignore[assignment]
-                    extra_brakes = tuple(brakes)  # type: ignore[assignment]
+                    values = list(floats)
+                    # OutGauge appends the extended tyre payload as five
+                    # consecutive blocks of four floats (inner, middle, outer,
+                    # pressure and brake temperatures) when the corresponding
+                    # OG_EXT_* flags are enabled.
+
+                    def _extract_block(offset: int) -> tuple[float, float, float, float]:
+                        block = [0.0, 0.0, 0.0, 0.0]
+                        for index in range(4):
+                            position = offset + index
+                            if position >= len(values):
+                                break
+                            try:
+                                numeric = float(values[position])
+                            except (TypeError, ValueError):
+                                continue
+                            if not math.isfinite(numeric) or numeric <= 0.0:
+                                continue
+                            block[index] = numeric
+                        return tuple(block)  # type: ignore[return-value]
+
+                    extra_inner = _extract_block(0)
+                    extra_middle = _extract_block(4)
+                    extra_outer = _extract_block(8)
+                    extra_pressures = _extract_block(12)
+                    extra_brakes = _extract_block(16)
 
         def _average_layers(index: int) -> float:
             values = [extra_inner[index], extra_middle[index], extra_outer[index]]
@@ -181,7 +172,7 @@ class OutGaugePacket:
             display2=_decode_string(display2),
             packet_id=packet_id,
             tyre_temps=averaged,
-            tyre_pressures=(0.0, 0.0, 0.0, 0.0),
+            tyre_pressures=extra_pressures,
             tyre_temps_inner=extra_inner,
             tyre_temps_middle=extra_middle,
             tyre_temps_outer=extra_outer,
