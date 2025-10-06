@@ -6,7 +6,7 @@ TNFR × LFS es el toolkit de análisis y automatización que operacionaliza la p
 
 ### Requisitos previos
 - Python 3.9 o superior instalado y disponible en el PATH.
-- Un dataset de telemetría en `data/` (el repositorio incluye `data/BL1_XFG_baseline.csv`).
+- Un dataset de telemetría en `data/`. El repositorio incluye tanto el CSV sintético `data/BL1_XFG_baseline.csv` como la captura real en RAF `data/test1.raf`, de modo que puedes ensayar flujos con cualquiera de los dos formatos.
 
 ### Ejecución
 Ejecuta el flujo end-to-end simulado con:
@@ -16,6 +16,8 @@ make quickstart
 ```
 
 El objetivo invoca `examples/quickstart.sh`, que genera artefactos en `examples/out/` a partir del dataset y produce informes JSON y Markdown listos para inspeccionar.
+
+El CLI acepta indistintamente CSV o RAF. Cuando trabajes con CSV utiliza el modo simulado (`tnfr-lfs baseline salida.jsonl --simulate data/BL1_XFG_baseline.csv`), mientras que para RAF basta con apuntar el archivo directamente al subcomando (`tnfr-lfs baseline salida.jsonl data/test1.raf --format jsonl`). Ambos caminos generan el mismo baseline y el resto del flujo (`analyze`, `suggest`, `report`, `write-set`) auto-detecta el formato gracias al parser `raf` incorporado.
 
 ### HUD en directo
 

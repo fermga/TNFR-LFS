@@ -23,11 +23,14 @@ pytest
   ``pyproject.toml``.
 - ``mypy --strict`` verifica los objetivos tipados incluidos en ``typing_targets``.
 - ``pytest`` ejecuta la batería de pruebas unitaria e integración, incluida la
-  verificación del dataset de ejemplo ``data/BL1_XFG_baseline.csv``.
+  verificación de los datasets de ejemplo ``data/BL1_XFG_baseline.csv`` y el
+  RAF ``data/test1.raf``.
 
 ## Dataset de referencia
 
 El flujo de quickstart y los tests de integración dependen del archivo
 ``data/BL1_XFG_baseline.csv``. El dataset contiene 17 muestras sintetizadas para
 la combinación BL1/XFG y se utiliza tanto por ``examples/quickstart.sh`` como
-por las pruebas de regresión.
+por las pruebas de regresión. Para reproducir escenarios con telemetría real,
+el repositorio añade además ``data/test1.raf`` (captura RAF de Live for Speed)
+que sirve de referencia para la ingesta binaria y los tutoriales del CLI.
