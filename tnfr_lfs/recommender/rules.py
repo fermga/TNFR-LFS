@@ -16,6 +16,8 @@ from typing import (
     MutableMapping,
     Protocol,
     Sequence,
+    SupportsFloat,
+    SupportsInt,
     Tuple,
     TYPE_CHECKING,
 )
@@ -1954,9 +1956,14 @@ def _axis_focus_descriptor(phase: str, axis: str) -> tuple[str, str, Tuple[str, 
     return _AXIS_FOCUS_MAP.get(direct)
 
 
-def _safe_float(value: object, default: float = 0.0) -> float:
+def _safe_float(
+    value: SupportsFloat | SupportsInt | str | bytes | bytearray | memoryview | None,
+    default: float = 0.0,
+) -> float:
+    if value is None:
+        return default
     try:
-        numeric = float(value)  # type: ignore[arg-type]
+        numeric = float(value)
     except (TypeError, ValueError):
         return default
     if math.isnan(numeric):
