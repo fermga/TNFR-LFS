@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from typing import Tuple
+import pytest
 from types import SimpleNamespace
 
 from tnfr_lfs.acquisition import ButtonEvent, ButtonLayout, MacroQueue, OverlayManager
@@ -13,6 +14,8 @@ from tnfr_lfs.cli.osd import HUDPager, MacroStatus, OSDController, TelemetryHUD
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
 from tnfr_lfs.core.metrics import (
     AeroAxisCoherence,
+    AeroBalanceDrift,
+    AeroBalanceDriftBin,
     AeroBandCoherence,
     AeroCoherence,
     BrakeHeadroom,
@@ -596,7 +599,7 @@ def test_render_page_a_includes_wave_when_active_phase():
     )
     gradient_line = osd_module._gradient_line(window_metrics)
     assert "Φsync" in gradient_line
-    assert "μΔ" in gradient_line
+    assert "μβ" in gradient_line
     assert "μΦF" in gradient_line
     assert "μΦR" in gradient_line
     assert "τmot" in gradient_line
@@ -620,6 +623,46 @@ def test_render_page_a_includes_wave_when_active_phase():
     )
     if len((output + "\n" + amc_line).encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
         assert "C(c/d/a)" in output
+
+
+def test_aero_drift_line_prefers_balance_segments() -> None:
+    drift = AeroBalanceDrift(
+        mu_tolerance=0.03,
+        high_speed=AeroBalanceDriftBin(
+            samples=12,
+            mu_delta=0.05,
+            mu_ratio=1.08,
+            mu_balance=0.09,
+            mu_symmetry_front=0.02,
+            mu_symmetry_rear=-0.07,
+            rake_mean=math.radians(1.5),
+        ),
+    )
+    line = osd_module._aero_drift_line(drift)
+    assert line is not None
+    assert "μβ⚠️" in line
+    assert "μΦR" in line
+    assert "μΔ" not in line
+
+
+def test_aero_drift_line_falls_back_to_mu_delta() -> None:
+    drift = AeroBalanceDrift(
+        mu_tolerance=0.02,
+        high_speed=AeroBalanceDriftBin(
+            samples=10,
+            mu_delta=-0.06,
+            mu_ratio=0.94,
+            mu_balance=0.0,
+            mu_symmetry_front=0.0,
+            mu_symmetry_rear=0.0,
+            rake_mean=math.radians(-1.2),
+        ),
+    )
+    line = osd_module._aero_drift_line(drift)
+    assert line is not None
+    assert "μΔ" in line
+    assert "μƒ/μr" in line
+    assert "μβ" not in line
 
 
 def test_render_page_a_displays_brake_meter_on_severe_events():
@@ -961,3 +1004,39 @@ def test_generate_out_reports_includes_phase_aliases(
     phase_node_entropy = metrics_payload[0]["phase_node_entropy"]
     assert "entry1" in phase_node_entropy
     assert "entry" in phase_node_entropy
+
+
+def test_sense_index_map_filters_sample_metrics() -> None:
+    class DummyMicrosector:
+        def __init__(self) -> None:
+            self.index = 0
+            self.phase_samples = {"entry": (0,), "apex": (), "exit": ()}
+            self.filtered_measures = {
+                "mu_balance": 0.12,
+                "mu_balance_samples": 6,
+                "mu_symmetry_front": 0.04,
+                "mu_symmetry_rear": -0.03,
+                "tyre_temp_fl": 88.0,
+            }
+            self.window_occupancy = {
+                "entry": {"delta": 0.4},
+                "apex": {},
+                "exit": {},
+            }
+            self.last_mutation = None
+            self.grip_rel = 0.98
+
+        def phase_indices(self, phase: str):
+            return self.phase_samples.get(phase, ())
+
+    bundles = [SimpleNamespace(sense_index=0.76)]
+    microsector = DummyMicrosector()
+    results = tnfr_lfs_cli._sense_index_map(bundles, [microsector])
+    assert results
+    entry = results[0]
+    filtered = entry["filtered_measures"]
+    assert "mu_balance_samples" not in filtered
+    assert filtered["mu_balance"] == pytest.approx(0.12, rel=1e-6)
+    samples = entry.get("sample_measures")
+    assert samples is not None
+    assert samples["mu_balance_samples"] == pytest.approx(6.0)

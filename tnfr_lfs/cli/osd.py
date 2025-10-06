@@ -21,6 +21,7 @@ from ..acquisition import (
 from ..core.epi import EPIExtractor, TelemetryRecord
 from ..core.metrics import (
     AeroBalanceDrift,
+    AeroBalanceDriftBin,
     BrakeHeadroom,
     CPHIReport,
     WindowMetrics,
@@ -693,6 +694,129 @@ def _render_page_a(
     return _ensure_limit("\n".join(lines))
 
 
+def _format_mu_metric(
+    label: str,
+    value: float,
+    *,
+    highlight: bool,
+    tolerance: float,
+    formatter: str,
+) -> str:
+    marker = "⚠️" if highlight and abs(value) > tolerance else ""
+    return f"{label}{marker} {formatter.format(value)}"
+
+
+def _format_mu_balance_segments(
+    *,
+    mu_balance: float,
+    mu_sym_front: float,
+    mu_sym_rear: float,
+    tolerance: float,
+) -> List[str]:
+    tolerance = max(0.0, float(tolerance))
+    display_threshold = max(0.01, tolerance * 0.5)
+    metrics = [
+        ("μβ", mu_balance, abs(mu_balance)),
+        ("μΦF", mu_sym_front, abs(mu_sym_front)),
+        ("μΦR", mu_sym_rear, abs(mu_sym_rear)),
+    ]
+    priority_label, priority_value, priority_severity = max(
+        metrics, key=lambda item: item[2]
+    )
+    segments: List[str] = []
+    for label, value, severity in metrics:
+        if label != priority_label and label != "μβ" and severity < display_threshold:
+            continue
+        segments.append(
+            _format_mu_metric(
+                label,
+                value,
+                highlight=(label == priority_label),
+                tolerance=tolerance,
+                formatter="{:+.2f}",
+            )
+        )
+    return segments
+
+
+def _resolve_mu_symmetry(
+    symmetry_map: Mapping[str, Mapping[str, float]] | None,
+) -> Tuple[float, float]:
+    if not isinstance(symmetry_map, Mapping):
+        return 0.0, 0.0
+    window_symmetry = symmetry_map.get("window")
+    if not isinstance(window_symmetry, Mapping):
+        return 0.0, 0.0
+    try:
+        front = float(window_symmetry.get("front", 0.0))
+    except (TypeError, ValueError):
+        front = 0.0
+    try:
+        rear = float(window_symmetry.get("rear", 0.0))
+    except (TypeError, ValueError):
+        rear = 0.0
+    if not math.isfinite(front):
+        front = 0.0
+    if not math.isfinite(rear):
+        rear = 0.0
+    return front, rear
+
+
+def _format_aero_drift_mu_segments(
+    payload: AeroBalanceDriftBin,
+    *,
+    tolerance: float,
+) -> List[str]:
+    tolerance = max(0.0, float(tolerance))
+    mu_balance = float(getattr(payload, "mu_balance", 0.0))
+    mu_sym_front = float(getattr(payload, "mu_symmetry_front", 0.0))
+    mu_sym_rear = float(getattr(payload, "mu_symmetry_rear", 0.0))
+    mu_delta = float(getattr(payload, "mu_delta", 0.0))
+    mu_ratio = float(getattr(payload, "mu_ratio", 0.0))
+    if not math.isfinite(mu_ratio):
+        mu_ratio = 0.0
+    balance_severity = max(
+        abs(mu_balance), abs(mu_sym_front), abs(mu_sym_rear)
+    )
+    ratio_deviation = abs(mu_ratio - 1.0)
+    delta_severity = max(abs(mu_delta), ratio_deviation)
+    balance_available = balance_severity > 0.0
+    delta_available = delta_severity > 0.0
+    use_balance = balance_available and (balance_severity >= delta_severity or not delta_available)
+    segments: List[str] = []
+    if use_balance:
+        segments.extend(
+            _format_mu_balance_segments(
+                mu_balance=mu_balance,
+                mu_sym_front=mu_sym_front,
+                mu_sym_rear=mu_sym_rear,
+                tolerance=tolerance,
+            )
+        )
+    else:
+        priority_label = "μΔ" if abs(mu_delta) >= ratio_deviation else "μƒ/μr"
+        segments.append(
+            _format_mu_metric(
+                "μΔ",
+                mu_delta,
+                highlight=priority_label == "μΔ",
+                tolerance=tolerance,
+                formatter="{:+.2f}",
+            )
+        )
+        if mu_ratio:
+            segments.append(
+                _format_mu_metric(
+                    "μƒ/μr",
+                    mu_ratio,
+                    highlight=priority_label == "μƒ/μr",
+                    tolerance=tolerance,
+                    formatter="{:.2f}",
+                )
+            )
+    return segments
+
+
 def _aero_drift_line(aero_drift: AeroBalanceDrift | None) -> str | None:
     if not isinstance(aero_drift, AeroBalanceDrift):
         return None
@@ -700,10 +824,12 @@ def _aero_drift_line(aero_drift: AeroBalanceDrift | None) -> str | None:
     if candidate is None:
         return None
     band_label, direction, payload = candidate
-    ratio_segment = f" μƒ/μr {payload.mu_ratio:.2f}" if payload.mu_ratio else ""
+    tolerance = getattr(aero_drift, "mu_tolerance", 0.04)
+    mu_segments = _format_aero_drift_mu_segments(payload, tolerance=tolerance)
+    mu_block = " ".join(mu_segments) if mu_segments else "μΔ {:+.2f}".format(payload.mu_delta)
     return _truncate_line(
         "Deriva aero "
-        f"{band_label}: μΔ {payload.mu_delta:+.2f}{ratio_segment} "
+        f"{band_label}: {mu_block} "
         f"rake {payload.rake_deg:+.2f}° → {direction}"
     )
 
@@ -717,20 +843,19 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         frequency_segment = (
             f"ν_f {window_metrics.nu_f:.2f}Hz/ν_exc {window_metrics.nu_exc:.2f}Hz"
         )
-    symmetry_map = getattr(window_metrics, "mu_symmetry", {}) or {}
-    window_symmetry = symmetry_map.get("window")
-    if isinstance(window_symmetry, Mapping):
-        try:
-            mu_sym_front = float(window_symmetry.get("front", 0.0))
-        except (TypeError, ValueError):
-            mu_sym_front = 0.0
-        try:
-            mu_sym_rear = float(window_symmetry.get("rear", 0.0))
-        except (TypeError, ValueError):
-            mu_sym_rear = 0.0
-    else:
-        mu_sym_front = 0.0
-        mu_sym_rear = 0.0
+    mu_sym_front, mu_sym_rear = _resolve_mu_symmetry(
+        getattr(window_metrics, "mu_symmetry", {})
+    )
+    mu_tolerance = getattr(
+        getattr(window_metrics, "aero_balance_drift", None), "mu_tolerance", 0.04
+    )
+    balance_segments = _format_mu_balance_segments(
+        mu_balance=float(getattr(window_metrics, "mu_balance", 0.0)),
+        mu_sym_front=mu_sym_front,
+        mu_sym_rear=mu_sym_rear,
+        tolerance=mu_tolerance,
+    )
+    balance_block = "".join(f" · {segment}" for segment in balance_segments)
     return (
         f"Si {window_metrics.si:.2f} · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
         f" · ∇Res {window_metrics.d_nfr_res:+.2f} · ∇Flat {window_metrics.d_nfr_flat:+.2f}"
@@ -745,9 +870,7 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · Carga {window_metrics.load_support_ratio:.4f}"
         f" · μF {window_metrics.mu_usage_front_ratio:.2f}"
         f" · μR {window_metrics.mu_usage_rear_ratio:.2f}"
-        f" · μΔ {window_metrics.mu_balance:+.2f}"
-        f" · μΦF {mu_sym_front:+.2f}"
-        f" · μΦR {mu_sym_rear:+.2f}"
+        f"{balance_block}"
     )
 
 
