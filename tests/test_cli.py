@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import itertools
 import json
 import re
 from collections.abc import Iterable, Mapping
@@ -9,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from tnfr_lfs.cli import compare as compare_module
 from tnfr_lfs.cli import tnfr_lfs_cli as cli_module
 from tnfr_lfs.cli.tnfr_lfs_cli import run_cli
 from tnfr_lfs.io.profiles import ProfileManager
@@ -118,14 +120,14 @@ def cli_config_pack(tmp_path: Path) -> Path:
 
             [suggest]
             car_model = "ABC"
-            track = "valencia"
+            track = "AS5"
 
             [write_set]
             car_model = "ABC"
 
             [osd]
             car_model = "ABC"
-            track = "valencia"
+            track = "AS5"
             """
         ),
         encoding="utf8",
@@ -138,9 +140,9 @@ def test_template_command_emits_phase_presets() -> None:
     output = run_cli([
         "template",
         "--car",
-        "generic_gt",
+        "FZR",
         "--track",
-        "valencia",
+        "AS5",
     ])
     data = tomllib.loads(output)
     assert data["limits"]["delta_nfr"]["entry"] == pytest.approx(0.8, rel=1e-3)
@@ -194,12 +196,12 @@ def test_compare_command_attaches_abtest(
             "recepcion": {"lap_indices": [0, 0, 1, 1]},
         }
     }
-    metrics_iter = iter([metrics_a, metrics_b])
+    metrics_iter = itertools.cycle([metrics_a, metrics_b])
 
     monkeypatch.setattr(cli_module, "_load_records", lambda path: [])
     monkeypatch.setattr(cli_module, "_group_records_by_lap", lambda records: [[], []])
     monkeypatch.setattr(
-        cli_module,
+        compare_module,
         "orchestrate_delta_metrics",
         lambda *args, **kwargs: next(metrics_iter),
     )
@@ -418,7 +420,7 @@ def test_suggest_pipeline(
         "--export",
         "json",
         "--car-model",
-        "generic_gt",
+        "FZR",
     ])
 
     payload = json.loads(output)
@@ -501,7 +503,7 @@ def test_write_set_markdown_export(
         "--export",
         "markdown",
         "--car-model",
-        "generic_gt",
+        "FZR",
         "--session",
         "stint-1",
     ])
@@ -529,16 +531,16 @@ def test_write_set_lfs_export(
         "--export",
         "set",
         "--car-model",
-        "generic_gt",
+        "FZR",
         "--session",
         "stint-1",
         "--set-output",
-        "GEN_race",
+        "FZR_race",
     ])
 
-    destination = tmp_path / "LFS/data/setups/GEN_race.set"
+    destination = tmp_path / "LFS/data/setups/FZR_race.set"
     assert destination.exists()
-    assert "GEN_race" in message
+    assert "FZR_race" in message
     assert "TNFR-LFS setup export" in destination.read_text(encoding="utf8")
 
 
@@ -566,13 +568,13 @@ def test_write_set_combined_export_outputs(
         "--export",
         "lfs-notes",
         "--car-model",
-        "generic_gt",
+        "FZR",
         "--set-output",
-        "GEN_test",
+        "FZR_test",
     ])
 
     captured = capsys.readouterr()
-    destination = tmp_path / "LFS/data/setups/GEN_test.set"
+    destination = tmp_path / "LFS/data/setups/FZR_test.set"
     assert destination.exists()
     assert "Setup guardado" in result
     assert "Instrucciones rápidas TNFR" in result
@@ -601,7 +603,7 @@ def test_write_set_lfs_rejects_invalid_name(
             "--export",
             "set",
             "--car-model",
-            "generic_gt",
+            "FZR",
             "--set-output",
             "bad_name",
         ])
@@ -648,14 +650,14 @@ def test_cli_end_to_end_pipeline(
             "--export",
             "json",
             "--car-model",
-            "generic_gt",
+            "FZR",
             "--track",
-            "valencia",
+            "AS5",
         ])
     )
 
-    assert suggestions["car_model"] == "generic_gt"
-    assert suggestions["track"] == "valencia"
+    assert suggestions["car_model"] == "FZR"
+    assert suggestions["track"] == "AS5"
     assert len(suggestions["recommendations"]) >= 1
     assert suggestions["phase_messages"]
 
@@ -722,8 +724,8 @@ def test_repository_template_configures_default_ports_and_profiles() -> None:
     assert telemetry["insim_port"] == 29999
 
     suggestion_defaults = data["suggest"]
-    assert suggestion_defaults["car_model"] == "generic_gt"
-    assert suggestion_defaults["track"] == "valencia"
+    assert suggestion_defaults["car_model"] == "FZR"
+    assert suggestion_defaults["track"] == "AS5"
 
     limits = data["limits"]["delta_nfr"]
     assert limits["entry"] == pytest.approx(0.5, rel=1e-3)
@@ -826,11 +828,11 @@ def test_profiles_persist_and_adjust(
     config_path.write_text(
         """
 [suggest]
-car_model = "generic_gt"
-track = "valencia"
+car_model = "FZR"
+track = "AS5"
 
 [write_set]
-car_model = "generic_gt"
+car_model = "FZR"
 
 [paths]
 profiles = "profiles.toml"
@@ -871,16 +873,16 @@ profiles = "profiles.toml"
     profiles_path = tmp_path / "profiles.toml"
     assert profiles_path.exists()
 
-    run_cli(["write-set", str(baseline_path), "--car-model", "generic_gt"])
+    run_cli(["write-set", str(baseline_path), "--car-model", "FZR"])
 
     def entry_weight() -> float:
         manager = ProfileManager(profiles_path)
         engine = RecommendationEngine(
-            car_model="generic_gt",
-            track_name="valencia",
+            car_model="FZR",
+            track_name="AS5",
             profile_manager=manager,
         )
-        weights = engine._resolve_context("generic_gt", "valencia").thresholds.weights_for_phase("entry")
+        weights = engine._resolve_context("FZR", "AS5").thresholds.weights_for_phase("entry")
         if isinstance(weights, Mapping):
             return float(weights.get("__default__", 1.0))
         return float(weights)
@@ -894,12 +896,12 @@ profiles = "profiles.toml"
 
     manager = ProfileManager(profiles_path)
     engine = RecommendationEngine(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         profile_manager=manager,
     )
-    base_profile = engine._lookup_profile("generic_gt", "valencia")
-    snapshot = manager.resolve("generic_gt", "valencia", base_profile)
+    base_profile = engine._lookup_profile("FZR", "AS5")
+    snapshot = manager.resolve("FZR", "AS5", base_profile)
     assert not snapshot.pending_plan
     assert snapshot.last_result is not None
     assert "last_result" in profiles_path.read_text(encoding="utf8")

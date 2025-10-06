@@ -238,10 +238,10 @@ def test_acceptance_memory_and_mutation_converge() -> None:
 def test_orchestrate_delta_metrics_exposes_network_memory() -> None:
     operator_state = {
         "recursivity": {
-            "active_session": "gt3|valencia|soft",
+            "active_session": "FZR|AS5|soft",
             "sessions": {
-                "gt3|valencia|soft": {
-                    "components": ("gt3", "valencia", "soft"),
+                "FZR|AS5|soft": {
+                    "components": ("FZR", "AS5", "soft"),
                     "stint_index": 1,
                     "samples": 2,
                     "active": {
@@ -286,6 +286,6 @@ def test_orchestrate_delta_metrics_exposes_network_memory() -> None:
 
     memory = result["network_memory"]
     assert memory["sessions"]
-    session_snapshot = memory["sessions"]["gt3|valencia|soft"]
+    session_snapshot = memory["sessions"]["FZR|AS5|soft"]
     assert session_snapshot["history"]
     assert session_snapshot["active"]["0"]["filtered"]["style_index"] == pytest.approx(0.71)

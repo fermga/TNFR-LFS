@@ -1,6 +1,6 @@
 [meta]
-id = "formula__p_fast_long"
-car_group = "formula"
+id = "fo8__p_fast_long"
+car_group = "FO8"
 base_profile = "p_fast_long"
 description = "Compensa la alta carga aero en monoplazas para circuitos rápidos."
 

@@ -29,8 +29,8 @@ by the recommendation engine (backed by ``data/threshold_profiles.toml``)
 and emits a TOML snippet that can be dropped into ``tnfr-lfs.toml``.
 
 ```bash
-tnfr-lfs template --car generic_gt --track valencia > presets/valencia.toml
-tnfr-lfs --config presets/valencia.toml analyze stint.jsonl
+tnfr-lfs template --car FZR --track AS5 > presets/fzr_as5.toml
+tnfr-lfs --config presets/fzr_as5.toml analyze stint.jsonl
 ```
 
 The generated file contains ``[analyze.phase_templates]`` and
@@ -46,10 +46,10 @@ multipliers applied to the heuristic phase weighting map derived during
 segmentation; values greater than ``1.0`` emphasise the corresponding
 node when computing ν_f and Sense Index penalties, while numbers below
 ``1.0`` soften its influence.  For example, favouring tyres and suspension
-in Valencia looks like:
+at Aston Grand Prix (AS5) looks like:
 
 ```toml
-[generic_gt.valencia.phase_weights.entry]
+[FZR.AS5.phase_weights.entry]
 __default__ = 1.1
 tyres = 1.35
 suspension = 1.2
@@ -289,7 +289,7 @@ objectives under ``car`` and ``tnfr_targets`` respectively.
 
 ```
 {
-  "car_model": "generic_gt",
+  "car_model": "FZR",
   "session": "FP1",
   "changes": [
     {"parameter": "rear_wing_angle", "delta": -1.0, "rationale": "Reduce drag", "expected_effect": "Higher top speed"}
@@ -338,8 +338,8 @@ outgauge_port = 3003
 export = "json"
 
 [suggest]
-car_model = "gt3"
-track = "spa"
+car_model = "FZR"
+track = "AS5"
 
 [paths]
 output_dir = "out"

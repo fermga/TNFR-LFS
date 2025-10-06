@@ -8,8 +8,8 @@ insim_port = 29999
 export = "json"
 
 [suggest]
-car_model = "generic_gt"
-track = "valencia"
+car_model = "FZR"
+track = "AS5"
 
 [paths]
 output_dir = "out"

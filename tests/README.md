@@ -81,20 +81,20 @@ import json
 from pathlib import Path
 
 profiles = {
-    "generic_gt": {
-        "valencia": {
+    "FZR": {
+        "AS5": {
             "entry_delta_tolerance": 0.9,
             "apex_delta_tolerance": 0.6,
             "exit_delta_tolerance": 1.2,
             "piano_delta_tolerance": 1.5,
         }
     },
-    "formula": {
-        "spa": {
+    "FO8": {
+        "KY3": {
             "entry_delta_tolerance": 0.7,
             "apex_delta_tolerance": 0.5,
             "exit_delta_tolerance": 1.0,
-            "piano_delta_tolerance": 1.1,
+            "piano_delta_tolerance": 1.2,
         }
     },
 }

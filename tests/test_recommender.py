@@ -522,8 +522,8 @@ def test_tyre_balance_rule_generates_guidance():
         rho_detune_threshold=0.4,
     )
     context = RuleContext(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         thresholds=thresholds,
         tyre_offsets={"pressure_front": -0.02},
     )
@@ -572,8 +572,8 @@ def test_tyre_balance_rule_suppresses_actions_when_dispersion_low(
         rho_detune_threshold=0.4,
     )
     context = RuleContext(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         thresholds=thresholds,
         tyre_offsets={"pressure_front": -0.02},
     )
@@ -644,8 +644,8 @@ def test_tyre_balance_rule_neutral_with_missing_cphi(car_track_thresholds) -> No
         rho_detune_threshold=0.4,
     )
     context = RuleContext(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         thresholds=thresholds,
         tyre_offsets={},
     )
@@ -692,8 +692,8 @@ def test_tyre_balance_rule_skips_when_cphi_healthy(car_track_thresholds) -> None
         rho_detune_threshold=0.4,
     )
     context = RuleContext(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         thresholds=thresholds,
         tyre_offsets={},
     )
@@ -887,8 +887,8 @@ def test_aero_coherence_rule_flags_high_speed_bias() -> None:
         rho_detune_threshold=0.4,
     )
     context = RuleContext(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         thresholds=thresholds,
         tyre_offsets={},
         aero_profiles={"race": AeroProfile(low_speed_target=0.0, high_speed_target=0.0)},
@@ -925,8 +925,8 @@ def test_front_wing_balance_rule_targets_front_limited_bias() -> None:
         rho_detune_threshold=0.4,
     )
     context = RuleContext(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         thresholds=thresholds,
         tyre_offsets={},
         aero_profiles={"race": AeroProfile(low_speed_target=0.0, high_speed_target=0.0)},
@@ -969,8 +969,8 @@ def test_aero_coherence_rule_respects_low_speed_window() -> None:
         rho_detune_threshold=0.4,
     )
     context = RuleContext(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         thresholds=thresholds,
         tyre_offsets={},
         aero_profiles={"race": AeroProfile(low_speed_target=0.0, high_speed_target=0.0)},
@@ -1162,8 +1162,8 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     ]
 
     engine = RecommendationEngine(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         threshold_library=car_track_thresholds,
     )
     recommendations = engine.generate(results, [microsector])
@@ -1194,12 +1194,12 @@ def test_recommendation_engine_updates_persistent_profile(tmp_path: Path) -> Non
     profiles_path = tmp_path / "profiles.toml"
     manager = ProfileManager(profiles_path)
     engine = RecommendationEngine(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         profile_manager=manager,
     )
 
-    baseline_context = engine._resolve_context("generic_gt", "valencia")
+    baseline_context = engine._resolve_context("FZR", "AS5")
     before_weights = baseline_context.thresholds.weights_for_phase("entry")
     if isinstance(before_weights, Mapping):
         entry_before = float(before_weights.get("__default__", 1.0))
@@ -1209,8 +1209,8 @@ def test_recommendation_engine_updates_persistent_profile(tmp_path: Path) -> Non
     engine.register_stint_result(
         sense_index=0.7,
         delta_nfr=2.5,
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
     )
 
     recommendations = [
@@ -1220,8 +1220,8 @@ def test_recommendation_engine_updates_persistent_profile(tmp_path: Path) -> Non
 
     engine.register_plan(
         recommendations,
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         baseline_sense_index=0.7,
         baseline_delta_nfr=2.5,
     )
@@ -1229,11 +1229,11 @@ def test_recommendation_engine_updates_persistent_profile(tmp_path: Path) -> Non
     engine.register_stint_result(
         sense_index=0.78,
         delta_nfr=1.4,
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
     )
 
-    updated_context = engine._resolve_context("generic_gt", "valencia")
+    updated_context = engine._resolve_context("FZR", "AS5")
     after_weights = updated_context.thresholds.weights_for_phase("entry")
     if isinstance(after_weights, Mapping):
         entry_after = float(after_weights.get("__default__", entry_before))
@@ -1250,11 +1250,11 @@ def test_profile_manager_rehydrates_track_weights(
     profiles_path = tmp_path / "profiles.toml"
     profiles_path.write_text(
         """
-[profiles.generic_gt.valencia.objectives]
+[profiles.FZR.AS5.objectives]
 target_delta_nfr = 0.4
 target_sense_index = 0.82
 
-[profiles.generic_gt.valencia.tolerances]
+[profiles.FZR.AS5.tolerances]
 entry = 0.9
 apex = 0.6
 exit = 1.1
@@ -1268,7 +1268,7 @@ piano = 1.5
         profiles_path, threshold_library=car_track_thresholds
     )
 
-    snapshot = manager.resolve("generic_gt", "valencia")
+    snapshot = manager.resolve("FZR", "AS5")
     entry_snapshot = snapshot.phase_weights.get("entry", {})
     assert entry_snapshot.get("tyres") == pytest.approx(1.2)
 
@@ -1278,18 +1278,18 @@ piano = 1.5
         profiles_path, threshold_library=car_track_thresholds
     )
     context_engine = RecommendationEngine(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         threshold_library=car_track_thresholds,
         profile_manager=reloaded,
-    )._resolve_context("generic_gt", "valencia")
+    )._resolve_context("FZR", "AS5")
     entry_weights = context_engine.thresholds.weights_for_phase("entry")
     assert isinstance(entry_weights, Mapping)
     assert entry_weights.get("tyres") == pytest.approx(1.2)
 
 def test_threshold_profile_exposes_phase_weights():
-    engine = RecommendationEngine(car_model="generic_gt", track_name="valencia")
-    profile = engine._resolve_context("generic_gt", "valencia").thresholds  # type: ignore[attr-defined]
+    engine = RecommendationEngine(car_model="FZR", track_name="AS5")
+    profile = engine._resolve_context("FZR", "AS5").thresholds  # type: ignore[attr-defined]
     entry_weights = profile.weights_for_phase("entry")
     assert isinstance(entry_weights, Mapping)
     assert entry_weights.get("tyres", 0.0) > 1.0
@@ -1460,18 +1460,18 @@ def test_track_specific_profile_tightens_entry_threshold():
 
     generic_engine = RecommendationEngine(car_model="generic", track_name="generic")
     generic_recs = generic_engine.generate(results, [microsector])
-    valencia_engine = RecommendationEngine(car_model="generic_gt", track_name="valencia")
-    valencia_recs = valencia_engine.generate(results, [microsector])
+    AS5_engine = RecommendationEngine(car_model="FZR", track_name="AS5")
+    AS5_recs = AS5_engine.generate(results, [microsector])
 
     generic_entry_global = [
         rec for rec in generic_recs if rec.category == "entry" and "ΔNFR global" in rec.message
     ]
-    valencia_entry_global = [
-        rec for rec in valencia_recs if rec.category == "entry" and "ΔNFR global" in rec.message
+    AS5_entry_global = [
+        rec for rec in AS5_recs if rec.category == "entry" and "ΔNFR global" in rec.message
     ]
 
     assert not generic_entry_global
-    assert valencia_entry_global
+    assert AS5_entry_global
 
 
 def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
@@ -1612,8 +1612,8 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
     ]
 
     engine = RecommendationEngine(
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         threshold_library=car_track_thresholds,
     )
     recommendations = engine.generate(results, [microsector])
@@ -1629,14 +1629,14 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
     rationale = exit_messages[0].rationale
     assert "transmisión" in rationale
     assert "ν_f medio" in rationale
-    assert "generic_gt/valencia" in rationale
+    assert "FZR/AS5" in rationale
 
 
 def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> None:
     engine = RecommendationEngine(
-        car_model="generic_gt", track_name="valencia", threshold_library=car_track_thresholds
+        car_model="FZR", track_name="AS5", threshold_library=car_track_thresholds
     )
-    context = engine._resolve_context("generic_gt", "valencia")
+    context = engine._resolve_context("FZR", "AS5")
     rule = PhaseNodeOperatorRule(
         phase="apex",
         operator_label="Operador",
@@ -1786,8 +1786,8 @@ def test_useful_dissonance_rule_reinforces_rear_when_udr_high(car_track_threshol
 
     engine = RecommendationEngine(
         rules=[UsefulDissonanceRule(priority=40)],
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         threshold_library=car_track_thresholds,
     )
 
@@ -1808,8 +1808,8 @@ def test_useful_dissonance_rule_softens_axle_when_udr_low(car_track_thresholds):
 
     engine = RecommendationEngine(
         rules=[UsefulDissonanceRule(priority=38)],
-        car_model="generic_gt",
-        track_name="valencia",
+        car_model="FZR",
+        track_name="AS5",
         threshold_library=car_track_thresholds,
     )
 

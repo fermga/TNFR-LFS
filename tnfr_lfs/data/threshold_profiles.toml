@@ -39,46 +39,46 @@ integral_cov_green = 0.25
 integral_cov_amber = 0.45
 integral_cov_min_laps = 3
 
-[generic_gt.valencia]
+[FZR.AS5]
 entry_delta_tolerance = 0.8
 apex_delta_tolerance = 0.6
 exit_delta_tolerance = 1.1
 piano_delta_tolerance = 1.8
 
-[generic_gt.valencia.targets.entry]
+[FZR.AS5.targets.entry]
 target_delta_nfr = 1.20
 slip_lat_window = [-0.045, 0.045]
 slip_long_window = [-0.035, 0.035]
 yaw_rate_window = [-0.28, 0.28]
 
-[generic_gt.valencia.targets.apex]
+[FZR.AS5.targets.apex]
 target_delta_nfr = 0.60
 slip_lat_window = [-0.035, 0.035]
 slip_long_window = [-0.030, 0.030]
 yaw_rate_window = [-0.24, 0.24]
 
-[generic_gt.valencia.targets.exit]
+[FZR.AS5.targets.exit]
 target_delta_nfr = -0.40
 slip_lat_window = [-0.055, 0.055]
 slip_long_window = [-0.045, 0.045]
 yaw_rate_window = [-0.32, 0.32]
 
-[generic_gt.valencia.phase_weights.entry]
+[FZR.AS5.phase_weights.entry]
 __default__ = 1.1
 tyres = 1.35
 suspension = 1.2
 
-[generic_gt.valencia.phase_weights.apex]
+[FZR.AS5.phase_weights.apex]
 __default__ = 1.05
 suspension = 1.3
 chassis = 1.15
 
-[generic_gt.valencia.phase_weights.exit]
+[FZR.AS5.phase_weights.exit]
 __default__ = 1.0
 tyres = 1.25
 transmission = 1.2
 
-[generic_gt.valencia.hud]
+[FZR.AS5.hud]
 delta_entropy_green = 0.65
 delta_entropy_amber = 0.45
 node_entropy_green = 0.60
@@ -86,3 +86,51 @@ node_entropy_amber = 0.40
 integral_cov_green = 0.25
 integral_cov_amber = 0.45
 integral_cov_min_laps = 3
+
+[FO8.KY3]
+entry_delta_tolerance = 0.7
+apex_delta_tolerance = 0.5
+exit_delta_tolerance = 1.0
+piano_delta_tolerance = 1.2
+
+[FO8.KY3.targets.entry]
+target_delta_nfr = 1.10
+slip_lat_window = [-0.040, 0.040]
+slip_long_window = [-0.030, 0.030]
+yaw_rate_window = [-0.26, 0.26]
+
+[FO8.KY3.targets.apex]
+target_delta_nfr = 0.55
+slip_lat_window = [-0.032, 0.032]
+slip_long_window = [-0.028, 0.028]
+yaw_rate_window = [-0.22, 0.22]
+
+[FO8.KY3.targets.exit]
+target_delta_nfr = -0.30
+slip_lat_window = [-0.045, 0.045]
+slip_long_window = [-0.040, 0.040]
+yaw_rate_window = [-0.28, 0.28]
+
+[FO8.KY3.phase_weights.entry]
+__default__ = 1.05
+aero = 1.2
+suspension = 1.15
+
+[FO8.KY3.phase_weights.apex]
+__default__ = 1.0
+aero = 1.1
+chassis = 1.05
+
+[FO8.KY3.phase_weights.exit]
+__default__ = 1.05
+transmission = 1.18
+differential = 1.12
+
+[FO8.KY3.hud]
+delta_entropy_green = 0.60
+delta_entropy_amber = 0.42
+node_entropy_green = 0.55
+node_entropy_amber = 0.38
+integral_cov_green = 0.22
+integral_cov_amber = 0.40
+integral_cov_min_laps = 4

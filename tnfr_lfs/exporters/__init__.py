@@ -41,8 +41,10 @@ CAR_MODEL_PREFIXES = {
     "FXR": "FXR",
     "XRR": "XRR",
     "FZR": "FZR",
-    "generic_gt": "GEN",
-    "formula": "FOR",
+    "gt_fzr": "FZR",
+    "gt_xrr": "XRR",
+    "formula_fo8": "FO8",
+    "formula_fox": "FOX",
 }
 
 INVALID_NAME_CHARS = set("\\/:*?\"<>|")
@@ -60,7 +62,7 @@ def _normalise(value: Any) -> Any:
         return asdict(value)
     if isinstance(value, list):
         return [_normalise(item) for item in value]
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return {key: _normalise(item) for key, item in value.items()}
     return value
 

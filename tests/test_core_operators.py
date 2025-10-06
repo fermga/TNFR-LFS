@@ -853,7 +853,7 @@ def test_recursividad_operator_requires_decay_in_range():
 
 def test_recursivity_operator_tracks_state_and_phase_changes():
     state: dict[str, dict[str, object]] = {}
-    session = ("gt3", "valencia", "soft")
+    session = ("FZR", "AS5", "soft")
 
     first = recursivity_operator(
         state,
@@ -899,8 +899,8 @@ def test_recursivity_operator_tracks_state_and_phase_changes():
     assert len(active_state) == 2
 def test_recursivity_operator_separates_sessions_and_tracks_history():
     state: dict[str, dict[str, object]] = {}
-    session_a = ("gt3", "aston", "soft")
-    session_b = ("gt4", "aston", "soft")
+    session_a = ("FZR", "aston", "soft")
+    session_b = ("XRR", "aston", "soft")
 
     recursivity_operator(
         state,
@@ -925,7 +925,7 @@ def test_recursivity_operator_separates_sessions_and_tracks_history():
 
 def test_recursivity_operator_rolls_over_on_limits():
     state: dict[str, dict[str, object]] = {}
-    session = ("gt3", "aston", "soft")
+    session = ("FZR", "aston", "soft")
 
     for step in range(3):
         recursivity_operator(
@@ -956,7 +956,7 @@ def test_recursivity_operator_rolls_over_on_limits():
 
 def test_recursivity_operator_detects_time_gap_rollover():
     state: dict[str, dict[str, object]] = {}
-    session = ("gt3", "aston", "soft")
+    session = ("FZR", "aston", "soft")
 
     recursivity_operator(
         state,

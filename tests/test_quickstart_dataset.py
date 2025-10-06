@@ -58,7 +58,7 @@ def test_quickstart_dataset_pipeline(
 
     args = [command, str(baseline_path), "--export", "json"]
     if command == "suggest":
-        args.extend(["--car-model", "generic_gt"])
+        args.extend(["--car-model", "FZR"])
 
     payload = json.loads(run_cli(args))
     assert payload
