@@ -18,6 +18,7 @@ from .contextual_delta import (
 from .dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
 from .epi import TelemetryRecord
 from .epi_models import EPIBundle
+from .phases import replicate_phase_aliases
 from .spectrum import phase_alignment
 from .resonance import estimate_excitation_frequency
 from .structural_time import resolve_time_axis
@@ -1649,8 +1650,12 @@ def compute_window_metrics(
 
     delta_std = _standard_deviation(delta_series)
     nodal_std = _standard_deviation(support_samples)
-    phase_delta_std_map = _phase_standard_deviation_map(delta_series)
-    phase_nodal_std_map = _phase_standard_deviation_map(support_samples)
+    phase_delta_std_map = replicate_phase_aliases(
+        _phase_standard_deviation_map(delta_series)
+    )
+    phase_nodal_std_map = replicate_phase_aliases(
+        _phase_standard_deviation_map(support_samples)
+    )
 
     support_effective = _weighted_average(support_samples, windows)
     load_support_ratio = (
@@ -2225,6 +2230,8 @@ def compute_window_metrics(
                 wheels={suffix: CPHIWheel() for suffix in _WHEEL_SUFFIXES},
                 thresholds=base_thresholds,
             )
+
+    phase_cphi = replicate_phase_aliases(phase_cphi)
 
     aero = compute_aero_coherence(records, bundles)
     coherence_values: list[float] = []

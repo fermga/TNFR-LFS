@@ -85,6 +85,21 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
             key.startswith("nodal_delta_nfr_std_")
             for key in microsector.filtered_measures
         )
+        assert {"entry1", "entry"}.issubset(microsector.phase_samples)
+        assert {"apex3a", "apex"}.issubset(microsector.phase_samples)
+        assert {"exit4", "exit"}.issubset(microsector.phase_samples)
+        assert {"entry1", "entry"}.issubset(microsector.phase_axis_targets)
+        assert {"apex3a", "apex"}.issubset(microsector.phase_axis_targets)
+        assert {"entry1", "entry"}.issubset(microsector.phase_axis_weights)
+        assert {"apex3a", "apex"}.issubset(microsector.phase_axis_weights)
+        assert {
+            "delta_nfr_std_entry1",
+            "delta_nfr_std_entry",
+        }.issubset(microsector.filtered_measures)
+        assert {
+            "nodal_delta_nfr_std_entry1",
+            "nodal_delta_nfr_std_entry",
+        }.issubset(microsector.filtered_measures)
         assert isinstance(microsector.recursivity_trace, tuple)
         assert microsector.last_mutation is None
         phases = [goal.phase for goal in microsector.goals]

@@ -39,6 +39,7 @@ from ..acquisition import (
 from .osd import OSDController, TelemetryHUD
 from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
 from ..core.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
+from ..core.phases import replicate_phase_aliases
 from ..core.resonance import analyse_modal_resonance
 from ..core.operators import orchestrate_delta_metrics
 from ..core.segmentation import (
@@ -1196,6 +1197,51 @@ def _generate_out_reports(
             for suffix, value in mapping.items()
         }
 
+    def _merge_sample_indices(sequences: Sequence[Tuple[int, ...]]) -> Tuple[int, ...]:
+        merged: List[int] = []
+        for sequence in sequences:
+            for value in sequence:
+                index = int(value)
+                if not merged or merged[-1] != index:
+                    merged.append(index)
+        return tuple(merged)
+
+    def _serialise_phase_samples_map(
+        mapping: Mapping[str, Iterable[int]] | Mapping[str, Tuple[int, ...]]
+    ) -> Dict[str, List[int]]:
+        normalised = {
+            str(phase): tuple(int(index) for index in indices)
+            for phase, indices in (mapping or {}).items()
+        }
+        normalised = replicate_phase_aliases(
+            normalised,
+            combine=_merge_sample_indices,
+        )
+        return {
+            phase: [int(index) for index in indices]
+            for phase, indices in normalised.items()
+        }
+
+    def _serialise_phase_axis_map(
+        mapping: Mapping[str, Mapping[str, Any]]
+    ) -> Dict[str, Dict[str, float]]:
+        normalised = {
+            str(phase): {
+                str(axis): _floatify(value)
+                for axis, value in (payload or {}).items()
+            }
+            for phase, payload in (mapping or {}).items()
+            if isinstance(payload, Mapping)
+        }
+        return replicate_phase_aliases(normalised)
+
+    def _serialise_phase_float_map(mapping: Mapping[str, Any]) -> Dict[str, float]:
+        normalised = {
+            str(phase): _floatify(value)
+            for phase, value in (mapping or {}).items()
+        }
+        return replicate_phase_aliases(normalised)
+
     sense_path = destination / "sense_index_map.json"
     resonance_path = destination / "modal_resonance.json"
     breakdown_path = destination / "delta_breakdown.json"
@@ -1204,6 +1250,10 @@ def _generate_out_reports(
     dissonance_path = destination / "dissonance_breakdown.json"
     memory_path = destination / "sense_memory.json"
     summary_path = destination / "metrics_summary.md"
+    phase_samples_path = destination / "phase_samples.json"
+    phase_axis_targets_path = destination / "phase_axis_targets.json"
+    phase_axis_weights_path = destination / "phase_axis_weights.json"
+    phase_metrics_path = destination / "phase_metrics.json"
 
     occupancy_payload: List[Dict[str, Any]] = []
     for entry in sense_map:
@@ -1218,6 +1268,57 @@ def _generate_out_reports(
                     }
                     for phase in ("entry", "apex", "exit")
                 },
+            }
+        )
+
+    phase_samples_payload: List[Dict[str, Any]] = []
+    phase_axis_targets_payload: List[Dict[str, Any]] = []
+    phase_axis_weights_payload: List[Dict[str, Any]] = []
+    phase_metrics_payload: List[Dict[str, Any]] = []
+    for microsector in microsectors:
+        label = f"Curva {microsector.index + 1}"
+        samples_map = _serialise_phase_samples_map(
+            getattr(microsector, "phase_samples", {}) or {}
+        )
+        axis_target_map = _serialise_phase_axis_map(
+            getattr(microsector, "phase_axis_targets", {}) or {}
+        )
+        axis_weight_map = _serialise_phase_axis_map(
+            getattr(microsector, "phase_axis_weights", {}) or {}
+        )
+        delta_map = _serialise_phase_float_map(
+            getattr(microsector, "phase_delta_nfr_std", {}) or {}
+        )
+        nodal_map = _serialise_phase_float_map(
+            getattr(microsector, "phase_nodal_delta_nfr_std", {}) or {}
+        )
+        phase_samples_payload.append(
+            {
+                "microsector": microsector.index,
+                "label": label,
+                "phase_samples": samples_map,
+            }
+        )
+        phase_axis_targets_payload.append(
+            {
+                "microsector": microsector.index,
+                "label": label,
+                "phase_axis_targets": axis_target_map,
+            }
+        )
+        phase_axis_weights_payload.append(
+            {
+                "microsector": microsector.index,
+                "label": label,
+                "phase_axis_weights": axis_weight_map,
+            }
+        )
+        phase_metrics_payload.append(
+            {
+                "microsector": microsector.index,
+                "label": label,
+                "phase_delta_nfr_std": delta_map,
+                "phase_nodal_delta_nfr_std": nodal_map,
             }
         )
 
@@ -1244,6 +1345,14 @@ def _generate_out_reports(
         json.dump(breakdown, handle, indent=2, sort_keys=True)
     with occupancy_path.open("w", encoding="utf8") as handle:
         json.dump(occupancy_payload, handle, indent=2, sort_keys=True)
+    with phase_samples_path.open("w", encoding="utf8") as handle:
+        json.dump(phase_samples_payload, handle, indent=2, sort_keys=True)
+    with phase_axis_targets_path.open("w", encoding="utf8") as handle:
+        json.dump(phase_axis_targets_payload, handle, indent=2, sort_keys=True)
+    with phase_axis_weights_path.open("w", encoding="utf8") as handle:
+        json.dump(phase_axis_weights_payload, handle, indent=2, sort_keys=True)
+    with phase_metrics_path.open("w", encoding="utf8") as handle:
+        json.dump(phase_metrics_payload, handle, indent=2, sort_keys=True)
 
     pairwise_payload: Dict[str, Any] = {}
     raw_pairwise = metrics.get("pairwise_coupling")
@@ -1511,6 +1620,16 @@ def _generate_out_reports(
         "modal_resonance": {"path": str(resonance_path), "data": resonance_payload},
         "delta_breakdown": {"path": str(breakdown_path), "data": breakdown},
         "window_occupancy": {"path": str(occupancy_path), "data": occupancy_payload},
+        "phase_samples": {"path": str(phase_samples_path), "data": phase_samples_payload},
+        "phase_axis_targets": {
+            "path": str(phase_axis_targets_path),
+            "data": phase_axis_targets_payload,
+        },
+        "phase_axis_weights": {
+            "path": str(phase_axis_weights_path),
+            "data": phase_axis_weights_payload,
+        },
+        "phase_metrics": {"path": str(phase_metrics_path), "data": phase_metrics_payload},
         "tyre_thermal": {"path": str(thermal_path), "data": thermal_payload},
         "microsector_variability": {
             "path": str(variability_path),
