@@ -8,7 +8,10 @@ lecturas TNFR provienen de la telemetría OutSim/OutGauge de Live for
 Speed, por lo que es imprescindible habilitar ambos broadcasters y
 configurar `OutSim Opts ff` para transmitir el paquete ampliado de
 ruedas (cargas, fuerzas y deflexiones) que requiere la fusión de
-telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 Los `slip_ratio`
+telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 Activa también el
+payload extendido de OutGauge (`OutGauge Opts …`) para que el flujo
+incluir temperaturas por capa y presiones reales; de lo contrario TNFR ×
+LFS conservará la última muestra o mostrará “sin datos”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】 Los `slip_ratio`
 y `slip_angle` globales de TNFR × LFS se derivan directamente del
 promedio ponderado de los canales por rueda del bloque OutSim y solo
 recurren a un cálculo cinemático de respaldo cuando la señal llega
@@ -39,9 +42,10 @@ vez de asumir lecturas inventadas.【F:tnfr_lfs/acquisition/outsim_client.py†L
   partir del `pitch` y los viajes de suspensión por eje que emite OutSim,
   además del contraste `μ_front - μ_rear`, sin combinar señales sintéticas
   adicionales.
-- **Temperaturas/presiones de neumáticos** – sólo aparecen cuando
-  OutGauge envía el payload extendido; de lo contrario HUD y exportadores
-  señalan `"sin datos"` para evitar asumir valores ficticios.
+- **Temperaturas/presiones de neumáticos** – la fusión reutiliza las
+  lecturas de OutGauge siempre que las muestras sean positivas y
+  finitas; si el bloque extendido está deshabilitado se conserva la
+  lectura previa o `"sin datos"`, evitando extrapolaciones artificiales.
 - **CPHI (Contact Patch Health Index)** – necesita `slip_ratio`,
   `slip_angle`, fuerzas laterales/longitudinales y cargas de rueda del
   paquete extendido de OutSim. Sin esas señales TNFR × LFS etiqueta la

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from io import StringIO
 import math
 import struct
@@ -341,6 +342,42 @@ def test_fusion_consumes_extended_outsim_packet(
     assert math.isnan(record.tyre_pressure_fr)
     assert math.isnan(record.tyre_pressure_rl)
     assert math.isnan(record.tyre_pressure_rr)
+
+
+def test_fusion_uses_outgauge_tyre_temperatures(
+    extended_outsim_packet: OutSimPacket, sample_outgauge_packet: OutGaugePacket
+) -> None:
+    fusion = TelemetryFusion()
+    tyre_temps = (88.3, 87.6, 84.2, 83.9)
+    inner = (92.1, 91.4, 87.3, 86.5)
+    middle = (88.0, 87.1, 84.0, 83.1)
+    outer = (85.4, 84.8, 81.9, 81.0)
+    enriched_packet = replace(
+        sample_outgauge_packet,
+        tyre_temps=tyre_temps,
+        tyre_temps_inner=inner,
+        tyre_temps_middle=middle,
+        tyre_temps_outer=outer,
+    )
+
+    record = fusion.fuse(extended_outsim_packet, enriched_packet)
+
+    assert record.tyre_temp_fl == pytest.approx(tyre_temps[0])
+    assert record.tyre_temp_fr == pytest.approx(tyre_temps[1])
+    assert record.tyre_temp_rl == pytest.approx(tyre_temps[2])
+    assert record.tyre_temp_rr == pytest.approx(tyre_temps[3])
+    assert record.tyre_temp_fl_inner == pytest.approx(inner[0])
+    assert record.tyre_temp_fr_inner == pytest.approx(inner[1])
+    assert record.tyre_temp_rl_inner == pytest.approx(inner[2])
+    assert record.tyre_temp_rr_inner == pytest.approx(inner[3])
+    assert record.tyre_temp_fl_middle == pytest.approx(middle[0])
+    assert record.tyre_temp_fr_middle == pytest.approx(middle[1])
+    assert record.tyre_temp_rl_middle == pytest.approx(middle[2])
+    assert record.tyre_temp_rr_middle == pytest.approx(middle[3])
+    assert record.tyre_temp_fl_outer == pytest.approx(outer[0])
+    assert record.tyre_temp_fr_outer == pytest.approx(outer[1])
+    assert record.tyre_temp_rl_outer == pytest.approx(outer[2])
+    assert record.tyre_temp_rr_outer == pytest.approx(outer[3])
 
 
 def test_fusion_marks_missing_wheel_block_as_nan(

@@ -29,6 +29,10 @@ UDP broadcasters and extend OutSim with `OutSim Opts ff` in `cfg.txt`
 (or run `/outsim Opts ff` before `/outsim 1 …`) so the UDP packets
 include the player identifier, driver inputs and the four-wheel block
 that feeds the telemetry fusion layer.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】
+Likewise, enable the extended OutGauge payload (via `OutGauge Opts …` in
+`cfg.txt` or `/outgauge Opts …`) so the simulator transmits tyre
+temperatures, their three-layer profile and pressures; otherwise the HUD
+and CLI will surface those entries as “sin datos”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
 The CSV reader mirrors that philosophy by preserving optional columns as
 `math.nan` when OutSim leaves them out, preventing artificial estimates
 from leaking into the metrics pipeline.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
@@ -57,9 +61,11 @@ is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_a
 - **Aero balance drift** – derives rake trends exclusively from OutSim
   `pitch` plus front/rear suspension travel so the drift guidance mirrors
   native LFS telemetry even if `AeroCoherence` appears neutral.【F:tnfr_lfs/core/metrics.py†L1650-L1735】
-- **Tyre temperatures/pressures** – depend on the OutGauge extended
-  payload; HUD and exporters label the entries as `"sin datos"` whenever
-  Live for Speed skips that block.
+- **Tyre temperatures/pressures** – TNFR × LFS now consumes the values
+  emitted by the OutGauge extended payload when they are finite and
+  positive; when the block is disabled the fusion keeps the historical
+  sample or `"sin datos"` so downstream tooling does not fabricate
+  temperatures.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
 
 ## Branding and terminology
 
