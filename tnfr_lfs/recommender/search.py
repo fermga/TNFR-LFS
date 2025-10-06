@@ -16,11 +16,12 @@ import math
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from statistics import fmean
-from typing import Any, Callable, Dict, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence
 
 from ..core.dissonance import compute_useful_dissonance_stats
 from ..core.epi_models import EPIBundle
 from ..core.segmentation import Microsector
+from .pareto import ParetoPoint
 from .rules import Recommendation, RecommendationEngine
 
 
@@ -306,6 +307,140 @@ def objective_score(
         )
 
     return sum(contributions.values())
+
+
+def _penalty_breakdown(components: Mapping[str, float]) -> Mapping[str, float]:
+    penalties: Dict[str, float] = {}
+    for key, value in components.items():
+        try:
+            penalties[key] = max(0.0, 1.0 - float(value))
+        except (TypeError, ValueError):
+            penalties[key] = 1.0
+    return MappingProxyType(penalties)
+
+
+def evaluate_candidate(
+    space: DecisionSpace,
+    vector: Mapping[str, float],
+    baseline: Sequence[EPIBundle],
+    *,
+    microsectors: Sequence[Microsector] | None = None,
+    simulator: Callable[[Mapping[str, float], Sequence[EPIBundle]], Sequence[EPIBundle]] | None = None,
+    session_weights: Mapping[str, Mapping[str, float]] | None = None,
+    session_hints: Mapping[str, object] | None = None,
+    cache: MutableMapping[
+        tuple[tuple[str, float], ...],
+        tuple[float, Sequence[EPIBundle], Mapping[str, float], Mapping[str, float]],
+    ] | None = None,
+) -> ParetoPoint:
+    """Evaluate ``vector`` returning a :class:`ParetoPoint`."""
+
+    clamped = space.clamp(vector)
+    key = tuple(sorted(clamped.items()))
+    if cache is None:
+        cache = {}
+    if key not in cache:
+        simulated = simulator(clamped, baseline) if simulator else baseline
+        breakdown_components: Dict[str, float] = {}
+        score = objective_score(
+            simulated,
+            microsectors,
+            session_weights=session_weights,
+            session_hints=session_hints,
+            breakdown=breakdown_components,
+        )
+        cache[key] = (
+            score,
+            tuple(simulated),
+            MappingProxyType(dict(breakdown_components)),
+            _penalty_breakdown(breakdown_components),
+        )
+    score, telemetry, components, penalties = cache[key]
+    return ParetoPoint(
+        decision_vector=MappingProxyType(dict(clamped)),
+        score=score,
+        breakdown=penalties,
+        objective_breakdown=components,
+        telemetry=telemetry,
+    )
+
+
+def axis_sweep_vectors(
+    space: DecisionSpace,
+    centre: Mapping[str, float],
+    *,
+    radius: int = 1,
+    include_centre: bool = True,
+) -> list[Dict[str, float]]:
+    """Generate axis-aligned candidates around ``centre``."""
+
+    clamped = space.clamp(centre)
+    vectors: list[Dict[str, float]] = []
+    if include_centre:
+        vectors.append(dict(clamped))
+    radius = max(0, int(radius))
+    if radius <= 0:
+        return vectors
+    for variable in space.variables:
+        current = clamped.get(variable.name, 0.0)
+        for step in range(1, radius + 1):
+            for direction in (-1.0, 1.0):
+                candidate_value = variable.clamp(current + direction * variable.step * step)
+                if candidate_value == current:
+                    continue
+                candidate = dict(clamped)
+                candidate[variable.name] = candidate_value
+                vectors.append(candidate)
+    unique: Dict[tuple[tuple[str, float], ...], Dict[str, float]] = {}
+    for vector in vectors:
+        key = tuple(sorted(vector.items()))
+        unique[key] = vector
+    return list(unique.values())
+
+
+def sweep_candidates(
+    space: DecisionSpace,
+    centre: Mapping[str, float],
+    baseline: Sequence[EPIBundle],
+    *,
+    microsectors: Sequence[Microsector] | None = None,
+    simulator: Callable[[Mapping[str, float], Sequence[EPIBundle]], Sequence[EPIBundle]] | None = None,
+    session_weights: Mapping[str, Mapping[str, float]] | None = None,
+    session_hints: Mapping[str, object] | None = None,
+    radius: int = 1,
+    include_centre: bool = True,
+    candidates: Iterable[Mapping[str, float]] | None = None,
+) -> list[ParetoPoint]:
+    """Evaluate a sweep of candidates returning :class:`ParetoPoint` entries."""
+
+    cache: MutableMapping[
+        tuple[tuple[str, float], ...],
+        tuple[float, Sequence[EPIBundle], Mapping[str, float], Mapping[str, float]],
+    ] = {}
+    if candidates is None:
+        vectors = axis_sweep_vectors(
+            space,
+            centre,
+            radius=radius,
+            include_centre=include_centre,
+        )
+    else:
+        vectors = [space.clamp(vector) for vector in candidates]
+    points: list[ParetoPoint] = []
+    for vector in vectors:
+        points.append(
+            evaluate_candidate(
+                space,
+                vector,
+                baseline,
+                microsectors=microsectors,
+                simulator=simulator,
+                session_weights=session_weights,
+                session_hints=session_hints,
+                cache=cache,
+            )
+        )
+    return points
 
 
 _ROAD_ALIGNMENT = (
