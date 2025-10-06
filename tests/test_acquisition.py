@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from io import StringIO
 import math
+import socket
 import struct
 
 import pytest
@@ -17,11 +18,10 @@ from tnfr_lfs.acquisition.outsim_client import (
     OPTIONAL_SCHEMA_COLUMNS,
     OutSimClient,
 )
-from tnfr_lfs.acquisition.outsim_udp import OutSimPacket
+from tnfr_lfs.acquisition.outsim_udp import OutSimPacket, OutSimUDPClient
 
 
-@pytest.fixture
-def extended_outsim_packet() -> OutSimPacket:
+def _build_extended_outsim_payload() -> bytes:
     time_ms = 1234
     base_floats = [
         0.1,
@@ -68,7 +68,7 @@ def extended_outsim_packet() -> OutSimPacket:
         285.0,
         0.05,
     ]
-    payload = struct.pack(
+    return struct.pack(
         "<I15fI5f24f",
         time_ms,
         *base_floats,
@@ -76,7 +76,16 @@ def extended_outsim_packet() -> OutSimPacket:
         *driver_inputs,
         *wheel_values,
     )
-    return OutSimPacket.from_bytes(payload)
+
+
+@pytest.fixture
+def extended_outsim_payload() -> bytes:
+    return _build_extended_outsim_payload()
+
+
+@pytest.fixture
+def extended_outsim_packet(extended_outsim_payload: bytes) -> OutSimPacket:
+    return OutSimPacket.from_bytes(extended_outsim_payload)
 
 
 @pytest.fixture
@@ -372,6 +381,33 @@ def test_fusion_consumes_extended_outsim_packet(
     assert math.isnan(record.tyre_pressure_fr)
     assert math.isnan(record.tyre_pressure_rl)
     assert math.isnan(record.tyre_pressure_rr)
+
+
+def test_udp_client_preserves_extended_payload_for_fusion(
+    extended_outsim_payload: bytes, sample_outgauge_packet: OutGaugePacket
+) -> None:
+    client = OutSimUDPClient(host="127.0.0.1", port=0, timeout=0.01, retries=20)
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sender.sendto(extended_outsim_payload, client.address)
+        packet = client.recv()
+        assert packet is not None
+        assert packet.inputs is not None
+
+        fusion = TelemetryFusion()
+        record = fusion.fuse(packet, sample_outgauge_packet)
+
+        assert record.throttle == pytest.approx(0.72)
+        assert record.brake_input == pytest.approx(0.35)
+        assert record.clutch_input == pytest.approx(0.1)
+        assert record.steer_input == pytest.approx(-0.15)
+        assert record.wheel_load_fl == pytest.approx(310.0)
+        assert record.wheel_load_rr == pytest.approx(285.0)
+        assert record.suspension_deflection_fl == pytest.approx(0.06)
+        assert record.suspension_deflection_rr == pytest.approx(0.05)
+    finally:
+        sender.close()
+        client.close()
 
 
 def test_outgauge_from_bytes_decodes_extended_tyre_payload(

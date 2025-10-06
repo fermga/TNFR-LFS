@@ -2,7 +2,7 @@
 
 from .insim import ButtonEvent, ButtonLayout, InSimClient, MacroQueue, OverlayManager
 from .outsim_client import OutSimClient, TelemetryFormatError
-from .outsim_udp import OutSimPacket, OutSimUDPClient
+from .outsim_udp import OUTSIM_MAX_PACKET_SIZE, OutSimPacket, OutSimUDPClient
 from .outgauge_udp import OutGaugePacket, OutGaugeUDPClient
 from .fusion import TelemetryFusion
 
@@ -19,6 +19,7 @@ __all__ = [
     "OverlayManager",
     "OutGaugePacket",
     "OutGaugeUDPClient",
+    "OUTSIM_MAX_PACKET_SIZE",
     "OutSimClient",
     "OutSimPacket",
     "OutSimUDPClient",
