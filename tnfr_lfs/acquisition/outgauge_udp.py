@@ -7,7 +7,7 @@ import math
 import socket
 import struct
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, cast
 
 __all__ = ["OutGaugePacket", "OutGaugeUDPClient"]
 
@@ -89,11 +89,11 @@ class OutGaugePacket:
             packet_id,
         ) = unpacked
 
-        extra_inner = (0.0, 0.0, 0.0, 0.0)
-        extra_middle = (0.0, 0.0, 0.0, 0.0)
-        extra_outer = (0.0, 0.0, 0.0, 0.0)
-        extra_pressures = (0.0, 0.0, 0.0, 0.0)
-        extra_brakes = (0.0, 0.0, 0.0, 0.0)
+        extra_inner: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+        extra_middle: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+        extra_outer: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+        extra_pressures: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+        extra_brakes: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
         extra_offset = _PACK_STRUCT.size
         if len(payload) > extra_offset:
             remainder = memoryview(payload)[extra_offset:]
@@ -125,7 +125,10 @@ class OutGaugePacket:
                             if not math.isfinite(numeric) or numeric <= 0.0:
                                 continue
                             block[index] = numeric
-                        return tuple(block)  # type: ignore[return-value]
+                        block_tuple = tuple(block)
+                        if len(block_tuple) < 4:
+                            block_tuple = block_tuple + (0.0,) * (4 - len(block_tuple))
+                        return cast(tuple[float, float, float, float], block_tuple)
 
                     extra_inner = _extract_block(0)
                     extra_middle = _extract_block(4)
