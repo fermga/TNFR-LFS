@@ -956,6 +956,43 @@ def test_tyre_balance_controller_returns_zero_without_cphi():
     assert control.per_wheel_pressure == {"fl": 0.0, "fr": 0.0, "rl": 0.0, "rr": 0.0}
 
 
+def test_tyre_balance_controller_neutral_when_cphi_missing():
+    metrics = {
+        "cphi_fl": float("nan"),
+        "cphi_fr": None,
+        "cphi_rl": float("nan"),
+        "cphi_rr": None,
+        "cphi_fl_temperature": None,
+        "cphi_fr_temperature": float("nan"),
+        "cphi_rl_temperature": None,
+        "cphi_rr_temperature": float("nan"),
+        "cphi_fl_gradient": None,
+        "cphi_fr_gradient": float("nan"),
+        "cphi_rl_gradient": None,
+        "cphi_rr_gradient": float("nan"),
+        "cphi_fl_mu": None,
+        "cphi_fr_mu": float("nan"),
+        "cphi_rl_mu": None,
+        "cphi_rr_mu": float("nan"),
+        "cphi_fl_temp_delta": None,
+        "cphi_fr_temp_delta": float("nan"),
+        "cphi_rl_temp_delta": None,
+        "cphi_rr_temp_delta": float("nan"),
+        "cphi_fl_gradient_rate": None,
+        "cphi_fr_gradient_rate": float("nan"),
+        "cphi_rl_gradient_rate": None,
+        "cphi_rr_gradient_rate": float("nan"),
+        "d_nfr_flat": 0.0,
+    }
+
+    control = tyre_balance_controller(metrics)
+    assert control.pressure_delta_front == 0.0
+    assert control.pressure_delta_rear == 0.0
+    assert control.camber_delta_front == 0.0
+    assert control.camber_delta_rear == 0.0
+    assert control.per_wheel_pressure == {"fl": 0.0, "fr": 0.0, "rl": 0.0, "rr": 0.0}
+
+
 def test_mutation_operator_detects_style_and_entropy_mutations():
     state: dict[str, dict[str, object]] = {}
     base_triggers = {

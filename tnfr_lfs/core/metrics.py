@@ -352,7 +352,15 @@ def _cphi_wheel_from_samples(
     samples: Sequence[tuple[float, float, float, float, float, float, float]]
 ) -> CPHIWheel:
     if not samples:
-        return CPHIWheel()
+        sentinel = math.nan
+        return CPHIWheel(
+            value=sentinel,
+            temperature_component=sentinel,
+            gradient_component=sentinel,
+            mu_component=sentinel,
+            temperature_delta=sentinel,
+            gradient_rate=sentinel,
+        )
 
     slip_components: list[float] = []
     angle_components: list[float] = []
@@ -398,6 +406,18 @@ def _cphi_wheel_from_samples(
             prev_angle = slip_angle
         if math.isfinite(timestamp):
             prev_time = timestamp
+
+    has_slip_or_force_samples = bool(slip_components or angle_components or mu_components)
+    if not has_slip_or_force_samples:
+        sentinel = math.nan
+        return CPHIWheel(
+            value=sentinel,
+            temperature_component=sentinel,
+            gradient_component=sentinel,
+            mu_component=sentinel,
+            temperature_delta=sentinel,
+            gradient_rate=sentinel,
+        )
 
     def _average(values: Sequence[float]) -> float:
         return sum(values) / len(values) if values else 0.0

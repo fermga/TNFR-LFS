@@ -671,20 +671,30 @@ def segment_microsectors(
         filtered_measures["brake_headroom_fade_available"] = fade_available
         if window_metrics.cphi:
             for suffix, wheel in window_metrics.cphi.items():
-                filtered_measures[f"cphi_{suffix}"] = float(wheel.value)
-                filtered_measures[
-                    f"cphi_{suffix}_temperature"
-                ] = float(wheel.temperature_component)
-                filtered_measures[
-                    f"cphi_{suffix}_gradient"
-                ] = float(wheel.gradient_component)
-                filtered_measures[f"cphi_{suffix}_mu"] = float(wheel.mu_component)
-                filtered_measures[
-                    f"cphi_{suffix}_temp_delta"
-                ] = float(wheel.temperature_delta)
-                filtered_measures[
-                    f"cphi_{suffix}_gradient_rate"
-                ] = float(wheel.gradient_rate)
+                value = float(wheel.value)
+                filtered_measures[f"cphi_{suffix}"] = (
+                    value if math.isfinite(value) else None
+                )
+                temp_component = float(wheel.temperature_component)
+                filtered_measures[f"cphi_{suffix}_temperature"] = (
+                    temp_component if math.isfinite(temp_component) else None
+                )
+                gradient_component = float(wheel.gradient_component)
+                filtered_measures[f"cphi_{suffix}_gradient"] = (
+                    gradient_component if math.isfinite(gradient_component) else None
+                )
+                mu_component = float(wheel.mu_component)
+                filtered_measures[f"cphi_{suffix}_mu"] = (
+                    mu_component if math.isfinite(mu_component) else None
+                )
+                temp_delta = float(wheel.temperature_delta)
+                filtered_measures[f"cphi_{suffix}_temp_delta"] = (
+                    temp_delta if math.isfinite(temp_delta) else None
+                )
+                gradient_rate = float(wheel.gradient_rate)
+                filtered_measures[f"cphi_{suffix}_gradient_rate"] = (
+                    gradient_rate if math.isfinite(gradient_rate) else None
+                )
         ventilation_alert = window_metrics.brake_headroom.ventilation_alert
         if ventilation_alert:
             filtered_measures["brake_headroom_ventilation_alert"] = ventilation_alert

@@ -582,6 +582,78 @@ def test_tyre_balance_rule_suppresses_actions_when_dispersion_low(
     assert recommendations == []
 
 
+def test_tyre_balance_rule_neutral_with_missing_cphi(car_track_thresholds) -> None:
+    microsector = Microsector(
+        index=4,
+        start_time=0.0,
+        end_time=0.3,
+        curvature=1.2,
+        brake_event=True,
+        support_event=True,
+        delta_nfr_signature=0.35,
+        goals=(),
+        phase_boundaries={"apex": (0, 3)},
+        phase_samples={"apex": (0, 1, 2)},
+        active_phase="apex",
+        dominant_nodes={"apex": ()},
+        phase_weights={},
+        grip_rel=1.0,
+        phase_lag={},
+        phase_alignment={},
+        filtered_measures={
+            "thermal_load": 5200.0,
+            "style_index": 0.83,
+            "grip_rel": 1.0,
+            "d_nfr_flat": -0.28,
+            "cphi_fl": float("nan"),
+            "cphi_fr": None,
+            "cphi_rl": float("nan"),
+            "cphi_rr": None,
+            "cphi_fl_temperature": None,
+            "cphi_fr_temperature": float("nan"),
+            "cphi_rl_temperature": None,
+            "cphi_rr_temperature": float("nan"),
+            "cphi_fl_gradient": None,
+            "cphi_fr_gradient": float("nan"),
+            "cphi_rl_gradient": None,
+            "cphi_rr_gradient": float("nan"),
+            "cphi_fl_mu": None,
+            "cphi_fr_mu": float("nan"),
+            "cphi_rl_mu": None,
+            "cphi_rr_mu": float("nan"),
+            "cphi_fl_temp_delta": None,
+            "cphi_fr_temp_delta": float("nan"),
+            "cphi_rl_temp_delta": None,
+            "cphi_rr_temp_delta": float("nan"),
+            "cphi_fl_gradient_rate": None,
+            "cphi_fr_gradient_rate": float("nan"),
+            "cphi_rl_gradient_rate": None,
+            "cphi_rr_gradient_rate": float("nan"),
+        },
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={"apex": {}},
+        operator_events={},
+    )
+    thresholds = ThresholdProfile(
+        entry_delta_tolerance=0.6,
+        apex_delta_tolerance=0.6,
+        exit_delta_tolerance=0.6,
+        piano_delta_tolerance=0.5,
+        rho_detune_threshold=0.4,
+    )
+    context = RuleContext(
+        car_model="generic_gt",
+        track_name="valencia",
+        thresholds=thresholds,
+        tyre_offsets={},
+    )
+    rule = TyreBalanceRule(priority=18)
+
+    recommendations = list(rule.evaluate([], [microsector], context))
+    assert recommendations == []
+
+
 def test_tyre_balance_rule_skips_when_cphi_healthy(car_track_thresholds) -> None:
     microsector = Microsector(
         index=6,
