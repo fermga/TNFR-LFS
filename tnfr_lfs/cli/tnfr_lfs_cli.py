@@ -48,6 +48,7 @@ from ..core.segmentation import (
     microsector_stability_metrics,
     segment_microsectors,
 )
+from ..analysis import compute_session_robustness
 from ..exporters import (
     REPORT_ARTIFACT_FORMATS,
     build_coherence_map_payload,
@@ -2490,6 +2491,32 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         metrics=metrics,
         artifact_format=getattr(namespace, "report_format", "json"),
     )
+    robustness_thresholds = getattr(thresholds, "robustness", None)
+    stages_payload = metrics.get("stages") if isinstance(metrics, Mapping) else None
+    reception_stage = (
+        stages_payload.get("recepcion") if isinstance(stages_payload, Mapping) else None
+    )
+    lap_indices = (
+        reception_stage.get("lap_indices") if isinstance(reception_stage, Mapping) else None
+    )
+    lap_metadata = metrics.get("lap_sequence") if isinstance(metrics, Mapping) else None
+    robustness_metrics = compute_session_robustness(
+        metrics.get("bundles") or bundles,
+        lap_indices=lap_indices,
+        lap_metadata=lap_metadata,
+        microsectors=microsectors,
+        thresholds=robustness_thresholds,
+    )
+    if robustness_metrics and session_payload is not None:
+        session_mapping = dict(session_payload)
+        session_metrics_block = session_mapping.get("metrics")
+        if isinstance(session_metrics_block, Mapping):
+            metrics_profile = dict(session_metrics_block)
+        else:
+            metrics_profile = {}
+        metrics_profile["robustness"] = robustness_metrics
+        session_mapping["metrics"] = metrics_profile
+        session_payload = session_mapping
     phase_templates = _phase_templates_from_config(config, "analyze")
     intermediate_metrics = {
         "epi_evolution": metrics.get("epi_evolution"),
@@ -2506,6 +2533,8 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         "pairwise_coupling": metrics.get("pairwise_coupling"),
         "microsector_variability": metrics.get("microsector_variability", []),
     }
+    if robustness_metrics:
+        summary_metrics["robustness"] = robustness_metrics
     if session_payload is not None:
         summary_metrics["session"] = session_payload
     payload: Dict[str, Any] = {
