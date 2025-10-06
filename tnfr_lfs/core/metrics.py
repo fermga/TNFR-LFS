@@ -384,6 +384,8 @@ class AeroBalanceDriftBin:
     mu_balance: float = 0.0
     mu_symmetry_front: float = 0.0
     mu_symmetry_rear: float = 0.0
+    mu_balance_slope: float = 0.0
+    mu_balance_sign_change: bool = False
 
     @property
     def rake_deg(self) -> float:
@@ -2105,6 +2107,7 @@ def compute_window_metrics(
             "mu_front_long": [],
             "mu_rear_lat": [],
             "mu_rear_long": [],
+            "mu_balance_samples": [],
         },
         "medium": {
             "rake": [],
@@ -2114,6 +2117,7 @@ def compute_window_metrics(
             "mu_front_long": [],
             "mu_rear_lat": [],
             "mu_rear_long": [],
+            "mu_balance_samples": [],
         },
         "high": {
             "rake": [],
@@ -2123,6 +2127,7 @@ def compute_window_metrics(
             "mu_front_long": [],
             "mu_rear_lat": [],
             "mu_rear_long": [],
+            "mu_balance_samples": [],
         },
     }
 
@@ -2209,6 +2214,15 @@ def compute_window_metrics(
             mu_rear_long = 0.0
         bin_payload = drift_bins[bin_key]
         if math.isfinite(rake_value):
+            front_total_sample = mu_front_lat + mu_front_long
+            rear_total_sample = mu_rear_lat + mu_rear_long
+            balance_denominator = abs(front_total_sample) + abs(rear_total_sample)
+            if balance_denominator <= 1e-9:
+                mu_balance_sample = 0.0
+            else:
+                mu_balance_sample = (front_total_sample - rear_total_sample) / balance_denominator
+            if not math.isfinite(mu_balance_sample):
+                mu_balance_sample = 0.0
             bin_payload["rake"].append(rake_value)
             bin_payload["mu_front"].append(mu_front)
             bin_payload["mu_rear"].append(mu_rear)
@@ -2216,6 +2230,7 @@ def compute_window_metrics(
             bin_payload["mu_front_long"].append(mu_front_long)
             bin_payload["mu_rear_lat"].append(mu_rear_lat)
             bin_payload["mu_rear_long"].append(mu_rear_long)
+            bin_payload["mu_balance_samples"].append(mu_balance_sample)
 
     def _build_drift_bin(
         key: str, lower: float, upper: float | None
@@ -2228,6 +2243,7 @@ def compute_window_metrics(
         mu_front_long_values = payload["mu_front_long"]
         mu_rear_lat_values = payload["mu_rear_lat"]
         mu_rear_long_values = payload["mu_rear_long"]
+        mu_balance_samples = payload["mu_balance_samples"]
         samples = len(rakes)
         rake_mean = mean(rakes) if rakes else 0.0
         rake_std = math.sqrt(pvariance(rakes)) if len(rakes) >= 2 else 0.0
@@ -2262,6 +2278,24 @@ def compute_window_metrics(
             mu_symmetry_rear = 0.0
         else:
             mu_symmetry_rear = (mu_rear_lat_mean - mu_rear_long_mean) / rear_symmetry_denominator
+        mu_balance_slope = 0.0
+        if len(rakes) >= 2 and len(mu_balance_samples) == len(rakes):
+            rake_mean_value = mean(rakes)
+            mu_balance_mean = mean(mu_balance_samples)
+            rake_variance = sum((value - rake_mean_value) ** 2 for value in rakes)
+            if rake_variance > 1e-12:
+                covariance = sum(
+                    (rake_value - rake_mean_value) * (mu_value - mu_balance_mean)
+                    for rake_value, mu_value in zip(rakes, mu_balance_samples)
+                )
+                mu_balance_slope = covariance / rake_variance
+        if not math.isfinite(mu_balance_slope):
+            mu_balance_slope = 0.0
+        mu_balance_sign_change = False
+        if mu_balance_samples:
+            positive_balance = any(value > 1e-6 for value in mu_balance_samples)
+            negative_balance = any(value < -1e-6 for value in mu_balance_samples)
+            mu_balance_sign_change = positive_balance and negative_balance
         return AeroBalanceDriftBin(
             speed_min=lower,
             speed_max=upper,
@@ -2275,6 +2309,8 @@ def compute_window_metrics(
             mu_balance=mu_balance,
             mu_symmetry_front=mu_symmetry_front,
             mu_symmetry_rear=mu_symmetry_rear,
+            mu_balance_slope=mu_balance_slope,
+            mu_balance_sign_change=mu_balance_sign_change,
         )
 
     low_drift = _build_drift_bin("low", 0.0, drift_low_threshold)
@@ -2292,6 +2328,13 @@ def compute_window_metrics(
             f"{drift_labels[key]} μΔ {payload.mu_delta:+.2f} "
             f"rake {payload.rake_deg:+.2f}° carga {direction}"
         )
+        guidance_details: list[str] = []
+        if abs(payload.mu_balance_slope) > 1e-6 and math.isfinite(payload.mu_balance_slope):
+            guidance_details.append(f"sensibilidad μβ {payload.mu_balance_slope:+.3f}/rad")
+        if payload.mu_balance_sign_change:
+            guidance_details.append("inversión μβ")
+        if guidance_details:
+            drift_guidance = f"{drift_guidance} ({'; '.join(guidance_details)})"
         break
     aero_balance_drift = AeroBalanceDrift(
         low_speed=low_drift,

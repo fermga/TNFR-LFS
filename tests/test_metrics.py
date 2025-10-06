@@ -945,6 +945,62 @@ def test_compute_window_metrics_aero_balance_drift_bins() -> None:
     assert "μΔ" in drift.guidance or drift.guidance == ""
 
 
+def test_compute_window_metrics_aero_balance_drift_balance_slopes() -> None:
+    base = _record(0.0, 110.0, si=0.82)
+
+    def _sample(
+        timestamp: float,
+        speed: float,
+        pitch: float,
+        front_lat: float,
+        front_long: float,
+        rear_lat: float,
+        rear_long: float,
+    ) -> TelemetryRecord:
+        front_total = front_lat + front_long
+        rear_total = rear_lat + rear_long
+        return replace(
+            base,
+            timestamp=timestamp,
+            speed=speed,
+            pitch=pitch,
+            suspension_travel_front=0.0,
+            suspension_travel_rear=0.0,
+            mu_eff_front=front_total / 2.0,
+            mu_eff_rear=rear_total / 2.0,
+            mu_eff_front_lateral=front_lat,
+            mu_eff_front_longitudinal=front_long,
+            mu_eff_rear_lateral=rear_lat,
+            mu_eff_rear_longitudinal=rear_long,
+        )
+
+    records = [
+        _sample(0.0, 25.0, 0.01, 0.9, 1.0, 1.1, 1.0),
+        _sample(0.1, 30.0, 0.02, 1.2, 1.2, 1.0, 1.0),
+        _sample(0.2, 40.0, 0.02, 1.3, 1.2, 0.8, 0.7),
+        _sample(0.3, 45.0, 0.05, 1.1, 0.9, 0.9, 0.7),
+        _sample(0.4, 60.0, 0.03, 1.1, 0.9, 0.8, 0.7),
+        _sample(0.5, 65.0, 0.06, 1.4, 1.2, 0.8, 0.6),
+    ]
+
+    metrics = compute_window_metrics(records)
+    drift = metrics.aero_balance_drift
+
+    assert drift.low_speed.samples == 2
+    assert drift.medium_speed.samples == 2
+    assert drift.high_speed.samples == 2
+
+    assert drift.low_speed.mu_balance_slope > 0.0
+    assert drift.medium_speed.mu_balance_slope < 0.0
+    assert drift.high_speed.mu_balance_slope > 0.0
+
+    assert drift.low_speed.mu_balance_sign_change is True
+    assert drift.medium_speed.mu_balance_sign_change is False
+    assert drift.high_speed.mu_balance_sign_change is False
+
+    assert "sensibilidad μβ" in drift.guidance or drift.guidance == ""
+
+
 def test_compute_window_metrics_brake_headroom_components() -> None:
     longitudinal = [-4.0, -6.5, -8.0, -7.2, -5.5]
     locking = [0.0, 0.2, 0.7, 0.85, 0.92]
