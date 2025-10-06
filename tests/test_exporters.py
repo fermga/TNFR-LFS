@@ -30,6 +30,7 @@ from tnfr_lfs.exporters import (
     normalise_set_output_name,
     operator_trajectory_exporter,
 )
+from tnfr_lfs.core.operator_detection import canonical_operator_label
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan, serialise_setup_plan
 
 
@@ -365,7 +366,11 @@ def test_operator_trajectory_exporter_serialises_events(
     events = data.get("events", [])
     assert events
     first = events[0]
-    assert first["type"] in {"AL", "OZ", "IL"}
+    assert first["type"] in {
+        canonical_operator_label("AL"),
+        canonical_operator_label("OZ"),
+        canonical_operator_label("IL"),
+    }
     assert first["delta_metrics"]["peak"] == pytest.approx(
         first["delta_metrics"]["peak"], rel=1e-6
     )

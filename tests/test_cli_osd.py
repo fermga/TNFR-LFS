@@ -24,6 +24,7 @@ from tnfr_lfs.core.metrics import (
     WindowMetrics,
     compute_window_metrics,
 )
+from tnfr_lfs.core.operator_detection import canonical_operator_label
 from tnfr_lfs.recommender.rules import RuleProfileObjectives
 from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
 from tnfr_lfs.core.epi_models import (
@@ -759,6 +760,7 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
     operator_events = {
         "OZ": (
             {
+                "name": canonical_operator_label("OZ"),
                 "delta_nfr_threshold": 0.28,
                 "delta_nfr_peak": 0.35,
                 "delta_nfr_avg": 0.3,
@@ -838,7 +840,7 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
     page = osd_module._render_page_a(active, bundles[0], 0.2, window_metrics, bundles)
     assert "ΔNFR frenada" in page
     assert "low_grip" in page
-    assert "OZ" in page
+    assert canonical_operator_label("OZ") in page
 
 
 def test_brake_headroom_line_renders_summary() -> None:
@@ -1033,6 +1035,7 @@ def test_brake_meter_skips_when_silence_dominates() -> None:
         "SILENCIO": ({"duration": 2.0},),
         "OZ": (
             {
+                "name": canonical_operator_label("OZ"),
                 "delta_nfr_threshold": 0.28,
                 "delta_nfr_peak": 0.45,
                 "delta_nfr_ratio": 1.2,

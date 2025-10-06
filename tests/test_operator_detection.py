@@ -6,6 +6,7 @@ from typing import List
 
 from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.core.operator_detection import (
+    canonical_operator_label,
     detect_al,
     detect_il,
     detect_oz,
@@ -96,7 +97,7 @@ def test_detect_al_tracks_duration_and_severity() -> None:
     events = detect_al(steady, window=3, lateral_threshold=1.5, load_threshold=200.0)
     assert len(events) == 1
     event = events[0]
-    assert event["name"] == "AL"
+    assert event["name"] == canonical_operator_label("AL")
     assert event["duration"] > 0.0
 
     stronger = detect_al(intense, window=3, lateral_threshold=1.5, load_threshold=200.0)
@@ -137,7 +138,7 @@ def test_detect_oz_requires_slip_and_yaw_alignment() -> None:
     events = detect_oz(oversteer, window=3, slip_threshold=0.12, yaw_threshold=0.25)
     assert len(events) == 1
     event = events[0]
-    assert event["name"] == "OZ"
+    assert event["name"] == canonical_operator_label("OZ")
     assert event["severity"] > 1.0
 
     milder = _build_series(
@@ -214,7 +215,7 @@ def test_detect_silencio_flags_quiet_structural_intervals() -> None:
     )
     assert events
     event = events[0]
-    assert event["name"] == "SILENCIO"
+    assert event["name"] == canonical_operator_label("SILENCIO")
     assert event["duration"] >= 0.4
     assert event["structural_duration"] >= event["duration"]
     assert event["load_span"] <= 150.0

@@ -10,6 +10,7 @@ from statistics import mean
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Protocol, Sequence, Tuple
 
 from ..core.epi_models import EPIBundle
+from ..core.operator_detection import canonical_operator_label
 from .setup_plan import (
     SetupPlan,
     phase_axis_summary_lines,
@@ -798,6 +799,8 @@ def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str,
         if boundaries:
             base_index = min(int(start) for start, _ in boundaries.values())
         for name, payloads in raw_events.items():
+            operator_code = str(name)
+            operator_label = canonical_operator_label(operator_code)
             for payload in payloads:
                 start_idx = payload.get("global_start_index")
                 if start_idx is None:
@@ -819,7 +822,8 @@ def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str,
                 )
                 structural_values.extend([structural_start, structural_end])
                 event_entry: Dict[str, Any] = {
-                    "type": str(name),
+                    "code": operator_code,
+                    "type": operator_label,
                     "microsector": int(getattr(microsector, "index", 0)),
                     "start_time": start_time,
                     "end_time": end_time,
@@ -840,12 +844,18 @@ def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str,
                     event_entry["structural_duration"] = structural_duration
                 events.append(event_entry)
                 stats = summary.setdefault(
-                    str(name), {"count": 0.0, "duration": 0.0, "peak": 0.0}
+                    operator_label,
+                    {
+                        "code": operator_code,
+                        "count": 0.0,
+                        "duration": 0.0,
+                        "peak": 0.0,
+                    },
                 )
                 stats["count"] += 1.0
                 stats["duration"] += duration
                 stats["peak"] += abs(delta_metrics.get("peak", 0.0))
-                if str(name) == "SILENCIO":
+                if operator_code == "SILENCIO":
                     quiet_total = stats.setdefault("quiet_duration", 0.0)
                     stats["quiet_duration"] = quiet_total + duration
                     density_total = stats.setdefault("density_total", 0.0)
@@ -882,7 +892,10 @@ def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str,
     if isinstance(aggregated, Mapping):
         candidate = aggregated.get("latent_states")
         if isinstance(candidate, Mapping):
-            latent_states = candidate
+            latent_states = {
+                canonical_operator_label(str(key)): value
+                for key, value in candidate.items()
+            }
 
     return {
         "events": events,
