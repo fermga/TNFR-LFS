@@ -8,7 +8,10 @@ lecturas TNFR provienen de la telemetría OutSim/OutGauge de Live for
 Speed, por lo que es imprescindible habilitar ambos broadcasters y
 configurar `OutSim Opts ff` para transmitir el paquete ampliado de
 ruedas (cargas, fuerzas y deflexiones) que requiere la fusión de
-telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 El `slip_ratio`
+global de TNFR × LFS se deriva directamente del promedio de los canales
+por rueda del bloque OutSim y solo recurre a un cálculo heurístico de
+respaldo cuando la señal llega incompleta.【F:tnfr_lfs/acquisition/fusion.py†L111-L157】【F:tnfr_lfs/acquisition/fusion.py†L242-L285】
 
 ## Señales necesarias por métrica
 
@@ -19,7 +22,7 @@ telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
 - **ν_f (frecuencia natural)** – aprovecha el reparto de carga, los
   `slip_ratio`/`slip_angle`, la velocidad y el `yaw_rate` procedentes de
   OutSim combinados con el estilo de conducción (`throttle`, `gear`) que
-  aporta OutGauge para clasificar nodos y bandas objetivo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+  aporta OutGauge para clasificar nodos y bandas objetivo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】 El `slip_ratio` utilizado aquí corresponde al promedio de las cuatro ruedas transmitidas por OutSim, garantizando que las etiquetas de frecuencia respondan a la adherencia real del tren.【F:tnfr_lfs/acquisition/fusion.py†L111-L157】
 - **C(t) (coherencia estructural)** – se construye a partir de la
   distribución nodal de ΔNFR, de los coeficientes `mu_eff_*` derivados de
   las aceleraciones OutSim y de la actividad ABS/TC reportada por

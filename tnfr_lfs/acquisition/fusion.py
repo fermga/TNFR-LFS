@@ -122,6 +122,14 @@ class TelemetryFusion:
             for wheel in wheels
         )
 
+        finite_slip_ratios = [ratio for ratio in wheel_slip_ratios if math.isfinite(ratio)]
+        if finite_slip_ratios:
+            aggregated_slip_ratio = _clamp(
+                sum(finite_slip_ratios) / len(finite_slip_ratios), -1.0, 1.0
+            )
+        else:
+            aggregated_slip_ratio = math.nan
+
         inputs = getattr(outsim, "inputs", None)
         throttle = _clamp(
             _safe_float(getattr(inputs, "throttle", outgauge.throttle)), 0.0, 1.0
@@ -139,7 +147,10 @@ class TelemetryFusion:
         speed = self._compute_speed(outsim, outgauge)
         yaw = self._normalise_heading(outsim.heading)
         yaw_rate = self._compute_yaw_rate(timestamp, yaw, outsim, previous, dt)
-        slip_ratio = self._compute_slip_ratio(outsim, outgauge, calibration)
+        if math.isfinite(aggregated_slip_ratio):
+            slip_ratio = aggregated_slip_ratio
+        else:
+            slip_ratio = self._compute_slip_ratio(outsim, outgauge, calibration)
         slip_angle = self._compute_slip_angle(
             yaw_rate, speed, slip_ratio, outsim, calibration, previous, dt
         )
