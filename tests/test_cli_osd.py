@@ -581,6 +581,8 @@ def test_render_page_a_includes_wave_when_active_phase():
         mu_usage_rear_ratio=0.0,
         phase_mu_usage_front_ratio=0.0,
         phase_mu_usage_rear_ratio=0.0,
+        mu_balance=0.01,
+        mu_symmetry={"window": {"front": 0.02, "rear": -0.03}},
         exit_gear_match=0.85,
         shift_stability=0.9,
         frequency_label="ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
@@ -591,6 +593,9 @@ def test_render_page_a_includes_wave_when_active_phase():
     )
     gradient_line = osd_module._gradient_line(window_metrics)
     assert "Φsync" in gradient_line
+    assert "μΔ" in gradient_line
+    assert "μΦF" in gradient_line
+    assert "μΦR" in gradient_line
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
     curve_label = f"Curva {microsector.index + 1}"
     assert curve_label in output
@@ -693,6 +698,8 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
         mu_usage_rear_ratio=0.0,
         phase_mu_usage_front_ratio=0.0,
         phase_mu_usage_rear_ratio=0.0,
+        mu_balance=-0.02,
+        mu_symmetry={"window": {"front": -0.01, "rear": 0.03}},
         exit_gear_match=0.78,
         shift_stability=0.88,
         frequency_label="ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
@@ -849,6 +856,8 @@ def test_render_page_a_includes_no_tocar_notice():
         mu_usage_rear_ratio=0.0,
         phase_mu_usage_front_ratio=0.0,
         phase_mu_usage_rear_ratio=0.0,
+        mu_balance=0.0,
+        mu_symmetry={"window": {"front": 0.0, "rear": 0.0}},
         exit_gear_match=0.9,
         shift_stability=1.0,
         frequency_label="",

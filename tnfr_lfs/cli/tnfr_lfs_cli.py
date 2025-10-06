@@ -999,7 +999,27 @@ def _sense_index_map(
             4,
         )
         filtered_payload: Dict[str, Any] = {}
+        symmetry_payload: Dict[str, Dict[str, float]] = {}
         for key, value in microsector.filtered_measures.items():
+            if isinstance(key, str) and key.startswith("mu_symmetry"):
+                parts = key.split("_")
+                if len(parts) == 3:
+                    phase_label = "window"
+                    axle = parts[2]
+                elif len(parts) >= 4:
+                    phase_label = parts[2]
+                    axle = parts[3]
+                else:
+                    continue
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(numeric):
+                    continue
+                bucket = symmetry_payload.setdefault(phase_label, {})
+                bucket[axle] = round(numeric, 4)
+                continue
             if isinstance(value, bool) or value is None:
                 filtered_payload[key] = value
                 continue
@@ -1011,6 +1031,8 @@ def _sense_index_map(
                 filtered_payload[key] = None
                 continue
             filtered_payload[key] = round(numeric, 4)
+        if symmetry_payload:
+            filtered_payload["mu_symmetry"] = symmetry_payload
         if "grip_rel" not in filtered_payload:
             filtered_payload["grip_rel"] = round(float(microsector.grip_rel), 4)
         entry["filtered_measures"] = filtered_payload

@@ -296,7 +296,15 @@ def segment_microsectors(
         speed_drop = max(0.0, entry_speed - min_speed)
         direction_changes = _direction_changes(record_window)
         def _mean_std(attribute: str) -> tuple[float, float]:
-            values = [float(getattr(record, attribute, 0.0)) for record in record_window]
+            values: list[float] = []
+            for sample in record_window:
+                try:
+                    candidate = float(getattr(sample, attribute, 0.0))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(candidate):
+                    continue
+                values.append(candidate)
             if not values:
                 return 0.0, 0.0
             avg_value = mean(values)
@@ -577,6 +585,7 @@ def segment_microsectors(
                 "bumpstop_rear_energy": window_metrics.bumpstop_histogram.rear_total_energy,
                 "mu_usage_front_ratio": window_metrics.mu_usage_front_ratio,
                 "mu_usage_rear_ratio": window_metrics.mu_usage_rear_ratio,
+                "mu_balance": window_metrics.mu_balance,
                 "delta_nfr_std": window_metrics.delta_nfr_std,
                 "nodal_delta_nfr_std": window_metrics.nodal_delta_nfr_std,
                 "exit_gear_match": window_metrics.exit_gear_match,
@@ -647,6 +656,33 @@ def segment_microsectors(
         headroom = window_metrics.brake_headroom
         temperature_available = getattr(headroom, "temperature_available", True)
         fade_available = getattr(headroom, "fade_available", True)
+        symmetry_map = getattr(window_metrics, "mu_symmetry", {}) or {}
+        window_symmetry = symmetry_map.get("window")
+        if isinstance(window_symmetry, Mapping):
+            try:
+                filtered_measures["mu_symmetry_front"] = float(window_symmetry.get("front", 0.0))
+            except (TypeError, ValueError):
+                filtered_measures["mu_symmetry_front"] = 0.0
+            try:
+                filtered_measures["mu_symmetry_rear"] = float(window_symmetry.get("rear", 0.0))
+            except (TypeError, ValueError):
+                filtered_measures["mu_symmetry_rear"] = 0.0
+        else:
+            filtered_measures.setdefault("mu_symmetry_front", 0.0)
+            filtered_measures.setdefault("mu_symmetry_rear", 0.0)
+        for phase_label, components in symmetry_map.items():
+            if phase_label == "window" or not isinstance(components, Mapping):
+                continue
+            try:
+                front_value = float(components.get("front", 0.0))
+            except (TypeError, ValueError):
+                front_value = 0.0
+            try:
+                rear_value = float(components.get("rear", 0.0))
+            except (TypeError, ValueError):
+                rear_value = 0.0
+            filtered_measures[f"mu_symmetry_{phase_label}_front"] = front_value
+            filtered_measures[f"mu_symmetry_{phase_label}_rear"] = rear_value
         if fade_available and math.isfinite(headroom.fade_slope):
             filtered_measures["brake_headroom_fade_slope"] = headroom.fade_slope
         else:
