@@ -1074,6 +1074,13 @@ class TelemetryFusion:
         # `resolved` contains four elements by construction.
         return cast(tuple[float, float, float, float], tuple(resolved))
 
+    # OutGauge brake temperatures are preferred when it supplies plausible
+    # readings, even if they rely on non-standard vendor scales; the estimator
+    # proxy only steps in according to the configured mode (`auto` falls back to
+    # the proxy, `off` sticks to raw OutGauge data, `force` ignores it). The
+    # `TNFR_LFS_BRAKE_THERMAL` environment variable can override the mode for
+    # expected scenarios such as forcing the proxy on hardware without sensors
+    # or disabling it entirely during calibration captures.
     def _resolve_brake_temperatures(
         self,
         dt: float,
