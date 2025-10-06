@@ -34,6 +34,13 @@ from ..core.archetypes import (
     DEFAULT_ARCHETYPE_PHASE_TARGETS,
     PhaseArchetypeTargets,
 )
+from ..constants import (
+    WHEEL_SUFFIXES,
+    WHEEL_LABELS,
+    TEMPERATURE_MEAN_KEYS,
+    TEMPERATURE_STD_KEYS,
+    PRESSURE_STD_KEYS,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..io.profiles import AeroProfile, ProfileManager
@@ -57,22 +64,6 @@ MANUAL_REFERENCES = {
     "dampers": "Advanced Setup Guide · Amortiguadores [ADV-DMP]",
     "springs": "Advanced Setup Guide · Rigidez de muelles [ADV-SPR]",
 }
-
-WHEEL_SUFFIXES: Tuple[str, ...] = ("fl", "fr", "rl", "rr")
-WHEEL_LABELS = MappingProxyType({
-    "fl": "FL",
-    "fr": "FR",
-    "rl": "RL",
-    "rr": "RR",
-})
-TEMPERATURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_temp_{suffix}" for suffix in WHEEL_SUFFIXES})
-TEMPERATURE_STD_KEYS = MappingProxyType({
-    suffix: f"{TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
-})
-PRESSURE_STD_KEYS = MappingProxyType({
-    suffix: f"tyre_pressure_{suffix}_std" for suffix in WHEEL_SUFFIXES
-})
-
 
 _ALIGNMENT_ALIGNMENT_GAP = 0.15
 _ALIGNMENT_LAG_GAP = 0.3

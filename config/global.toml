@@ -15,3 +15,13 @@ delta_nfr = [-0.80, 0.80]
 nu_f = [0.18, 0.42]
 slip_lat = [-0.55, 0.55]
 slip_long = [-0.45, 0.45]
+
+[thermal.brakes]
+ambient_C = 20.0
+eta_in = 0.85
+thermal_mass_J_per_K = 22000.0
+k_cool = 0.035
+k_speed = 0.015
+min_speed_cooling = 1.0
+smoothing_alpha = 0.10
+mode = "auto"

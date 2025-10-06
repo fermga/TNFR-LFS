@@ -26,6 +26,16 @@ network = 0.08
 [defaults.tyre]
 effective_radius = 0.315
 
+[defaults.thermal.brakes]
+ambient_C = 20.0
+eta_in = 0.85
+thermal_mass_J_per_K = 22000.0
+k_cool = 0.035
+k_speed = 0.015
+min_speed_cooling = 1.0
+smoothing_alpha = 0.10
+mode = "auto"
+
 [cars.XFG.defaults]
 load_scale = 1035.0
 

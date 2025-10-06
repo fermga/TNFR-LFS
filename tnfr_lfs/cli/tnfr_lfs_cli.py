@@ -71,6 +71,14 @@ from ..io import (
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
 from ..recommender import Plan, RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
+from ..constants import (
+    WHEEL_SUFFIXES,
+    WHEEL_LABELS,
+    TEMPERATURE_MEAN_KEYS,
+    TEMPERATURE_STD_KEYS,
+    PRESSURE_MEAN_KEYS,
+    PRESSURE_STD_KEYS,
+)
 from ..session import format_session_messages
 from ..track_loader import (
     Track,
@@ -100,23 +108,6 @@ DEFAULT_CONFIG_FILENAME = "tnfr-lfs.toml"
 DEFAULT_OUTPUT_DIR = Path("out")
 PROFILES_ENV_VAR = "TNFR_LFS_PROFILES"
 DEFAULT_PROFILES_FILENAME = "profiles.toml"
-
-WHEEL_SUFFIXES: Tuple[str, ...] = ("fl", "fr", "rl", "rr")
-WHEEL_LABELS = MappingProxyType({
-    "fl": "FL",
-    "fr": "FR",
-    "rl": "RL",
-    "rr": "RR",
-})
-TEMPERATURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_temp_{suffix}" for suffix in WHEEL_SUFFIXES})
-TEMPERATURE_STD_KEYS = MappingProxyType({
-    suffix: f"{TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
-})
-PRESSURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_pressure_{suffix}" for suffix in WHEEL_SUFFIXES})
-PRESSURE_STD_KEYS = MappingProxyType({
-    suffix: f"{PRESSURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
-})
-
 
 PLAYBOOK_RULES = load_playbook()
 
