@@ -1,6 +1,6 @@
 # TNFR × LFS Toolkit
 
-TNFR × LFS es el toolkit de análisis y automatización que operacionaliza la **Teoría de la Naturaleza Fractal-Resonante (TNFR)**. Mientras la teoría describe los fundamentos conceptuales (símbolos, glifos y métricas ΔNFR/ΔSi), el paquete suministra implementaciones reproducibles para instrumentar dichas ideas en flujos de trabajo de telemetría.
+TNFR × LFS es el toolkit de análisis y automatización que operacionaliza la propuesta **Fractal-Resonant Telemetry Analytics for Live for Speed** y la **Teoría de la Naturaleza Fractal-Resonante (TNFR)**. Mientras la teoría describe los fundamentos conceptuales (símbolos, glifos y métricas ΔNFR/ΔSi), el paquete suministra implementaciones reproducibles para instrumentar dichas ideas en flujos de trabajo de telemetría.
 
 ## Quickstart
 
@@ -35,7 +35,7 @@ Los indicadores de set-up (como el Contact Patch Health Index y los ajustes ΔP/
 
 #### Señales clave por métrica
 
-- **ΔNFR / ΔNFR_lat** – combina las cargas verticales, aceleraciones longitudinales y laterales, fuerzas de rueda y deflexiones de suspensión derivadas del paquete de ruedas OutSim con el régimen del motor, posición de pedal y luces ABS/TC de OutGauge para contextualizar el bloqueo y la referencia longitudinal.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+- **ΔNFR / ΔNFR_lat** – combina las cargas Fz (y sus variaciones ΔFz), aceleraciones longitudinales y laterales, fuerzas de rueda y deflexiones de suspensión derivadas del paquete de ruedas OutSim con el régimen del motor, posición de pedal y luces ABS/TC de OutGauge para contextualizar el bloqueo y la referencia longitudinal.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
 - **ν_f (frecuencia natural)** – requiere el reparto de carga, las ratios/ángulos de deslizamiento y la velocidad/yaw rate procedentes de OutSim junto a la señal de estilo del piloto (`throttle`, `gear`) para ajustar la categoría y ventana espectral de cada nodo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
 - **C(t) (coherencia estructural)** – se deriva de la distribución nodal de ΔNFR y de las bandas de ν_f, por lo que depende de los mismos campos de OutSim, de los coeficientes de adherencia `mu_eff_*` calculados a partir de las aceleraciones laterales/longitudinales y de las banderas ABS/TC que llegan por OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
 - **Ventilación / fade de freno** – solo se evalúan cuando OutGauge transmite temperaturas reales de pinza y disco. Si el broadcaster envía los valores de marcador (`0 °C`) TNFR × LFS mostrará “sin datos” para evitar diagnósticos falsamente optimistas.【F:tnfr_lfs/acquisition/fusion.py†L566-L610】【F:tnfr_lfs/core/metrics.py†L860-L982】

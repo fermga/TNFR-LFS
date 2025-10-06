@@ -46,7 +46,7 @@
 La implementación software incorpora un registro de telemetría extendido para
 cada muestra ``TelemetryRecord`` con orientación (``yaw``, ``pitch``,
 ``roll``), presión de freno normalizada y un indicador de bloqueo del ABS/TC.
-Estos campos se combinan con las magnitudes clásicas (carga vertical,
+Estos campos se combinan con las magnitudes clásicas (carga Fz,
 aceleraciones lateral/longitudinal, slip ratio, ΔNFR y Sense Index) para
 estimar la contribución de cada nodo del vehículo.
 
@@ -61,8 +61,8 @@ ponderaciones empíricas:
 
 | Nodo          | Señales principales                                      |
 | ------------- | -------------------------------------------------------- |
-| ``tyres``     | Δslip ratio, bloqueo ABS/TC, variación de carga vertical, temperaturas y presiones por rueda |
-| ``suspension``| Δcarga vertical, Δpitch, Δroll                            |
+| ``tyres``     | Δslip ratio, bloqueo ABS/TC, variación de carga Fz (ΔFz), temperaturas y presiones por rueda |
+| ``suspension``| ΔFz, Δpitch, Δroll                                       |
 | ``chassis``   | Δaceleración lateral, Δroll, Δyaw                         |
 | ``brakes``    | Δpresión de freno, indicador de bloqueo, deceleración     |
 | ``transmission`` | Δaceleración longitudinal, Δslip, Δyaw               |
@@ -148,7 +148,7 @@ respuesta.  Además se exponen indicadores agregados del apoyo estructural en
 
 * ``support_effective`` captura el ΔNFR absorbido por neumáticos y suspensión
   ponderado por las ventanas estructurales del tramo analizado.
-* ``load_support_ratio`` normaliza dicho valor frente a la carga vertical media
+* ``load_support_ratio`` normaliza dicho valor frente a la carga Fz media
   para contextualizar el esfuerzo requerido al chasis.
 * ``structural_expansion_longitudinal``/``structural_contraction_longitudinal``
   cuantifican la expansión o contracción del eje estructural inducida por las

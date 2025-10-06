@@ -361,7 +361,7 @@ Before running the CLI against Live for Speed you must enable the telemetry broa
    coinciden con las opciones por defecto de ``tnfr-lfs baseline`` y pueden activarse al vuelo con
    ``/outsim 1 127.0.0.1 4123`` desde el chat del simulador.
 2. Añade ``OutSim Opts ff`` para incluir el ID del jugador, las entradas de piloto y el bloque de ruedas
-   (fuerzas, cargas, deflexión) que requieren los cálculos de ΔNFR y ν_f.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+   (fuerzas, cargas Fz, deflexión) que requieren los cálculos de ΔNFR y ν_f.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
 3. Actualiza el bloque ``OutGauge`` con ``Mode 1``, ``Port 3000`` e ``IP 127.0.0.1``; Live for Speed acepta
    ``/outgauge 1 127.0.0.1 3000`` como atajo para la misma configuración.
 4. Reserva un puerto ``InSim`` estableciendo ``InSim Port 29999`` (o el valor preferido) y la IP del equipo
@@ -373,10 +373,10 @@ coherentes y que ningún servicio está bloqueando los puertos UDP.
 
 ### Telemetry field checklist
 
-- **ΔNFR / ΔNFR_lat** – requiere OutSim para exponer cargas verticales,
+- **ΔNFR / ΔNFR_lat** – requiere OutSim para exponer cargas Fz,
   aceleraciones, fuerzas y deflexión de rueda junto a OutGauge para
   obtener `rpm`, pedales y luces ABS/TC.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
-- **ν_f (frecuencia natural)** – depende de la distribución de cargas,
+- **ν_f (frecuencia natural)** – depende de la distribución de cargas Fz,
   `slip_ratio`/`slip_angle`, velocidad y `yaw_rate` calculados desde
   OutSim, con señales de estilo (`throttle`, `gear`) procedentes de
   OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】

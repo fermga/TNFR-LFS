@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tnfr-lfs"
 version = "0.1.0"
-description = "Telemetry Normal Force Reconstruction toolkit"
+description = "Fractal-Resonant Telemetry Analytics for Live for Speed toolkit"
 readme = "docs/index.md"
 authors = [{ name = "TNFR Team" }]
 requires-python = ">=3.9"
