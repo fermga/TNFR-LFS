@@ -418,10 +418,10 @@ def test_lfs_set_exporter_validates_name(
 
 
 def test_normalise_set_output_name_requires_prefix() -> None:
-    name = normalise_set_output_name("GEN_race", "generic_gt")
-    assert name == "GEN_race.set"
+    name = normalise_set_output_name("FZR_race", "FZR")
+    assert name == "FZR_race.set"
     with pytest.raises(ValueError):
-        normalise_set_output_name("XFG_setup", "generic_gt")
+        normalise_set_output_name("XFG_setup", "FZR")
 
 
 def test_quickstart_reports_include_new_metrics(monkeypatch: pytest.MonkeyPatch) -> None:

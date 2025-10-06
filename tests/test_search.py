@@ -503,14 +503,14 @@ def test_setup_planner_reports_consistent_sensitivities():
         return adjusted
 
     planner = SetupPlanner()
-    plan = planner.plan(baseline, [microsector], car_model="generic_gt", simulator=simulator)
+    plan = planner.plan(baseline, [microsector], car_model="FZR", simulator=simulator)
 
     mean_si = sum(bundle.sense_index for bundle in plan.telemetry) / len(plan.telemetry)
     sci_score = objective_score(plan.telemetry, [microsector])
     base_integral = _absolute_integral(plan.telemetry)
     base_phase = _phase_integrals(plan.telemetry, [microsector])
 
-    space = DEFAULT_DECISION_LIBRARY["generic_gt"]
+    space = DEFAULT_DECISION_LIBRARY["gt_fzr"]
     for variable in space.variables:
         base_value = plan.decision_vector[variable.name]
         raw_step = max(variable.step * 0.25, 1e-3)
@@ -609,7 +609,7 @@ def test_setup_planner_rejects_unknown_car_model():
 def test_setup_planner_consults_profile_jacobian(tmp_path: Path) -> None:
     profiles_path = tmp_path / "profiles.toml"
     manager = ProfileManager(profiles_path)
-    car_model = "generic_gt"
+    car_model = "FZR"
     track = "generic"
     manager.resolve(car_model, track)
     manager.register_plan(

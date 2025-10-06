@@ -77,7 +77,7 @@ vez de asumir lecturas inventadas.【F:tnfr_lfs/acquisition/outsim_client.py†L
 **Ejemplo CLI**
 
 ```bash
-$ tnfr-lfs suggest stint.jsonl --car-model generic_gt --track spa \
+$ tnfr-lfs suggest stint.jsonl --car-model FZR --track AS5 \
     | jq '.recommendations[] | select(.parameter=="rear_wing_angle")'
 {
   "parameter": "rear_wing_angle",

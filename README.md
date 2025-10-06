@@ -62,7 +62,7 @@ Desde esta versión el CLI también puede resolver un *pack* TNFR × LFS complet
 
 | Subcomando | Propósito | Exportadores recomendados | Ejemplo |
 | --- | --- | --- | --- |
-| `pareto` | Barrer el espacio de decisión alrededor del plan generado y devolver el frente de Pareto con los candidatos dominantes. | `markdown` para inspección rápida o `html_ext` para un informe navegable con tablas, histogramas y sugerencias del playbook. | `tnfr-lfs pareto stint.jsonl --car-model generic_gt --radius 2 --export html_ext > pareto.html` |
+| `pareto` | Barrer el espacio de decisión alrededor del plan generado y devolver el frente de Pareto con los candidatos dominantes. | `markdown` para inspección rápida o `html_ext` para un informe navegable con tablas, histogramas y sugerencias del playbook. | `tnfr-lfs pareto stint.jsonl --car-model FZR --radius 2 --export html_ext > pareto.html` |
 | `compare` | Comparar dos stints o configuraciones (A/B) agregando métricas por vuelta y resaltando la variante ganadora para la métrica elegida. | `markdown` para notas de ingeniería o `html_ext` cuando se necesita un dashboard con gráficos de vueltas y mensajes de sesión. | `tnfr-lfs compare baseline.jsonl variante.jsonl --metric sense_index --export html_ext > abtest.html` |
 
 Ambos subcomandos aceptan `--export html_ext`, que reutiliza el exportador HTML extendido para incrustar el frente de Pareto, resúmenes A/B y las sugerencias del playbook en un único archivo portable.【F:tnfr_lfs/cli/pareto.py†L23-L117】【F:tnfr_lfs/cli/compare.py†L28-L135】【F:tnfr_lfs/exporters/__init__.py†L1183-L1193】

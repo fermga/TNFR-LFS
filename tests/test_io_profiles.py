@@ -9,7 +9,7 @@ from tnfr_lfs.io.profiles import ProfileManager
 def test_profile_manager_persists_jacobian_history(tmp_path: Path) -> None:
     profiles_path = tmp_path / "profiles.toml"
     manager = ProfileManager(profiles_path)
-    car_model = "generic_gt"
+    car_model = "FZR"
     track = "generic"
     manager.resolve(car_model, track)
     manager.register_plan(
@@ -26,7 +26,7 @@ def test_profile_manager_persists_jacobian_history(tmp_path: Path) -> None:
     manager.register_result(car_model, track, sense_index=0.7, delta_nfr=3.0)
 
     contents = profiles_path.read_text(encoding="utf8")
-    assert "[profiles.generic_gt.generic.jacobian.overall.sense_index]" in contents
+    assert "[profiles.\"FZR\".generic.jacobian.overall.sense_index]" in contents
     assert "rear_wing_angle = 1.4" in contents
 
     reloaded = ProfileManager(profiles_path)
@@ -39,7 +39,7 @@ def test_profile_manager_persists_jacobian_history(tmp_path: Path) -> None:
 def test_profile_manager_updates_tyre_offsets(tmp_path: Path) -> None:
     profiles_path = tmp_path / "profiles.toml"
     manager = ProfileManager(profiles_path)
-    car_model = "generic_gt"
+    car_model = "FZR"
     track = "generic"
     manager.resolve(car_model, track)
     manager.update_tyre_offsets(car_model, track, {"pressure_front": -0.04, "camber_rear": 0.08})
@@ -55,7 +55,7 @@ def test_profile_manager_updates_tyre_offsets(tmp_path: Path) -> None:
 def test_profile_manager_updates_aero_profiles(tmp_path: Path) -> None:
     profiles_path = tmp_path / "profiles.toml"
     manager = ProfileManager(profiles_path)
-    car_model = "generic_gt"
+    car_model = "FZR"
     track = "generic"
     manager.resolve(car_model, track)
 
@@ -68,7 +68,7 @@ def test_profile_manager_updates_aero_profiles(tmp_path: Path) -> None:
 
     manager.save()
     persisted = profiles_path.read_text(encoding="utf8")
-    assert "[profiles.generic_gt.generic.aero_profiles.race]" in persisted
+    assert "[profiles.\"FZR\".generic.aero_profiles.race]" in persisted
     assert "high_speed_target = 0.32" in persisted
 
     reloaded = ProfileManager(profiles_path)
@@ -79,7 +79,7 @@ def test_profile_manager_updates_aero_profiles(tmp_path: Path) -> None:
 def test_profile_manager_merges_session_weights(tmp_path: Path) -> None:
     profiles_path = tmp_path / "profiles.toml"
     manager = ProfileManager(profiles_path)
-    car_model = "generic_gt"
+    car_model = "FZR"
     track = "generic"
     session_one = {
         "weights": {"entry": {"__default__": 1.25, "brakes": 1.4}},

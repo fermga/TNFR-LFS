@@ -40,7 +40,7 @@ from tnfr_lfs.core.epi_models import (
 
 
 def _populate_hud(records) -> TelemetryHUD:
-    hud = TelemetryHUD(car_model="generic_gt", track_name="valencia", plan_interval=0.0)
+    hud = TelemetryHUD(car_model="FZR", track_name="AS5", plan_interval=0.0)
     for record in records:
         hud.append(record)
     return hud
@@ -355,7 +355,7 @@ def test_hud_macro_status_injects_warnings():
 
 def test_osd_controller_applies_macro_on_trigger():
     plan = SetupPlan(
-        car_model="generic_gt",
+        car_model="FZR",
         session=None,
         changes=(
             SetupChange(parameter="Alerón", delta=2.0, rationale="", expected_effect=""),
@@ -409,7 +409,7 @@ def test_osd_controller_applies_macro_on_trigger():
 
 def test_osd_controller_blocks_macro_when_preflight_fails():
     plan = SetupPlan(
-        car_model="generic_gt",
+        car_model="FZR",
         session=None,
         changes=(
             SetupChange(parameter="Alerón", delta=2.0, rationale="", expected_effect=""),
@@ -455,7 +455,7 @@ def test_render_page_c_marks_riesgos(synthetic_records):
     hud = _populate_hud(synthetic_records[:60])
     thresholds = hud._thresholds
     plan = SetupPlan(
-        car_model="generic_gt",
+        car_model="FZR",
         session=None,
         sci=0.842,
         changes=(
@@ -490,7 +490,7 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
     hud = _populate_hud(synthetic_records[:60])
     thresholds = hud._thresholds
     plan = SetupPlan(
-        car_model="generic_gt",
+        car_model="FZR",
         session=None,
         sci=0.731,
         changes=(),
@@ -514,7 +514,7 @@ def test_render_page_c_includes_phase_axis_summary_map(synthetic_records):
     hud = _populate_hud(synthetic_records[:60])
     thresholds = hud._thresholds
     plan = SetupPlan(
-        car_model="generic_gt",
+        car_model="FZR",
         session=None,
         sci=0.731,
         changes=(),
@@ -539,7 +539,7 @@ def test_render_page_c_includes_phase_axis_summary_map(synthetic_records):
 def test_render_page_c_adds_operational_checklist(synthetic_records):
     hud = _populate_hud(synthetic_records[:60])
     thresholds = hud._thresholds
-    plan = SetupPlan(car_model="generic_gt", session=None)
+    plan = SetupPlan(car_model="FZR", session=None)
     sense_state = {"average": 0.78}
     window_metrics = SimpleNamespace(
         brake_headroom=SimpleNamespace(value=0.35),
@@ -602,7 +602,7 @@ def test_build_setup_plan_includes_phase_axis_summary() -> None:
             ),
         )
     ]
-    plan = osd_module._build_setup_plan(base_plan, "generic_gt", None, microsectors)
+    plan = osd_module._build_setup_plan(base_plan, "FZR", None, microsectors)
     assert plan.phase_axis_summary["longitudinal"]["entry"] == "⇈+0.40"
     assert any("Entrada ∥" in hint for hint in plan.phase_axis_suggestions)
 

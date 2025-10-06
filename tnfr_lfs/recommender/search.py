@@ -608,22 +608,23 @@ for model in _FORMULA_MODELS:
     _LFS_DECISION_LIBRARY[model] = _build_space(model, tuple(spec))
 
 
+_ALIAS_DECISION_KEYS: Mapping[str, str] = MappingProxyType(
+    {
+        "gt_fzr": "FZR",
+        "gt_xrr": "XRR",
+        "formula_fo8": "FO8",
+        "formula_fox": "FOX",
+    }
+)
+
+
 DEFAULT_DECISION_LIBRARY: Mapping[str, DecisionSpace] = {
     **_LFS_DECISION_LIBRARY,
-    "generic_gt": _build_space(
-        "generic_gt",
-        _ROAD_ALIGNMENT
-        + _ROAD_SUSPENSION
-        + _ROAD_MISC
-        + (("rear_wing_angle", -3.0, 3.0, 0.5),),
-    ),
-    "formula": _build_space(
-        "formula",
-        _FORMULA_ALIGNMENT
-        + _FORMULA_SUSPENSION
-        + _FORMULA_MISC_BASE
-        + (("front_wing_angle", -8.0, 8.0, 0.5),),
-    ),
+    **{
+        alias: _LFS_DECISION_LIBRARY[target]
+        for alias, target in _ALIAS_DECISION_KEYS.items()
+        if target in _LFS_DECISION_LIBRARY
+    },
 }
 
 

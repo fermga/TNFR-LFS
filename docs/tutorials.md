@@ -78,7 +78,7 @@ to obtain a flat table with timestamped values.
 ## 3. Generate suggestions
 
 ```bash
-tnfr-lfs suggest stint.jsonl --car-model generic_gt --track spa --export json > suggestions.json
+tnfr-lfs suggest stint.jsonl --car-model FZR --track AS5 --export json > suggestions.json
 ```
 
 The recommendation engine evaluates the telemetry against the thresholds
@@ -108,7 +108,7 @@ sketches that can be pasted into chat tools.
 ## 5. Create a setup plan (optional)
 
 ```bash
-tnfr-lfs write-set stint.jsonl --car-model generic_gt --session FP1 --export markdown > setup.md
+tnfr-lfs write-set stint.jsonl --car-model FZR --session FP1 --export markdown > setup.md
 ```
 
 The planner runs the optimisation-aware search module to propose setup
@@ -139,7 +139,7 @@ El HTML resultante incluye secciones de robustez con variabilidad por microsecto
 Para visualizar cómo responden las palancas del plan ante pequeñas variaciones, ejecuta el subcomando `pareto` y abre el informe HTML generado:
 
 ```bash
-tnfr-lfs pareto stint.jsonl --car-model generic_gt --radius 2 --export html_ext > pareto.html
+tnfr-lfs pareto stint.jsonl --car-model FZR --radius 2 --export html_ext > pareto.html
 ```
 
 El comando barre el espacio de decisión alrededor del vector actual y produce un frente de Pareto con puntuaciones y desgloses por métrica; el exportador `html_ext` incrusta las tablas directamente en el informe.【F:tnfr_lfs/cli/pareto.py†L23-L117】【F:tnfr_lfs/exporters/report_extended.py†L188-L220】【F:tnfr_lfs/exporters/report_extended.py†L290-L324】 Usa estas filas para contrastar el impacto relativo de cada parámetro antes de aceptar cambios mayores y documenta la elección con las notas del playbook.【F:tnfr_lfs/io/playbook.py†L35-L64】
@@ -174,11 +174,11 @@ engine = RecommendationEngine()
 recommendations = engine.generate(bundles)
 
 planner = SetupPlanner()
-plan = planner.plan(bundles, microsectors=microsectors, car_model="generic_gt")
+plan = planner.plan(bundles, microsectors=microsectors, car_model="FZR")
 
 setup_payload = {
     "setup_plan": SetupPlan(
-        car_model="generic_gt",
+        car_model="FZR",
         session="FP1",
         changes=[
             SetupChange(
