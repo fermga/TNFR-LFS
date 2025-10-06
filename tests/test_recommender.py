@@ -2362,6 +2362,75 @@ def test_phase_delta_rule_emits_geometry_actions_for_coherence_gap() -> None:
     assert all(rec.priority <= rule.priority - 1 for rec in geometry_recs)
 
 
+def test_phase_delta_rule_targets_front_toe_for_entry_synchrony_gap() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="entry",
+        operator_label="Operador de frenado",
+        category="entry",
+        phase_label="entrada",
+        priority=12,
+        reference_key="braking",
+    )
+    goal = Goal(
+        phase="entry1",
+        archetype="frenada",
+        description="",
+        target_delta_nfr=0.3,
+        target_sense_index=0.9,
+        nu_f_target=0.28,
+        nu_exc_target=0.22,
+        rho_target=1.0,
+        target_phase_lag=0.0,
+        target_phase_alignment=0.92,
+        measured_phase_lag=0.25,
+        measured_phase_alignment=0.6,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.3, 0.3),
+        dominant_nodes=("tyres", "suspension"),
+        target_delta_nfr_long=0.18,
+        target_delta_nfr_lat=0.12,
+    )
+    samples = tuple(range(3))
+    microsector = Microsector(
+        index=6,
+        start_time=0.0,
+        end_time=0.3,
+        curvature=1.2,
+        brake_event=True,
+        support_event=False,
+        delta_nfr_signature=0.3,
+        goals=(goal,),
+        phase_boundaries={goal.phase: (0, 3)},
+        phase_samples={goal.phase: samples},
+        active_phase=goal.phase,
+        dominant_nodes={goal.phase: goal.dominant_nodes},
+        phase_weights={goal.phase: {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={goal.phase: goal.measured_phase_lag},
+        phase_alignment={goal.phase: goal.measured_phase_alignment},
+        phase_synchrony={goal.phase: goal.measured_phase_synchrony},
+        filtered_measures={},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={goal.phase: {}},
+        operator_events={},
+    )
+    results = [
+        _axis_bundle(0.3, 0.18, 0.12),
+        _axis_bundle(0.3, 0.18, 0.12),
+        _axis_bundle(0.3, 0.18, 0.12),
+    ]
+    thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate(results, [microsector], context))
+    front_toe = [rec for rec in recommendations if rec.parameter == "front_toe_deg"]
+    assert front_toe, "expected front toe recommendations for synchrony gap"
+    assert all(
+        rec.delta is not None and rec.delta > 0 for rec in front_toe
+    ), "synchrony gap should trigger toe-out"
+
+
 def test_phase_delta_rule_prioritises_front_spring_with_lateral_bias() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="apex",
@@ -2560,3 +2629,73 @@ def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
     assert any("camber" in rec.message.lower() or "toe" in rec.message.lower() for rec in geometry_recs)
     assert any("C(t)" in rec.rationale for rec in geometry_recs)
     assert all(rec.priority <= rule.priority - 1 for rec in geometry_recs)
+
+
+def test_phase_delta_rule_targets_rear_toe_for_exit_synchrony_gap() -> None:
+    rule = PhaseDeltaDeviationRule(
+        phase="exit",
+        operator_label="Operador de tracción",
+        category="exit",
+        phase_label="salida",
+        priority=16,
+        reference_key="differential",
+    )
+    goal = Goal(
+        phase="exit",
+        archetype="medium",
+        description="",
+        target_delta_nfr=0.28,
+        target_sense_index=0.88,
+        nu_f_target=0.3,
+        nu_exc_target=0.24,
+        rho_target=0.95,
+        target_phase_lag=0.25,
+        target_phase_alignment=0.8,
+        measured_phase_lag=-0.05,
+        measured_phase_alignment=1.0,
+        slip_lat_window=(-0.3, 0.3),
+        slip_long_window=(-0.3, 0.3),
+        yaw_rate_window=(-0.4, 0.4),
+        dominant_nodes=("tyres", "transmission"),
+        target_delta_nfr_long=0.14,
+        target_delta_nfr_lat=0.14,
+    )
+    samples = tuple(range(4))
+    microsector = Microsector(
+        index=11,
+        start_time=0.0,
+        end_time=0.4,
+        curvature=1.4,
+        brake_event=False,
+        support_event=True,
+        delta_nfr_signature=0.28,
+        goals=(goal,),
+        phase_boundaries={goal.phase: (0, 4)},
+        phase_samples={goal.phase: samples},
+        active_phase=goal.phase,
+        dominant_nodes={goal.phase: goal.dominant_nodes},
+        phase_weights={goal.phase: {"__default__": 1.0}},
+        grip_rel=1.0,
+        phase_lag={goal.phase: goal.measured_phase_lag},
+        phase_alignment={goal.phase: goal.measured_phase_alignment},
+        phase_synchrony={goal.phase: goal.measured_phase_synchrony},
+        filtered_measures={},
+        recursivity_trace=(),
+        last_mutation=None,
+        window_occupancy={goal.phase: {}},
+        operator_events={},
+    )
+    results = [
+        _axis_bundle(0.28, 0.14, 0.14),
+        _axis_bundle(0.28, 0.14, 0.14),
+        _axis_bundle(0.28, 0.14, 0.14),
+        _axis_bundle(0.28, 0.14, 0.14),
+    ]
+    thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
+    context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
+    recommendations = list(rule.evaluate(results, [microsector], context))
+    rear_toe = [rec for rec in recommendations if rec.parameter == "rear_toe_deg"]
+    assert rear_toe, "expected rear toe recommendations for synchrony spike"
+    assert all(
+        rec.delta is not None and rec.delta > 0 for rec in rear_toe
+    ), "synchrony spike should trigger toe-in"
