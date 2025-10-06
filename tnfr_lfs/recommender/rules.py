@@ -562,6 +562,7 @@ class ThresholdProfile:
     archetype_phase_targets: Mapping[str, Mapping[str, PhaseArchetypeTargets]] = field(
         default_factory=dict
     )
+    robustness: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
 
     def tolerance_for_phase(self, phase: str) -> float:
         mapping = {
@@ -662,6 +663,35 @@ def _freeze_phase_weights(
         elif isinstance(profile, (int, float)):
             frozen[str(phase)] = float(profile)
     return MappingProxyType(frozen)
+
+
+def _freeze_metric_thresholds(payload: Mapping[str, object]) -> Mapping[str, float]:
+    table: Dict[str, float] = {}
+    for key, value in payload.items():
+        try:
+            table[str(key)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return MappingProxyType(table) if table else MappingProxyType({})
+
+
+def _build_robustness_thresholds(
+    payload: Mapping[str, object] | None,
+    *,
+    defaults: Mapping[str, Mapping[str, float]] | None = None,
+) -> Mapping[str, Mapping[str, float]]:
+    if not isinstance(payload, Mapping):
+        return defaults or MappingProxyType({})
+    tables: Dict[str, Mapping[str, float]] = {}
+    for scope, values in payload.items():
+        if not isinstance(values, Mapping):
+            continue
+        metrics = _freeze_metric_thresholds(values)
+        if metrics:
+            tables[str(scope)] = metrics
+    if not tables:
+        return defaults or MappingProxyType({})
+    return MappingProxyType(tables)
 
 
 def _coerce_session_weights(
@@ -829,6 +859,9 @@ _BASELINE_ARCHETYPE_TARGETS = _freeze_archetype_targets(
 )
 
 
+_BASELINE_ROBUSTNESS_THRESHOLDS: Mapping[str, Mapping[str, float]] = MappingProxyType({})
+
+
 def _coerce_window(
     values: Sequence[object] | None, default: Tuple[float, float]
 ) -> Tuple[float, float]:
@@ -911,6 +944,9 @@ def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
     phase_weights = _build_phase_weights(
         payload.get("phase_weights"), defaults=_BASELINE_PHASE_WEIGHTS
     )
+    robustness = _build_robustness_thresholds(
+        payload.get("robustness"), defaults=_BASELINE_ROBUSTNESS_THRESHOLDS
+    )
     return ThresholdProfile(
         entry_delta_tolerance=float(payload.get("entry_delta_tolerance", defaults["entry_delta_tolerance"])),
         apex_delta_tolerance=float(payload.get("apex_delta_tolerance", defaults["apex_delta_tolerance"])),
@@ -920,6 +956,7 @@ def _profile_from_payload(payload: Mapping[str, object]) -> ThresholdProfile:
         phase_targets=phase_targets,
         phase_weights=phase_weights,
         archetype_phase_targets=_BASELINE_ARCHETYPE_TARGETS,
+        robustness=robustness,
     )
 
 
@@ -1548,6 +1585,7 @@ DEFAULT_THRESHOLD_PROFILE = ThresholdProfile(
     phase_targets=_BASELINE_PHASE_TARGETS,
     phase_weights=_BASELINE_PHASE_WEIGHTS,
     archetype_phase_targets=_BASELINE_ARCHETYPE_TARGETS,
+    robustness=_BASELINE_ROBUSTNESS_THRESHOLDS,
 )
 
 

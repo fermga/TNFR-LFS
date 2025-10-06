@@ -22,6 +22,14 @@ slip_lat_window = [-0.06, 0.06]
 slip_long_window = [-0.05, 0.05]
 yaw_rate_window = [-0.30, 0.30]
 
+[generic.generic.robustness.lap]
+delta_nfr = 0.35
+sense_index = 0.18
+
+[generic.generic.robustness.phase]
+delta_nfr = 0.45
+sense_index = 0.22
+
 [generic_gt.valencia]
 entry_delta_tolerance = 0.8
 apex_delta_tolerance = 0.6

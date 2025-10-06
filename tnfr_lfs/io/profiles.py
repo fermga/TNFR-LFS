@@ -142,6 +142,7 @@ class ProfileRecord:
             phase_targets=base_profile.phase_targets,
             phase_weights=merged_weights,
             archetype_phase_targets=base_profile.archetype_phase_targets,
+            robustness=base_profile.robustness,
         )
 
     def apply_mutation(
