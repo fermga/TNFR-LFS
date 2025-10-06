@@ -48,7 +48,7 @@ from ..core.segmentation import (
     microsector_stability_metrics,
     segment_microsectors,
 )
-from ..analysis import SUPPORTED_LAP_METRICS, ab_compare_by_lap, compute_session_robustness
+from ..analysis import compute_session_robustness
 from ..exporters import (
     REPORT_ARTIFACT_FORMATS,
     build_coherence_map_payload,
@@ -63,13 +63,7 @@ from ..exporters import (
 from ..exporters.setup_plan import SetupChange, SetupPlan
 from ..io import load_playbook, logs
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
-from ..recommender import (
-    Plan,
-    RecommendationEngine,
-    SetupPlanner,
-    pareto_front,
-    sweep_candidates,
-)
+from ..recommender import Plan, RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
 from ..session import format_session_messages
 from ..track_loader import (
@@ -88,6 +82,8 @@ from ..config_loader import (
     load_profiles as load_pack_profiles,
     resolve_targets as resolve_pack_targets,
 )
+from . import compare as compare_command
+from . import pareto as pareto_command
 
 
 Records = List[TelemetryRecord]
@@ -114,9 +110,6 @@ PRESSURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_pressure_{suffix}" for suf
 PRESSURE_STD_KEYS = MappingProxyType({
     suffix: f"{PRESSURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
 })
-
-
-SUPPORTED_AB_METRICS: tuple[str, ...] = tuple(sorted(SUPPORTED_LAP_METRICS))
 
 
 PLAYBOOK_RULES = load_playbook()
@@ -2546,34 +2539,7 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     )
     report_parser.set_defaults(handler=_handle_report)
 
-    compare_parser = subparsers.add_parser(
-        "compare",
-        help="Compara dos stints de telemetría agregando métricas por vuelta.",
-    )
-    compare_parser.add_argument(
-        "telemetry_a",
-        type=Path,
-        help="Ruta a la telemetría baseline o configuración A.",
-    )
-    compare_parser.add_argument(
-        "telemetry_b",
-        type=Path,
-        help="Ruta a la telemetría variante o configuración B.",
-    )
-    compare_parser.add_argument(
-        "--metric",
-        choices=SUPPORTED_AB_METRICS,
-        default="sense_index",
-        help="Métrica por vuelta utilizada para la comparación (default: sense_index).",
-    )
-    _add_export_argument(
-        compare_parser,
-        default="markdown",
-        help_text=(
-            "Exporter usado para renderizar la comparación A/B (default: markdown)."
-        ),
-    )
-    compare_parser.set_defaults(handler=_handle_compare)
+    compare_command.register_subparser(subparsers, config=config)
 
     write_set_cfg = dict(config.get("write_set", {}))
     write_set_parser = subparsers.add_parser(
@@ -2608,37 +2574,7 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     )
     write_set_parser.set_defaults(handler=_handle_write_set)
 
-    pareto_parser = subparsers.add_parser(
-        "pareto",
-        help="Evalúa candidatos de setup y exporta el frente de Pareto resultante.",
-    )
-    pareto_parser.add_argument(
-        "telemetry", type=Path, help="Ruta al archivo o CSV con la telemetría base."
-    )
-    _add_export_argument(
-        pareto_parser,
-        default=_validated_export(write_set_cfg.get("export"), fallback="markdown"),
-        help_text="Exporter usado para representar el frente Pareto (default: markdown).",
-    )
-    pareto_parser.add_argument(
-        "--car-model",
-        default=str(write_set_cfg.get("car_model", _default_car_model(config))),
-        help="Modelo de coche utilizado para resolver el espacio de decisiones.",
-    )
-    pareto_parser.add_argument(
-        "--session",
-        default=None,
-        help="Etiqueta opcional de sesión que acompañará a los resultados.",
-    )
-    pareto_parser.add_argument(
-        "--radius",
-        type=int,
-        default=int(write_set_cfg.get("pareto_radius", 1)),
-        help=(
-            "Número de pasos +/- por parámetro en el barrido de candidatos (default: 1)."
-        ),
-    )
-    pareto_parser.set_defaults(handler=_handle_pareto)
+    pareto_command.register_subparser(subparsers, config=config)
 
     return parser
 
@@ -3226,78 +3162,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 
 
 def _handle_compare(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    metric = str(namespace.metric)
-    pack_root = _resolve_pack_root(namespace, config)
-    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
-    car_model = _default_car_model(config)
-    track_name = track_selection.name or _default_track_name(config)
-    report_cfg = dict(config.get("report", {}))
-    target_delta = float(report_cfg.get("target_delta", 0.0))
-    target_si = float(report_cfg.get("target_si", 0.75))
-    coherence_window = int(report_cfg.get("coherence_window", 3))
-    recursion_decay = float(report_cfg.get("recursion_decay", 0.4))
-
-    def _compute_metrics(path: Path) -> Mapping[str, Any]:
-        records = _load_records(path)
-        lap_segments = _group_records_by_lap(records)
-        return orchestrate_delta_metrics(
-            lap_segments,
-            target_delta,
-            target_si,
-            coherence_window=coherence_window,
-            recursion_decay=recursion_decay,
-        )
-
-    try:
-        baseline_metrics = _compute_metrics(namespace.telemetry_a)
-        variant_metrics = _compute_metrics(namespace.telemetry_b)
-        abtest_result = ab_compare_by_lap(
-            baseline_metrics,
-            variant_metrics,
-            metric=metric,
-        )
-    except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
-
-    cars = _load_pack_cars(pack_root)
-    track_profiles = _load_pack_track_profiles(pack_root)
-    modifiers = _load_pack_modifiers(pack_root)
-    session_payload = _assemble_session_payload(
-        car_model,
-        track_selection,
-        cars=cars,
-        track_profiles=track_profiles,
-        modifiers=modifiers,
-    )
-    if isinstance(session_payload, Mapping):
-        session_mapping: Dict[str, Any] = dict(session_payload)
-    else:
-        session_mapping = {
-            "car_model": car_model,
-            "track_profile": track_selection.track_profile or track_name,
-        }
-    session_mapping["abtest"] = abtest_result
-
-    payload: Dict[str, Any] = {
-        "metric": metric,
-        "baseline": {
-            "telemetry": str(namespace.telemetry_a),
-            "mean": abtest_result.baseline_mean,
-            "lap_means": list(abtest_result.baseline_laps),
-            "lap_count": len(abtest_result.baseline_laps),
-        },
-        "variant": {
-            "telemetry": str(namespace.telemetry_b),
-            "mean": abtest_result.variant_mean,
-            "lap_means": list(abtest_result.variant_laps),
-            "lap_count": len(abtest_result.variant_laps),
-        },
-        "session": session_mapping,
-    }
-    session_messages = format_session_messages(session_mapping)
-    if session_messages:
-        payload["session_messages"] = session_messages
-    return _render_payload(payload, _resolve_exports(namespace))
+    return compare_command.handle(namespace, config=config)
 
 
 def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
@@ -3415,57 +3280,7 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
 
 
 def _handle_pareto(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    namespace.car_model = str(namespace.car_model or _default_car_model(config)).strip()
-    if not namespace.car_model:
-        raise SystemExit("Debe proporcionar un --car-model válido para evaluar el frente Pareto.")
-    context = _compute_setup_plan(namespace, config=config)
-    payload = _build_setup_plan_payload(context, namespace)
-
-    planner = context.planner
-    space = planner._adapt_space(
-        planner._space_for_car(namespace.car_model),
-        namespace.car_model,
-        context.track_name,
-    )
-    centre_vector: Mapping[str, float] = context.plan.decision_vector or space.initial_guess()
-
-    session_weights: Mapping[str, Mapping[str, float]] | None = None
-    session_hints: Mapping[str, object] | None = None
-    if isinstance(context.session_payload, Mapping):
-        weights_candidate = context.session_payload.get("weights")
-        if isinstance(weights_candidate, Mapping):
-            session_weights = weights_candidate  # type: ignore[assignment]
-        hints_candidate = context.session_payload.get("hints")
-        if isinstance(hints_candidate, Mapping):
-            session_hints = hints_candidate  # type: ignore[assignment]
-
-    radius = max(0, int(getattr(namespace, "radius", 1)))
-    candidates = sweep_candidates(
-        space,
-        centre_vector,
-        context.bundles,
-        microsectors=context.microsectors,
-        simulator=None,
-        session_weights=session_weights,
-        session_hints=session_hints,
-        radius=radius,
-        include_centre=True,
-    )
-    front = pareto_front(candidates)
-    pareto_payload = [dict(point.as_dict()) for point in front]
-
-    session_section: Mapping[str, Any] | None = payload.get("session")  # type: ignore[assignment]
-    if isinstance(session_section, Mapping):
-        updated_session = dict(session_section)
-    elif isinstance(context.session_payload, Mapping):
-        updated_session = dict(context.session_payload)
-    else:
-        updated_session = {}
-    updated_session["pareto"] = pareto_payload
-    payload["session"] = updated_session
-    payload["pareto_points"] = pareto_payload
-    payload["pareto_radius"] = radius
-    return _render_payload(payload, _resolve_exports(namespace))
+    return pareto_command.handle(namespace, config=config)
 
 
 def _resolve_exports(namespace: argparse.Namespace) -> List[str]:
