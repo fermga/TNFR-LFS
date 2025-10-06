@@ -200,7 +200,20 @@ def test_fusion_consumes_extended_outsim_packet(
         wheel.slip_ratio for wheel in extended_outsim_packet.wheels[:4] if wheel.decoded
     ]
     expected_slip_ratio = sum(wheel_slip_ratios) / len(wheel_slip_ratios)
+    wheel_angles_and_loads = [
+        (wheel.slip_angle, wheel.load)
+        for wheel in extended_outsim_packet.wheels[:4]
+        if wheel.decoded
+    ]
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for angle, load in wheel_angles_and_loads:
+        weight = load if math.isfinite(load) and load > 1e-3 else 1.0
+        weighted_sum += angle * weight
+        weight_total += weight
+    expected_slip_angle = weighted_sum / weight_total
     assert record.slip_ratio == pytest.approx(expected_slip_ratio)
+    assert record.slip_angle == pytest.approx(expected_slip_angle)
     assert record.throttle == pytest.approx(0.72)
     assert record.brake_pressure == pytest.approx(0.2)
     assert record.brake_input == pytest.approx(0.35)

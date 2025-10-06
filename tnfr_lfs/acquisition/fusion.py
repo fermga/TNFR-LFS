@@ -122,6 +122,29 @@ class TelemetryFusion:
             for wheel in wheels
         )
 
+        angle_weight_sum = 0.0
+        angle_total_weight = 0.0
+        angle_sum = 0.0
+        angle_count = 0
+        for angle, load in zip(wheel_slip_angles, wheel_loads):
+            if not math.isfinite(angle):
+                continue
+            angle_sum += angle
+            angle_count += 1
+            if math.isfinite(load) and load > 1e-3:
+                weight = load
+            else:
+                weight = 1.0
+            angle_weight_sum += angle * weight
+            angle_total_weight += weight
+        if angle_count:
+            if angle_total_weight > 1e-6:
+                aggregated_slip_angle = angle_weight_sum / angle_total_weight
+            else:
+                aggregated_slip_angle = angle_sum / angle_count
+        else:
+            aggregated_slip_angle = math.nan
+
         finite_slip_ratios = [ratio for ratio in wheel_slip_ratios if math.isfinite(ratio)]
         if finite_slip_ratios:
             aggregated_slip_ratio = _clamp(
@@ -151,9 +174,12 @@ class TelemetryFusion:
             slip_ratio = aggregated_slip_ratio
         else:
             slip_ratio = self._compute_slip_ratio(outsim, outgauge, calibration)
-        slip_angle = self._compute_slip_angle(
-            yaw_rate, speed, slip_ratio, outsim, calibration, previous, dt
-        )
+        if math.isfinite(aggregated_slip_angle):
+            slip_angle = aggregated_slip_angle
+        else:
+            slip_angle = self._compute_slip_angle(
+                yaw_rate, speed, slip_ratio, outsim, calibration, previous, dt
+            )
         steer = self._compute_steer(yaw_rate, speed, calibration)
         front_share, rear_share = self._estimate_axle_distribution(
             outsim, speed, calibration
