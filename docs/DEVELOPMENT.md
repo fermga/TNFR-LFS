@@ -28,14 +28,12 @@ pytest
   ten en cuenta que el análisis estricto sobre todo ``tnfr_lfs`` tarda algo más
   que el conjunto reducido anterior.
 - ``pytest`` ejecuta la batería de pruebas unitaria e integración, incluida la
-  verificación de los datasets de ejemplo ``data/BL1_XFG_baseline.csv`` y el
-  RAF ``data/test1.raf``.
+  verificación de los datasets de ejemplo ``data/test1.raf`` y ``data/test1.zip``.
 
 ## Dataset de referencia
 
-El flujo de quickstart y los tests de integración dependen del archivo
-``data/BL1_XFG_baseline.csv``. El dataset contiene 17 muestras sintetizadas para
-la combinación BL1/XFG y se utiliza tanto por ``examples/quickstart.sh`` como
-por las pruebas de regresión. Para reproducir escenarios con telemetría real,
-el repositorio añade además ``data/test1.raf`` (captura RAF de Live for Speed)
-que sirve de referencia para la ingesta binaria y los tutoriales del CLI.
+El flujo de quickstart y los tests de integración dependen de la captura
+``data/test1.raf`` y del bundle ``data/test1.zip`` exportado desde Replay
+Analyzer. Ambos artefactos recogen telemetría real de Live for Speed y sirven
+como datasets de referencia para los flujos de ingesta binaria, las pruebas de
+regresión y los tutoriales del CLI.
