@@ -118,7 +118,7 @@ rigidez hasta que el indicador cambie a "óptima" y la barra de coherencia
 | --- | --- | --- | --- |
 | Presión en caliente | `∇NFR⊥` | Deltas laterales irregulares entre vueltas reflejan diferencias de presión. | Ajustar presiones para suavizar `∇NFR⊥` y estabilizar `ν_f` alrededor de la frecuencia nominal del perfil, confirmando con las trazas `Fz` por rueda que las cargas convergen tras el cambio.
 | Caída (camber) | `C(t)` | Una coherencia decreciente en las fases de apoyo indica que el parche de contacto no sigue la carga. | Aumentar la caída negativa hasta que `C(t)` se alinee con la referencia de la tabla de perfil (>0.78).
-| Toe | `ν_f` | Saltos rápidos del indicador `ν_f~` tras cambios de dirección se asocian a toe excesivo. | Reducir toe para eliminar artefactos en la señal `ν_f~` y devolver la lectura a la banda "óptima".
+| Toe | `ν_f`, `Φsync` | Saltos rápidos del indicador `ν_f~` tras cambios de dirección se asocian a toe excesivo; gaps de `Φsync` en entrada/salida activan correcciones (toe-out delantero si cae, toe-in trasero si se dispara). | Ajustar toe para eliminar artefactos en la señal `ν_f~` y recuperar la banda "óptima"; utiliza las recomendaciones de `Φsync` para abrir toe delante cuando falte sincronía en entrada y cerrar toe detrás cuando aumente en salida.
 
 **Ejemplo CLI**
 
