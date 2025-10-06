@@ -457,6 +457,8 @@ def bottoming_segments(monkeypatch):
         phase_lag=0.0,
         phase_alignment=0.95,
         phase_synchrony_index=0.97,
+        motor_latency_ms=0.0,
+        phase_motor_latency_ms={},
         useful_dissonance_ratio=0.4,
         useful_dissonance_percentage=40.0,
         coherence_index=0.5,

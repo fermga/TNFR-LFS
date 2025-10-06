@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field
 from statistics import mean, pvariance, pstdev
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Mapping, Sequence, Tuple
 
 from .contextual_delta import (
     ContextMatrix,
@@ -20,7 +20,12 @@ from .dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_st
 from .epi import TelemetryRecord, delta_nfr_by_node
 from .epi_models import EPIBundle
 from .phases import replicate_phase_aliases
-from .spectrum import phase_alignment
+from .spectrum import (
+    PhaseCorrelation,
+    motor_input_correlations,
+    phase_alignment,
+    phase_to_latency_ms,
+)
 from .resonance import estimate_excitation_frequency
 from .structural_time import resolve_time_axis
 
@@ -828,6 +833,7 @@ class WindowMetrics:
     phase_lag: float
     phase_alignment: float
     phase_synchrony_index: float
+    motor_latency_ms: float
     useful_dissonance_ratio: float
     useful_dissonance_percentage: float
     coherence_index: float
@@ -845,6 +851,7 @@ class WindowMetrics:
     mu_usage_rear_ratio: float
     phase_mu_usage_front_ratio: float
     phase_mu_usage_rear_ratio: float
+    phase_motor_latency_ms: Mapping[str, float] = field(default_factory=dict)
     mu_balance: float = 0.0
     mu_symmetry: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     delta_nfr_std: float = 0.0
@@ -1008,6 +1015,8 @@ def compute_window_metrics(
             phase_lag=0.0,
             phase_alignment=1.0,
             phase_synchrony_index=1.0,
+            motor_latency_ms=0.0,
+            phase_motor_latency_ms={},
             useful_dissonance_ratio=0.0,
             useful_dissonance_percentage=0.0,
             coherence_index=0.0,
@@ -1414,6 +1423,50 @@ def compute_window_metrics(
     nu_exc = estimate_excitation_frequency(records)
     rho = nu_exc / freq if freq > 1e-9 else 0.0
     synchrony = phase_synchrony_index(lag, alignment)
+
+    correlations = motor_input_correlations(selected)
+
+    def _select_correlation(
+        mapping: Mapping[str | Tuple[str, str], PhaseCorrelation] | None,
+    ) -> PhaseCorrelation | None:
+        best: PhaseCorrelation | None = None
+        if not mapping:
+            return None
+        for payload in mapping.values():
+            if not isinstance(payload, PhaseCorrelation):
+                continue
+            if best is None or payload.magnitude > best.magnitude:
+                best = payload
+        return best
+
+    best_correlation = _select_correlation(correlations)
+    motor_latency_ms = (
+        abs(best_correlation.latency_ms)
+        if best_correlation is not None
+        else abs(phase_to_latency_ms(freq, lag))
+    )
+
+    phase_latency_map: dict[str, float] = {}
+    for phase_label, indices in phase_windows.items():
+        subset = [
+            records[index]
+            for index in indices
+            if 0 <= index < len(records)
+        ]
+        if len(subset) < 3:
+            continue
+        phase_correlations = motor_input_correlations(subset)
+        phase_best = _select_correlation(phase_correlations)
+        if phase_best is not None:
+            phase_latency_map[str(phase_label)] = abs(phase_best.latency_ms)
+            continue
+        phase_freq, phase_lag, _ = phase_alignment(subset)
+        if phase_freq > 0.0:
+            phase_latency_map[str(phase_label)] = abs(
+                phase_to_latency_ms(phase_freq, phase_lag)
+            )
+
+    phase_latency_map = replicate_phase_aliases(phase_latency_map)
 
     couple, resonance, flatten = _segment_gradients(
         records, segments=3, fallback_to_chronological=fallback_to_chronological
@@ -2428,6 +2481,8 @@ def compute_window_metrics(
         mu_usage_rear_ratio=mu_usage_rear_ratio,
         phase_mu_usage_front_ratio=phase_mu_usage_front_ratio,
         phase_mu_usage_rear_ratio=phase_mu_usage_rear_ratio,
+        motor_latency_ms=motor_latency_ms,
+        phase_motor_latency_ms=phase_latency_map,
         mu_balance=mu_balance,
         mu_symmetry=mu_symmetry,
         delta_nfr_std=delta_std,

@@ -564,6 +564,8 @@ def test_render_page_a_includes_wave_when_active_phase():
         phase_lag=0.0,
         phase_alignment=1.0,
         phase_synchrony_index=1.0,
+        motor_latency_ms=0.0,
+        phase_motor_latency_ms={},
         useful_dissonance_ratio=0.6,
         useful_dissonance_percentage=60.0,
         coherence_index=0.4,
@@ -597,11 +599,12 @@ def test_render_page_a_includes_wave_when_active_phase():
     assert "μΔ" in gradient_line
     assert "μΦF" in gradient_line
     assert "μΦR" in gradient_line
+    assert "τmot" in gradient_line
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
     curve_label = f"Curva {microsector.index + 1}"
     assert curve_label in output
     assert osd_module.HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize()) in output
-    assert "ν_f~" in output
+    assert "ν_f" in output
     assert "[" in output  # ΔNFR gauge
     assert "C(t) 0.40" in output
     assert "∇Acop" in output
@@ -681,6 +684,8 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
         phase_lag=0.05,
         phase_alignment=0.9,
         phase_synchrony_index=0.92,
+        motor_latency_ms=0.0,
+        phase_motor_latency_ms={},
         useful_dissonance_ratio=0.64,
         useful_dissonance_percentage=58.0,
         coherence_index=0.45,
@@ -839,6 +844,8 @@ def test_render_page_a_includes_no_tocar_notice():
         phase_lag=0.0,
         phase_alignment=0.95,
         phase_synchrony_index=0.97,
+        motor_latency_ms=0.0,
+        phase_motor_latency_ms={},
         useful_dissonance_ratio=0.2,
         useful_dissonance_percentage=20.0,
         coherence_index=0.5,

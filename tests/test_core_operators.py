@@ -10,6 +10,7 @@ from typing import List
 import pytest
 
 from tnfr_lfs.core import Goal, Microsector, TelemetryRecord, phase_synchrony_index
+from tnfr_lfs.core.spectrum import phase_to_latency_ms
 from tnfr_lfs.core.coherence import sense_index
 from tnfr_lfs.core.contextual_delta import (
     apply_contextual_delta,
@@ -462,6 +463,11 @@ def test_window_metrics_phase_alignment_tracks_cross_spectrum():
     assert abs(abs(metrics.phase_lag) - phase_offset) < 0.25
     expected_sync = phase_synchrony_index(phase_offset, cos(phase_offset))
     assert metrics.phase_synchrony_index == pytest.approx(expected_sync, abs=0.05)
+    expected_latency_ms = abs(phase_to_latency_ms(frequency, phase_offset))
+    assert metrics.motor_latency_ms == pytest.approx(expected_latency_ms, abs=6.0)
+    assert metrics.phase_motor_latency_ms
+    first_phase_latency = next(iter(metrics.phase_motor_latency_ms.values()))
+    assert first_phase_latency == pytest.approx(expected_latency_ms, abs=6.0)
 
 
 def test_orchestrator_respects_phase_weight_overrides():

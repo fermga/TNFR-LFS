@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from statistics import mean
-from typing import Iterable, List, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from .epi import TelemetryRecord
 
@@ -16,7 +17,150 @@ __all__ = [
     "power_spectrum",
     "cross_spectrum",
     "phase_alignment",
+    "PhaseCorrelation",
+    "phase_to_latency_ms",
+    "motor_input_correlations",
 ]
+
+
+@dataclass(frozen=True)
+class PhaseCorrelation:
+    """Correlation payload describing the dominant cross-spectrum component."""
+
+    frequency: float
+    phase: float
+    alignment: float
+    latency_ms: float
+    magnitude: float
+
+
+_DEFAULT_CONTROL_FIELDS: Mapping[str, Tuple[str, ...]] = {
+    "steer": ("steer",),
+    "brake": ("brake_pressure", "brake"),
+    "throttle": ("throttle",),
+}
+
+_DEFAULT_RESPONSE_FIELDS: Mapping[str, Tuple[str, ...]] = {
+    "yaw": ("yaw_rate",),
+    "ax": ("longitudinal_accel",),
+    "ay": ("lateral_accel",),
+}
+
+
+def phase_to_latency_ms(frequency: float, phase: float) -> float:
+    """Convert a phase lag expressed in radians to milliseconds."""
+
+    if frequency <= 1e-9:
+        return 0.0
+    delay_seconds = phase / (2.0 * math.pi * frequency)
+    return delay_seconds * 1000.0
+
+
+def _resolve_dominant_correlation(
+    input_series: Sequence[float],
+    response_series: Sequence[float],
+    sample_rate: float,
+) -> PhaseCorrelation | None:
+    length = min(len(input_series), len(response_series))
+    if length < 2 or sample_rate <= 0.0:
+        return None
+
+    input_values = list(_normalise(input_series))[-length:]
+    response_values = list(_normalise(response_series))[-length:]
+    spectrum = cross_spectrum(input_values, response_values, sample_rate)
+    if not spectrum:
+        return None
+
+    dominant_frequency = 0.0
+    dominant_phase = 0.0
+    dominant_magnitude = 0.0
+    for frequency, cross_real, cross_imag in spectrum:
+        magnitude = math.hypot(cross_real, cross_imag)
+        if magnitude > dominant_magnitude:
+            dominant_frequency = float(frequency)
+            dominant_phase = math.atan2(cross_imag, cross_real)
+            dominant_magnitude = magnitude
+
+    alignment = math.cos(dominant_phase)
+    latency = phase_to_latency_ms(dominant_frequency, dominant_phase)
+    return PhaseCorrelation(
+        frequency=dominant_frequency,
+        phase=dominant_phase,
+        alignment=alignment,
+        latency_ms=latency,
+        magnitude=max(0.0, dominant_magnitude),
+    )
+
+
+def _extract_series(
+    records: Sequence[TelemetryRecord],
+    attributes: Sequence[str],
+) -> list[float]:
+    samples: list[float] = []
+    for record in records:
+        value = 0.0
+        resolved = False
+        for attr in attributes:
+            try:
+                candidate = getattr(record, attr)
+            except AttributeError:
+                continue
+            try:
+                numeric = float(candidate)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(numeric):
+                value = numeric
+                resolved = True
+                break
+        if not resolved:
+            value = 0.0
+        samples.append(value)
+    return samples
+
+
+def _has_variation(samples: Sequence[float]) -> bool:
+    if len(samples) < 2:
+        return False
+    min_value = min(samples)
+    max_value = max(samples)
+    return math.isfinite(min_value) and math.isfinite(max_value) and (max_value - min_value) > 1e-6
+
+
+def motor_input_correlations(
+    records: Sequence[TelemetryRecord],
+    *,
+    controls: Mapping[str, Sequence[str]] | None = None,
+    responses: Mapping[str, Sequence[str]] | None = None,
+    sample_rate: float | None = None,
+) -> Dict[Tuple[str, str], PhaseCorrelation]:
+    """Return dominant correlations between driver inputs and chassis responses."""
+
+    if controls is None:
+        controls = _DEFAULT_CONTROL_FIELDS
+    if responses is None:
+        responses = _DEFAULT_RESPONSE_FIELDS
+    if sample_rate is None:
+        sample_rate = estimate_sample_rate(records)
+    if sample_rate <= 0.0:
+        return {}
+
+    results: Dict[Tuple[str, str], PhaseCorrelation] = {}
+    for control_label, control_attrs in controls.items():
+        control_series = _extract_series(records, control_attrs)
+        if not _has_variation(control_series):
+            continue
+        for response_label, response_attrs in responses.items():
+            response_series = _extract_series(records, response_attrs)
+            if not _has_variation(response_series):
+                continue
+            correlation = _resolve_dominant_correlation(
+                control_series, response_series, sample_rate
+            )
+            if correlation is None:
+                continue
+            results[(str(control_label), str(response_label))] = correlation
+    return results
 
 
 def estimate_sample_rate(records: Sequence[TelemetryRecord]) -> float:
@@ -199,20 +343,8 @@ def phase_alignment(
 
     steer_trimmed = steer_values[-length:]
     response_trimmed = combined_response[-length:]
-    spectrum = cross_spectrum(steer_trimmed, response_trimmed, sample_rate)
-    if not spectrum:
+    correlation = _resolve_dominant_correlation(steer_trimmed, response_trimmed, sample_rate)
+    if correlation is None:
         return (0.0, 0.0, 1.0)
-
-    dominant_frequency = 0.0
-    dominant_phase = 0.0
-    dominant_magnitude = 0.0
-    for frequency, cross_real, cross_imag in spectrum:
-        magnitude = math.hypot(cross_real, cross_imag)
-        if magnitude > dominant_magnitude:
-            dominant_magnitude = magnitude
-            dominant_frequency = float(frequency)
-            dominant_phase = math.atan2(cross_imag, cross_real)
-
-    cosine = math.cos(dominant_phase)
-    return dominant_frequency, dominant_phase, cosine
+    return correlation.frequency, correlation.phase, correlation.alignment
 
