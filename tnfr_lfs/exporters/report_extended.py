@@ -301,6 +301,17 @@ def html_exporter(results: Mapping[str, Any]) -> str:
         "ul{margin:0 0 16px 24px;padding:0;}li{margin-bottom:4px;}</style></head>"
     )
     body_parts = [f"<main><h1>{escape(title)}</h1>"]
+    body_parts.append(
+        "<section><h2>Fuente de datos y estimaciones</h2>"
+        "<p>Live for Speed no expone una temperatura nativa de frenos;"
+        " por ello TNFR trabaja con las señales disponibles.</p>"
+        "<p>Cuando el servidor proporciona lecturas OutGauge se usan"
+        " directamente en los cálculos y gráficos del informe.</p>"
+        "<p>Si OutGauge no está disponible se recurre a un proxy de"
+        " temperatura basado en la dinámica del coche, lo que puede"
+        " introducir mayor incertidumbre en las estimaciones.</p>"
+        "</section>"
+    )
     global_metrics = _render_global_metrics(results)
     if global_metrics:
         body_parts.append(f"<section><h2>Métricas globales</h2>{global_metrics}</section>")
