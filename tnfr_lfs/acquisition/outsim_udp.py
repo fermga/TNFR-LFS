@@ -116,7 +116,7 @@ class OutSimPacket:
             )
             offset += _INPUT_STRUCT.size
 
-        wheels = []
+        wheels: list[OutSimWheelState] = []
         for _ in range(4):
             if len(payload) < offset + _WHEEL_STRUCT.size:
                 break
@@ -136,14 +136,18 @@ class OutSimPacket:
             )
             offset += _WHEEL_STRUCT.size
 
+        if len(wheels) > 4:
+            wheels = wheels[:4]
         if len(wheels) < 4:
             wheels.extend([OutSimWheelState()] * (4 - len(wheels)))
+        # Ensure ``wheels`` always contains exactly four elements for the tuple below.
+        w_fl, w_fr, w_rl, w_rr = wheels
 
         return cls(
             *base_values,
             player_id=player_id,
             inputs=inputs,
-            wheels=tuple(wheels),  # type: ignore[arg-type]
+            wheels=(w_fl, w_fr, w_rl, w_rr),
         )
 
 
