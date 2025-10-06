@@ -9,6 +9,7 @@ to the orchestration pipeline.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from statistics import mean
 from typing import List, Mapping, Sequence
@@ -201,9 +202,15 @@ def detect_il(
         window_records = _window(records, index, window)
         if len(window_records) < window:
             continue
-        mean_speed = mean(abs(sample.speed) for sample in window_records)
+        speed_samples = [abs(sample.speed) for sample in window_records if math.isfinite(sample.speed)]
+        mean_speed = mean(speed_samples) if speed_samples else 0.0
         threshold = base_threshold + (speed_gain * mean_speed)
-        deviation_peak = max(abs(sample.line_deviation) for sample in window_records)
+        deviation_samples = [
+            abs(sample.line_deviation)
+            for sample in window_records
+            if math.isfinite(sample.line_deviation)
+        ]
+        deviation_peak = max(deviation_samples) if deviation_samples else 0.0
         meets_threshold = deviation_peak >= threshold
         if meets_threshold:
             if active_start is None:
@@ -218,7 +225,10 @@ def detect_il(
 
     if active_start is not None:
         final_records = _window(records, len(records) - 1, window)
-        mean_speed = mean(abs(sample.speed) for sample in final_records)
+        final_speed_samples = [
+            abs(sample.speed) for sample in final_records if math.isfinite(sample.speed)
+        ]
+        mean_speed = mean(final_speed_samples) if final_speed_samples else 0.0
         threshold = base_threshold + (speed_gain * mean_speed)
         events.append(
             _finalise_event(
