@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import MISSING, dataclass, field, fields
 from math import isfinite
 from pathlib import Path
-from typing import Dict, Mapping, MutableMapping, Sequence, Tuple
+from typing import Mapping, MutableMapping, Sequence, Tuple, TypeAlias
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -14,6 +14,8 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 from .epi import TelemetryRecord
 
+TelemetryBaselineValue: TypeAlias = float | int | str | None
+
 __all__ = ["CoherenceCalibrationStore", "CalibrationSnapshot"]
 
 
@@ -21,8 +23,8 @@ def _is_numeric(value: object) -> bool:
     return isinstance(value, (int, float)) and isfinite(float(value))
 
 
-def _record_to_numeric_map(record: TelemetryRecord) -> Dict[str, float]:
-    payload: Dict[str, float] = {}
+def _record_to_numeric_map(record: TelemetryRecord) -> dict[str, float]:
+    payload: dict[str, float] = {}
     for field_name, value in record.__dict__.items():
         if _is_numeric(value):
             payload[field_name] = float(value)
@@ -32,7 +34,7 @@ def _record_to_numeric_map(record: TelemetryRecord) -> Dict[str, float]:
 _TELEMETRY_FIELDS = {field.name: field for field in fields(TelemetryRecord) if field.init}
 
 
-def _coerce_field_value(name: str, value: float) -> float | int:
+def _coerce_field_value(name: str, value: float) -> TelemetryBaselineValue:
     field = _TELEMETRY_FIELDS.get(name)
     if field is None:
         return value
@@ -42,8 +44,8 @@ def _coerce_field_value(name: str, value: float) -> float | int:
     return float(value)
 
 
-def _default_template() -> Dict[str, object]:
-    template: Dict[str, object] = {}
+def _default_template() -> dict[str, TelemetryBaselineValue]:
+    template: dict[str, TelemetryBaselineValue] = {}
     for name, field in _TELEMETRY_FIELDS.items():
         if field.default is not MISSING:
             template[name] = field.default
@@ -81,8 +83,8 @@ class CalibrationEntry:
     player_name: str
     car_model: str
     laps: int = 0
-    metrics: Dict[str, CalibrationMetric] = field(default_factory=dict)
-    template: Dict[str, object] = field(default_factory=_default_template)
+    metrics: dict[str, CalibrationMetric] = field(default_factory=dict)
+    template: dict[str, TelemetryBaselineValue] = field(default_factory=_default_template)
 
     def update(self, record: TelemetryRecord, decay: float) -> None:
         payload = _record_to_numeric_map(record)
@@ -96,15 +98,18 @@ class CalibrationEntry:
                     self.metrics[name] = CalibrationMetric(mean=float(value))
                 else:
                     metric.update(float(value), decay)
-        self.template.update({name: payload[name] for name in payload})
+        updates: dict[str, TelemetryBaselineValue] = {
+            name: payload[name] for name in payload
+        }
+        self.template.update(updates)
 
     def build_baseline(self) -> TelemetryRecord:
-        data: Dict[str, object] = dict(self.template)
+        data: dict[str, TelemetryBaselineValue] = dict(self.template)
         for name, metric in self.metrics.items():
             data[name] = _coerce_field_value(name, metric.mean)
-        return TelemetryRecord(**data)  # type: ignore[arg-type]
+        return TelemetryRecord(**data)
 
-    def ranges(self) -> Dict[str, Tuple[float, float]]:
+    def ranges(self) -> dict[str, Tuple[float, float]]:
         return {name: metric.norm_range for name, metric in self.metrics.items()}
 
 
@@ -140,7 +145,7 @@ class CoherenceCalibrationStore:
         self.decay = float(decay)
         self.min_laps = int(min_laps)
         self.max_laps = int(max_laps)
-        self._entries: Dict[Tuple[str, str], CalibrationEntry] = {}
+        self._entries: dict[Tuple[str, str], CalibrationEntry] = {}
         self._load()
 
     def register_lap(self, player_name: str, car_model: str, records: Sequence[TelemetryRecord]) -> None:
@@ -190,7 +195,7 @@ class CoherenceCalibrationStore:
             if self.path.exists():
                 self.path.unlink()
             return
-        root: Dict[str, MutableMapping[str, object]] = {}
+        root: dict[str, MutableMapping[str, object]] = {}
         for (player, car), entry in self._entries.items():
             player_node = root.setdefault(str(player), {})
             car_node: MutableMapping[str, object] = {
