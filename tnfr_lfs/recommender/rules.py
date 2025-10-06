@@ -115,27 +115,27 @@ _GEOMETRY_METRIC_NODES: Mapping[str, Mapping[str, str]] = {
 
 _AXIS_FOCUS_MAP: Mapping[tuple[str, str], tuple[str, str, Tuple[str, ...]]] = {
     ("entry", "longitudinal"): (
-        "Prioriza el bias de frenos (ΔNFR∥)",
+        "Prioriza el bias de frenos (proyección ∇NFR∥)",
         "braking",
         ("brake_bias_pct",),
     ),
     ("exit", "longitudinal"): (
-        "Refuerza el bloqueo de retención (ΔNFR∥)",
+        "Refuerza el bloqueo de retención (proyección ∇NFR∥)",
         "differential",
         ("diff_coast_lock",),
     ),
     ("apex", "lateral"): (
-        "Ajusta las barras estabilizadoras (ΔNFR⊥)",
+        "Ajusta las barras estabilizadoras (proyección ∇NFR⊥)",
         "antiroll",
         ("front_arb_steps", "rear_arb_steps"),
     ),
     ("entry", "lateral"): (
-        "Afina el toe delantero (ΔNFR⊥)",
+        "Afina el toe delantero (proyección ∇NFR⊥)",
         "tyre_balance",
         ("front_toe_deg",),
     ),
     ("exit", "lateral"): (
-        "Afina el toe trasero (ΔNFR⊥)",
+        "Afina el toe trasero (proyección ∇NFR⊥)",
         "tyre_balance",
         ("rear_toe_deg",),
     ),
@@ -232,12 +232,12 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             gradient_deadband=0.001,
         ),
         PhaseActionTemplate(
-            metric="delta_nfr_lateral",
+            metric="delta_nfr_proj_lateral",
             parameter="front_spring_stiffness",
             scale=-900.0,
             min_value=-35.0,
             max_value=35.0,
-            message_pattern="{delta:+.1f} N/mm muelle delantero (νf_susp · ΔNFR⊥)",
+            message_pattern="{delta:+.1f} N/mm muelle delantero (νf_susp · ∇NFR⊥)",
             step=0.5,
             nodes=("suspension",),
             priority_offset=-2,
@@ -319,12 +319,12 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             step=1.0,
         ),
         PhaseActionTemplate(
-            metric="delta_nfr_lateral",
+            metric="delta_nfr_proj_lateral",
             parameter="front_spring_stiffness",
             scale=-900.0,
             min_value=-35.0,
             max_value=35.0,
-            message_pattern="{delta:+.1f} N/mm muelle delantero (νf_susp · ΔNFR⊥)",
+            message_pattern="{delta:+.1f} N/mm muelle delantero (νf_susp · ∇NFR⊥)",
             step=0.5,
             nodes=("suspension",),
             priority_offset=-2,
@@ -427,12 +427,12 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             step=5.0,
         ),
         PhaseActionTemplate(
-            metric="delta_nfr_lateral",
+            metric="delta_nfr_proj_lateral",
             parameter="rear_spring_stiffness",
             scale=-900.0,
             min_value=-35.0,
             max_value=35.0,
-            message_pattern="{delta:+.1f} N/mm muelle trasero (νf_susp · ΔNFR⊥)",
+            message_pattern="{delta:+.1f} N/mm muelle trasero (νf_susp · ∇NFR⊥)",
             step=0.5,
             nodes=("suspension",),
             priority_offset=-2,
@@ -1143,7 +1143,7 @@ class BottomingPriorityRule:
                     f"Operador bottoming: {focus} {axle} en microsector {microsector.index}"
                 )
                 rationale = (
-                    f"Índice de bottoming {ratio:.2f} en el eje {axle} coincide con picos de ΔNFR∥ "
+                    f"Índice de bottoming {ratio:.2f} en el eje {axle} coincide con picos de ∇NFR∥ "
                     f"en microsector {microsector.index}. Densidad bump stop {density:.2f} y "
                     f"energía {energy:.2f} ΔNFR. Superficie {surface_label} (factor {surface_factor:.2f})"
                     f" → prioriza {focus}. {reference}."
@@ -1755,7 +1755,7 @@ def _phase_action_recommendations(
         if template.parameter in _SPRING_PARAMETERS:
             rationale = (
                 f"{base_rationale} Acción sugerida: {message}. νf_susp pondera el ajuste "
-                f"para homogeneizar ΔNFR⊥ en la banda de G activa. Consulta "
+                f"para homogeneizar ∇NFR⊥ en la banda de G activa. Consulta "
                 f"{MANUAL_REFERENCES[reference_key]} para aplicar el ajuste."
             )
         recommendations.append(
@@ -2116,8 +2116,8 @@ class PhaseDeltaDeviationRule:
                 continue
             actual_delta = mean(bundle.delta_nfr for bundle in samples)
             deviation = actual_delta - goal.target_delta_nfr
-            avg_long = mean(bundle.delta_nfr_longitudinal for bundle in samples)
-            avg_lat = mean(bundle.delta_nfr_lateral for bundle in samples)
+            avg_long = mean(bundle.delta_nfr_proj_longitudinal for bundle in samples)
+            avg_lat = mean(bundle.delta_nfr_proj_lateral for bundle in samples)
             target_long = getattr(goal, "target_delta_nfr_long", 0.0)
             target_lat = getattr(goal, "target_delta_nfr_lat", 0.0)
             long_dev = avg_long - target_long
@@ -2290,14 +2290,14 @@ class PhaseDeltaDeviationRule:
                         if abs(spring_signal) > 1e-6:
                             spring_rationale = (
                                 f"{base_rationale} νf_susp objetivo {target_nu_f:.2f} frente al medido "
-                                f"{actual_nu_f:.2f} ({nu_f_delta:+.2f}). ΔNFR⊥ medio {avg_lat:.2f} "
+                                f"{actual_nu_f:.2f} ({nu_f_delta:+.2f}). ∇NFR⊥ medio {avg_lat:.2f} "
                                 f"(objetivo {target_lat:.2f}, Δ {lat_dev:+.2f}). El ajuste del muelle busca "
-                                "homogeneizar ΔNFR⊥ en la banda de G activa."
+                                "homogeneizar ∇NFR⊥ en la banda de G activa."
                             )
                             spring_recommendations = _phase_action_recommendations(
                                 phase=self.phase,
                                 category=self.category,
-                                metric="delta_nfr_lateral",
+                                metric="delta_nfr_proj_lateral",
                                 raw_value=spring_signal,
                                 base_rationale=spring_rationale,
                                 priority=self.priority - 2,

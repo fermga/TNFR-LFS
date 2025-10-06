@@ -165,8 +165,8 @@ def test_compare_command_attaches_abtest(
             self.sense_index = value
             self.delta_nfr = value
             self.coherence_index = value
-            self.delta_nfr_longitudinal = value
-            self.delta_nfr_lateral = value
+            self.delta_nfr_proj_longitudinal = value
+            self.delta_nfr_proj_lateral = value
 
     metrics_a = {
         "stages": {

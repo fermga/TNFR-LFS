@@ -50,8 +50,10 @@ the ``Si plan`` trace.  Use the ``--layout-*`` overrides if you need to move the
 40×16 button to a different area of the HUD.
 
 Consult the [setup equivalence guide](setup_equivalences.md) to interpret how
-the HUD surfaces `ΔNFR_lat`, `ν_f` and `C(t)` para cada subsistema antes de
-realizar ajustes en directo.
+the HUD surfaces the nodal projections `∇NFR∥`/`∇NFR⊥`, together with `ν_f` and
+`C(t)`, for each subsystem before tweaking the setup.  Esa guía aclara cuándo
+conviene consultar los canales `Fz`/`ΔFz` originales si el ajuste depende de
+cargas absolutas.
 
 ## 1. Capture a baseline
 
@@ -84,8 +86,10 @@ defined for the selected car model and track.  The resulting payload
 contains rule identifiers, rationales, and expected effects.
 
 Cross-check those insights with the [equivalence tables](setup_equivalences.md)
-to translate each metric (`ΔNFR_lat`, `ν_f`, `C(t)`) into actionable setup
-changes aligned with the TNFR plan.
+to translate each metric (proyecciones `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)`) into
+actionable setup changes aligned with the TNFR plan.  Las tablas también te
+recuerdan cuándo una recomendación basada en `∇NFR⊥` debe validarse con las
+cargas `Fz`/`ΔFz` si el ajuste depende del apoyo absoluto disponible.
 
 ## 4. Build a report
 
@@ -116,7 +120,7 @@ document can be handed directly to race engineers.
 
 | Métrica TNFR | Operador estructural | Palanca primaria | Playbook y guías |
 | --- | --- | --- | --- |
-| `ΔNFR_lat` | `recursivity_operator` mantiene la memoria térmica/estilística por microsector y filtra las contribuciones ΔNFR para detectar picos persistentes antes de cerrar un stint.【F:tnfr_lfs/core/operators.py†L475-L646】 | El controlador de balance de neumáticos convierte esas desviaciones en ΔP/Δcamber y sesgos por rueda, base de los ajustes de barras, bias o presiones recogidos en la guía de equivalencias.【F:tnfr_lfs/core/operators.py†L733-L831】【F:docs/setup_equivalences.md†L61-L152】 | Consulta el [playbook TNFR](../tnfr_lfs/data/playbooks/tnfr_playbook.toml) para priorizar acciones cuando el informe muestre alertas de carga.【F:tnfr_lfs/io/playbook.py†L35-L64】 |
+| `∇NFR⊥` (proyección nodal lateral) | `recursivity_operator` mantiene la memoria térmica/estilística por microsector y filtra las contribuciones ΔNFR para detectar picos persistentes antes de cerrar un stint.【F:tnfr_lfs/core/operators.py†L475-L646】 | El controlador de balance de neumáticos convierte esas desviaciones relativas en ΔP/Δcamber y sesgos por rueda.  Cuando la corrección requiera cuantificar la carga absoluta, cruza la recomendación con los canales `Fz`/`ΔFz` antes de modificar barras, bias o presiones.【F:tnfr_lfs/core/operators.py†L733-L831】【F:docs/setup_equivalences.md†L61-L152】 | Consulta el [playbook TNFR](../tnfr_lfs/data/playbooks/tnfr_playbook.toml) para priorizar acciones cuando el informe muestre alertas de carga.【F:tnfr_lfs/io/playbook.py†L35-L64】 |
 | `ν_f` | `mutation_operator` vigila la entropía estructural y la deriva de estilo para mutar el arquetipo y restablecer la frecuencia natural objetivo por fase.【F:tnfr_lfs/core/operators.py†L834-L940】 | Ajusta muelles, barras y geometría según las recomendaciones vinculadas a `ν_f` en la tabla de equivalencias (rigidez, toe) cuando el HUD/CLI indique "muy baja"/"muy alta".【F:docs/setup_equivalences.md†L87-L152】 | El playbook refuerza estas acciones con recordatorios por microsector y fase.【F:tnfr_lfs/io/playbook.py†L35-L64】 |
 | `C(t)` | La misma memoria recursiva expone la traza de coherencia y alimenta las métricas de robustez; los exportadores la usan para reconstruir acoplamientos nodales y pérdida de coherencia.【F:tnfr_lfs/core/operators.py†L475-L646】【F:tnfr_lfs/exporters/report_extended.py†L156-L179】 | Modula amortiguadores, camber y controles electrónicos para recuperar coherencia cuando los informes destaquen decoherencia o ABS agresivo.【F:docs/setup_equivalences.md†L91-L140】 | Cruza las banderas del playbook para validar qué subsistema atacar primero.【F:tnfr_lfs/io/playbook.py†L35-L64】 |
 

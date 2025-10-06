@@ -13,8 +13,8 @@ SUPPORTED_LAP_METRICS: tuple[str, ...] = (
     "sense_index",
     "delta_nfr",
     "coherence_index",
-    "delta_nfr_longitudinal",
-    "delta_nfr_lateral",
+    "delta_nfr_proj_longitudinal",
+    "delta_nfr_proj_lateral",
 )
 
 

@@ -580,7 +580,7 @@ def _render_page_a(
         coupling_alert = _coupling_alert_line(
             window_metrics,
             longitudinal_delta=float(
-                getattr(bundle, "delta_nfr_longitudinal", 0.0)
+                getattr(bundle, "delta_nfr_proj_longitudinal", 0.0)
             ),
             tolerance=tolerance,
         )
@@ -596,8 +596,8 @@ def _render_page_a(
     goal_delta = active.goal.target_delta_nfr if active.goal else 0.0
     spark_delta = _phase_sparkline(active.microsector, bundles, "delta_nfr")
     spark_si = _phase_sparkline(active.microsector, bundles, "sense_index")
-    long_component = getattr(bundle, "delta_nfr_longitudinal", 0.0)
-    lat_component = getattr(bundle, "delta_nfr_lateral", 0.0)
+    long_component = getattr(bundle, "delta_nfr_proj_longitudinal", 0.0)
+    lat_component = getattr(bundle, "delta_nfr_proj_lateral", 0.0)
     if active.goal:
         goal_long = getattr(active.goal, "target_delta_nfr_long", 0.0)
         goal_lat = getattr(active.goal, "target_delta_nfr_lat", 0.0)
@@ -978,8 +978,8 @@ def _coupling_alert_line(
     longitudinal_threshold = max(0.3, tolerance_value * 0.75)
     if longitudinal_value <= longitudinal_threshold:
         return None
-    payload = "⚠️ Acop ΔNFR∥ " + " · ".join(
-        (*low_segments, f"|Δ∥| {longitudinal_value:.2f}")
+    payload = "⚠️ Acop proy ∇NFR∥ " + " · ".join(
+        (*low_segments, f"|∇∥| {longitudinal_value:.2f}")
     )
     return _truncate_line(payload)
 

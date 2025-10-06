@@ -74,12 +74,12 @@ def csv_exporter(results: Dict[str, Any]) -> str:
     from io import StringIO
 
     buffer = StringIO()
-    buffer.write("timestamp,epi,delta_nfr,delta_nfr_longitudinal,delta_nfr_lateral,sense_index\n")
+    buffer.write("timestamp,epi,delta_nfr,delta_nfr_proj_longitudinal,delta_nfr_proj_lateral,sense_index\n")
     for result in results.get("series", []):
         if not isinstance(result, EPIBundle):
             raise TypeError("CSV exporter expects EPIBundle instances")
         buffer.write(
-            f"{result.timestamp:.3f},{result.epi:.4f},{result.delta_nfr:.3f},{result.delta_nfr_longitudinal:.3f},{result.delta_nfr_lateral:.3f},{result.sense_index:.3f}\n"
+            f"{result.timestamp:.3f},{result.epi:.4f},{result.delta_nfr:.3f},{result.delta_nfr_proj_longitudinal:.3f},{result.delta_nfr_proj_lateral:.3f},{result.sense_index:.3f}\n"
         )
     return buffer.getvalue()
 
@@ -307,8 +307,8 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     axis_weights = plan.get("phase_axis_weights", {}) or {}
     if axis_targets or axis_weights:
         lines.append("")
-        lines.append("**Objetivos ΔNFR∥/ΔNFR⊥ por fase**")
-        lines.append("| Fase | ΔNFR∥ obj | ΔNFR⊥ obj | Peso ∥ | Peso ⊥ |")
+        lines.append("**Objetivos proyección ∇NFR∥/∇NFR⊥ por fase**")
+        lines.append("| Fase | ∇NFR∥ obj | ∇NFR⊥ obj | Peso ∥ | Peso ⊥ |")
         lines.append("| --- | --- | --- | --- | --- |")
         for phase in sorted(set(axis_targets) | set(axis_weights)):
             target = axis_targets.get(phase, {})
@@ -323,7 +323,7 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     summary_lines = phase_axis_summary_lines(plan.get("phase_axis_summary"))
     if summary_lines:
         lines.append("")
-        lines.append("**Mapa ΔNFR∥/ΔNFR⊥ por fase**")
+        lines.append("**Mapa proyección ∇NFR∥/∇NFR⊥ por fase**")
         lines.append("```")
         lines.extend(summary_lines)
         lines.append("```")

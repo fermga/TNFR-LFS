@@ -138,8 +138,8 @@ def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBund
         timestamp=record.timestamp,
         epi=0.0,
         delta_nfr=record.nfr,
-        delta_nfr_longitudinal=0.0,
-        delta_nfr_lateral=0.0,
+        delta_nfr_proj_longitudinal=0.0,
+        delta_nfr_proj_lateral=0.0,
         sense_index=record.si,
         tyres=TyresNode(delta_nfr=share, sense_index=record.si),
         suspension=SuspensionNode(delta_nfr=share, sense_index=record.si),
@@ -622,8 +622,8 @@ def _longitudinal_bundle(
         timestamp=timestamp,
         epi=0.0,
         delta_nfr=delta_long,
-        delta_nfr_longitudinal=delta_long,
-        delta_nfr_lateral=0.0,
+        delta_nfr_proj_longitudinal=delta_long,
+        delta_nfr_proj_lateral=0.0,
         sense_index=si,
         tyres=TyresNode(delta_nfr=share, sense_index=si),
         suspension=SuspensionNode(
@@ -1135,7 +1135,7 @@ def test_locking_window_score_detects_throttle_transitions() -> None:
             locking=locking,
             yaw_rate=yaw_rate,
         )
-        object.__setattr__(record, "delta_nfr_longitudinal", delta_long)
+        object.__setattr__(record, "delta_nfr_proj_longitudinal", delta_long)
         return record
 
     records = [
@@ -1363,8 +1363,8 @@ def test_aero_mechanical_coherence_blends_components() -> None:
                     "mu_eff_rear": 0.14 + 0.04 * index,
                 }
             },
-            delta_nfr_longitudinal=0.06,
-            delta_nfr_lateral=0.03,
+            delta_nfr_proj_longitudinal=0.06,
+            delta_nfr_proj_lateral=0.03,
             coherence_index=0.78,
         )
         for index, record in enumerate(records)

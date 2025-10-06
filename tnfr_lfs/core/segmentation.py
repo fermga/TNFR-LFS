@@ -1465,19 +1465,19 @@ def _build_goals(
             avg_delta = mean(adjusted_delta)
             avg_si = mean(bundle.sense_index for bundle in segment)
             avg_long = mean(
-                bundle.delta_nfr_longitudinal * multipliers[idx]
+                bundle.delta_nfr_proj_longitudinal * multipliers[idx]
                 for idx, bundle in enumerate(segment)
             )
             avg_lat = mean(
-                bundle.delta_nfr_lateral * multipliers[idx]
+                bundle.delta_nfr_proj_lateral * multipliers[idx]
                 for idx, bundle in enumerate(segment)
             )
             abs_long = mean(
-                abs(bundle.delta_nfr_longitudinal) * multipliers[idx]
+                abs(bundle.delta_nfr_proj_longitudinal) * multipliers[idx]
                 for idx, bundle in enumerate(segment)
             )
             abs_lat = mean(
-                abs(bundle.delta_nfr_lateral) * multipliers[idx]
+                abs(bundle.delta_nfr_proj_lateral) * multipliers[idx]
                 for idx, bundle in enumerate(segment)
             )
         else:

@@ -271,8 +271,8 @@ def _udr_bundle_series(values: Sequence[float], *, si: float = 0.8) -> Sequence[
                 timestamp=index * 0.1,
                 epi=0.0,
                 delta_nfr=value,
-                delta_nfr_longitudinal=value,
-                delta_nfr_lateral=0.0,
+                delta_nfr_proj_longitudinal=value,
+                delta_nfr_proj_lateral=0.0,
                 sense_index=si,
                 **nodes,
             )
@@ -319,8 +319,8 @@ def _axis_bundle(
         timestamp=0.0,
         epi=0.0,
         delta_nfr=delta_nfr,
-        delta_nfr_longitudinal=long_component,
-        delta_nfr_lateral=lat_component,
+        delta_nfr_proj_longitudinal=long_component,
+        delta_nfr_proj_lateral=lat_component,
         sense_index=si,
         **nodes,
     )
@@ -2427,7 +2427,7 @@ def test_phase_delta_rule_prioritises_front_spring_with_lateral_bias() -> None:
     assert spring_recs, "expected front spring recommendation under lateral dominance"
     assert all(rec.delta is not None and rec.delta < 0 for rec in spring_recs)
     assert all("νf_susp" in rec.message for rec in spring_recs)
-    assert all("ΔNFR⊥" in rec.rationale for rec in spring_recs)
+    assert all("∇NFR⊥" in rec.rationale for rec in spring_recs)
 
 
 def test_phase_delta_rule_scales_rear_spring_with_lateral_bias_and_low_frequency() -> None:
@@ -2495,7 +2495,7 @@ def test_phase_delta_rule_scales_rear_spring_with_lateral_bias_and_low_frequency
     assert rear_spring_recs, "expected rear spring recommendation for exit phase"
     assert all(rec.delta is not None and rec.delta > 0 for rec in rear_spring_recs)
     assert all("νf_susp" in rec.message for rec in rear_spring_recs)
-    assert all("ΔNFR⊥" in rec.rationale for rec in rear_spring_recs)
+    assert all("∇NFR⊥" in rec.rationale for rec in rear_spring_recs)
 
 
 def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
