@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from math import cos, pi, sin, sqrt
 from statistics import mean, pstdev, pvariance
-from typing import List
+from typing import List, Mapping
 
 import pytest
 
@@ -52,6 +52,7 @@ from tnfr_lfs.core.operators import (
     resonance_operator,
     TyreBalanceControlOutput,
     tyre_balance_controller,
+    WHEEL_SUFFIXES,
 )
 from tnfr_lfs.core.metrics import compute_window_metrics
 
@@ -224,6 +225,8 @@ def _build_microsector(
     apex_target: float,
     support_event: bool = True,
     archetype: str = "hairpin",
+    phase_synchrony_map: Mapping[str, float] | None = None,
+    cphi_values: Mapping[str, float] | None = None,
 ) -> Microsector:
     target_map = {
         "entry1": 0.0,
@@ -252,12 +255,32 @@ def _build_microsector(
     phase_weights = {phase: {} for phase in PHASE_SEQUENCE}
     phase_lag = {phase: 0.0 for phase in PHASE_SEQUENCE}
     phase_alignment = {phase: 1.0 for phase in PHASE_SEQUENCE}
-    phase_synchrony = {phase: 1.0 for phase in PHASE_SEQUENCE}
+    if phase_synchrony_map is None:
+        phase_synchrony = {phase: 1.0 for phase in PHASE_SEQUENCE}
+    else:
+        phase_synchrony = {
+            phase: float(phase_synchrony_map.get(phase, 1.0))
+            for phase in PHASE_SEQUENCE
+        }
+    cphi_mapping = {
+        suffix: float(cphi_values.get(suffix, 0.7))
+        for suffix in WHEEL_SUFFIXES
+    } if cphi_values is not None else {suffix: 0.7 for suffix in WHEEL_SUFFIXES}
+    cphi_payload = {
+        "wheels": {
+            suffix: {"value": value, "components": {}}
+            for suffix, value in cphi_mapping.items()
+        },
+        "thresholds": {"red": 0.4, "amber": 0.6, "green": 0.8},
+    }
     filtered_measures = {
         "thermal_load": 5000.0,
         "style_index": 0.9,
         "grip_rel": 1.0,
+        "cphi": cphi_payload,
     }
+    for suffix, value in cphi_mapping.items():
+        filtered_measures[f"cphi_{suffix}"] = value
     window_occupancy = {
         phase: {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0}
         for phase in PHASE_SEQUENCE
@@ -598,9 +621,33 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
     _fake_recepcion.call_count = 0
     monkeypatch.setattr("tnfr_lfs.core.operators.recepcion_operator", _fake_recepcion)
 
+    phase_sync_a = {
+        phase: 0.85 + index * 0.02 for index, phase in enumerate(PHASE_SEQUENCE)
+    }
+    cphi_a = {suffix: 0.65 + i * 0.01 for i, suffix in enumerate(WHEEL_SUFFIXES)}
+    phase_sync_b = {
+        phase: 0.8 + index * 0.015 for index, phase in enumerate(PHASE_SEQUENCE)
+    }
+    cphi_b = {suffix: 0.6 + i * 0.02 for i, suffix in enumerate(WHEEL_SUFFIXES)}
     microsectors = [
-        _build_microsector(0, 0, 1, 2, apex_target=0.0),
-        _build_microsector(1, 1, 2, 3, apex_target=0.0),
+        _build_microsector(
+            0,
+            0,
+            1,
+            2,
+            apex_target=0.0,
+            phase_synchrony_map=phase_sync_a,
+            cphi_values=cphi_a,
+        ),
+        _build_microsector(
+            1,
+            1,
+            2,
+            3,
+            apex_target=0.0,
+            phase_synchrony_map=phase_sync_b,
+            cphi_values=cphi_b,
+        ),
     ]
 
     results = orchestrate_delta_metrics(
@@ -624,17 +671,53 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
             for idx in samples
         }
     )
-    expected_delta_variance = pvariance(
-        [coherence_bundles[idx].delta_nfr for idx in sample_indices]
-    )
+    delta_samples = [coherence_bundles[idx].delta_nfr for idx in sample_indices]
+    expected_delta_variance = pvariance(delta_samples)
     assert first["overall"]["delta_nfr"]["variance"] == pytest.approx(
         expected_delta_variance
     )
+    sense_samples = [0.8, 0.82, 0.78]
     assert first["overall"]["sense_index"]["variance"] == pytest.approx(
-        pvariance([0.8, 0.82, 0.78])
+        pvariance(sense_samples)
     )
+    assert first["overall"]["sense_index"]["mean"] == pytest.approx(
+        mean(sense_samples)
+    )
+    expected_si_stdev = sqrt(pvariance(sense_samples))
+    expected_si_cov = expected_si_stdev / max(abs(mean(sense_samples)), 1e-9)
+    assert first["overall"]["sense_index"]["coefficient_of_variation"] == pytest.approx(
+        expected_si_cov
+    )
+    expected_stability = 1.0 - min(1.0, expected_si_cov / 0.15)
+    assert first["overall"]["sense_index"]["stability_score"] == pytest.approx(
+        max(0.0, expected_stability)
+    )
+    integral_samples = []
+    timestamps = [coherence_bundles[idx].timestamp for idx in sample_indices]
+    for pos, idx in enumerate(sample_indices):
+        if pos + 1 < len(sample_indices):
+            dt = timestamps[pos + 1] - timestamps[pos]
+        elif pos > 0:
+            dt = timestamps[pos] - timestamps[pos - 1]
+        else:
+            dt = 1.0
+        if dt <= 0.0:
+            dt = 1.0
+        integral_samples.append(abs(coherence_bundles[idx].delta_nfr) * dt)
+    assert first["overall"]["delta_nfr_integral"]["mean"] == pytest.approx(
+        mean(integral_samples)
+    )
+    assert first["overall"]["phase_synchrony"]["mean"] == pytest.approx(
+        mean(phase_sync_a.values())
+    )
+    assert first["overall"]["cphi"]["mean"] == pytest.approx(mean(cphi_a.values()))
     assert set(first["laps"]) == {"Vuelta 1", "Vuelta 2"}
     assert first["laps"]["Vuelta 1"]["samples"] == 2
+    lap_metrics = first["laps"]["Vuelta 1"]
+    assert "delta_nfr_integral" in lap_metrics
+    assert lap_metrics["cphi"]["mean"] == pytest.approx(
+        first["overall"]["cphi"]["mean"]
+    )
     reception_stage = results["stages"]["recepcion"]
     lap_indices = reception_stage.get("lap_indices", [])
     lap_sequence = results["lap_sequence"]

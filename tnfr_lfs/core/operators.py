@@ -1270,14 +1270,85 @@ def _phase_context_from_microsectors(
     return assignments, weight_lookup
 
 
+_STABILITY_COV_THRESHOLD = 0.15
+
+
 def _variance_payload(values: Sequence[float]) -> Dict[str, float]:
     if not values:
-        return {"variance": 0.0, "stdev": 0.0}
+        return {
+            "mean": 0.0,
+            "variance": 0.0,
+            "stdev": 0.0,
+            "coefficient_of_variation": 0.0,
+            "stability_score": 1.0,
+        }
+    average = float(mean(values))
     variance = float(pvariance(values))
     if variance < 0.0 and abs(variance) < 1e-12:
         variance = 0.0
     stdev = sqrt(variance) if variance > 0.0 else 0.0
-    return {"variance": variance, "stdev": stdev}
+    baseline = max(abs(average), 1e-9)
+    coefficient = stdev / baseline
+    stability = 1.0 - min(1.0, coefficient / _STABILITY_COV_THRESHOLD)
+    if stability < 0.0:
+        stability = 0.0
+    return {
+        "mean": average,
+        "variance": variance,
+        "stdev": stdev,
+        "coefficient_of_variation": coefficient,
+        "stability_score": stability,
+    }
+
+
+def _delta_integral_series(
+    bundles: Sequence[EPIBundle], sample_indices: Sequence[int]
+) -> List[float]:
+    integrals: List[float] = []
+    if not bundles or not sample_indices:
+        return integrals
+    timestamps = [float(bundles[idx].timestamp) for idx in sample_indices]
+    for pos, idx in enumerate(sample_indices):
+        dt = 0.0
+        if pos + 1 < len(sample_indices):
+            dt = max(0.0, timestamps[pos + 1] - timestamps[pos])
+        elif pos > 0:
+            dt = max(0.0, timestamps[pos] - timestamps[pos - 1])
+        if dt <= 0.0:
+            dt = 1.0
+        integrals.append(abs(float(bundles[idx].delta_nfr)) * dt)
+    return integrals
+
+
+def _microsector_cphi_values(microsector: "Microsector") -> List[float]:
+    values: List[float] = []
+    measures = getattr(microsector, "filtered_measures", {}) or {}
+    if isinstance(measures, Mapping):
+        cphi_payload = measures.get("cphi")
+        if isinstance(cphi_payload, Mapping):
+            wheels = cphi_payload.get("wheels")
+            if isinstance(wheels, Mapping):
+                for payload in wheels.values():
+                    if isinstance(payload, Mapping):
+                        value = payload.get("value")
+                        if isinstance(value, (int, float)) and math.isfinite(value):
+                            values.append(float(value))
+        for suffix in WHEEL_SUFFIXES:
+            key = f"cphi_{suffix}"
+            value = measures.get(key)
+            if isinstance(value, (int, float)) and math.isfinite(value):
+                values.append(float(value))
+    return values
+
+
+def _microsector_phase_synchrony_values(microsector: "Microsector") -> List[float]:
+    synchrony = getattr(microsector, "phase_synchrony", {}) or {}
+    values: List[float] = []
+    if isinstance(synchrony, Mapping):
+        for value in synchrony.values():
+            if isinstance(value, (int, float)) and math.isfinite(value):
+                values.append(float(value))
+    return values
 
 
 def _microsector_variability(
@@ -1297,6 +1368,11 @@ def _microsector_variability(
         ]
         delta_values = [bundles[idx].delta_nfr for idx in sample_indices]
         si_values = [bundles[idx].sense_index for idx in sample_indices]
+        integral_values = _delta_integral_series(bundles, sample_indices)
+        cphi_values = _microsector_cphi_values(microsector)
+        synchrony_values = _microsector_phase_synchrony_values(microsector)
+        cphi_stats = _variance_payload(cphi_values)
+        synchrony_stats = _variance_payload(synchrony_values)
         entry: Dict[str, object] = {
             "microsector": microsector.index,
             "label": f"Curva {microsector.index + 1}",
@@ -1304,6 +1380,9 @@ def _microsector_variability(
                 "samples": len(sample_indices),
                 "delta_nfr": _variance_payload(delta_values),
                 "sense_index": _variance_payload(si_values),
+                "delta_nfr_integral": _variance_payload(integral_values),
+                "cphi": cphi_stats,
+                "phase_synchrony": synchrony_stats,
             },
         }
         if include_laps and lap_indices:
@@ -1326,6 +1405,11 @@ def _microsector_variability(
                     "sense_index": _variance_payload(
                         [bundles[idx].sense_index for idx in lap_specific_indices]
                     ),
+                    "delta_nfr_integral": _variance_payload(
+                        _delta_integral_series(bundles, lap_specific_indices)
+                    ),
+                    "cphi": dict(cphi_stats),
+                    "phase_synchrony": dict(synchrony_stats),
                 }
             if lap_payload:
                 entry["laps"] = lap_payload
