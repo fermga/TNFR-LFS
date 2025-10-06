@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import gzip
 import json
+import math
 import re
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence, Tuple
 
-from ..core.epi import TelemetryRecord
+from ..core.epi import TelemetryRecord, _MISSING_FLOAT
 
 RUNS_DIR = Path("runs")
 
@@ -116,6 +117,9 @@ def _decode_record(payload: dict[str, Any]) -> TelemetryRecord:
         values["reference"] = reference
     else:
         raise TypeError("Invalid reference payload for TelemetryRecord")
+    for key, value in list(values.items()):
+        if isinstance(value, float) and math.isnan(value):
+            values[key] = _MISSING_FLOAT
     return TelemetryRecord(**values)
 
 

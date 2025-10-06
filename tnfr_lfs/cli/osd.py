@@ -70,6 +70,8 @@ PRESSURE_STD_KEYS = {
     suffix: f"{PRESSURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
 }
 
+MOTOR_LATENCY_TARGETS_MS: Mapping[str, float] = {"entry": 250.0, "apex": 180.0, "exit": 220.0}
+
 NODE_AXIS_LABELS = {
     "yaw": "guiñada",
     "roll": "balanceo",
@@ -486,6 +488,7 @@ def _render_page_a(
     coherence_line = _coherence_meter_line(coherence_value, coherence_series)
     nu_wave = _nu_wave_line(bundles)
     sense_line = _sense_state_line(sense_state)
+    motor_latency_line = _motor_latency_line(window_metrics)
     classification_segment = (
         f" · ν_f {frequency_classification}" if frequency_classification else ""
     )
@@ -518,6 +521,10 @@ def _render_page_a(
             if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
                 lines.append(nu_wave)
         lines.append(_gradient_line(window_metrics))
+        if motor_latency_line:
+            candidate = "\n".join((*lines, motor_latency_line))
+            if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+                lines.append(motor_latency_line)
         return _ensure_limit("\n".join(lines))
 
     curve_label = f"Curva {active.microsector.index + 1}"
@@ -583,6 +590,10 @@ def _render_page_a(
         lines.append(coherence_line)
     if nu_wave:
         lines.append(nu_wave)
+    if motor_latency_line:
+        candidate = "\n".join((*lines, motor_latency_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(motor_latency_line)
     amc_value = float(getattr(window_metrics, "aero_mechanical_coherence", 0.0))
     if amc_value > 0.0:
         amc_line = _truncate_line(f"C(c/d/a) {amc_value:.2f}")
@@ -703,7 +714,9 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
     return (
         f"Si {window_metrics.si:.2f} · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
         f" · ∇Res {window_metrics.d_nfr_res:+.2f} · ∇Flat {window_metrics.d_nfr_flat:+.2f}"
-        f" · C(t) {window_metrics.coherence_index:.2f} · {frequency_segment}"
+        f" · C(t) {window_metrics.coherence_index:.2f}"
+        f" · τmot {window_metrics.motor_latency_ms:.0f}ms"
+        f" · {frequency_segment}"
         f" · ρ {window_metrics.rho:.2f} · θ {window_metrics.phase_lag:+.2f}rad"
         f" · Siφ {window_metrics.phase_alignment:+.2f}"
         f" · Φsync {window_metrics.phase_synchrony_index:.2f}"
@@ -718,6 +731,32 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
     )
 
 
+
+def _motor_latency_line(window_metrics: WindowMetrics) -> str | None:
+    global_latency = float(getattr(window_metrics, "motor_latency_ms", 0.0))
+    if not math.isfinite(global_latency):
+        global_latency = 0.0
+    phase_map = getattr(window_metrics, "phase_motor_latency_ms", {}) or {}
+    measured_segments: list[str] = []
+    for phase_label, target in MOTOR_LATENCY_TARGETS_MS.items():
+        value = phase_map.get(phase_label)
+        if value is None:
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(numeric):
+            continue
+        measured_segments.append(f"{phase_label[0].upper()} {numeric:.0f}/{target:.0f}ms")
+    target_segment = "obj " + " ".join(
+        f"{phase[0].upper()}<{limit:.0f}ms" for phase, limit in MOTOR_LATENCY_TARGETS_MS.items()
+    )
+    segments = [f"τmot {global_latency:.0f}ms"]
+    if measured_segments:
+        segments.extend(measured_segments)
+    segments.append(target_segment)
+    return _truncate_line(" · ".join(segments))
 
 
 def _cphi_health_line(report: CPHIReport) -> str | None:

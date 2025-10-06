@@ -176,6 +176,8 @@ class Microsector:
     phase_lag: Mapping[PhaseLiteral, float]
     phase_alignment: Mapping[PhaseLiteral, float]
     phase_synchrony: Mapping[PhaseLiteral, float] = field(default_factory=dict)
+    phase_motor_latency: Mapping[PhaseLiteral, float] = field(default_factory=dict)
+    motor_latency_ms: float = 0.0
     filtered_measures: Mapping[str, object] = field(default_factory=dict)
     recursivity_trace: Tuple[Mapping[str, float | str | None], ...] = ()
     last_mutation: Mapping[str, object] | None = None
@@ -571,6 +573,7 @@ def segment_microsectors(
         rear_velocity = window_metrics.suspension_velocity_rear
         filtered_measures.update(
             {
+                "motor_latency_ms": window_metrics.motor_latency_ms,
                 "d_nfr_couple": window_metrics.d_nfr_couple,
                 "d_nfr_res": window_metrics.d_nfr_res,
                 "d_nfr_flat": window_metrics.d_nfr_flat,
@@ -675,6 +678,12 @@ def segment_microsectors(
                 "brake_headroom_sustained_locking": window_metrics.brake_headroom.sustained_locking_ratio,
             }
         )
+        phase_motor_latency_payload = {
+            str(label): float(value)
+            for label, value in window_metrics.phase_motor_latency_ms.items()
+        }
+        if phase_motor_latency_payload:
+            filtered_measures["phase_motor_latency_ms"] = phase_motor_latency_payload
         headroom = window_metrics.brake_headroom
         temperature_available = getattr(headroom, "temperature_available", True)
         fade_available = getattr(headroom, "fade_available", True)
@@ -1110,6 +1119,8 @@ def segment_microsectors(
                 phase_lag=dict(phase_lag_map),
                 phase_alignment=dict(phase_alignment_map),
                 phase_synchrony=dict(phase_synchrony_map),
+                phase_motor_latency=dict(phase_motor_latency_payload),
+                motor_latency_ms=float(window_metrics.motor_latency_ms),
                 delta_nfr_std=float(window_metrics.delta_nfr_std),
                 nodal_delta_nfr_std=float(window_metrics.nodal_delta_nfr_std),
                 phase_delta_nfr_std=phase_delta_payload,

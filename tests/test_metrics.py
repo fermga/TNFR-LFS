@@ -19,6 +19,7 @@ from tnfr_lfs.core.metrics import (
     compute_window_metrics,
     resolve_aero_mechanical_coherence,
 )
+from tnfr_lfs.core.spectrum import motor_input_correlations, phase_to_latency_ms
 from dataclasses import replace
 from statistics import pvariance, pstdev
 from types import SimpleNamespace
@@ -92,6 +93,43 @@ def test_record_optional_defaults_are_nan() -> None:
     assert math.isnan(record.instantaneous_radius)
     assert math.isnan(record.front_track_width)
     assert math.isnan(record.wheelbase)
+
+
+def test_phase_to_latency_ms_converts_expected_delay() -> None:
+    frequency = 2.5
+    phase = math.pi / 4
+    expected = phase / (2.0 * math.pi * frequency) * 1000.0
+    assert phase_to_latency_ms(frequency, phase) == pytest.approx(expected)
+
+
+def test_motor_input_correlations_prefers_steer_yaw_pair() -> None:
+    frequency = 1.6
+    phase_offset = math.pi / 5
+    records = []
+    for index in range(96):
+        timestamp = index * 0.04
+        steer = math.sin(2.0 * math.pi * frequency * timestamp)
+        yaw = math.sin(2.0 * math.pi * frequency * timestamp - phase_offset)
+        records.append(
+            _record(
+                timestamp,
+                100.0,
+                yaw_rate=yaw,
+                steer=steer,
+                throttle=0.0,
+                brake_pressure=0.0,
+                longitudinal_accel=0.0,
+                lateral_accel=0.0,
+            )
+        )
+
+    correlations = motor_input_correlations(records)
+
+    assert ("steer", "yaw") in correlations
+    dominant = correlations[("steer", "yaw")]
+    expected_latency = phase_to_latency_ms(frequency, phase_offset)
+    assert dominant.frequency == pytest.approx(frequency, rel=0.1)
+    assert dominant.latency_ms == pytest.approx(expected_latency, abs=5.0)
 
 
 def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBundle:
@@ -1106,6 +1144,8 @@ def test_compute_window_metrics_empty_window() -> None:
         phase_lag=0.0,
         phase_alignment=1.0,
         phase_synchrony_index=1.0,
+        motor_latency_ms=0.0,
+        phase_motor_latency_ms={},
         useful_dissonance_ratio=0.0,
         useful_dissonance_percentage=0.0,
         coherence_index=0.0,
