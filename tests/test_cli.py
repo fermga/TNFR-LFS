@@ -65,6 +65,91 @@ def test_baseline_generates_timestamped_run(
     assert str(run_path.relative_to(tmp_path)) in captured.out
 
 
+def test_cli_analyze_accepts_raf_sample(
+    tmp_path: Path,
+    raf_sample_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    captured_records: dict[str, list] = {}
+
+    original = cli_module.raf_to_telemetry_records
+
+    def _capture_records(raf_file):
+        records = original(raf_file)
+        captured_records["records"] = records
+        return records
+
+    monkeypatch.setattr(cli_module, "raf_to_telemetry_records", _capture_records)
+
+    class _StubThresholds:
+        phase_weights: Mapping[str, float] = {}
+        robustness: Mapping[str, float] | None = None
+
+    monkeypatch.setattr(
+        cli_module,
+        "_compute_insights",
+        lambda *args, **kwargs: ([], [], _StubThresholds(), None),
+    )
+
+    monkeypatch.setattr(
+        cli_module,
+        "orchestrate_delta_metrics",
+        lambda *args, **kwargs: {
+            "delta_nfr": 0.0,
+            "sense_index": 0.0,
+            "bundles": [],
+            "microsector_variability": [],
+            "stages": {},
+            "objectives": {},
+            "lap_sequence": [],
+        },
+    )
+
+    monkeypatch.setattr(
+        cli_module,
+        "_generate_out_reports",
+        lambda *args, **kwargs: {},
+    )
+
+    monkeypatch.setattr(
+        cli_module,
+        "_phase_deviation_messages",
+        lambda *args, **kwargs: [],
+    )
+
+    monkeypatch.setattr(
+        cli_module,
+        "compute_session_robustness",
+        lambda *args, **kwargs: {},
+    )
+
+    payload = json.loads(
+        run_cli(
+            [
+                "analyze",
+                str(raf_sample_path),
+                "--export",
+                "json",
+                "--target-delta",
+                "0.5",
+                "--target-si",
+                "0.75",
+            ]
+        )
+    )
+
+    assert payload["telemetry_samples"] == 9586
+    records = captured_records.get("records")
+    assert records is not None and len(records) == 9586
+
+    record = records[0]
+    assert record.wheel_load_fl == pytest.approx(3056.1862793, rel=1e-6)
+    assert record.wheel_longitudinal_force_rr == pytest.approx(901.4348755, rel=1e-6)
+    assert record.wheel_lateral_force_fl == pytest.approx(1046.0095215, rel=1e-6)
+
+
 @pytest.fixture()
 def cli_config_pack(tmp_path: Path) -> Path:
     pack_root = tmp_path / "pack"
