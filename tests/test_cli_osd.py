@@ -221,9 +221,10 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
         assert len(page.encode("utf8")) <= OverlayManager.MAX_BUTTON_TEXT - 1
 
     page_a, page_b, page_c, page_d = pages
-    assert "ΔNFR" in page_a and "∇Acop" in page_a
+    assert "ΔNFR" in page_a
     assert "C(t)" in page_a
     assert "[" in page_a  # ΔNFR gauge present
+    assert "ENTR Δ" in page_a
     if "Sin microsector activo" not in page_a:
         assert any(char in page_a for char in "▁▂▃▄▅▆▇█")
         assert "ν_f~" in page_a or "ν_f~" in page_b
@@ -232,6 +233,44 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
     assert "C(t)" in page_b
     assert "Mapa ΔNFR fases" in page_c
     assert "Aplicar" in page_d
+
+
+def test_entropy_indicator_uses_thresholds() -> None:
+    metrics = SimpleNamespace(delta_nfr_entropy=0.72, node_entropy=0.48)
+    thresholds = {
+        "delta_entropy_green": 0.70,
+        "delta_entropy_amber": 0.50,
+        "node_entropy_green": 0.60,
+        "node_entropy_amber": 0.45,
+    }
+    line = osd_module._entropy_indicator_line(metrics, thresholds)
+    assert line is not None
+    assert "🟠" in line
+    assert "0.72" in line and "0.48" in line
+
+
+def test_lap_integral_series_and_cov_indicator() -> None:
+    records = []
+    bundles = []
+    timestamp = 0.0
+    for lap in (0, 0, 1, 1, 2, 2, None):
+        records.append(
+            SimpleNamespace(timestamp=timestamp, structural_timestamp=timestamp, lap=lap)
+        )
+        magnitude = 0.0 if lap is None else 1.0 + (lap or 0.0)
+        bundles.append(SimpleNamespace(delta_nfr=magnitude))
+        timestamp += 1.0
+
+    values = osd_module._lap_integral_series(records, bundles)
+    assert values == pytest.approx((2.0, 4.0, 6.0))
+    mean_value = sum(values) / len(values)
+    variance = sum((value - mean_value) ** 2 for value in values) / len(values)
+    cov = math.sqrt(variance) / mean_value
+    thresholds = {"integral_cov_green": 0.25, "integral_cov_amber": 0.45}
+    line = osd_module._integral_cov_line(cov, len(values), thresholds)
+    assert line is not None
+    assert "🟠" in line
+    assert f"n {len(values)}" in line
 
 
 def test_hud_pager_cycles_on_button_click(synthetic_records):
