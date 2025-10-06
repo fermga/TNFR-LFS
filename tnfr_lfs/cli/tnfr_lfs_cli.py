@@ -1101,7 +1101,7 @@ def _generate_out_reports(
     def _collect_average(
         entries: Sequence[Mapping[str, Any]],
         key_map: Mapping[str, str],
-    ) -> Dict[str, float]:
+    ) -> Dict[str, float | None]:
         samples: Dict[str, List[float]] = {suffix: [] for suffix in WHEEL_SUFFIXES}
         for entry in entries:
             measures = entry.get("filtered_measures", {}) if isinstance(entry, Mapping) else {}
@@ -1119,7 +1119,7 @@ def _generate_out_reports(
                     continue
                 samples[suffix].append(numeric)
         return {
-            suffix: (sum(values) / len(values) if values else 0.0)
+            suffix: (sum(values) / len(values) if values else None)
             for suffix, values in samples.items()
         }
 
@@ -1145,6 +1145,12 @@ def _generate_out_reports(
             else:
                 payload[str(key)] = _floatify(value, default=0.0)
         return payload
+
+    def _serialise_average(mapping: Mapping[str, float | None]) -> Dict[str, float | None]:
+        return {
+            suffix: (float(value) if value is not None else None)
+            for suffix, value in mapping.items()
+        }
 
     sense_path = destination / "sense_index_map.json"
     resonance_path = destination / "modal_resonance.json"
@@ -1282,10 +1288,13 @@ def _generate_out_reports(
     )
     thermal_summary: List[str] = []
     temp_segments: List[str] = []
+    temperature_samples_present = any(
+        value is not None for value in avg_temperature.values()
+    )
     for suffix in WHEEL_SUFFIXES:
-        mean_value = avg_temperature.get(suffix, 0.0)
-        std_value = avg_temperature_std.get(suffix, 0.0)
-        if not mean_value and not std_value:
+        mean_value = avg_temperature.get(suffix)
+        std_value = avg_temperature_std.get(suffix)
+        if mean_value is None or std_value is None:
             continue
         label = WHEEL_LABELS.get(suffix, suffix.upper())
         temp_segments.append(f"{label} {mean_value:.1f}±{std_value:.1f}")
@@ -1293,17 +1302,28 @@ def _generate_out_reports(
         thermal_summary.append(
             f"- Temperatura (°C): {' · '.join(temp_segments)}"
         )
+    elif not temperature_samples_present:
+        thermal_summary.append(
+            "- Temperatura (°C): sin datos (OutGauge omitió el bloque de neumáticos)"
+        )
     pressure_segments: List[str] = []
+    pressure_samples_present = any(
+        value is not None for value in avg_pressure.values()
+    )
     for suffix in WHEEL_SUFFIXES:
-        mean_value = avg_pressure.get(suffix, 0.0)
-        std_value = avg_pressure_std.get(suffix, 0.0)
-        if not mean_value and not std_value:
+        mean_value = avg_pressure.get(suffix)
+        std_value = avg_pressure_std.get(suffix)
+        if mean_value is None or std_value is None:
             continue
         label = WHEEL_LABELS.get(suffix, suffix.upper())
         pressure_segments.append(f"{label} {mean_value:.2f}±{std_value:.3f}")
     if pressure_segments:
         thermal_summary.append(
             f"- Presión (bar): {' · '.join(pressure_segments)}"
+        )
+    elif not pressure_samples_present:
+        thermal_summary.append(
+            "- Presión (bar): sin datos (OutGauge omitió el bloque de neumáticos)"
         )
     if thermal_summary:
         summary_lines.extend(["", "## Dispersión térmica de neumáticos", *thermal_summary])
@@ -1392,6 +1412,28 @@ def _generate_out_reports(
     with summary_path.open("w", encoding="utf8") as handle:
         handle.write(summary_text)
 
+    thermal_payload = {
+        "temperature": (
+            {
+                "mean": _serialise_average(avg_temperature),
+                "std": _serialise_average(avg_temperature_std),
+            }
+            if temperature_samples_present
+            else None
+        ),
+        "pressure": (
+            {
+                "mean": _serialise_average(avg_pressure),
+                "std": _serialise_average(avg_pressure_std),
+            }
+            if pressure_samples_present
+            else None
+        ),
+    }
+    thermal_path = destination / "tyre_thermal.json"
+    with thermal_path.open("w", encoding="utf8") as handle:
+        json.dump(thermal_payload, handle, indent=2, sort_keys=True)
+
     variability_data = [dict(entry) for entry in microsector_variability or ()]
     variability_path = destination / "microsector_variability.json"
     with variability_path.open("w", encoding="utf8") as handle:
@@ -1425,6 +1467,7 @@ def _generate_out_reports(
         "modal_resonance": {"path": str(resonance_path), "data": resonance_payload},
         "delta_breakdown": {"path": str(breakdown_path), "data": breakdown},
         "window_occupancy": {"path": str(occupancy_path), "data": occupancy_payload},
+        "tyre_thermal": {"path": str(thermal_path), "data": thermal_payload},
         "microsector_variability": {
             "path": str(variability_path),
             "data": variability_data,

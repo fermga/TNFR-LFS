@@ -259,6 +259,57 @@ def test_analyze_pipeline_json_export(
     bifurcation_entry = payload["reports"]["delta_bifurcations"]
     assert Path(bifurcation_entry["path"]).exists()
     assert bifurcation_entry["data"]["series"]
+    thermal_entry = payload["reports"]["tyre_thermal"]
+    assert Path(thermal_entry["path"]).exists()
+    assert "temperature" in thermal_entry["data"]
+    assert "pressure" in thermal_entry["data"]
+
+
+def test_analyze_reports_note_missing_tyre_data(
+    tmp_path: Path,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    truncated_path = tmp_path / "synthetic_no_tyres.csv"
+    with synthetic_stint_path.open(encoding="utf8") as source, truncated_path.open(
+        "w", encoding="utf8", newline=""
+    ) as destination:
+        reader = csv.DictReader(source)
+        assert reader.fieldnames is not None
+        fieldnames = [
+            name
+            for name in reader.fieldnames
+            if not name.startswith("tyre_temp_") and not name.startswith("tyre_pressure_")
+        ]
+        writer = csv.DictWriter(destination, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in reader:
+            writer.writerow({name: row[name] for name in fieldnames})
+
+    baseline_path = tmp_path / "baseline.jsonl"
+    run_cli([
+        "baseline",
+        str(baseline_path),
+        "--simulate",
+        str(truncated_path),
+    ])
+
+    output = run_cli([
+        "analyze",
+        str(baseline_path),
+        "--export",
+        "json",
+    ])
+
+    payload = json.loads(output)
+    summary_text = payload["reports"]["metrics_summary"]["data"]
+    assert "Temperatura (°C): sin datos" in summary_text
+    assert "Presión (bar): sin datos" in summary_text
+    thermal_entry = payload["reports"]["tyre_thermal"]
+    assert Path(thermal_entry["path"]).exists()
+    assert thermal_entry["data"]["temperature"] is None
+    assert thermal_entry["data"]["pressure"] is None
 
 
 def test_suggest_pipeline(
