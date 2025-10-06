@@ -22,6 +22,19 @@ proyección del gradiente nodal; cuando necesites interpretar cargas
 absolutas cruza las recomendaciones con los canales `Fz`/`ΔFz` directos
 de OutSim.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
 
+Replay Analyzer exports can be ingested with `--replay-csv-bundle`:
+
+```bash
+tnfr-lfs baseline runs/test1.jsonl --replay-csv-bundle data/test1.zip --format jsonl
+```
+
+The bundle flag accepts either a directory or a ZIP produced by Replay Analyzer and
+normalises the signal names to the canonical TNFR × LFS layout (`wheel_load_fl`,
+`slip_ratio_rr`, `timestamp`, …). During ingestion the reader also converts the
+`distance` index to floats, expands `speed_kmh` into the `speed` channel (m/s) and
+maps the G-based accelerations/drift angle into SI units before generating telemetry
+records.【F:tnfr_lfs/io/replay_csv_bundle.py†L92-L213】
+
 ## Subcommands
 
 The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into eight subcommands:
