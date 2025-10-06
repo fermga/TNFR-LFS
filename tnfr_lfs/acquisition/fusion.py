@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Dict, List, Mapping, Tuple
+from typing import Dict, List, Mapping, Tuple, cast
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -985,7 +985,9 @@ class TelemetryFusion:
                 if not math.isfinite(resolved_value) or resolved_value <= 0.0:
                     resolved_value = float("nan")
                 resolved.append(float(resolved_value))
-            return tuple(resolved)  # type: ignore[return-value]
+            # `values` and `fallback` are normalised to four wheels, so `resolved`
+            # always contains exactly four entries matching the return type.
+            return cast(tuple[float, float, float, float], tuple(resolved))
 
         inner = _resolve_layer(
             getattr(outgauge, "tyre_temps_inner", (0.0, 0.0, 0.0, 0.0)),
@@ -1033,7 +1035,9 @@ class TelemetryFusion:
                 resolved_value = float("nan")
             resolved.append(float(resolved_value))
 
-        return tuple(resolved)  # type: ignore[return-value]
+        # `candidate` and `fallback` are normalised to four wheels, so `resolved`
+        # always contains exactly four entries matching the declared tuple type.
+        return cast(tuple[float, float, float, float], tuple(resolved))
 
     def _resolve_wheel_pressures(
         self, outgauge: OutGaugePacket, previous: TelemetryRecord | None
@@ -1066,7 +1070,9 @@ class TelemetryFusion:
                 resolved_value = float("nan")
             resolved.append(float(resolved_value))
 
-        return tuple(resolved)  # type: ignore[return-value]
+        # `candidate_values` and `fallback` always provide one entry per wheel, so
+        # `resolved` contains four elements by construction.
+        return cast(tuple[float, float, float, float], tuple(resolved))
 
     def _resolve_brake_temperatures(
         self,
@@ -1109,16 +1115,21 @@ class TelemetryFusion:
         if gauge_valid:
             estimator.observe(gauge_values)
             if mode != "force":
-                return tuple(estimator.temperatures)
+                # The estimator stores one temperature per wheel and exposes a
+                # four-element tuple via its property.
+                return estimator.temperatures
 
         env_mode = mode
         if env_mode == "off":
-            return tuple(gauge_values)
+            # `gauge_values` captures four brake readings, one per wheel.
+            return cast(tuple[float, float, float, float], tuple(gauge_values))
         if env_mode == "force":
             return estimated
 
         if gauge_valid:
-            return tuple(estimator.temperatures)
+            # The estimator stores one temperature per wheel and exposes a
+            # four-element tuple via its property.
+            return estimator.temperatures
 
         return estimated
 
