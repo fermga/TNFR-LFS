@@ -27,7 +27,7 @@ def register_subparser(
     parser.add_argument(
         "telemetry",
         type=Path,
-        help="Ruta al archivo o CSV con la telemetría base.",
+        help="Ruta al archivo (.raf, .csv, .jsonl, .json, .parquet) con la telemetría base.",
     )
     cli._add_export_argument(
         parser,

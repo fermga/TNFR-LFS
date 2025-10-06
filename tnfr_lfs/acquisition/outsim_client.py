@@ -4,8 +4,11 @@ The original TNFR project ingests data from an OutSim UDP stream that
 encodes suspension loads, slip angles, and wheel data.  For the
 purposes of this library we implement a light-weight client that reads
 CSV-formatted telemetry into :class:`~tnfr_lfs.core.epi.TelemetryRecord`
-instances.  The goal is to provide deterministic behaviour that can be
-unit-tested while staying faithful to the OutSim schema.
+instances.  RAF captures produced by Live for Speed can be converted
+into the same :class:`TelemetryRecord` structure via
+``raf_to_telemetry_records(read_raf(...))``, making ``.raf`` files a
+first-class telemetry source for the CLI while keeping this client
+focused on deterministic CSV ingestion.
 """
 
 from __future__ import annotations
@@ -194,7 +197,10 @@ class OutSimClient:
         ----------
         source:
             Either a path to a CSV file or any iterable that yields lines
-            of text.
+            of text.  When working with RAF captures, prefer
+            :func:`tnfr_lfs.io.raf_to_telemetry_records` in combination
+            with :func:`tnfr_lfs.io.read_raf` before handing the
+            resulting records to other consumers.
         """
 
         iterator = self._open_source(source)
