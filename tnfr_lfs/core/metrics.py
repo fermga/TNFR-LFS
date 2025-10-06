@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field
 from statistics import mean, pvariance, pstdev
-from typing import Iterable, Mapping, Sequence, Tuple
+from typing import Iterable, Iterator, Mapping, Sequence, Tuple
 
 from .contextual_delta import (
     ContextMatrix,
@@ -547,13 +547,13 @@ class CPHIReport(MappingABC[str, CPHIWheel]):
     def __post_init__(self) -> None:
         object.__setattr__(self, "wheels", {str(key): value for key, value in self.wheels.items()})
 
-    def __iter__(self):  # type: ignore[override]
+    def __iter__(self) -> Iterator[str]:
         return iter(self.wheels)
 
-    def __len__(self) -> int:  # type: ignore[override]
+    def __len__(self) -> int:
         return len(self.wheels)
 
-    def __getitem__(self, key: str) -> CPHIWheel:  # type: ignore[override]
+    def __getitem__(self, key: str) -> CPHIWheel:
         return self.wheels[key]
 
     def classification(self, value: float) -> str:
