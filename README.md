@@ -58,6 +58,15 @@ El archivo `tnfr-lfs.toml` ubicado en la raíz del repositorio proporciona una p
 
 Desde esta versión el CLI también puede resolver un *pack* TNFR × LFS completo (metadatos de coches y perfiles objetivo) apuntando `paths.pack_root` al directorio que contiene `config/global.toml`, `data/cars` y `data/profiles`. La opción global `--pack-root` permite cambiar el pack en una ejecución concreta sin modificar el fichero TOML. Los resultados de `analyze`, `suggest` y `write-set` incluyen ahora las secciones `car` y `tnfr_targets`, derivadas de ese pack, para que los exports JSON reflejen el contexto TNFR activo.
 
+### Subcomandos `pareto` y `compare`
+
+| Subcomando | Propósito | Exportadores recomendados | Ejemplo |
+| --- | --- | --- | --- |
+| `pareto` | Barrer el espacio de decisión alrededor del plan generado y devolver el frente de Pareto con los candidatos dominantes. | `markdown` para inspección rápida o `html_ext` para un informe navegable con tablas, histogramas y sugerencias del playbook. | `tnfr-lfs pareto stint.jsonl --car-model generic_gt --radius 2 --export html_ext > pareto.html` |
+| `compare` | Comparar dos stints o configuraciones (A/B) agregando métricas por vuelta y resaltando la variante ganadora para la métrica elegida. | `markdown` para notas de ingeniería o `html_ext` cuando se necesita un dashboard con gráficos de vueltas y mensajes de sesión. | `tnfr-lfs compare baseline.jsonl variante.jsonl --metric sense_index --export html_ext > abtest.html` |
+
+Ambos subcomandos aceptan `--export html_ext`, que reutiliza el exportador HTML extendido para incrustar el frente de Pareto, resúmenes A/B y las sugerencias del playbook en un único archivo portable.【F:tnfr_lfs/cli/pareto.py†L23-L117】【F:tnfr_lfs/cli/compare.py†L28-L135】【F:tnfr_lfs/exporters/__init__.py†L1183-L1193】
+
 ## Branding y relación con la teoría
 
 - **TNFR** se refiere únicamente a la teoría original: el marco conceptual que define los EPI, las métricas ΔNFR/ΔSi y los principios resonantes.
