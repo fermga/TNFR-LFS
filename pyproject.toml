@@ -53,7 +53,7 @@ target-version = ["py39"]
 
 [tool.mypy]
 python_version = "3.9"
-files = ["typing_targets"]
+files = ["typing_targets", "tnfr_lfs", "tests"]
 warn_unused_configs = true
 
 [tool.setuptools.package-data]
