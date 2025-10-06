@@ -342,6 +342,55 @@ def test_compute_window_metrics_trending_series() -> None:
     assert metrics.shift_stability == pytest.approx(1.0)
 
 
+def test_compute_window_metrics_motor_coupling_correlations() -> None:
+    records: list[TelemetryRecord] = []
+    phase_indices: dict[str, tuple[int, ...]] = {"entry": tuple(range(5)), "exit": tuple(range(5, 10))}
+    for index in range(10):
+        timestamp = float(index)
+        throttle = index / 9.0
+        brake = 1.0 - throttle
+        acceleration = 2.0 * throttle - 1.0
+        records.append(
+            _record(
+                timestamp,
+                100.0 + index,
+                throttle=throttle,
+                brake_pressure=brake,
+                longitudinal_accel=acceleration,
+                locking=0.0,
+            )
+        )
+
+    metrics = compute_window_metrics(records, phase_indices=phase_indices)
+
+    assert metrics.throttle_longitudinal_correlation == pytest.approx(1.0, rel=1e-6)
+    assert metrics.brake_longitudinal_correlation == pytest.approx(1.0, rel=1e-6)
+    assert metrics.phase_throttle_longitudinal_correlation["entry"] == pytest.approx(
+        1.0, rel=1e-6
+    )
+    assert metrics.phase_brake_longitudinal_correlation["exit"] == pytest.approx(
+        1.0, rel=1e-6
+    )
+
+
+def test_compute_window_metrics_motor_coupling_handles_constant_series() -> None:
+    records = [
+        _record(
+            float(index),
+            120.0 + index,
+            throttle=0.5,
+            brake_pressure=0.0,
+            longitudinal_accel=(-1.0) ** index,
+        )
+        for index in range(8)
+    ]
+
+    metrics = compute_window_metrics(records)
+
+    assert metrics.throttle_longitudinal_correlation == pytest.approx(0.0, abs=1e-9)
+    assert metrics.brake_longitudinal_correlation == pytest.approx(0.0, abs=1e-9)
+
+
 def test_compute_window_metrics_variance_and_derivative(
     acceptance_records, acceptance_bundle_series
 ) -> None:

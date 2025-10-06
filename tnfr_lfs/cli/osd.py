@@ -521,6 +521,17 @@ def _render_page_a(
             if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
                 lines.append(nu_wave)
         lines.append(_gradient_line(window_metrics))
+        coupling_alert = _coupling_alert_line(
+            window_metrics,
+            longitudinal_delta=float(
+                getattr(bundle, "delta_nfr_longitudinal", 0.0)
+            ),
+            tolerance=tolerance,
+        )
+        if coupling_alert:
+            candidate = "\n".join((*lines, coupling_alert))
+            if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+                lines.append(coupling_alert)
         if motor_latency_line:
             candidate = "\n".join((*lines, motor_latency_line))
             if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
@@ -586,6 +597,15 @@ def _render_page_a(
     if brake_line:
         lines.append(brake_line)
     lines.append(gradient_line)
+    coupling_alert = _coupling_alert_line(
+        window_metrics,
+        longitudinal_delta=long_component,
+        tolerance=tolerance,
+    )
+    if coupling_alert:
+        candidate = "\n".join((*lines, coupling_alert))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(coupling_alert)
     if coherence_line:
         lines.append(coherence_line)
     if nu_wave:
@@ -730,6 +750,56 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · μΦR {mu_sym_rear:+.2f}"
     )
 
+
+def _coupling_alert_line(
+    window_metrics: WindowMetrics,
+    *,
+    longitudinal_delta: float,
+    tolerance: float,
+) -> str | None:
+    try:
+        brake_corr = float(
+            getattr(window_metrics, "brake_longitudinal_correlation", 0.0)
+        )
+    except (TypeError, ValueError):
+        brake_corr = 0.0
+    try:
+        throttle_corr = float(
+            getattr(window_metrics, "throttle_longitudinal_correlation", 0.0)
+        )
+    except (TypeError, ValueError):
+        throttle_corr = 0.0
+    if not math.isfinite(brake_corr):
+        brake_corr = 0.0
+    if not math.isfinite(throttle_corr):
+        throttle_corr = 0.0
+    low_segments: List[str] = []
+    correlation_threshold = 0.35
+    if brake_corr < correlation_threshold:
+        low_segments.append(f"freno {brake_corr:.2f}")
+    if throttle_corr < correlation_threshold:
+        low_segments.append(f"acel {throttle_corr:.2f}")
+    if not low_segments:
+        return None
+    try:
+        longitudinal_value = abs(float(longitudinal_delta))
+    except (TypeError, ValueError):
+        longitudinal_value = 0.0
+    if not math.isfinite(longitudinal_value):
+        longitudinal_value = 0.0
+    try:
+        tolerance_value = float(tolerance)
+    except (TypeError, ValueError):
+        tolerance_value = 0.0
+    if not math.isfinite(tolerance_value):
+        tolerance_value = 0.0
+    longitudinal_threshold = max(0.3, tolerance_value * 0.75)
+    if longitudinal_value <= longitudinal_threshold:
+        return None
+    payload = "⚠️ Acop ΔNFR∥ " + " · ".join(
+        (*low_segments, f"|Δ∥| {longitudinal_value:.2f}")
+    )
+    return _truncate_line(payload)
 
 
 def _motor_latency_line(window_metrics: WindowMetrics) -> str | None:

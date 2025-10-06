@@ -880,6 +880,14 @@ class WindowMetrics:
     phase_nodal_delta_nfr_std: Mapping[str, float] = field(default_factory=dict)
     phase_delta_nfr_entropy: Mapping[str, float] = field(default_factory=dict)
     phase_node_entropy: Mapping[str, float] = field(default_factory=dict)
+    brake_longitudinal_correlation: float = 0.0
+    throttle_longitudinal_correlation: float = 0.0
+    phase_brake_longitudinal_correlation: Mapping[str, float] = field(
+        default_factory=dict
+    )
+    phase_throttle_longitudinal_correlation: Mapping[str, float] = field(
+        default_factory=dict
+    )
 
 
 def _compute_bumpstop_histogram(
@@ -1056,6 +1064,10 @@ def compute_window_metrics(
             phase_nodal_delta_nfr_std={},
             phase_delta_nfr_entropy={},
             phase_node_entropy={},
+            brake_longitudinal_correlation=0.0,
+            throttle_longitudinal_correlation=0.0,
+            phase_brake_longitudinal_correlation={},
+            phase_throttle_longitudinal_correlation={},
         )
 
     if isinstance(phase_indices, Mapping):
@@ -1350,6 +1362,8 @@ def compute_window_metrics(
     rear_mu_long_series: list[float] = []
     throttle_series: list[float] = []
     locking_series: list[float] = []
+    brake_series: list[float] = []
+    longitudinal_accel_series: list[float] = []
     for index, record in enumerate(records):
         try:
             throttle_value = float(getattr(record, "throttle", 0.0))
@@ -1365,6 +1379,20 @@ def compute_window_metrics(
         if not math.isfinite(locking_value):
             locking_value = 0.0
         locking_series.append(max(0.0, min(1.0, locking_value)))
+        try:
+            brake_value = float(getattr(record, "brake_pressure", 0.0))
+        except (TypeError, ValueError):
+            brake_value = 0.0
+        if not math.isfinite(brake_value):
+            brake_value = 0.0
+        brake_series.append(max(0.0, min(1.0, brake_value)))
+        try:
+            accel_value = float(getattr(record, "longitudinal_accel", 0.0))
+        except (TypeError, ValueError):
+            accel_value = 0.0
+        if not math.isfinite(accel_value):
+            accel_value = 0.0
+        longitudinal_accel_series.append(accel_value)
 
         per_wheel_payload: dict[str, tuple[float, float, float, float, float, float, float]] = {}
         wheel_loads: dict[str, float | None] = {}
@@ -1792,6 +1820,30 @@ def compute_window_metrics(
             return -1.0
         return coeff
 
+    def _normalise_series(values: Sequence[float]) -> list[float]:
+        cleaned: list[float] = []
+        minimum = float("inf")
+        maximum = float("-inf")
+        for raw in values:
+            try:
+                numeric = float(raw)
+            except (TypeError, ValueError):
+                numeric = 0.0
+            if not math.isfinite(numeric):
+                numeric = 0.0
+            cleaned.append(numeric)
+            if numeric < minimum:
+                minimum = numeric
+            if numeric > maximum:
+                maximum = numeric
+        if not cleaned:
+            return []
+        span = maximum - minimum
+        if not math.isfinite(span) or span <= 1e-12:
+            return [0.0 for _ in cleaned]
+        scale = 1.0 / span
+        return [(value - minimum) * scale for value in cleaned]
+
     def _select_series(series: Sequence[float], indices: Sequence[int] | None) -> list[float]:
         if not indices:
             return [float(value) for value in series]
@@ -1806,6 +1858,22 @@ def compute_window_metrics(
                     value = 0.0
                 selected.append(value)
         return selected
+
+    def _phase_correlation_map(
+        series_a: Sequence[float], series_b: Sequence[float]
+    ) -> dict[str, float]:
+        if not phase_windows:
+            return {}
+        phase_map: dict[str, float] = {}
+        for phase_label, indices in phase_windows.items():
+            samples_a = _select_series(series_a, indices)
+            samples_b = _select_series(series_b, indices)
+            if len(samples_a) != len(samples_b):
+                length = min(len(samples_a), len(samples_b))
+                samples_a = samples_a[:length]
+                samples_b = samples_b[:length]
+            phase_map[str(phase_label)] = _pearson_correlation(samples_a, samples_b)
+        return phase_map
 
     def _phase_standard_deviation_map(
         series: Sequence[float],
@@ -2383,6 +2451,27 @@ def compute_window_metrics(
         longitudinal_series,
     )
 
+    normalised_brake = _normalise_series(brake_series)
+    normalised_throttle = _normalise_series(throttle_series)
+    normalised_accel = _normalise_series(longitudinal_accel_series)
+    normalised_decel = _normalise_series([-value for value in longitudinal_accel_series])
+
+    brake_longitudinal_correlation = _pearson_correlation(
+        normalised_brake,
+        normalised_decel,
+    )
+    throttle_longitudinal_correlation = _pearson_correlation(
+        normalised_throttle,
+        normalised_accel,
+    )
+
+    phase_brake_correlation_map = replicate_phase_aliases(
+        _phase_correlation_map(normalised_brake, normalised_decel)
+    )
+    phase_throttle_correlation_map = replicate_phase_aliases(
+        _phase_correlation_map(normalised_throttle, normalised_accel)
+    )
+
     if wheel_samples:
         cphi_overall = _cphi_from_samples(wheel_samples)
         base_thresholds = cphi_overall.thresholds
@@ -2506,6 +2595,10 @@ def compute_window_metrics(
         phase_nodal_delta_nfr_std=phase_nodal_std_map,
         phase_delta_nfr_entropy=phase_delta_entropy_map,
         phase_node_entropy=phase_node_entropy_map,
+        brake_longitudinal_correlation=brake_longitudinal_correlation,
+        throttle_longitudinal_correlation=throttle_longitudinal_correlation,
+        phase_brake_longitudinal_correlation=phase_brake_correlation_map,
+        phase_throttle_longitudinal_correlation=phase_throttle_correlation_map,
     )
 
 
