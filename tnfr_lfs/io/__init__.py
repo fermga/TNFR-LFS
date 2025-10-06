@@ -2,6 +2,7 @@
 
 from .logs import DeterministicReplayer, iter_run, write_run
 from .playbook import load_playbook
+from .replay_csv_bundle import ReplayCSVBundleReader
 from .raf import (
     RafCarStatic,
     RafFile,
@@ -32,6 +33,7 @@ __all__ = [
     "StintMetrics",
     "AeroProfile",
     "load_playbook",
+    "ReplayCSVBundleReader",
     "read_raf",
     "raf_to_telemetry_records",
     "RafHeader",
