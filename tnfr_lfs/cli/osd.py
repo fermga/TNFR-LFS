@@ -679,6 +679,20 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         frequency_segment = (
             f"ν_f {window_metrics.nu_f:.2f}Hz/ν_exc {window_metrics.nu_exc:.2f}Hz"
         )
+    symmetry_map = getattr(window_metrics, "mu_symmetry", {}) or {}
+    window_symmetry = symmetry_map.get("window")
+    if isinstance(window_symmetry, Mapping):
+        try:
+            mu_sym_front = float(window_symmetry.get("front", 0.0))
+        except (TypeError, ValueError):
+            mu_sym_front = 0.0
+        try:
+            mu_sym_rear = float(window_symmetry.get("rear", 0.0))
+        except (TypeError, ValueError):
+            mu_sym_rear = 0.0
+    else:
+        mu_sym_front = 0.0
+        mu_sym_rear = 0.0
     return (
         f"Si {window_metrics.si:.2f} · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
         f" · ∇Res {window_metrics.d_nfr_res:+.2f} · ∇Flat {window_metrics.d_nfr_flat:+.2f}"
@@ -691,6 +705,9 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · Carga {window_metrics.load_support_ratio:.4f}"
         f" · μF {window_metrics.mu_usage_front_ratio:.2f}"
         f" · μR {window_metrics.mu_usage_rear_ratio:.2f}"
+        f" · μΔ {window_metrics.mu_balance:+.2f}"
+        f" · μΦF {mu_sym_front:+.2f}"
+        f" · μΦR {mu_sym_rear:+.2f}"
     )
 
 

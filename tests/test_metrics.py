@@ -926,6 +926,85 @@ def test_locking_window_score_detects_throttle_transitions() -> None:
     assert score.value == pytest.approx(0.452308, rel=1e-6)
 
 
+def test_aero_balance_drift_normalises_mu_metrics() -> None:
+    base = _record(0.0, 110.0, speed=60.0)
+
+    def _sample(
+        timestamp: float,
+        speed: float,
+        front_lat: float,
+        front_long: float,
+        rear_lat: float,
+        rear_long: float,
+    ) -> TelemetryRecord:
+        return replace(
+            base,
+            timestamp=timestamp,
+            speed=speed,
+            mu_eff_front=front_lat + front_long,
+            mu_eff_rear=rear_lat + rear_long,
+            mu_eff_front_lateral=front_lat,
+            mu_eff_front_longitudinal=front_long,
+            mu_eff_rear_lateral=rear_lat,
+            mu_eff_rear_longitudinal=rear_long,
+        )
+
+    records = [
+        _sample(0.0, 60.0, 1.0, 0.5, 0.8, 0.4),
+        _sample(0.5, 62.0, 1.2, 0.6, 0.7, 0.5),
+        _sample(1.0, 65.0, 0.9, 0.7, 0.9, 0.6),
+    ]
+
+    metrics = compute_window_metrics(records, phase_indices={"entry": (0, 1), "exit": (2,)})
+    drift = metrics.aero_balance_drift.high_speed
+
+    front_lat = [1.0, 1.2, 0.9]
+    front_long = [0.5, 0.6, 0.7]
+    rear_lat = [0.8, 0.7, 0.9]
+    rear_long = [0.4, 0.5, 0.6]
+
+    def _symmetry(lat_values: list[float], long_values: list[float]) -> float:
+        lat_mean = sum(lat_values) / len(lat_values)
+        long_mean = sum(long_values) / len(long_values)
+        denominator = abs(lat_mean) + abs(long_mean)
+        return (lat_mean - long_mean) / denominator if denominator > 0 else 0.0
+
+    def _balance() -> float:
+        front_total = (sum(front_lat) / len(front_lat)) + (sum(front_long) / len(front_long))
+        rear_total = (sum(rear_lat) / len(rear_lat)) + (sum(rear_long) / len(rear_long))
+        denominator = abs(front_total) + abs(rear_total)
+        return (front_total - rear_total) / denominator if denominator > 0 else 0.0
+
+    assert drift.mu_balance == pytest.approx(_balance(), rel=1e-6)
+    assert drift.mu_symmetry_front == pytest.approx(_symmetry(front_lat, front_long), rel=1e-6)
+    assert drift.mu_symmetry_rear == pytest.approx(_symmetry(rear_lat, rear_long), rel=1e-6)
+    assert metrics.mu_balance == pytest.approx(_balance(), rel=1e-6)
+
+    window_symmetry = metrics.mu_symmetry.get("window", {})
+    assert window_symmetry.get("front", 0.0) == pytest.approx(
+        _symmetry(front_lat, front_long), rel=1e-6
+    )
+    assert window_symmetry.get("rear", 0.0) == pytest.approx(
+        _symmetry(rear_lat, rear_long), rel=1e-6
+    )
+
+    entry_symmetry = metrics.mu_symmetry.get("entry", {})
+    assert entry_symmetry.get("front", 0.0) == pytest.approx(
+        _symmetry(front_lat[:2], front_long[:2]), rel=1e-6
+    )
+    assert entry_symmetry.get("rear", 0.0) == pytest.approx(
+        _symmetry(rear_lat[:2], rear_long[:2]), rel=1e-6
+    )
+
+    exit_symmetry = metrics.mu_symmetry.get("exit", {})
+    assert exit_symmetry.get("front", 0.0) == pytest.approx(
+        _symmetry(front_lat[2:], front_long[2:]), rel=1e-6
+    )
+    assert exit_symmetry.get("rear", 0.0) == pytest.approx(
+        _symmetry(rear_lat[2:], rear_long[2:]), rel=1e-6
+    )
+
+
 def test_compute_window_metrics_empty_window() -> None:
     metrics = compute_window_metrics([])
     assert metrics == WindowMetrics(
@@ -958,6 +1037,8 @@ def test_compute_window_metrics_empty_window() -> None:
         mu_usage_rear_ratio=0.0,
         phase_mu_usage_front_ratio=0.0,
         phase_mu_usage_rear_ratio=0.0,
+        mu_balance=0.0,
+        mu_symmetry={},
         exit_gear_match=0.0,
         shift_stability=0.0,
         frequency_label="",

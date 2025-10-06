@@ -262,6 +262,9 @@ class AeroBalanceDriftBin:
     mu_rear_mean: float = 0.0
     mu_delta: float = 0.0
     mu_ratio: float = 1.0
+    mu_balance: float = 0.0
+    mu_symmetry_front: float = 0.0
+    mu_symmetry_rear: float = 0.0
 
     @property
     def rake_deg(self) -> float:
@@ -589,6 +592,8 @@ class WindowMetrics:
     mu_usage_rear_ratio: float
     phase_mu_usage_front_ratio: float
     phase_mu_usage_rear_ratio: float
+    mu_balance: float = 0.0
+    mu_symmetry: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     delta_nfr_std: float = 0.0
     nodal_delta_nfr_std: float = 0.0
     exit_gear_match: float = 0.0
@@ -765,6 +770,8 @@ def compute_window_metrics(
             mu_usage_rear_ratio=0.0,
             phase_mu_usage_front_ratio=0.0,
             phase_mu_usage_rear_ratio=0.0,
+            mu_balance=0.0,
+            mu_symmetry={},
             delta_nfr_std=0.0,
             nodal_delta_nfr_std=0.0,
             exit_gear_match=0.0,
@@ -1623,6 +1630,61 @@ def compute_window_metrics(
             ),
         )
 
+    def _mean_subset(series: Sequence[float], indices: Sequence[int] | None) -> float:
+        if indices is None:
+            values = series
+        else:
+            values = [series[index] for index in indices if 0 <= index < len(series)]
+        cleaned = [float(value) for value in values if math.isfinite(float(value))]
+        return mean(cleaned) if cleaned else 0.0
+
+    def _axis_means(indices: Sequence[int] | None) -> tuple[float, float, float, float]:
+        return (
+            _mean_subset(front_mu_lat_series, indices),
+            _mean_subset(front_mu_long_series, indices),
+            _mean_subset(rear_mu_lat_series, indices),
+            _mean_subset(rear_mu_long_series, indices),
+        )
+
+    def _normalised_symmetry(lat_mean: float, long_mean: float) -> float:
+        denominator = abs(lat_mean) + abs(long_mean)
+        if denominator <= 1e-9:
+            return 0.0
+        return (lat_mean - long_mean) / denominator
+
+    def _normalised_balance(
+        front_lat_mean: float,
+        front_long_mean: float,
+        rear_lat_mean: float,
+        rear_long_mean: float,
+    ) -> float:
+        front_total = front_lat_mean + front_long_mean
+        rear_total = rear_lat_mean + rear_long_mean
+        denominator = abs(front_total) + abs(rear_total)
+        if denominator <= 1e-9:
+            return 0.0
+        return (front_total - rear_total) / denominator
+
+    window_front_lat, window_front_long, window_rear_lat, window_rear_long = _axis_means(None)
+    mu_balance = _normalised_balance(
+        window_front_lat,
+        window_front_long,
+        window_rear_lat,
+        window_rear_long,
+    )
+    mu_symmetry: dict[str, dict[str, float]] = {
+        "window": {
+            "front": _normalised_symmetry(window_front_lat, window_front_long),
+            "rear": _normalised_symmetry(window_rear_lat, window_rear_long),
+        }
+    }
+    for phase_label, indices in phase_windows.items():
+        front_lat_mean, front_long_mean, rear_lat_mean, rear_long_mean = _axis_means(indices)
+        mu_symmetry[phase_label] = {
+            "front": _normalised_symmetry(front_lat_mean, front_long_mean),
+            "rear": _normalised_symmetry(rear_lat_mean, rear_long_mean),
+        }
+
     drift_low_threshold = max(
         0.0, _objective("aero_drift_low_speed_threshold", 35.0)
     )
@@ -1639,9 +1701,33 @@ def compute_window_metrics(
         0.0, _objective("aero_drift_mu_tolerance", 0.04)
     )
     drift_bins: dict[str, dict[str, list[float]]] = {
-        "low": {"rake": [], "mu_front": [], "mu_rear": []},
-        "medium": {"rake": [], "mu_front": [], "mu_rear": []},
-        "high": {"rake": [], "mu_front": [], "mu_rear": []},
+        "low": {
+            "rake": [],
+            "mu_front": [],
+            "mu_rear": [],
+            "mu_front_lat": [],
+            "mu_front_long": [],
+            "mu_rear_lat": [],
+            "mu_rear_long": [],
+        },
+        "medium": {
+            "rake": [],
+            "mu_front": [],
+            "mu_rear": [],
+            "mu_front_lat": [],
+            "mu_front_long": [],
+            "mu_rear_lat": [],
+            "mu_rear_long": [],
+        },
+        "high": {
+            "rake": [],
+            "mu_front": [],
+            "mu_rear": [],
+            "mu_front_lat": [],
+            "mu_front_long": [],
+            "mu_rear_lat": [],
+            "mu_rear_long": [],
+        },
     }
 
     def _drift_bin_key(speed_value: float) -> str:
@@ -1701,11 +1787,39 @@ def compute_window_metrics(
             mu_rear = 0.0
         if not math.isfinite(mu_rear):
             mu_rear = 0.0
+        try:
+            mu_front_lat = float(getattr(record, "mu_eff_front_lateral", 0.0))
+        except (TypeError, ValueError):
+            mu_front_lat = 0.0
+        if not math.isfinite(mu_front_lat):
+            mu_front_lat = 0.0
+        try:
+            mu_front_long = float(getattr(record, "mu_eff_front_longitudinal", 0.0))
+        except (TypeError, ValueError):
+            mu_front_long = 0.0
+        if not math.isfinite(mu_front_long):
+            mu_front_long = 0.0
+        try:
+            mu_rear_lat = float(getattr(record, "mu_eff_rear_lateral", 0.0))
+        except (TypeError, ValueError):
+            mu_rear_lat = 0.0
+        if not math.isfinite(mu_rear_lat):
+            mu_rear_lat = 0.0
+        try:
+            mu_rear_long = float(getattr(record, "mu_eff_rear_longitudinal", 0.0))
+        except (TypeError, ValueError):
+            mu_rear_long = 0.0
+        if not math.isfinite(mu_rear_long):
+            mu_rear_long = 0.0
         bin_payload = drift_bins[bin_key]
         if math.isfinite(rake_value):
             bin_payload["rake"].append(rake_value)
             bin_payload["mu_front"].append(mu_front)
             bin_payload["mu_rear"].append(mu_rear)
+            bin_payload["mu_front_lat"].append(mu_front_lat)
+            bin_payload["mu_front_long"].append(mu_front_long)
+            bin_payload["mu_rear_lat"].append(mu_rear_lat)
+            bin_payload["mu_rear_long"].append(mu_rear_long)
 
     def _build_drift_bin(
         key: str, lower: float, upper: float | None
@@ -1714,6 +1828,10 @@ def compute_window_metrics(
         rakes = payload["rake"]
         mu_front_values = payload["mu_front"]
         mu_rear_values = payload["mu_rear"]
+        mu_front_lat_values = payload["mu_front_lat"]
+        mu_front_long_values = payload["mu_front_long"]
+        mu_rear_lat_values = payload["mu_rear_lat"]
+        mu_rear_long_values = payload["mu_rear_long"]
         samples = len(rakes)
         rake_mean = mean(rakes) if rakes else 0.0
         rake_std = math.sqrt(pvariance(rakes)) if len(rakes) >= 2 else 0.0
@@ -1726,6 +1844,28 @@ def compute_window_metrics(
             mu_ratio = 1.0 if abs(mu_front_mean) <= 1e-9 else math.copysign(10.0, mu_front_mean)
         if not math.isfinite(mu_ratio):
             mu_ratio = 1.0
+        mu_front_lat_mean = mean(mu_front_lat_values) if mu_front_lat_values else 0.0
+        mu_front_long_mean = mean(mu_front_long_values) if mu_front_long_values else 0.0
+        mu_rear_lat_mean = mean(mu_rear_lat_values) if mu_rear_lat_values else 0.0
+        mu_rear_long_mean = mean(mu_rear_long_values) if mu_rear_long_values else 0.0
+        front_total = mu_front_lat_mean + mu_front_long_mean
+        rear_total = mu_rear_lat_mean + mu_rear_long_mean
+        balance_denominator = abs(front_total) + abs(rear_total)
+        mu_delta_total = front_total - rear_total
+        if balance_denominator <= 1e-9:
+            mu_balance = 0.0
+        else:
+            mu_balance = mu_delta_total / balance_denominator
+        front_symmetry_denominator = abs(mu_front_lat_mean) + abs(mu_front_long_mean)
+        if front_symmetry_denominator <= 1e-9:
+            mu_symmetry_front = 0.0
+        else:
+            mu_symmetry_front = (mu_front_lat_mean - mu_front_long_mean) / front_symmetry_denominator
+        rear_symmetry_denominator = abs(mu_rear_lat_mean) + abs(mu_rear_long_mean)
+        if rear_symmetry_denominator <= 1e-9:
+            mu_symmetry_rear = 0.0
+        else:
+            mu_symmetry_rear = (mu_rear_lat_mean - mu_rear_long_mean) / rear_symmetry_denominator
         return AeroBalanceDriftBin(
             speed_min=lower,
             speed_max=upper,
@@ -1736,6 +1876,9 @@ def compute_window_metrics(
             mu_rear_mean=mu_rear_mean,
             mu_delta=mu_delta_value,
             mu_ratio=mu_ratio,
+            mu_balance=mu_balance,
+            mu_symmetry_front=mu_symmetry_front,
+            mu_symmetry_rear=mu_symmetry_rear,
         )
 
     low_drift = _build_drift_bin("low", 0.0, drift_low_threshold)
@@ -1996,6 +2139,8 @@ def compute_window_metrics(
         mu_usage_rear_ratio=mu_usage_rear_ratio,
         phase_mu_usage_front_ratio=phase_mu_usage_front_ratio,
         phase_mu_usage_rear_ratio=phase_mu_usage_rear_ratio,
+        mu_balance=mu_balance,
+        mu_symmetry=mu_symmetry,
         delta_nfr_std=delta_std,
         nodal_delta_nfr_std=nodal_std,
         exit_gear_match=exit_gear_match,

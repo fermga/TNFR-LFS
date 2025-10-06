@@ -449,6 +449,8 @@ def bottoming_segments(monkeypatch):
         mu_usage_rear_ratio=0.0,
         phase_mu_usage_front_ratio=0.0,
         phase_mu_usage_rear_ratio=0.0,
+        mu_balance=0.05,
+        mu_symmetry={"window": {"front": 0.12, "rear": -0.08}, "apex": {"front": 0.18, "rear": -0.1}},
         exit_gear_match=0.0,
         shift_stability=1.0,
         frequency_label="",
@@ -484,6 +486,8 @@ def bottoming_segments(monkeypatch):
             rebound_high_ratio=0.25,
             ar_index=0.8,
         ),
+        mu_balance=-0.04,
+        mu_symmetry={"window": {"front": -0.06, "rear": 0.09}},
     )
     metric_sequence = iter([smooth_metrics, rough_metrics])
 
@@ -597,6 +601,11 @@ def test_segment_microsectors_exposes_bottoming_ratios(bottoming_segments) -> No
     assert smooth.filtered_measures["bumpstop_front_energy_bin_0"] == pytest.approx(0.12)
     assert smooth.filtered_measures["suspension_velocity_front_high_speed_pct"] == pytest.approx(45.0)
     assert smooth.filtered_measures["suspension_velocity_front_ar_index"] == pytest.approx(1.5)
+    assert smooth.filtered_measures["mu_balance"] == pytest.approx(0.05)
+    assert smooth.filtered_measures["mu_symmetry_front"] == pytest.approx(0.12)
+    assert smooth.filtered_measures["mu_symmetry_rear"] == pytest.approx(-0.08)
+    assert smooth.filtered_measures["mu_symmetry_apex_front"] == pytest.approx(0.18)
+    assert smooth.filtered_measures["mu_symmetry_apex_rear"] == pytest.approx(-0.1)
     assert rough.filtered_measures["bottoming_ratio_rear"] == pytest.approx(0.68)
     assert rough.context_factors.get("surface") == pytest.approx(1.25)
     assert rough.filtered_measures["bumpstop_rear_density"] == pytest.approx(0.22)
@@ -605,6 +614,9 @@ def test_segment_microsectors_exposes_bottoming_ratios(bottoming_segments) -> No
         55.0
     )
     assert rough.filtered_measures["suspension_velocity_rear_ar_index"] == pytest.approx(0.8)
+    assert rough.filtered_measures["mu_balance"] == pytest.approx(-0.04)
+    assert rough.filtered_measures["mu_symmetry_front"] == pytest.approx(-0.06)
+    assert rough.filtered_measures["mu_symmetry_rear"] == pytest.approx(0.09)
 
 
 def _yaw_rate(records: list[TelemetryRecord], index: int) -> float:
