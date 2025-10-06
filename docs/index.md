@@ -1,17 +1,17 @@
 # TNFR × LFS Documentation
 
-TNFR × LFS (Tyre Normal Force × Load Flow Synthesis) is the lightweight
-Python toolkit that operationalises the core insights of the
-Telemetry/Teoría de la Naturaleza Fractal-Resonante (TNFR) framework.
-The theory establishes how to reason about Event Performance Indicators
-(EPI), ΔNFR deltas and Sense Index signals; the toolkit provides
-production-ready layers to apply those ideas in racing telemetry
-pipelines:
+TNFR × LFS (Fractal-Resonant Telemetry Analytics for Live for Speed) is
+the lightweight Python toolkit that operationalises the canonical
+Telemetría/Teoría de la Naturaleza Fractal-Resonante (TNFR) framework
+alongside the Load Flow Synthesis methodology. The theory establishes
+how to reason about Event Performance Indicators (EPI), ΔFz/ΔSi deltas
+and Sense Index signals; the toolkit provides production-ready layers to
+apply those ideas in racing telemetry pipelines:
 
 1. **Acquisition** – ingest telemetry samples from OutSim-compatible
    streams via :class:`tnfr_lfs.acquisition.outsim_client.OutSimClient`.
 2. **Core analytics** – extract Event Performance Indicators (EPI) and
-   compute ΔNFR/ΔSi deltas through :class:`tnfr_lfs.core.epi.EPIExtractor`.
+   compute ΔFz/ΔSi deltas through :class:`tnfr_lfs.core.epi.EPIExtractor`.
 3. **Recommendation engine** – map metrics to actionable setup advice
    using the rule engine in :mod:`tnfr_lfs.recommender.rules`.
 4. **Exporters** – serialise analysis results to JSON or CSV with the
@@ -46,7 +46,7 @@ is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_a
 
 ### Metric field checklist
 
-- **ΔNFR / ΔNFR_lat** – consumes vertical loads, lateral/longitudinal
+- **ΔNFR / ΔNFR_lat** – consumes wheel Fz loads and their ΔFz deltas, lateral/longitudinal
   acceleration, wheel forces and suspension deflection from the OutSim
   wheel payload together with engine speed, pedal positions and ABS/TC
   lights sourced from OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】

@@ -7,7 +7,7 @@ y `C(t)` dentro del flujo de recomendación y del HUD en vivo. Todas las
 lecturas TNFR provienen de la telemetría OutSim/OutGauge de Live for
 Speed, por lo que es imprescindible habilitar ambos broadcasters y
 configurar `OutSim Opts ff` para transmitir el paquete ampliado de
-ruedas (cargas, fuerzas y deflexiones) que requiere la fusión de
+ruedas (cargas Fz, fuerzas y deflexiones) que requiere la fusión de
 telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 Activa también el
 payload extendido de OutGauge (`OutGauge Opts …`) para que el flujo
 incluya las temperaturas por capa y las presiones reales: habilita al menos las
@@ -25,11 +25,11 @@ vez de asumir lecturas inventadas.【F:tnfr_lfs/acquisition/outsim_client.py†L
 
 ## Señales necesarias por métrica
 
-- **ΔNFR / ΔNFR_lat** – integra las cargas verticales, fuerzas y
+- **ΔNFR / ΔNFR_lat** – integra las cargas Fz (y sus ΔFz), fuerzas y
   deflexiones de rueda reportadas por OutSim junto al régimen del motor,
   entradas de pedales y luces ABS/TC que llegan vía OutGauge para evaluar
   el reparto longitudinal/lateral.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
-- **ν_f (frecuencia natural)** – aprovecha el reparto de carga, los
+- **ν_f (frecuencia natural)** – aprovecha el reparto de carga Fz, los
   `slip_ratio`/`slip_angle`, la velocidad y el `yaw_rate` procedentes de
   OutSim combinados con el estilo de conducción (`throttle`, `gear`) que
   aporta OutGauge para clasificar nodos y bandas objetivo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】 Los `slip_ratio` y `slip_angle` utilizados aquí corresponden al promedio de las cuatro ruedas transmitidas por OutSim, garantizando que las etiquetas de frecuencia respondan a la adherencia real del tren y solo regresando a la estimación cinemática cuando no hay lecturas válidas.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】

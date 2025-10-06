@@ -127,7 +127,7 @@ fields, quantifying the fraction of high yaw-acceleration samples where
 ``orchestrate_delta_metrics`` también expone métricas de apoyo derivadas de
 ``WindowMetrics``: ``support_effective`` (ΔNFR sostenido por neumáticos y
 suspensión ponderado estructuralmente), ``load_support_ratio`` (normalizado por
-la carga vertical media) y los pares
+la carga Fz media) y los pares
 ``structural_expansion_longitudinal``/``structural_contraction_longitudinal`` y
 ``structural_expansion_lateral``/``structural_contraction_lateral`` que
 describen cómo las componentes longitudinal/lateral de ΔNFR expanden o
