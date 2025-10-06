@@ -61,7 +61,7 @@ from ..exporters import (
     render_operator_trajectories,
 )
 from ..exporters.setup_plan import SetupChange, SetupPlan
-from ..io import load_playbook, logs
+from ..io import load_playbook, logs, raf_to_telemetry_records, read_raf
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
 from ..recommender import Plan, RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
@@ -2439,7 +2439,11 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     analyze_parser = subparsers.add_parser(
         "analyze", help="Analyse a telemetry baseline and export ΔNFR/Si insights."
     )
-    analyze_parser.add_argument("telemetry", type=Path, help="Path to a baseline file or CSV.")
+    analyze_parser.add_argument(
+        "telemetry",
+        type=Path,
+        help="Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet).",
+    )
     _add_export_argument(
         analyze_parser,
         default=_validated_export(analyze_cfg.get("export"), fallback="json"),
@@ -2476,7 +2480,11 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         "suggest",
         help="Generate recommendations for a telemetry baseline using the rule engine.",
     )
-    suggest_parser.add_argument("telemetry", type=Path, help="Path to a baseline file or CSV.")
+    suggest_parser.add_argument(
+        "telemetry",
+        type=Path,
+        help="Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet).",
+    )
     _add_export_argument(
         suggest_parser,
         default=_validated_export(suggest_cfg.get("export"), fallback="json"),
@@ -2499,7 +2507,11 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         "report",
         help="Generate ΔNFR and sense index reports linked to the exporter registry.",
     )
-    report_parser.add_argument("telemetry", type=Path, help="Path to a baseline file or CSV.")
+    report_parser.add_argument(
+        "telemetry",
+        type=Path,
+        help="Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet).",
+    )
     _add_export_argument(
         report_parser,
         default=_validated_export(report_cfg.get("export"), fallback="json"),
@@ -2547,7 +2559,9 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         help="Create a setup plan by combining optimisation with recommendations.",
     )
     write_set_parser.add_argument(
-        "telemetry", type=Path, help="Path to a baseline file or CSV containing telemetry."
+        "telemetry",
+        type=Path,
+        help="Path to a baseline file (.raf, .csv, .jsonl, .json, .parquet).",
     )
     _add_export_argument(
         write_set_parser,
@@ -3454,6 +3468,8 @@ def _load_records(source: Path) -> Records:
     name = source.name.lower()
     if suffix == ".csv":
         return OutSimClient().ingest(source)
+    if suffix == ".raf":
+        return raf_to_telemetry_records(read_raf(source))
     if name.endswith(".jsonl") or name.endswith(".jsonl.gz") or name.endswith(".jsonl.gzip"):
         return list(logs.iter_run(source))
     if suffix == ".parquet":
