@@ -28,6 +28,7 @@ from ..core.metrics import (
     compute_window_metrics,
 )
 from ..core.operators import orchestrate_delta_metrics
+from ..core.operator_detection import canonical_operator_label
 from ..core.phases import PHASE_SEQUENCE, phase_family
 from ..core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
 from ..core.segmentation import (
@@ -1345,9 +1346,13 @@ def _brake_event_meter(microsector: Microsector) -> str | None:
                     label_value = surface.get("label")
                     if isinstance(label_value, str):
                         surface_label = label_value
+            label = payload.get("name")
+            if not isinstance(label, str) or not label:
+                label = canonical_operator_label(event_type)
             payloads.append(
                 {
                     "type": event_type,
+                    "label": label,
                     "ratio": ratio,
                     "peak": peak,
                     "threshold": threshold,
@@ -1359,7 +1364,7 @@ def _brake_event_meter(microsector: Microsector) -> str | None:
     payloads.sort(key=lambda item: float(item["ratio"]), reverse=True)
     segments: List[str] = []
     for entry in payloads[:3]:
-        label = entry["type"]
+        label = entry.get("label") or canonical_operator_label(str(entry.get("type", "")))
         peak = float(entry["peak"])
         threshold = float(entry["threshold"])
         surface = entry["surface"]

@@ -27,6 +27,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 from ..core.epi_models import EPIBundle
 from ..core.operators import TyreBalanceControlOutput, tyre_balance_controller
+from ..core.operator_detection import canonical_operator_label
 from ..core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
 from ..core.archetypes import (
     ARCHETYPE_MEDIUM,
@@ -2027,9 +2028,13 @@ def _brake_event_summary(
                 label_value = payload["surface"].get("label")  # type: ignore[index]
                 if isinstance(label_value, str):
                     surface_label = label_value
+            label = payload.get("name")
+            if not isinstance(label, str) or not label:
+                label = canonical_operator_label(event_type)
             relevant.append(
                 {
                     "type": event_type,
+                    "label": label,
                     "ratio": ratio,
                     "threshold": threshold,
                     "peak": peak,
@@ -2050,11 +2055,12 @@ def _brake_event_summary(
         count = len(typed)
         worst = max(typed, key=lambda item: item["ratio"])
         max_ratio = max(max_ratio, _safe_float(worst["ratio"]))
-        label = worst["surface"] or "superficie"
+        surface_name = worst["surface"] or "superficie"
         threshold = _safe_float(worst["threshold"])
         peak = _safe_float(worst["peak"])
+        label = worst.get("label") or canonical_operator_label(event_type)
         summary_parts.append(
-            f"{event_type}×{count} ({label}) ΔNFR {peak:.2f}>{threshold:.2f}"
+            f"{label}×{count} ({surface_name}) ΔNFR {peak:.2f}>{threshold:.2f}"
         )
         weight = sum(_safe_float(entry["ratio"]) for entry in typed)
         if event_type == "OZ":

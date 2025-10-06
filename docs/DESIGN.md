@@ -4,7 +4,7 @@
 
 ## Prefacio y visión general
 - Contexto: transición del conocimiento descriptivo a la ciencia resonante.
-- Enfoque TNFR: el símbolo como unidad operativa del ser y los glifos como estructuras primarias de información (EPI).
+- Enfoque TNFR: el símbolo como unidad operativa del ser y los operadores estructurales como estructuras primarias de información (EPI).
 - Objetivos del manual: activar nodos culturales vivos mediante dispositivos simbólicos, lenguajes glíficos y protocolos simbióticos.
 
 ## 1. Análisis de la matriz de coherencia \(W_i(t)\)

@@ -19,11 +19,30 @@ from .structural_time import compute_structural_timestamps
 
 __all__ = [
     "OperatorEvent",
+    "STRUCTURAL_OPERATOR_LABELS",
+    "canonical_operator_label",
     "detect_al",
     "detect_oz",
     "detect_il",
     "detect_silencio",
 ]
+
+
+STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
+    "AL": "Apoyo",
+    "OZ": "Disonancia",
+    "IL": "Coherencia",
+    "SILENCIO": "Silencio estructural",
+}
+
+
+def canonical_operator_label(identifier: str) -> str:
+    """Return the canonical structural label for an operator identifier."""
+
+    if not isinstance(identifier, str):
+        return str(identifier)
+    key = identifier.upper()
+    return STRUCTURAL_OPERATOR_LABELS.get(key, identifier)
 
 
 @dataclass(frozen=True)
@@ -120,14 +139,28 @@ def detect_al(
                 peak_value = max(peak_value, lateral_avg)
         elif active_start is not None:
             events.append(
-                _finalise_event("AL", records, active_start, index - 1, peak_value, lateral_threshold)
+                _finalise_event(
+                    canonical_operator_label("AL"),
+                    records,
+                    active_start,
+                    index - 1,
+                    peak_value,
+                    lateral_threshold,
+                )
             )
             active_start = None
             peak_value = 0.0
 
     if active_start is not None:
         events.append(
-            _finalise_event("AL", records, active_start, len(records) - 1, peak_value, lateral_threshold)
+            _finalise_event(
+                canonical_operator_label("AL"),
+                records,
+                active_start,
+                len(records) - 1,
+                peak_value,
+                lateral_threshold,
+            )
         )
 
     return [event.as_mapping() for event in events]
@@ -163,7 +196,14 @@ def detect_oz(
                 peak_value = max(peak_value, slip_avg, yaw_avg)
         elif active_start is not None:
             events.append(
-                _finalise_event("OZ", records, active_start, index - 1, peak_value, max(slip_threshold, yaw_threshold))
+                _finalise_event(
+                    canonical_operator_label("OZ"),
+                    records,
+                    active_start,
+                    index - 1,
+                    peak_value,
+                    max(slip_threshold, yaw_threshold),
+                )
             )
             active_start = None
             peak_value = 0.0
@@ -171,7 +211,7 @@ def detect_oz(
     if active_start is not None:
         events.append(
             _finalise_event(
-                "OZ",
+                canonical_operator_label("OZ"),
                 records,
                 active_start,
                 len(records) - 1,
@@ -219,7 +259,16 @@ def detect_il(
             else:
                 peak_value = max(peak_value, deviation_peak)
         elif active_start is not None:
-            events.append(_finalise_event("IL", records, active_start, index - 1, peak_value, threshold))
+            events.append(
+                _finalise_event(
+                    canonical_operator_label("IL"),
+                    records,
+                    active_start,
+                    index - 1,
+                    peak_value,
+                    threshold,
+                )
+            )
             active_start = None
             peak_value = 0.0
 
@@ -232,7 +281,12 @@ def detect_il(
         threshold = base_threshold + (speed_gain * mean_speed)
         events.append(
             _finalise_event(
-                "IL", records, active_start, len(records) - 1, peak_value, threshold
+                canonical_operator_label("IL"),
+                records,
+                active_start,
+                len(records) - 1,
+                peak_value,
+                threshold,
             )
         )
 
@@ -316,7 +370,7 @@ def detect_silencio(
         if slack <= 0.0:
             return
         event = _finalise_event(
-            "SILENCIO",
+            canonical_operator_label("SILENCIO"),
             records,
             start_index,
             end_index,

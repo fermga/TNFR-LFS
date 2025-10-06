@@ -20,6 +20,7 @@ from tnfr_lfs.core.epi_models import (
 from collections.abc import Mapping
 
 from tnfr_lfs.core.segmentation import Goal, Microsector
+from tnfr_lfs.core.operator_detection import canonical_operator_label
 from tnfr_lfs.io.profiles import AeroProfile, ProfileManager
 from tnfr_lfs.core.metrics import compute_window_metrics
 from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
@@ -2168,7 +2169,7 @@ def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
     operator_events = {
         "OZ": (
             {
-                "name": "OZ",
+                "name": canonical_operator_label("OZ"),
                 "start_index": 0,
                 "end_index": 2,
                 "microsector": 4,
@@ -2217,7 +2218,7 @@ def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
     assert all(rec.delta is not None and rec.delta > 0 for rec in brake_recs)
     assert all(rec.priority <= rule.priority - 2 for rec in brake_recs)
     rationale_blob = " ".join(rec.rationale for rec in brake_recs)
-    assert "OZ×1" in rationale_blob
+    assert f"{canonical_operator_label('OZ')}×1" in rationale_blob
     assert "low_grip" in rationale_blob
     assert "ΔNFR" in rationale_blob
 
