@@ -1001,28 +1001,32 @@ def _sense_index_map(
         )
         filtered_payload: Dict[str, Any] = {}
         symmetry_payload: Dict[str, Dict[str, float]] = {}
+        samples_payload: Dict[str, Any] = {}
+
+        def _normalise(value: Any) -> Any:
+            if isinstance(value, Mapping):
+                return {str(key): _normalise(sub_value) for key, sub_value in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [_normalise(item) for item in value]
+            if isinstance(value, bool) or value is None:
+                return value
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                return value
+            if not math.isfinite(numeric):
+                return None
+            return round(numeric, 4)
 
         def _serialise_cphi_mapping(payload: Mapping[str, Any]) -> Dict[str, Any]:
-            def _normalise(value: Any) -> Any:
-                if isinstance(value, Mapping):
-                    return {str(key): _normalise(sub_value) for key, sub_value in value.items()}
-                if isinstance(value, (list, tuple)):
-                    return [_normalise(item) for item in value]
-                if isinstance(value, bool) or value is None:
-                    return value
-                try:
-                    numeric = float(value)
-                except (TypeError, ValueError):
-                    return value
-                if not math.isfinite(numeric):
-                    return None
-                return round(numeric, 4)
-
             return _normalise(payload)
 
         for key, value in microsector.filtered_measures.items():
             if key == "cphi" and isinstance(value, Mapping):
                 filtered_payload["cphi"] = _serialise_cphi_mapping(value)
+                continue
+            if isinstance(key, str) and key.endswith("_samples"):
+                samples_payload[key] = _normalise(value)
                 continue
             if isinstance(key, str) and key.startswith("mu_symmetry"):
                 parts = key.split("_")
@@ -1059,6 +1063,8 @@ def _sense_index_map(
         if "grip_rel" not in filtered_payload:
             filtered_payload["grip_rel"] = round(float(microsector.grip_rel), 4)
         entry["filtered_measures"] = filtered_payload
+        if samples_payload:
+            entry["sample_measures"] = samples_payload
         entry["grip_rel"] = filtered_payload.get("grip_rel", 0.0)
         entry["filtered_style_index"] = filtered_payload.get("style_index")
         occupancy_payload: Dict[str, Dict[str, float]] = {}
@@ -1538,6 +1544,8 @@ def _generate_out_reports(
         for domain, pairs in sorted(pairwise_payload.items()):
             summary_lines.append(f"  - {domain}:")
             for pair, value in sorted(pairs.items()):
+                if isinstance(pair, str) and pair.endswith("_samples"):
+                    continue
                 summary_lines.append(f"    - {pair}: {value:.3f}")
 
     if microsector_variability:
