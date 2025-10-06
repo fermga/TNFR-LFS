@@ -611,6 +611,8 @@ def segment_microsectors(
                 "mu_usage_front_ratio": window_metrics.mu_usage_front_ratio,
                 "mu_usage_rear_ratio": window_metrics.mu_usage_rear_ratio,
                 "mu_balance": window_metrics.mu_balance,
+                "brake_longitudinal_correlation": window_metrics.brake_longitudinal_correlation,
+                "throttle_longitudinal_correlation": window_metrics.throttle_longitudinal_correlation,
                 "delta_nfr_std": window_metrics.delta_nfr_std,
                 "nodal_delta_nfr_std": window_metrics.nodal_delta_nfr_std,
                 "exit_gear_match": window_metrics.exit_gear_match,
@@ -786,6 +788,16 @@ def segment_microsectors(
             window_metrics.phase_node_entropy or {}
         ).items():
             filtered_measures[f"node_entropy_{phase_label}"] = float(value)
+        for phase_label, value in (
+            window_metrics.phase_brake_longitudinal_correlation or {}
+        ).items():
+            filtered_measures[f"brake_longitudinal_correlation_{phase_label}"] = float(value)
+        for phase_label, value in (
+            window_metrics.phase_throttle_longitudinal_correlation or {}
+        ).items():
+            filtered_measures[
+                f"throttle_longitudinal_correlation_{phase_label}"
+            ] = float(value)
         histogram = window_metrics.bumpstop_histogram
         for index, _ in enumerate(histogram.depth_bins):
             filtered_measures[f"bumpstop_front_density_bin_{index}"] = histogram.front_density[index]
