@@ -53,7 +53,7 @@ files = ["typing_targets"]
 warn_unused_configs = true
 
 [tool.setuptools.package-data]
-"tnfr_lfs.data" = ["*.toml"]
+"tnfr_lfs.data" = ["*.toml", "playbooks/*.toml"]
 
 [tool.setuptools.data-files]
 "tnfr_lfs_pack/data/tracks" = ["data/tracks/*.toml"]
