@@ -22,7 +22,7 @@ tests to illustrate the workflow.
 
 ## Telemetry requirements
 
-All TNFR metrics (`ΔNFR`, `ΔNFR_lat`, `ν_f`, `C(t)` and related
+All TNFR metrics (`ΔNFR`, the nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)` and related
 indicators) are derived from the Live for Speed OutSim/OutGauge telemetry
 streams; the toolkit does not synthesise additional inputs. Enable both
 UDP broadcasters and extend OutSim with `OutSim Opts ff` in `cfg.txt`
@@ -46,10 +46,14 @@ is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_a
 
 ### Metric field checklist
 
-- **ΔNFR / ΔNFR_lat** – consumes wheel Fz loads and their ΔFz deltas, lateral/longitudinal
-  acceleration, wheel forces and suspension deflection from the OutSim
-  wheel payload together with engine speed, pedal positions and ABS/TC
-  lights sourced from OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+- **ΔNFR (gradiente nodal) y ∇NFR∥/∇NFR⊥ (proyecciones del gradiente)** – consumen
+  las cargas Fz por rueda, sus ΔFz, las fuerzas longitudinales/laterales y las
+  deflexiones de suspensión reportadas por OutSim junto con el régimen del
+  motor, pedales y banderas ABS/TC que aporta OutGauge para determinar el
+  gradiente nodal. Las proyecciones ∇NFR∥/∇NFR⊥ son componentes del gradiente,
+  no sustituyen a los canales de carga reales; cruza siempre las recomendaciones
+  con los registros `Fz`/`ΔFz` cuando necesites cuantificar fuerzas absolutas.
+  【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
 - **ν_f (natural frequency)** – requires load split, slip ratios/angles
   and yaw rate/velocity from OutSim, plus driver style signals (throttle,
   gear) resolved via OutGauge to tailor node categories and spectral

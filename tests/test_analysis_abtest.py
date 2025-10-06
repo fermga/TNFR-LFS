@@ -10,8 +10,8 @@ class DummyBundle:
         self.sense_index = value
         self.delta_nfr = value
         self.coherence_index = value
-        self.delta_nfr_longitudinal = value
-        self.delta_nfr_lateral = value
+        self.delta_nfr_proj_longitudinal = value
+        self.delta_nfr_proj_lateral = value
 
 
 def _metrics_from_laps(lap_samples: list[list[float]]) -> dict[str, object]:

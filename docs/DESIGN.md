@@ -128,7 +128,7 @@ asociados al arquetipo vigente.  Los valores se derivan de un espectro cruzado
 entre la dirección del piloto y la respuesta combinada yaw/aceleración lateral,
 lo que expone la frecuencia dominante del apoyo y permite detectar atrasos o
 adelantos del chasis.  El HUD y las reglas del recomendador utilizan estas
-métricas, junto con los objetivos ΔNFR⊥/∥ y ``ν_f`` fijados por arquetipo, para
+métricas, junto con los objetivos de proyección ∇NFR⊥/∇NFR∥ y ``ν_f`` fijados por arquetipo, para
 invertir las sugerencias de barras y amortiguadores cuando la fase medida
 pierde la alineación con el objetivo.
 

@@ -75,8 +75,8 @@ def _bundle(
         track=TrackNode(delta_nfr=0.0, sense_index=0.8),
         driver=DriverNode(delta_nfr=0.0, sense_index=0.8),
         structural_timestamp=structural,
-        delta_nfr_longitudinal=longitudinal_delta,
-        delta_nfr_lateral=lateral_delta,
+        delta_nfr_proj_longitudinal=longitudinal_delta,
+        delta_nfr_proj_lateral=lateral_delta,
     )
 
 

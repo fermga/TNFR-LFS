@@ -102,7 +102,7 @@ def test_csv_exporter_renders_rows():
     lines = output.strip().splitlines()
     assert (
         lines[0]
-        == "timestamp,epi,delta_nfr,delta_nfr_longitudinal,delta_nfr_lateral,sense_index"
+        == "timestamp,epi,delta_nfr,delta_nfr_proj_longitudinal,delta_nfr_proj_lateral,sense_index"
     )
     assert len(lines) == 3
 
@@ -239,8 +239,8 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "**Gradientes de ∫|ΔNFR| por fase**" in output
     assert "**Racionales TNFR por nodo**" in output
     assert "**Efectos esperados por fase**" in output
-    assert "**Objetivos ΔNFR∥/ΔNFR⊥ por fase**" in output
-    assert "**Mapa ΔNFR∥/ΔNFR⊥ por fase**" in output
+    assert "**Objetivos proyección ∇NFR∥/∇NFR⊥ por fase**" in output
+    assert "**Mapa proyección ∇NFR∥/∇NFR⊥ por fase**" in output
     assert "Entrada ∥" in output
     assert "**Sugerencias de fases prioritarias**" in output
     assert "C(c/d/a)" in output

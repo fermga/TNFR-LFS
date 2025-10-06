@@ -151,11 +151,11 @@ def test_delta_calculator_decomposes_longitudinal_component():
     )
     bundle = DeltaCalculator.compute_bundle(sample, baseline, epi_value=0.0)
     assert bundle.delta_nfr == pytest.approx(1.5, rel=1e-3)
-    assert bundle.delta_nfr_longitudinal + bundle.delta_nfr_lateral == pytest.approx(
+    assert bundle.delta_nfr_proj_longitudinal + bundle.delta_nfr_proj_lateral == pytest.approx(
         bundle.delta_nfr,
         rel=1e-6,
     )
-    assert abs(bundle.delta_nfr_longitudinal) > abs(bundle.delta_nfr_lateral)
+    assert abs(bundle.delta_nfr_proj_longitudinal) > abs(bundle.delta_nfr_proj_lateral)
 
 
 def test_delta_calculator_decomposes_lateral_component():
@@ -186,11 +186,11 @@ def test_delta_calculator_decomposes_lateral_component():
     )
     bundle = DeltaCalculator.compute_bundle(sample, baseline, epi_value=0.0)
     assert bundle.delta_nfr == pytest.approx(1.2, rel=1e-3)
-    assert bundle.delta_nfr_longitudinal + bundle.delta_nfr_lateral == pytest.approx(
+    assert bundle.delta_nfr_proj_longitudinal + bundle.delta_nfr_proj_lateral == pytest.approx(
         bundle.delta_nfr,
         rel=1e-6,
     )
-    assert abs(bundle.delta_nfr_lateral) > abs(bundle.delta_nfr_longitudinal)
+    assert abs(bundle.delta_nfr_proj_lateral) > abs(bundle.delta_nfr_proj_longitudinal)
 
 
 def _build_goal(phase: str, target_delta: float, *, archetype: str = "medium") -> Goal:

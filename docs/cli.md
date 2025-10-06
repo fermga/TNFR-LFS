@@ -8,10 +8,14 @@ tnfr-lfs telemetry.csv --export csv
 ```
 
 The CLI ingests the telemetry file, computes EPI metrics, and prints the
-selected export format to stdout. All TNFR indicators (`ΔNFR`,
-`ΔNFR_lat`, `ν_f`, `C(t)` and nodal derivatives) are computed from the
-Live for Speed OutSim/OutGauge telemetry streams, so make sure the
-simulator exposes both feeds before running any subcommand.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+selected export format to stdout. All TNFR indicators (`ΔNFR`, the
+nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)` and nodal derivatives)
+are computed from the Live for Speed OutSim/OutGauge telemetry streams,
+so make sure the simulator exposes both feeds before running any
+subcommand.  Recuerda que las componentes `∇NFR∥`/`∇NFR⊥` reflejan la
+proyección del gradiente nodal; cuando necesites interpretar cargas
+absolutas cruza las recomendaciones con los canales `Fz`/`ΔFz` directos
+de OutSim.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
 
 ## Subcommands
 
@@ -70,7 +74,7 @@ The HUD cycles through three pages (press the button to advance):
 * **Página A** – curva y fase actuales con la insignia ``ν_f`` (muy
   baja/óptima/…), un medidor ΔNFR con tolerancias ``[--^--]`` integrado en la
   línea de objetivos, el arquetipo activo (``hairpin``, ``medium``, ``fast`` o
-  ``chicane``) con sus referencias ΔNFR∥/⊥ y pesos de detune, el resumen dinámico
+  ``chicane``) con sus referencias de proyección ∇NFR∥/∇NFR⊥ y pesos de detune, el resumen dinámico
   ``Si↺`` de la memoria sensorial y la banda ``ν_f~▁▃▆`` que muestra la evolución
   reciente de la frecuencia natural.  Debajo se representa la barra de
   coherencia ``C(t) ███░`` normalizada con el objetivo de Si del perfil actual y
@@ -115,8 +119,10 @@ umbral y ⚠️ cuando requiere actuación, reutilizando los mismos límites
 que emplean el motor de reglas y las métricas de ventana.【F:tnfr_lfs/recommender/rules.py†L604-L615】【F:tnfr_lfs/recommender/search.py†L210-L236】【F:tnfr_lfs/core/metrics.py†L2558-L2575】【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 
 Refer to the [setup equivalence guide](setup_equivalences.md) for a
-metric-by-metric breakdown (`ΔNFR_lat`, `ν_f`, `C(t)`) that matches the HUD
-widgets and the recommendations emitted by ``osd``.
+metric-by-metric breakdown (`∇NFR⊥`, `ν_f`, `C(t)`) that matches the HUD
+widgets and the recommendations emitted by ``osd``.  Esa guía también explica
+cuándo apoyar esas proyecciones con los canales `Fz`/`ΔFz` si buscas ajustes de
+carga absolutos.
 
 ```bash
 tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
@@ -373,9 +379,11 @@ coherentes y que ningún servicio está bloqueando los puertos UDP.
 
 ### Telemetry field checklist
 
-- **ΔNFR / ΔNFR_lat** – requiere OutSim para exponer cargas Fz,
-  aceleraciones, fuerzas y deflexión de rueda junto a OutGauge para
-  obtener `rpm`, pedales y luces ABS/TC.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+- **ΔNFR (gradiente nodal) / ∇NFR⊥ (proyección lateral)** – requieren OutSim para
+  exponer cargas Fz, aceleraciones, fuerzas y deflexión de rueda junto a OutGauge
+  para obtener `rpm`, pedales y luces ABS/TC.  Estas señales alimentan el
+  gradiente nodal; consulta los canales `Fz`/`ΔFz` si necesitas cuantificar
+  cargas absolutas antes de aplicar un ajuste.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
 - **ν_f (frecuencia natural)** – depende de la distribución de cargas Fz,
   `slip_ratio`/`slip_angle`, velocidad y `yaw_rate` calculados desde
   OutSim, con señales de estilo (`throttle`, `gear`) procedentes de

@@ -1565,10 +1565,10 @@ def compute_window_metrics(
             float(getattr(bundle.tyres, "mu_eff_rear_longitudinal", 0.0)) for bundle in bundles
         ]
         longitudinal_series = [
-            float(getattr(bundle, "delta_nfr_longitudinal", 0.0)) for bundle in bundles
+            float(getattr(bundle, "delta_nfr_proj_longitudinal", 0.0)) for bundle in bundles
         ]
         lateral_series = [
-            float(getattr(bundle, "delta_nfr_lateral", 0.0)) for bundle in bundles
+            float(getattr(bundle, "delta_nfr_proj_lateral", 0.0)) for bundle in bundles
         ]
         if primary_phase_indices:
             ackermann_samples = [
@@ -1603,10 +1603,10 @@ def compute_window_metrics(
         yaw_rates = [record.yaw_rate for record in records]
         steer_series = [float(getattr(record, "steer", 0.0)) for record in records]
         longitudinal_series = [
-            float(getattr(record, "delta_nfr_longitudinal", 0.0)) for record in records
+            float(getattr(record, "delta_nfr_proj_longitudinal", 0.0)) for record in records
         ]
         lateral_series = [
-            float(getattr(record, "delta_nfr_lateral", 0.0)) for record in records
+            float(getattr(record, "delta_nfr_proj_lateral", 0.0)) for record in records
         ]
         front_travel_series = [
             float(getattr(record, "suspension_travel_front", 0.0)) for record in records

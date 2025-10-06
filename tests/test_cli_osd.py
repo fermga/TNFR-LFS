@@ -748,8 +748,8 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
     bundles = [
         SimpleNamespace(
             delta_nfr=-0.2,
-            delta_nfr_longitudinal=-0.18,
-            delta_nfr_lateral=-0.04,
+            delta_nfr_proj_longitudinal=-0.18,
+            delta_nfr_proj_lateral=-0.04,
             sense_index=0.78,
         )
     ]

@@ -92,9 +92,10 @@ allowing downstream tooling to weigh ΔNFR contributions using documented
 subsystem dynamics.  Bundles now expose the derivative ``dEPI_dt`` and the
 cumulatively integrated ``integrated_epi`` value obtained through explicit
 Euler integration.  The ΔNFR signal is also decomposed into longitudinal and
-lateral components via the ``delta_nfr_longitudinal``/``delta_nfr_lateral``
-fields which are derived from the underlying feature contributions and
-provide immediate visibility of brake/traction versus balance imbalances.
+lateral components via the ``delta_nfr_proj_longitudinal``/``delta_nfr_proj_lateral``
+fields which project the nodal gradient onto each axis, providing immediate
+visibility of brake/traction versus balance imbalances while keeping the raw
+`Fz`/`ΔFz` channels available for force-based analysis.
 
 ### Operator utilities
 
