@@ -12,6 +12,7 @@ from tnfr_lfs.acquisition.fusion import TelemetryFusion
 from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket
 from tnfr_lfs.acquisition.outsim_client import (
     DEFAULT_SCHEMA,
+    LEGACY_COLUMNS,
     OPTIONAL_SCHEMA_COLUMNS,
     OutSimClient,
 )
@@ -232,6 +233,42 @@ def test_outsim_ingest_sets_nan_for_missing_optional_columns() -> None:
     assert math.isnan(record.rpm)
     assert math.isnan(record.line_deviation)
 
+
+def test_outsim_ingest_legacy_defaults_are_nan() -> None:
+    header = ",".join(LEGACY_COLUMNS)
+    payload_values = [
+        "0.0",
+        "5000.0",
+        "0.01",
+        "1.2",
+        "0.3",
+        "0.02",
+        "0.01",
+        "0.0",
+        "15.0",
+        "0.0",
+        "450.0",
+        "0.75",
+    ]
+    buffer = StringIO(f"{header}\n{','.join(payload_values)}\n")
+    client = OutSimClient(schema=DEFAULT_SCHEMA)
+    record = client.ingest(buffer)[0]
+
+    assert math.isnan(record.speed)
+    assert math.isnan(record.yaw_rate)
+    assert math.isnan(record.slip_angle)
+    assert math.isnan(record.slip_ratio_fl)
+    assert math.isnan(record.slip_angle_fl)
+    assert math.isnan(record.vertical_load_front)
+    assert math.isnan(record.mu_eff_front)
+    assert math.isnan(record.suspension_travel_front)
+    assert math.isnan(record.tyre_temp_fl)
+    assert math.isnan(record.tyre_pressure_fl)
+    assert math.isnan(record.rpm)
+    assert math.isnan(record.line_deviation)
+    assert math.isnan(record.instantaneous_radius)
+    assert math.isnan(record.front_track_width)
+    assert math.isnan(record.wheelbase)
 
 def test_outsim_packet_from_bytes_parses_extended_layout(extended_outsim_packet: OutSimPacket) -> None:
     packet = extended_outsim_packet

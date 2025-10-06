@@ -71,14 +71,25 @@ def _record(timestamp: float, nfr: float, si: float = 0.8, **overrides) -> Telem
         suspension_travel_rear=0.0,
         suspension_velocity_front=0.0,
         suspension_velocity_rear=0.0,
-        brake_temp_fl=0.0,
-        brake_temp_fr=0.0,
-        brake_temp_rl=0.0,
-        brake_temp_rr=0.0,
     )
     if overrides:
         base = replace(base, **overrides)
     return base
+
+
+def test_record_optional_defaults_are_nan() -> None:
+    record = _record(0.0, 100.0)
+
+    assert math.isnan(record.slip_ratio_fl)
+    assert math.isnan(record.slip_angle_fl)
+    assert math.isnan(record.tyre_temp_fl)
+    assert math.isnan(record.tyre_pressure_fl)
+    assert math.isnan(record.brake_temp_fl)
+    assert math.isnan(record.rpm)
+    assert math.isnan(record.line_deviation)
+    assert math.isnan(record.instantaneous_radius)
+    assert math.isnan(record.front_track_width)
+    assert math.isnan(record.wheelbase)
 
 
 def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBundle:
