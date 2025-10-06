@@ -48,7 +48,7 @@ from ..core.segmentation import (
     microsector_stability_metrics,
     segment_microsectors,
 )
-from ..analysis import compute_session_robustness
+from ..analysis import SUPPORTED_LAP_METRICS, ab_compare_by_lap, compute_session_robustness
 from ..exporters import (
     REPORT_ARTIFACT_FORMATS,
     build_coherence_map_payload,
@@ -114,6 +114,8 @@ PRESSURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_pressure_{suffix}" for suf
 PRESSURE_STD_KEYS = MappingProxyType({
     suffix: f"{PRESSURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
 })
+
+SUPPORTED_AB_METRICS: tuple[str, ...] = tuple(sorted(SUPPORTED_LAP_METRICS))
 
 
 @dataclass(frozen=True, slots=True)
@@ -2444,6 +2446,35 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
     )
     report_parser.set_defaults(handler=_handle_report)
 
+    compare_parser = subparsers.add_parser(
+        "compare",
+        help="Compara dos stints de telemetría agregando métricas por vuelta.",
+    )
+    compare_parser.add_argument(
+        "telemetry_a",
+        type=Path,
+        help="Ruta a la telemetría baseline o configuración A.",
+    )
+    compare_parser.add_argument(
+        "telemetry_b",
+        type=Path,
+        help="Ruta a la telemetría variante o configuración B.",
+    )
+    compare_parser.add_argument(
+        "--metric",
+        choices=SUPPORTED_AB_METRICS,
+        default="sense_index",
+        help="Métrica por vuelta utilizada para la comparación (default: sense_index).",
+    )
+    _add_export_argument(
+        compare_parser,
+        default="markdown",
+        help_text=(
+            "Exporter usado para renderizar la comparación A/B (default: markdown)."
+        ),
+    )
+    compare_parser.set_defaults(handler=_handle_compare)
+
     write_set_cfg = dict(config.get("write_set", {}))
     write_set_parser = subparsers.add_parser(
         "write-set",
@@ -3092,7 +3123,83 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     return _render_payload(payload, _resolve_exports(namespace))
 
 
+def _handle_compare(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+    metric = str(namespace.metric)
+    pack_root = _resolve_pack_root(namespace, config)
+    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
+    car_model = _default_car_model(config)
+    track_name = track_selection.name or _default_track_name(config)
+    report_cfg = dict(config.get("report", {}))
+    target_delta = float(report_cfg.get("target_delta", 0.0))
+    target_si = float(report_cfg.get("target_si", 0.75))
+    coherence_window = int(report_cfg.get("coherence_window", 3))
+    recursion_decay = float(report_cfg.get("recursion_decay", 0.4))
+
+    def _compute_metrics(path: Path) -> Mapping[str, Any]:
+        records = _load_records(path)
+        lap_segments = _group_records_by_lap(records)
+        return orchestrate_delta_metrics(
+            lap_segments,
+            target_delta,
+            target_si,
+            coherence_window=coherence_window,
+            recursion_decay=recursion_decay,
+        )
+
+    try:
+        baseline_metrics = _compute_metrics(namespace.telemetry_a)
+        variant_metrics = _compute_metrics(namespace.telemetry_b)
+        abtest_result = ab_compare_by_lap(
+            baseline_metrics,
+            variant_metrics,
+            metric=metric,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    cars = _load_pack_cars(pack_root)
+    track_profiles = _load_pack_track_profiles(pack_root)
+    modifiers = _load_pack_modifiers(pack_root)
+    session_payload = _assemble_session_payload(
+        car_model,
+        track_selection,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+    )
+    if isinstance(session_payload, Mapping):
+        session_mapping: Dict[str, Any] = dict(session_payload)
+    else:
+        session_mapping = {
+            "car_model": car_model,
+            "track_profile": track_selection.track_profile or track_name,
+        }
+    session_mapping["abtest"] = abtest_result
+
+    payload: Dict[str, Any] = {
+        "metric": metric,
+        "baseline": {
+            "telemetry": str(namespace.telemetry_a),
+            "mean": abtest_result.baseline_mean,
+            "lap_means": list(abtest_result.baseline_laps),
+            "lap_count": len(abtest_result.baseline_laps),
+        },
+        "variant": {
+            "telemetry": str(namespace.telemetry_b),
+            "mean": abtest_result.variant_mean,
+            "lap_means": list(abtest_result.variant_laps),
+            "lap_count": len(abtest_result.variant_laps),
+        },
+        "session": session_mapping,
+    }
+    session_messages = format_session_messages(session_mapping)
+    if session_messages:
+        payload["session_messages"] = session_messages
+    return _render_payload(payload, _resolve_exports(namespace))
+
+
 def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+
     records = _load_records(namespace.telemetry)
     car_model = _default_car_model(config)
     pack_root = _resolve_pack_root(namespace, config)
