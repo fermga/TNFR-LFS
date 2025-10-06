@@ -732,7 +732,7 @@ def _format_dispersion_line(
 def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     measures = getattr(microsector, "filtered_measures", {}) or {}
     if not isinstance(measures, Mapping):
-        return ()
+        measures = {}
     lines: List[str] = []
     temp_line = _format_dispersion_line(
         measures,
@@ -744,6 +744,8 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     )
     if temp_line:
         lines.append(temp_line)
+    else:
+        lines.append(_truncate_line("T° sin datos"))
     brake_temp_line = _format_dispersion_line(
         measures,
         BRAKE_TEMPERATURE_MEAN_KEYS,
@@ -754,6 +756,8 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     )
     if brake_temp_line:
         lines.append(brake_temp_line)
+    else:
+        lines.append(_truncate_line("T° freno sin datos"))
     pressure_line = _format_dispersion_line(
         measures,
         PRESSURE_MEAN_KEYS,
@@ -764,6 +768,8 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     )
     if pressure_line:
         lines.append(pressure_line)
+    else:
+        lines.append(_truncate_line("Pbar sin datos"))
     return tuple(lines)
 
 
