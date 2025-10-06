@@ -47,7 +47,13 @@ from .metrics import (
 )
 from .operator_detection import detect_al, detect_il, detect_oz, detect_silencio
 from .operators import mutation_operator, recursivity_operator
-from .phases import LEGACY_PHASE_MAP, PHASE_SEQUENCE, expand_phase_alias, phase_family
+from .phases import (
+    LEGACY_PHASE_MAP,
+    PHASE_SEQUENCE,
+    expand_phase_alias,
+    phase_family,
+    replicate_phase_aliases,
+)
 from .archetypes import (
     ARCHETYPE_CHICANE,
     ARCHETYPE_HAIRPIN,
@@ -212,6 +218,16 @@ class Microsector:
             start = min(entry[0] for entry in ranges)
             stop = max(entry[1] for entry in ranges)
         return range(start, stop)
+
+
+def _merge_phase_indices(sequences: Sequence[Tuple[int, ...]]) -> Tuple[int, ...]:
+    merged: list[int] = []
+    for sequence in sequences:
+        for value in sequence:
+            index = int(value)
+            if not merged or merged[-1] != index:
+                merged.append(index)
+    return tuple(merged)
 
 
 def segment_microsectors(
@@ -998,6 +1014,49 @@ def segment_microsectors(
                 events.append(payload)
             if events:
                 operator_events[name] = tuple(events)
+        serialised_phase_samples = {
+            str(phase): tuple(int(index) for index in indices)
+            for phase, indices in phase_samples.items()
+        }
+        serialised_phase_samples = replicate_phase_aliases(
+            serialised_phase_samples,
+            combine=_merge_phase_indices,
+        )
+        serialised_axis_targets = replicate_phase_aliases(
+            {
+                str(phase): {
+                    str(axis): float(value)
+                    for axis, value in (payload or {}).items()
+                }
+                for phase, payload in axis_targets.items()
+            }
+        )
+        serialised_axis_weights = replicate_phase_aliases(
+            {
+                str(phase): {
+                    str(axis): float(value)
+                    for axis, value in (payload or {}).items()
+                }
+                for phase, payload in axis_weights.items()
+            }
+        )
+        phase_delta_payload = replicate_phase_aliases(
+            {
+                str(label): float(value)
+                for label, value in (
+                    (window_metrics.phase_delta_nfr_std or {}).items()
+                )
+            }
+        )
+        phase_nodal_payload = replicate_phase_aliases(
+            {
+                str(label): float(value)
+                for label, value in (
+                    (window_metrics.phase_nodal_delta_nfr_std or {}).items()
+                )
+            }
+        )
+
         microsectors.append(
             Microsector(
                 index=spec["index"],
@@ -1009,7 +1068,7 @@ def segment_microsectors(
                 delta_nfr_signature=delta_signature,
                 goals=goals,
                 phase_boundaries=phase_boundaries,
-                phase_samples=dict(phase_samples),
+                phase_samples=serialised_phase_samples,
                 active_phase=active_goal.phase,
                 dominant_nodes=dict(dominant_nodes),
                 phase_weights=phase_weights,
@@ -1019,24 +1078,14 @@ def segment_microsectors(
                 phase_synchrony=dict(phase_synchrony_map),
                 delta_nfr_std=float(window_metrics.delta_nfr_std),
                 nodal_delta_nfr_std=float(window_metrics.nodal_delta_nfr_std),
-                phase_delta_nfr_std={
-                    str(label): float(value)
-                    for label, value in (
-                        (window_metrics.phase_delta_nfr_std or {}).items()
-                    )
-                },
-                phase_nodal_delta_nfr_std={
-                    str(label): float(value)
-                    for label, value in (
-                        (window_metrics.phase_nodal_delta_nfr_std or {}).items()
-                    )
-                },
+                phase_delta_nfr_std=phase_delta_payload,
+                phase_nodal_delta_nfr_std=phase_nodal_payload,
                 filtered_measures=dict(filtered_measures),
                 recursivity_trace=rec_trace,
                 last_mutation=dict(mutation_details) if mutation_details is not None else None,
                 window_occupancy=occupancy,
-                phase_axis_targets=dict(axis_targets),
-                phase_axis_weights=dict(axis_weights),
+                phase_axis_targets=serialised_axis_targets,
+                phase_axis_weights=serialised_axis_weights,
                 context_factors=(
                     spec.get("context_factors").as_mapping()
                     if spec.get("context_factors")

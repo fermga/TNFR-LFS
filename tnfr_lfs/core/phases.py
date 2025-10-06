@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Callable, Mapping, Sequence, Tuple, TypeVar
 
 PHASE_SEQUENCE: Tuple[str, ...] = ("entry1", "entry2", "apex3a", "apex3b", "exit4")
 
@@ -11,6 +11,8 @@ LEGACY_PHASE_MAP: dict[str, Tuple[str, ...]] = {
     "apex": ("apex3a", "apex3b"),
     "exit": ("exit4",),
 }
+
+T = TypeVar("T")
 
 _PHASE_TO_FAMILY: dict[str, str] = {}
 for legacy, phases in LEGACY_PHASE_MAP.items():
@@ -40,3 +42,42 @@ def phase_family(phase: str) -> str:
 
     key = normalise_phase_key(phase)
     return _PHASE_TO_FAMILY.get(key, key)
+
+
+def replicate_phase_aliases(
+    payload: Mapping[str, T],
+    *,
+    combine: Callable[[Sequence[T]], T] | None = None,
+) -> dict[str, T]:
+    """Return ``payload`` enriched with legacy phase aliases.
+
+    Parameters
+    ----------
+    payload:
+        Mapping keyed by phase identifiers. Keys are normalised to lower case in
+        the resulting dictionary. Values are copied verbatim unless ``combine``
+        is provided.
+    combine:
+        Optional reducer applied when populating a legacy alias from multiple
+        concrete phase values. When omitted the last available concrete phase
+        value is reused for the alias.
+    """
+
+    normalised: dict[str, T] = {
+        normalise_phase_key(str(key)): value for key, value in payload.items()
+    }
+    for alias, phases in LEGACY_PHASE_MAP.items():
+        if alias in normalised:
+            continue
+        candidates = [
+            normalised[phase]
+            for phase in phases
+            if phase in normalised
+        ]
+        if not candidates:
+            continue
+        if combine is not None:
+            normalised[alias] = combine(tuple(candidates))
+        else:
+            normalised[alias] = candidates[-1]
+    return normalised

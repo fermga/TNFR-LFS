@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from tnfr_lfs.acquisition import ButtonEvent, ButtonLayout, MacroQueue, OverlayManager
 from tnfr_lfs.cli import osd as osd_module
+from tnfr_lfs.cli import tnfr_lfs_cli
 from tnfr_lfs.cli.osd import HUDPager, MacroStatus, OSDController, TelemetryHUD
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
 from tnfr_lfs.core.metrics import (
@@ -917,3 +918,33 @@ def test_brake_meter_skips_when_silence_dominates() -> None:
         end_time=2.0,
     )
     assert osd_module._brake_event_meter(microsector) is None
+
+
+def test_generate_out_reports_includes_phase_aliases(
+    tmp_path,
+    synthetic_records,
+    synthetic_bundles,
+    synthetic_microsectors,
+) -> None:
+    reports = tnfr_lfs_cli._generate_out_reports(
+        synthetic_records,
+        synthetic_bundles,
+        synthetic_microsectors,
+        tmp_path,
+        metrics={},
+    )
+    samples_payload = reports["phase_samples"]["data"]
+    assert samples_payload
+    phase_samples = samples_payload[0]["phase_samples"]
+    assert "entry1" in phase_samples
+    assert "entry" in phase_samples
+    axis_targets_payload = reports["phase_axis_targets"]["data"]
+    assert axis_targets_payload
+    axis_targets = axis_targets_payload[0]["phase_axis_targets"]
+    assert "entry1" in axis_targets
+    assert "entry" in axis_targets
+    metrics_payload = reports["phase_metrics"]["data"]
+    assert metrics_payload
+    phase_metrics = metrics_payload[0]["phase_delta_nfr_std"]
+    assert "entry1" in phase_metrics
+    assert "entry" in phase_metrics
