@@ -106,6 +106,14 @@ and every page is trimmed to 239 bytes so it fits within the
 ``--layout-left``/``--layout-top``/``--layout-width``/``--layout-height`` if
 another mod already occupies that region.
 
+### Checklist operativo en HUD/CLI
+
+La página C incorpora una línea «Checklist» que valida los objetivos de
+operaciones: ``Si`` medio ≥ 0.75, integral ΔNFR ≤ 6.00 kN·s⁻¹, ``Head`` ≥
+0.40 y Δμ ≤ 0.12. Cada bloque muestra ✅ cuando la métrica respeta el
+umbral y ⚠️ cuando requiere actuación, reutilizando los mismos límites
+que emplean el motor de reglas y las métricas de ventana.【F:tnfr_lfs/recommender/rules.py†L604-L615】【F:tnfr_lfs/recommender/search.py†L210-L236】【F:tnfr_lfs/core/metrics.py†L2558-L2575】【F:tnfr_lfs/cli/osd.py†L1477-L1567】
+
 Refer to the [setup equivalence guide](setup_equivalences.md) for a
 metric-by-metric breakdown (`ΔNFR_lat`, `ν_f`, `C(t)`) that matches the HUD
 widgets and the recommendations emitted by ``osd``.

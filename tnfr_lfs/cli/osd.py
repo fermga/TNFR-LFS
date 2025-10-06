@@ -224,6 +224,7 @@ class TelemetryHUD:
         )
         self._thresholds: ThresholdProfile = context.thresholds
         self._profile_objectives: RuleProfileObjectives = context.objectives
+        self._session_hints: Mapping[str, object] = context.session_hints
 
     def append(self, record: TelemetryRecord) -> None:
         self._records.append(record)
@@ -254,6 +255,7 @@ class TelemetryHUD:
         )
         self._thresholds = context.thresholds
         self._profile_objectives = context.objectives
+        self._session_hints = context.session_hints
         self._session_messages = tuple(
             format_session_messages(getattr(self.recommendation_engine, "session", None))
         )
@@ -447,6 +449,10 @@ class TelemetryHUD:
                 microsectors=self._microsectors,
                 quiet_sequences=self._quiet_sequences,
                 session_messages=self._session_messages,
+                window_metrics=window_metrics,
+                objectives=self._profile_objectives,
+                session_hints=self._session_hints,
+                bundles=self._bundles,
             ),
             _render_page_d(top_changes, self._macro_status),
         )
@@ -1496,6 +1502,159 @@ def _format_sensitivities(derivatives: Mapping[str, float], limit: int = 3) -> s
     return " · ".join(parts)
 
 
+def _safe_float(value: object, default: float | None = None) -> float | None:
+    try:
+        numeric = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(numeric):
+        return default
+    return numeric
+
+
+def _hint_float(hints: Mapping[str, object] | None, key: str, default: float) -> float:
+    if not isinstance(hints, Mapping):
+        return default
+    candidate = hints.get(key)
+    value = _safe_float(candidate)
+    if value is None:
+        return default
+    return value
+
+
+def _sense_average(
+    sense_state: Mapping[str, object] | None,
+    bundles: Sequence[object] | None,
+) -> float | None:
+    if isinstance(sense_state, Mapping):
+        average = _safe_float(sense_state.get("average"))
+        if average is not None:
+            return average
+    values: list[float] = []
+    if bundles:
+        for bundle in bundles:
+            value = _safe_float(getattr(bundle, "sense_index", None))
+            if value is not None:
+                values.append(value)
+    if values:
+        return sum(values) / len(values)
+    return None
+
+
+def _delta_density(bundles: Sequence[object] | None) -> float | None:
+    if not bundles:
+        return None
+    series: list[tuple[float, float]] = []
+    for bundle in bundles:
+        timestamp = _safe_float(getattr(bundle, "timestamp", None))
+        delta = _safe_float(getattr(bundle, "delta_nfr", None))
+        if timestamp is None or delta is None:
+            continue
+        series.append((timestamp, abs(delta)))
+    if len(series) < 2:
+        return None
+    series.sort(key=lambda entry: entry[0])
+    total = 0.0
+    for index, (timestamp, magnitude) in enumerate(series):
+        if index + 1 < len(series):
+            next_timestamp = series[index + 1][0]
+            dt = next_timestamp - timestamp
+        elif index > 0:
+            dt = timestamp - series[index - 1][0]
+        else:
+            dt = 0.0
+        if not math.isfinite(dt) or dt <= 0.0:
+            dt = 1e-3
+        total += magnitude * dt
+    duration = series[-1][0] - series[0][0]
+    if not math.isfinite(duration) or duration <= 0.0:
+        duration = 1.0
+    return total / duration
+
+
+def _format_check_entry(
+    label: str,
+    value: float,
+    target: float,
+    *,
+    threshold_type: str,
+) -> str:
+    if threshold_type == "min":
+        ok = value >= target
+        comparator = "≥"
+    else:
+        ok = value <= target
+        comparator = "≤"
+    status = "✅" if ok else "⚠️"
+    return f"{label}{_format_value(value)}{comparator}{_format_value(target)}{status}"
+
+
+def _format_value(value: float) -> str:
+    formatted = f"{value:.2f}"
+    if formatted.startswith("-0") and len(formatted) >= 3:
+        formatted = "-" + formatted[2:]
+    elif formatted.startswith("0") and len(formatted) >= 2 and formatted[1] == ".":
+        formatted = formatted[1:]
+    formatted = formatted.rstrip("0").rstrip(".")
+    return formatted or "0"
+
+
+def _operational_checklist_line(
+    bundles: Sequence[object] | None,
+    window_metrics: WindowMetrics | None,
+    objectives: RuleProfileObjectives | None,
+    session_hints: Mapping[str, object] | None,
+    *,
+    sense_state: Mapping[str, object] | None = None,
+) -> str | None:
+    entries: list[str] = []
+
+    sense_target = _safe_float(getattr(objectives, "target_sense_index", None), 0.75)
+    sense_value = _sense_average(sense_state, bundles)
+    if sense_value is not None and sense_target is not None:
+        entries.append(_format_check_entry("Si", sense_value, sense_target, threshold_type="min"))
+
+    delta_reference = _hint_float(session_hints, "delta_reference", 6.0)
+    delta_density = _delta_density(bundles)
+    if delta_density is not None and delta_reference is not None:
+        entries.append(
+            _format_check_entry("Δ∫", delta_density, delta_reference, threshold_type="max")
+        )
+
+    headroom_target = _safe_float(
+        getattr(objectives, "target_brake_headroom", None),
+        0.4,
+    )
+    headroom_value = None
+    if window_metrics is not None:
+        brake_headroom = getattr(window_metrics, "brake_headroom", None)
+        headroom_value = _safe_float(getattr(brake_headroom, "value", None))
+    if headroom_value is not None and headroom_target is not None:
+        entries.append(
+            _format_check_entry("Hd", headroom_value, headroom_target, threshold_type="min")
+        )
+
+    aero_target = _hint_float(session_hints, "aero_reference", 0.12)
+    aero_value = None
+    if window_metrics is not None:
+        aero_coherence = getattr(window_metrics, "aero_coherence", None)
+        aero_value = _safe_float(getattr(aero_coherence, "high_speed_imbalance", None))
+    if aero_value is None and window_metrics is not None:
+        aero_drift = getattr(window_metrics, "aero_balance_drift", None)
+        if aero_drift is not None:
+            high_speed = getattr(aero_drift, "high_speed", None)
+            if high_speed is not None:
+                aero_value = _safe_float(getattr(high_speed, "mu_delta", None))
+    if aero_value is not None and aero_target is not None:
+        entries.append(
+            _format_check_entry("Δμ", abs(aero_value), aero_target, threshold_type="max")
+        )
+
+    if not entries:
+        return None
+    return _truncate_line("Checklist " + " ".join(entries))
+
+
 def _render_page_c(
     phase_hint: str | None,
     plan: SetupPlan | None,
@@ -1506,11 +1665,24 @@ def _render_page_c(
     microsectors: Sequence[Microsector] | None = None,
     quiet_sequences: Sequence[Sequence[int]] | None = None,
     session_messages: Sequence[str] | None = None,
+    window_metrics: WindowMetrics | None = None,
+    objectives: RuleProfileObjectives | None = None,
+    session_hints: Mapping[str, object] | None = None,
+    bundles: Sequence[object] | None = None,
 ) -> str:
     lines: List[str] = []
     sense_line = _sense_state_line(sense_state, prefix="Si plan ")
     if sense_line:
         lines.append(sense_line)
+    checklist_line = _operational_checklist_line(
+        bundles,
+        window_metrics,
+        objectives,
+        session_hints,
+        sense_state=sense_state,
+    )
+    if checklist_line:
+        lines.append(checklist_line)
     if quiet_sequences and microsectors:
         summary_line = _quiet_summary_line(microsectors, quiet_sequences)
         if summary_line:
@@ -1532,13 +1704,8 @@ def _render_page_c(
                 else f"Perfil {phase_label} ±{tolerance:.2f}"
             )
         )
-    if plan and plan.changes:
-        for change in plan.changes[:3]:
-            delta = f"{change.delta:+.2f}"
-            effect = change.expected_effect.strip()
-            lines.append(_truncate_line(f"{change.parameter}: {delta} → {effect}"))
-    else:
-        lines.append("Plan en preparación…")
+    summary_lines: Sequence[str] = ()
+    post_plan_lines: List[str] = []
     if plan:
         summary_map = getattr(plan, "phase_axis_summary", {}) or {}
         suggestions = tuple(getattr(plan, "phase_axis_suggestions", ()))
@@ -1554,27 +1721,23 @@ def _render_page_c(
             if not suggestions:
                 suggestions = computed_suggestions
         summary_lines = phase_axis_summary_lines(summary_map)
-        if summary_lines:
-            lines.append("Mapa ΔNFR fases")
-            for summary_line in summary_lines:
-                lines.append(_truncate_line(summary_line))
         for hint in suggestions:
             if hint:
-                lines.append(_truncate_line(f"→ {hint}"))
+                post_plan_lines.append(_truncate_line(f"→ {hint}"))
         if getattr(plan, "clamped_parameters", ()):  # compatibility with older plans
             riesgos = _format_riesgos(plan.clamped_parameters)
             if riesgos:
-                lines.append(_truncate_line(f"riesgos: {riesgos}"))
+                post_plan_lines.append(_truncate_line(f"riesgos: {riesgos}"))
         dsi_line = _format_sensitivities(plan.sensitivities.get("sense_index", {}))
         if dsi_line:
-            lines.append(_truncate_line(f"dSi {dsi_line}"))
+            post_plan_lines.append(_truncate_line(f"dSi {dsi_line}"))
         sci_value = getattr(plan, "sci", None)
         try:
             sci_float = float(sci_value) if sci_value is not None else None
         except (TypeError, ValueError):
             sci_float = None
         if sci_float is not None:
-            lines.append(_truncate_line(f"SCI {sci_float:.3f}"))
+            post_plan_lines.append(_truncate_line(f"SCI {sci_float:.3f}"))
         breakdown_mapping = (
             getattr(plan, "sci_breakdown", None)
             or getattr(plan, "objective_breakdown", None)
@@ -1599,10 +1762,10 @@ def _render_page_c(
                 except (TypeError, ValueError):
                     parts.append(f"{key} {value}")
             if parts:
-                lines.append(_truncate_line("SCI → " + " · ".join(parts)))
+                post_plan_lines.append(_truncate_line("SCI → " + " · ".join(parts)))
         aero_guidance = getattr(plan, "aero_guidance", "")
         if aero_guidance:
-            lines.append(_truncate_line(f"Aero {aero_guidance}"))
+            post_plan_lines.append(_truncate_line(f"Aero {aero_guidance}"))
         aero_metrics = getattr(plan, "aero_metrics", {}) or {}
         amc_value = aero_metrics.get("aero_mechanical_coherence")
         if amc_value is None:
@@ -1612,15 +1775,27 @@ def _render_page_c(
         except (TypeError, ValueError):
             amc_float = None
         if amc_float is not None:
-            lines.append(_truncate_line(f"C(c/d/a) {amc_float:.2f}"))
+            post_plan_lines.append(_truncate_line(f"C(c/d/a) {amc_float:.2f}"))
         high_imbalance = aero_metrics.get("high_speed_imbalance")
         low_imbalance = aero_metrics.get("low_speed_imbalance")
         if high_imbalance is not None and low_imbalance is not None:
-            lines.append(
+            post_plan_lines.append(
                 _truncate_line(
                     f"Δaero alta {high_imbalance:+.2f} · baja {low_imbalance:+.2f}"
                 )
             )
+    if summary_lines:
+        lines.append("Mapa ΔNFR fases")
+        for summary_line in summary_lines:
+            lines.append(_truncate_line(summary_line))
+    if plan and plan.changes:
+        for change in plan.changes[:3]:
+            delta = f"{change.delta:+.2f}"
+            effect = change.expected_effect.strip()
+            lines.append(_truncate_line(f"{change.parameter}: {delta} → {effect}"))
+    else:
+        lines.append("Plan en preparación…")
+    lines.extend(post_plan_lines)
     return _ensure_limit("\n".join(lines))
 
 
@@ -1711,16 +1886,6 @@ def _ensure_limit(payload: str) -> str:
         payload = payload[:-1]
         encoded = payload.encode("utf8")
     return payload
-
-
-def _safe_float(value: object, default: float = 0.0) -> float:
-    try:
-        numeric = float(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return default
-    if math.isnan(numeric):
-        return default
-    return numeric
 
 
 class OSDController:
