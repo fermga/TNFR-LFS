@@ -2053,10 +2053,12 @@ def _brake_event_summary(
             label_payload = payload.get("surface_label")
             if isinstance(label_payload, str):
                 surface_label = label_payload
-            elif isinstance(payload.get("surface"), Mapping):
-                label_value = payload["surface"].get("label")  # type: ignore[index]
-                if isinstance(label_value, str):
-                    surface_label = label_value
+            else:
+                surface_payload = payload.get("surface")
+                if isinstance(surface_payload, Mapping):
+                    label_value = surface_payload.get("label")
+                    if isinstance(label_value, str):
+                        surface_label = label_value
             label = payload.get("name")
             if not isinstance(label, str) or not label:
                 label = canonical_operator_label(event_type)
