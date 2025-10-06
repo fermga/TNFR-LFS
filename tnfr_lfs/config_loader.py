@@ -8,7 +8,10 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping
 
-import tomllib
+try:  # Python 3.11+
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+    import tomli as tomllib  # type: ignore
 
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent
