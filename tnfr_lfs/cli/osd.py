@@ -22,6 +22,7 @@ from ..core.epi import EPIExtractor, TelemetryRecord
 from ..core.metrics import (
     AeroBalanceDrift,
     BrakeHeadroom,
+    CPHIReport,
     WindowMetrics,
     compute_window_metrics,
 )
@@ -642,6 +643,12 @@ def _render_page_a(
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(damper_line)
 
+    cphi_line = _cphi_health_line(window_metrics.cphi)
+    if cphi_line:
+        candidate = "\n".join((*lines, cphi_line))
+        if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+            lines.append(cphi_line)
+
     brake_headroom_line = _brake_headroom_line(window_metrics.brake_headroom)
     if brake_headroom_line:
         candidate = "\n".join((*lines, brake_headroom_line))
@@ -709,6 +716,39 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · μΦF {mu_sym_front:+.2f}"
         f" · μΦR {mu_sym_rear:+.2f}"
     )
+
+
+
+
+def _cphi_health_line(report: CPHIReport) -> str | None:
+    if not isinstance(report, CPHIReport):
+        return None
+    segments: List[str] = []
+    for suffix in WHEEL_SUFFIXES:
+        wheel = report.get(suffix)
+        if wheel is None:
+            continue
+        value = float(wheel.value)
+        if math.isfinite(value):
+            value_label = f"{value:.2f}"
+        else:
+            value_label = "--"
+        status = report.classification(value)
+        if status == "green":
+            marker = "🟢"
+            if report.is_optimal(value):
+                marker += "+"
+        elif status == "amber":
+            marker = "🟠"
+        elif status == "red":
+            marker = "🔴"
+        else:
+            marker = "⬜"
+        label = WHEEL_LABELS.get(suffix, suffix.upper())
+        segments.append(f"{marker}{label} {value_label}")
+    if not segments:
+        return None
+    return _truncate_line("CPHI " + " ".join(segments))
 
 
 def _format_dispersion_line(

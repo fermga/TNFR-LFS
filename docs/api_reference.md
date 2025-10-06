@@ -142,6 +142,8 @@ bandas de velocidad baja/media/alta.  El rake se evalúa únicamente con el
 que la deriva aerodinámica refleja directamente los datos nativos incluso si
 ``AeroCoherence`` todavía parece neutra.
 
+``WindowMetrics.cphi`` now yields a :class:`~tnfr_lfs.core.metrics.CPHIReport` with per-wheel :class:`~tnfr_lfs.core.metrics.CPHIWheel` data and the shared :class:`~tnfr_lfs.core.metrics.CPHIThresholds`. The thresholds follow a red/amber/green traffic-light scheme so HUD pages and CLI reports colour tyre health consistently. Consumers that require the historical flat keys can rely on :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_legacy_mapping`.
+
 Cuando se comparte el ``operator_state`` utilizado por
 ``segment_microsectors``, la orquestación añade el campo ``network_memory`` y
 un espejo en ``sense_memory["network"]`` con la memoria de red por sesión
@@ -171,6 +173,11 @@ relative weighting between them.  These values are propagated to
 so downstream recommenders and exporters can highlight whether the
 microsector demands longitudinal support (bias de frenos, bloqueo del
 diferencial) or lateral balance (barras, toe, alineaciones).
+
+The ``filtered_measures`` mapping now exposes a structured ``"cphi"`` block
+that mirrors :class:`~tnfr_lfs.core.metrics.CPHIReport`, including the
+shared traffic-light thresholds so JSON exports and dashboards can reuse
+the same red/amber/green semantics without recomputing the bands.
 
 * ``nu_f_target`` – the weighted natural frequency of the fastest nodes in the
   phase.

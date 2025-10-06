@@ -1000,7 +1000,29 @@ def _sense_index_map(
         )
         filtered_payload: Dict[str, Any] = {}
         symmetry_payload: Dict[str, Dict[str, float]] = {}
+
+        def _serialise_cphi_mapping(payload: Mapping[str, Any]) -> Dict[str, Any]:
+            def _normalise(value: Any) -> Any:
+                if isinstance(value, Mapping):
+                    return {str(key): _normalise(sub_value) for key, sub_value in value.items()}
+                if isinstance(value, (list, tuple)):
+                    return [_normalise(item) for item in value]
+                if isinstance(value, bool) or value is None:
+                    return value
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    return value
+                if not math.isfinite(numeric):
+                    return None
+                return round(numeric, 4)
+
+            return _normalise(payload)
+
         for key, value in microsector.filtered_measures.items():
+            if key == "cphi" and isinstance(value, Mapping):
+                filtered_payload["cphi"] = _serialise_cphi_mapping(value)
+                continue
             if isinstance(key, str) and key.startswith("mu_symmetry"):
                 parts = key.split("_")
                 if len(parts) == 3:
