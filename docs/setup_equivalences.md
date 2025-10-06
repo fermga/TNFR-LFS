@@ -8,10 +8,11 @@ lecturas TNFR provienen de la telemetría OutSim/OutGauge de Live for
 Speed, por lo que es imprescindible habilitar ambos broadcasters y
 configurar `OutSim Opts ff` para transmitir el paquete ampliado de
 ruedas (cargas, fuerzas y deflexiones) que requiere la fusión de
-telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 El `slip_ratio`
-global de TNFR × LFS se deriva directamente del promedio de los canales
-por rueda del bloque OutSim y solo recurre a un cálculo heurístico de
-respaldo cuando la señal llega incompleta.【F:tnfr_lfs/acquisition/fusion.py†L111-L157】【F:tnfr_lfs/acquisition/fusion.py†L242-L285】
+telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 Los `slip_ratio`
+y `slip_angle` globales de TNFR × LFS se derivan directamente del
+promedio ponderado de los canales por rueda del bloque OutSim y solo
+recurren a un cálculo cinemático de respaldo cuando la señal llega
+incompleta.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】【F:tnfr_lfs/acquisition/fusion.py†L242-L291】
 
 ## Señales necesarias por métrica
 
@@ -22,7 +23,7 @@ respaldo cuando la señal llega incompleta.【F:tnfr_lfs/acquisition/fusion.py�
 - **ν_f (frecuencia natural)** – aprovecha el reparto de carga, los
   `slip_ratio`/`slip_angle`, la velocidad y el `yaw_rate` procedentes de
   OutSim combinados con el estilo de conducción (`throttle`, `gear`) que
-  aporta OutGauge para clasificar nodos y bandas objetivo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】 El `slip_ratio` utilizado aquí corresponde al promedio de las cuatro ruedas transmitidas por OutSim, garantizando que las etiquetas de frecuencia respondan a la adherencia real del tren.【F:tnfr_lfs/acquisition/fusion.py†L111-L157】
+  aporta OutGauge para clasificar nodos y bandas objetivo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】 Los `slip_ratio` y `slip_angle` utilizados aquí corresponden al promedio de las cuatro ruedas transmitidas por OutSim, garantizando que las etiquetas de frecuencia respondan a la adherencia real del tren y solo regresando a la estimación cinemática cuando no hay lecturas válidas.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】
 - **C(t) (coherencia estructural)** – se construye a partir de la
   distribución nodal de ΔNFR, de los coeficientes `mu_eff_*` derivados de
   las aceleraciones OutSim y de la actividad ABS/TC reportada por
