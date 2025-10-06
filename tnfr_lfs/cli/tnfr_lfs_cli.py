@@ -1540,6 +1540,23 @@ def _generate_out_reports(
             for pair, value in sorted(pairs.items()):
                 summary_lines.append(f"    - {pair}: {value:.3f}")
 
+    if microsector_variability:
+        stability_lines: List[str] = []
+        for entry in microsector_variability:
+            label = str(entry.get("label", entry.get("microsector", "")))
+            overall = entry.get("overall", {}) if isinstance(entry, Mapping) else {}
+            if not isinstance(overall, Mapping):
+                continue
+            sense_stats = overall.get("sense_index", {})
+            if isinstance(sense_stats, Mapping):
+                stability = sense_stats.get("stability_score")
+                if isinstance(stability, (int, float)) and math.isfinite(stability):
+                    stability_lines.append(
+                        f"- {label}: estabilidad SI {float(stability):.2f}"
+                    )
+        if stability_lines:
+            summary_lines.extend(["", "## Estabilidad microsectores", *stability_lines])
+
     if memory_payload["memory"] or memory_payload["series"]:
         summary_lines.extend(
             [

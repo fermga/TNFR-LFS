@@ -96,6 +96,11 @@ def test_analyze_reports_microsector_variability_by_lap(
     lap_labels = set()
     for entry in variability:
         lap_labels.update(entry.get("laps", {}).keys())
+        overall = entry.get("overall", {})
+        assert overall.get("sense_index", {}).get("stability_score") is not None
+        assert "delta_nfr_integral" in overall
+        for lap_stats in entry.get("laps", {}).values():
+            assert "phase_synchrony" in lap_stats
     assert {"lap-1", "lap-2"} <= lap_labels
     reports = payload["reports"]
     assert "microsector_variability" in reports
