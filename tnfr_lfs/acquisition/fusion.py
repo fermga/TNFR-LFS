@@ -713,16 +713,17 @@ class TelemetryFusion:
         candidate = getattr(outgauge, "tyre_pressures", (0.0, 0.0, 0.0, 0.0))
         if not isinstance(candidate, tuple) or len(candidate) != 4:
             candidate = (0.0, 0.0, 0.0, 0.0)
-
-        resolved: list[float] = []
-        for value, default in zip(candidate, fallback):
+        candidate_values: list[float] = []
+        for value in candidate:
             try:
                 numeric = float(value)
             except (TypeError, ValueError):
                 numeric = math.nan
+            candidate_values.append(numeric)
+
+        resolved: list[float] = []
+        for numeric, default in zip(candidate_values, fallback):
             if math.isfinite(numeric) and numeric > 0.0:
-                # OutGauge transmits pressures in bar already, so pass the
-                # reading through unchanged when it is valid.
                 resolved_value = numeric
             else:
                 resolved_value = default

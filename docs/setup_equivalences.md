@@ -10,7 +10,10 @@ configurar `OutSim Opts ff` para transmitir el paquete ampliado de
 ruedas (cargas, fuerzas y deflexiones) que requiere la fusión de
 telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 Activa también el
 payload extendido de OutGauge (`OutGauge Opts …`) para que el flujo
-incluir temperaturas por capa y presiones reales; de lo contrario TNFR ×
+incluya las temperaturas por capa y las presiones reales: habilita al menos las
+banderas `OG_EXT_TYRE_TEMP`, `OG_EXT_TYRE_PRESS` y `OG_EXT_BRAKE_TEMP` para que el
+broadcaster envíe los 20 flotantes del bloque extendido (perfiles interno/medio/
+externo, presiones y temperaturas de pinza). De lo contrario TNFR ×
 LFS conservará la última muestra o mostrará “sin datos”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】 Los `slip_ratio`
 y `slip_angle` globales de TNFR × LFS se derivan directamente del
 promedio ponderado de los canales por rueda del bloque OutSim y solo
