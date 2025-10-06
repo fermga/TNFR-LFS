@@ -741,6 +741,49 @@ def test_brake_headroom_line_with_missing_temperature_data() -> None:
     assert "sin datos" in line
 
 
+def test_thermal_dispersion_lines_render_fallback_without_telemetry() -> None:
+    microsector = SimpleNamespace(filtered_measures={})
+    lines = osd_module._thermal_dispersion_lines(microsector)
+    assert "T° sin datos" in lines
+    assert any(
+        line.startswith("Pbar") and "sin datos" in line for line in lines
+    )
+
+
+def test_thermal_dispersion_lines_render_values_when_available() -> None:
+    measures = {
+        "tyre_temp_fl": 88.2,
+        "tyre_temp_fl_std": 1.5,
+        "tyre_temp_fr": 89.0,
+        "tyre_temp_fr_std": 1.2,
+        "tyre_temp_rl": 86.3,
+        "tyre_temp_rl_std": 1.1,
+        "tyre_temp_rr": 87.1,
+        "tyre_temp_rr_std": 1.4,
+        "brake_temp_fl": 420.0,
+        "brake_temp_fl_std": 5.0,
+        "brake_temp_fr": 415.0,
+        "brake_temp_fr_std": 4.5,
+        "brake_temp_rl": 400.0,
+        "brake_temp_rl_std": 4.0,
+        "brake_temp_rr": 405.0,
+        "brake_temp_rr_std": 4.2,
+        "tyre_pressure_fl": 1.82,
+        "tyre_pressure_fl_std": 0.012,
+        "tyre_pressure_fr": 1.83,
+        "tyre_pressure_fr_std": 0.011,
+        "tyre_pressure_rl": 1.80,
+        "tyre_pressure_rl_std": 0.010,
+        "tyre_pressure_rr": 1.81,
+        "tyre_pressure_rr_std": 0.009,
+    }
+    microsector = SimpleNamespace(filtered_measures=measures)
+    lines = osd_module._thermal_dispersion_lines(microsector)
+    assert lines
+    assert all("sin datos" not in line for line in lines)
+    assert any("T° FL" in line for line in lines)
+
+
 def test_render_page_a_includes_no_tocar_notice():
     from types import SimpleNamespace
 
