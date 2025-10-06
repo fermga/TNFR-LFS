@@ -61,7 +61,7 @@ from ..exporters import (
     render_operator_trajectories,
 )
 from ..exporters.setup_plan import SetupChange, SetupPlan
-from ..io import logs
+from ..io import load_playbook, logs
 from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
 from ..recommender import (
     Plan,
@@ -115,7 +115,106 @@ PRESSURE_STD_KEYS = MappingProxyType({
     suffix: f"{PRESSURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
 })
 
+
 SUPPORTED_AB_METRICS: tuple[str, ...] = tuple(sorted(SUPPORTED_LAP_METRICS))
+
+
+PLAYBOOK_RULES = load_playbook()
+
+
+def _numeric(value: Any) -> float | None:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return numeric
+
+
+def _resolve_playbook_rules(metrics: Mapping[str, Any] | None) -> tuple[str, ...]:
+    if not isinstance(metrics, Mapping):
+        return ()
+    objectives = metrics.get("objectives")
+    target_delta = _numeric(objectives.get("target_delta_nfr")) if isinstance(objectives, Mapping) else None
+    target_si = _numeric(objectives.get("target_sense_index")) if isinstance(objectives, Mapping) else None
+    candidates: list[str] = []
+    delta_value = _numeric(metrics.get("delta_nfr"))
+    if delta_value is not None and target_delta is not None:
+        tolerance = max(0.25, abs(target_delta) * 0.15 + 0.1)
+        if delta_value > target_delta + tolerance:
+            candidates.append("delta_surplus")
+        elif delta_value < target_delta - tolerance:
+            candidates.append("delta_deficit")
+    sense_value = _numeric(metrics.get("sense_index"))
+    if sense_value is not None and target_si is not None:
+        tolerance = max(0.02, target_si * 0.05)
+        if sense_value < target_si - tolerance:
+            candidates.append("sense_index_low")
+    coherence_value = _numeric(metrics.get("coherence_index"))
+    if coherence_value is not None and coherence_value < 0.6:
+        candidates.append("coherence_low")
+    aero_value = _numeric(metrics.get("aero_mechanical_coherence"))
+    if aero_value is not None and aero_value < 0.55:
+        candidates.append("aero_balance_low")
+    support_ratio = _numeric(metrics.get("load_support_ratio"))
+    if support_ratio is not None and support_ratio < 0.55:
+        candidates.append("support_low")
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for entry in candidates:
+        if entry not in seen:
+            seen.add(entry)
+            ordered.append(entry)
+    return tuple(ordered)
+
+
+def _resolve_playbook_suggestions(
+    metrics: Mapping[str, Any] | None,
+    *,
+    playbook: Mapping[str, Sequence[str]] | None = None,
+) -> tuple[str, ...]:
+    mapping = playbook or PLAYBOOK_RULES
+    if not mapping:
+        return ()
+    suggestions: list[str] = []
+    for rule in _resolve_playbook_rules(metrics):
+        actions = mapping.get(rule, ())
+        for action in actions:
+            text = str(action).strip()
+            if text and text not in suggestions:
+                suggestions.append(text)
+    return tuple(suggestions)
+
+
+def _augment_session_with_playbook(
+    session: Mapping[str, Any] | None,
+    metrics: Mapping[str, Any] | None,
+    *,
+    playbook: Mapping[str, Sequence[str]] | None = None,
+) -> Mapping[str, Any] | None:
+    if not isinstance(session, Mapping):
+        return session
+    suggestions = _resolve_playbook_suggestions(metrics, playbook=playbook)
+    if not suggestions:
+        return session
+    updated: Dict[str, Any] = dict(session)
+    existing_raw = updated.get("playbook_suggestions")
+    existing: list[str] = []
+    if isinstance(existing_raw, str):
+        text = existing_raw.strip()
+        if text:
+            existing.append(text)
+    elif isinstance(existing_raw, Sequence) and not isinstance(existing_raw, (bytes, bytearray)):
+        for item in existing_raw:
+            text = str(item).strip()
+            if text and text not in existing:
+                existing.append(text)
+    for suggestion in suggestions:
+        if suggestion not in existing:
+            existing.append(suggestion)
+    updated["playbook_suggestions"] = tuple(existing)
+    return updated
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,6 +408,7 @@ def _compute_setup_plan(
         microsectors=microsectors,
         phase_weights=thresholds.phase_weights,
     )
+    session_payload = _augment_session_with_playbook(session_payload, metrics)
     delta_metric = _effective_delta_metric(metrics)
     engine.register_stint_result(
         sense_index=metrics.get("sense_index", 0.0),
@@ -2896,6 +2996,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         microsectors=microsectors,
         phase_weights=thresholds.phase_weights,
     )
+    session_payload = _augment_session_with_playbook(session_payload, metrics)
     delta_metric = _effective_delta_metric(metrics)
     engine.register_stint_result(
         sense_index=metrics.get("sense_index", 0.0),
@@ -3063,6 +3164,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         microsectors=microsectors,
         phase_weights=thresholds.phase_weights,
     )
+    session_payload = _augment_session_with_playbook(session_payload, metrics)
     recommendations = engine.generate(
         bundles, microsectors, car_model=namespace.car_model, track_name=track_name
     )
@@ -3252,6 +3354,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         microsectors=microsectors,
         phase_weights=thresholds.phase_weights,
     )
+    session_payload = _augment_session_with_playbook(session_payload, metrics)
     delta_metric = _effective_delta_metric(metrics)
     engine.register_stint_result(
         sense_index=metrics.get("sense_index", 0.0),
