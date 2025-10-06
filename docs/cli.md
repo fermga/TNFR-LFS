@@ -4,11 +4,16 @@ Install the project in editable mode and run:
 
 ```
 pip install -e .
-tnfr-lfs telemetry.csv --export csv
+tnfr-lfs baseline runs/test1.jsonl data/test1.raf --format jsonl
 ```
 
-The CLI ingests the telemetry file, computes EPI metrics, and prints the
-selected export format to stdout. All TNFR indicators (`ΔNFR`, the
+The example converts the bundled RAF capture (`data/test1.raf`) into a
+JSONL baseline. The CLI inspects the suffix of every telemetry source
+(`.raf`, `.csv`, `.jsonl`, `.parquet`…) and automatically routes it
+through the appropriate parser. CSV inputs continue to use the
+`--simulate` flag (`tnfr-lfs baseline runs/demo.jsonl --simulate data/BL1_XFG_baseline.csv`),
+while RAF captures are parsed natively through `tnfr_lfs.io.read_raf`
+and `tnfr_lfs.io.raf_to_telemetry_records`. All TNFR indicators (`ΔNFR`, the
 nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)` and nodal derivatives)
 are computed from the Live for Speed OutSim/OutGauge telemetry streams,
 so make sure the simulator exposes both feeds before running any
@@ -409,3 +414,6 @@ script stores artefacts under ``examples/out`` and generates a quick ASCII
 plot of the Sense Index series to visualise the lap at a glance.  The
 dataset mirrors a short 17-sample stint captured at BL1/XFG pace so that
 the quickstart replicates realistic ΔNFR and Sense Index oscillations.
+If you prefer to rehearse with real RAF telemetry, swap the dataset in the
+script (or call ``tnfr-lfs baseline`` manually) and point it to
+``data/test1.raf``; the CLI will pick the right parser automatically.

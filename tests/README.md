@@ -13,6 +13,9 @@ future.
 * Mantén los mismos encabezados para conservar compatibilidad con el script
   `examples/quickstart.sh` y con las funciones tipadas en
   `typing_targets.quickstart_dataset`.
+* Cuando necesites telemetría real para tutoriales o verificaciones manuales,
+  recurre también a la captura RAF ``data/test1.raf`` incluida en la raíz; el
+  CLI la detecta automáticamente gracias al parser RAF incorporado.
 
 Para regenerarlo puedes copiar el contenido de `tests/data/synthetic_stint.csv`
 o volver a ejecutar el script indicado abajo, guardando el resultado en
