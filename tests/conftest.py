@@ -41,6 +41,16 @@ def quickstart_dataset_path() -> Path:
 
 
 @pytest.fixture(scope="session")
+def raf_sample_path() -> Path:
+    """Location of the bundled RAF telemetry sample."""
+
+    sample = ROOT / "data" / "test1.raf"
+    if not sample.exists():  # pragma: no cover - defensive guard for local runs
+        raise FileNotFoundError(sample)
+    return sample
+
+
+@pytest.fixture(scope="session")
 def synthetic_stint_path() -> Path:
     """Location of the bundled synthetic telemetry stint."""
 
