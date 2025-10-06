@@ -47,9 +47,15 @@ Los indicadores de set-up (como el Contact Patch Health Index y los ajustes ΔP/
 
 ### Brake thermal proxy
 
-El proxy térmico de frenos integra el trabajo mecánico `m·a·v` por rueda para inyectar calor en la pinza/disco activo (ponderado por la carga normal instantánea) y aplica una disipación convectiva proporcional a la raíz de la velocidad y a un coeficiente de ventilación configurable. La integración es acumulativa y mantiene la serie acotada entre la temperatura ambiente y un techo de 1200 °C, de modo que las métricas de fade pueden seguir calculándose aunque OutGauge no emita lecturas reales.【F:tnfr_lfs/analysis/brake_thermal.py†L9-L122】【F:tnfr_lfs/acquisition/fusion.py†L248-L321】
+Live for Speed no expone temperaturas de freno reales en la configuración base; el bloque extendido de OutGauge (`OG_EXT_BRAKE_TEMP`) se limita a transmitirlas cuando el coche/versión las soporta y el broadcaster está activado. El proxy térmico de TNFR × LFS toma esas lecturas nativas siempre que lleguen (ignorando los `0 °C` de marcador que envía OutGauge al deshabilitar el sensor) y, cuando no existe telemetría directa, mantiene una serie estimada para que el pipeline siga ofreciendo indicadores de fade y ventilación.【F:tnfr_lfs/acquisition/fusion.py†L248-L321】 El cálculo integra el trabajo mecánico `m·a·v` por rueda para inyectar calor en la pinza/disco activo —ponderado por la carga normal instantánea— y aplica una disipación convectiva proporcional a la raíz de la velocidad y a un coeficiente de ventilación configurable. La integración es acumulativa y acota la serie entre la temperatura ambiente y un techo de 1200 °C, de modo que los módulos analíticos operan con valores finitos incluso sin OutGauge.【F:tnfr_lfs/analysis/brake_thermal.py†L9-L122】
 
 Los parámetros del proxy (temperatura ambiente de referencia, capacidad térmica efectiva, eficiencia de frenado, coeficientes convectivos y umbral de pedal) se declaran en el bloque `[thermal.brakes]` de `config/global.toml` y admiten overrides por coche en `data/cars/*.toml`. La clave `mode` controla si el proxy opera en modo `auto`, `off` o `force`, y también puede forzarse en tiempo de ejecución mediante la variable de entorno `TNFR_LFS_BRAKE_THERMAL`.【F:config/global.toml†L13-L20】【F:tnfr_lfs/acquisition/fusion.py†L186-L321】
+
+#### Limitaciones de telemetría
+
+- El proxy solo rellena huecos cuando OutGauge omite la temperatura o publica el marcador `0 °C`; si el simulador transmite valores erráticos estos se conservan tal cual para evitar desincronizar la lectura real con la estimación.
+- En coches sin sensores de freno expuestos por OutGauge la estimación parte de la energía disipada en las ruedas delanteras/traseras reportadas por OutSim, por lo que los ciclos cortos de muestreo (<10 Hz) pueden subestimar picos instantáneos.
+- La estimación no corrige el retardo de red de OutSim/OutGauge; asume que ambos streams llegan sincronizados dentro de la tolerancia habitual de Live for Speed (uno o dos paquetes).
 
 ## Documentación
 
