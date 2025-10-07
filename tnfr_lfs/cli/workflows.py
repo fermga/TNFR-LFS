@@ -20,6 +20,11 @@ from time import monotonic, sleep
 from types import MappingProxyType
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
 
+try:  # Python 3.11+
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreters
+    import tomli as tomllib  # type: ignore
+
 from ..acquisition import (
     ButtonLayout,
     DEFAULT_RETRIES,
@@ -106,7 +111,25 @@ PRESSURE_STD_KEYS = MappingProxyType({
 })
 
 
-PLAYBOOK_RULES = load_playbook()
+_EMPTY_PLAYBOOK_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({})
+_PLAYBOOK_RULES_CACHE: Mapping[str, tuple[str, ...]] | None = None
+
+
+def _load_playbook_rules() -> Mapping[str, tuple[str, ...]]:
+    global _PLAYBOOK_RULES_CACHE
+    if _PLAYBOOK_RULES_CACHE is not None:
+        return _PLAYBOOK_RULES_CACHE
+    try:
+        rules = load_playbook()
+    except (FileNotFoundError, tomllib.TOMLDecodeError):
+        return _EMPTY_PLAYBOOK_RULES
+    _PLAYBOOK_RULES_CACHE = rules
+    return rules
+
+
+def _reset_playbook_rules_cache() -> None:
+    global _PLAYBOOK_RULES_CACHE
+    _PLAYBOOK_RULES_CACHE = None
 
 
 def _numeric(value: Any) -> float | None:
@@ -161,7 +184,7 @@ def _resolve_playbook_suggestions(
     *,
     playbook: Mapping[str, Sequence[str]] | None = None,
 ) -> tuple[str, ...]:
-    mapping = playbook or PLAYBOOK_RULES
+    mapping = playbook or _load_playbook_rules()
     if not mapping:
         return ()
     suggestions: list[str] = []

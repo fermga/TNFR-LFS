@@ -1,6 +1,12 @@
+from __future__ import annotations
+
+import io
 from typing import Any, Mapping
 
-from tnfr_lfs.cli.tnfr_lfs_cli import (
+import pytest
+
+from tnfr_lfs.cli import workflows as workflows_module
+from tnfr_lfs.cli.workflows import (
     _augment_session_with_playbook,
     _resolve_playbook_suggestions,
 )
@@ -67,3 +73,64 @@ def test_augment_session_with_playbook_preserves_existing() -> None:
         "Balance aero",
         "Más soporte",
     )
+
+
+class _MemoryBuffer(io.BytesIO):
+    def __enter__(self) -> "_MemoryBuffer":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        self.close()
+        return False
+
+
+def test_cli_workflows_ignore_missing_playbook(monkeypatch: pytest.MonkeyPatch) -> None:
+    workflows_module._reset_playbook_rules_cache()
+
+    def _raise_missing(*_args, **_kwargs):
+        raise FileNotFoundError
+
+    monkeypatch.setattr("tnfr_lfs.io.playbook.resources.open_binary", _raise_missing)
+
+    try:
+        metrics = _rich_metrics()
+        assert workflows_module._resolve_playbook_suggestions(metrics) == ()
+    finally:
+        workflows_module._reset_playbook_rules_cache()
+
+
+def test_cli_workflows_loads_playbook_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    workflows_module._reset_playbook_rules_cache()
+    attempts = {"count": 0}
+
+    def _open_playbook(*_args, **_kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise FileNotFoundError
+        payload = b"[rules]\ndelta_surplus = [\"Reforzar delta\"]\n"
+        return _MemoryBuffer(payload)
+
+    monkeypatch.setattr("tnfr_lfs.io.playbook.resources.open_binary", _open_playbook)
+
+    try:
+        metrics = _rich_metrics()
+        assert workflows_module._resolve_playbook_suggestions(metrics) == ()
+        assert workflows_module._resolve_playbook_suggestions(metrics) == ("Reforzar delta",)
+        assert attempts["count"] == 2
+    finally:
+        workflows_module._reset_playbook_rules_cache()
+
+
+def test_cli_workflows_ignores_invalid_playbook(monkeypatch: pytest.MonkeyPatch) -> None:
+    workflows_module._reset_playbook_rules_cache()
+
+    def _open_invalid(*_args, **_kwargs):
+        return _MemoryBuffer(b"not toml =")
+
+    monkeypatch.setattr("tnfr_lfs.io.playbook.resources.open_binary", _open_invalid)
+
+    try:
+        metrics = _rich_metrics()
+        assert workflows_module._resolve_playbook_suggestions(metrics) == ()
+    finally:
+        workflows_module._reset_playbook_rules_cache()
