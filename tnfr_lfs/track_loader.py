@@ -14,30 +14,13 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 from ._pack_resources import data_root, modifiers_root
+from .utils.immutables import _freeze_dict, _freeze_value
 
 
 _DATA_ROOT = data_root()
 _TRACKS_ROOT = _DATA_ROOT / "tracks"
 _TRACK_PROFILES_ROOT = _DATA_ROOT / "track_profiles"
 _MODIFIERS_ROOT = modifiers_root()
-
-
-def _freeze_value(value: Any) -> Any:
-    """Recursively convert mutable containers into immutable counterparts."""
-
-    if isinstance(value, Mapping):
-        return MappingProxyType({str(k): _freeze_value(v) for k, v in value.items()})
-    if isinstance(value, list):
-        return tuple(_freeze_value(item) for item in value)
-    return value
-
-
-def _freeze_dict(payload: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Return an immutable view for a mapping, freezing nested structures."""
-
-    if not payload:
-        return MappingProxyType({})
-    return MappingProxyType({str(key): _freeze_value(value) for key, value in payload.items()})
 
 
 def _normalise_weights(
