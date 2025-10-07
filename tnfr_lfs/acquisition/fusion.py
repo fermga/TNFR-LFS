@@ -1026,16 +1026,44 @@ class TelemetryFusion:
         if not isinstance(candidate, tuple) or len(candidate) != 4:
             candidate = (0.0, 0.0, 0.0, 0.0)
 
-        resolved: list[float] = []
-        for value, default in zip(candidate, fallback):
+        candidate_values: list[float] = []
+        for value in candidate:
             try:
                 numeric = float(value)
             except (TypeError, ValueError):
                 numeric = math.nan
+            candidate_values.append(numeric)
+
+        def _layer_average(index: int) -> float:
+            if layers is None:
+                return float("nan")
+            aggregates: list[float] = []
+            for layer in layers:
+                if not isinstance(layer, tuple) or len(layer) != 4:
+                    continue
+                try:
+                    numeric = float(layer[index])
+                except (TypeError, ValueError):
+                    continue
+                if math.isfinite(numeric) and numeric > 0.0:
+                    aggregates.append(numeric)
+            if not aggregates:
+                return float("nan")
+            return sum(aggregates) / len(aggregates)
+
+        layer_fallback = tuple(_layer_average(index) for index in range(4))
+
+        resolved: list[float] = []
+        for index, default in enumerate(fallback):
+            numeric = candidate_values[index]
             if math.isfinite(numeric) and numeric > 0.0:
                 resolved_value = numeric
             else:
-                resolved_value = default
+                layer_value = layer_fallback[index]
+                if math.isfinite(layer_value) and layer_value > 0.0:
+                    resolved_value = layer_value
+                else:
+                    resolved_value = default
             if not math.isfinite(resolved_value) or resolved_value <= 0.0:
                 resolved_value = float("nan")
             resolved.append(float(resolved_value))
