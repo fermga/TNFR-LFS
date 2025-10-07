@@ -2824,14 +2824,20 @@ def _handle_pareto(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
     return pareto_command.handle(namespace, config=config)
 
 
+def _unique_export_list(values: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            ordered.append(value)
+    return ordered
+
+
 def _resolve_exports(namespace: argparse.Namespace) -> List[str]:
     exports = getattr(namespace, "exports", None)
     if exports:
-        ordered: List[str] = []
-        for name in exports:
-            if name not in ordered:
-                ordered.append(name)
-        return ordered
+        return _unique_export_list(exports)
     default = getattr(namespace, "export_default", None)
     if isinstance(default, str):
         return [default]
@@ -2842,11 +2848,7 @@ def _render_payload(payload: Mapping[str, Any], exporters: Sequence[str] | str) 
     if isinstance(exporters, str):
         selected = [exporters]
     else:
-        ordered: List[str] = []
-        for name in exporters:
-            if name not in ordered:
-                ordered.append(name)
-        selected = ordered
+        selected = _unique_export_list(exporters)
 
     rendered_outputs: List[str] = []
     for exporter_name in selected:
