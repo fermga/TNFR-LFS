@@ -34,6 +34,7 @@ from tnfr_lfs.core.epi_models import (
     TyresNode,
 )
 from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias
+from tnfr_lfs.core.constants import WHEEL_SUFFIXES
 from tnfr_lfs.core.operators import (
     DissonanceBreakdown,
     acoplamiento_operator,
@@ -52,7 +53,6 @@ from tnfr_lfs.core.operators import (
     resonance_operator,
     TyreBalanceControlOutput,
     tyre_balance_controller,
-    WHEEL_SUFFIXES,
 )
 from tnfr_lfs.core.metrics import compute_window_metrics
 
