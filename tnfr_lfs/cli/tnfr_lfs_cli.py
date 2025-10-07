@@ -6,10 +6,37 @@ import argparse
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
-from .io import load_cli_config
-from .parser import build_parser
-from .workflows import *  # noqa: F401,F403 - re-export workflow helpers
+import sys
+import types
 
+from .io import load_cli_config, raf_to_telemetry_records
+from .parser import build_parser, _add_export_argument, _validated_export
+from ..core.operators import orchestrate_delta_metrics
+from . import workflows as _workflows_module
+from . import io as _cli_io_module
+
+
+class _CLIModule(types.ModuleType):
+    """Proxy module that mirrors workflow helpers for monkeypatching tests."""
+
+    def __getattr__(self, name: str):
+        if name in self.__dict__:
+            return self.__dict__[name]
+        if hasattr(_workflows_module, name):
+            return getattr(_workflows_module, name)
+        if hasattr(_cli_io_module, name):
+            return getattr(_cli_io_module, name)
+        raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value) -> None:
+        super().__setattr__(name, value)
+        if hasattr(_workflows_module, name):
+            setattr(_workflows_module, name, value)
+        if hasattr(_cli_io_module, name):
+            setattr(_cli_io_module, name, value)
+
+
+sys.modules[__name__].__class__ = _CLIModule
 
 def run_cli(args: Sequence[str] | None = None) -> str:
     """Execute the TNFR × LFS command line interface."""

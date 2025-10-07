@@ -167,6 +167,11 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         help="Validate cfg.txt telemetry configuration and UDP availability.",
     )
     diagnose_parser.add_argument(
+        "cfg",
+        type=Path,
+        help="Path to the Live for Speed cfg.txt file to validate.",
+    )
+    diagnose_parser.add_argument(
         "--host",
         default=str(telemetry_cfg.get("host", "127.0.0.1")),
         help="Host where the OutSim/OutGauge broadcasters are running.",
@@ -217,6 +222,45 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         "baseline",
         help="Record a telemetry baseline by capturing OutSim/OutGauge streams.",
     )
+    simulate_default = telemetry_cfg.get("simulate")
+    if isinstance(simulate_default, str) and simulate_default.strip():
+        simulate_default = Path(simulate_default).expanduser()
+    else:
+        simulate_default = None
+    duration_default = telemetry_cfg.get("duration", 45.0)
+    try:
+        duration_default = float(duration_default)
+    except (TypeError, ValueError):
+        duration_default = 45.0
+    limit_default = telemetry_cfg.get("limit")
+    try:
+        limit_default = int(limit_default)
+    except (TypeError, ValueError):
+        limit_default = None
+    overlay_default = bool(telemetry_cfg.get("overlay", False))
+    insim_keepalive_default = telemetry_cfg.get("insim_keepalive", 5.0)
+    try:
+        insim_keepalive_default = float(insim_keepalive_default)
+    except (TypeError, ValueError):
+        insim_keepalive_default = 5.0
+    output_default = telemetry_cfg.get("output")
+    if isinstance(output_default, str) and output_default.strip():
+        output_default = Path(output_default).expanduser()
+    else:
+        output_default = None
+    output_dir_default = telemetry_cfg.get("output_dir")
+    if isinstance(output_dir_default, str) and output_dir_default.strip():
+        output_dir_default = Path(output_dir_default).expanduser()
+    else:
+        output_dir_default = None
+    force_default = bool(telemetry_cfg.get("force", False))
+    baseline_parser.add_argument(
+        "--simulate",
+        dest="simulate",
+        type=Path,
+        default=simulate_default,
+        help="Telemetry source ingested instead of live capture (CSV/RAF/JSONL).",
+    )
     baseline_parser.add_argument(
         "telemetry",
         type=Path,
@@ -231,6 +275,34 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         choices=("jsonl", "parquet"),
         default=str(telemetry_cfg.get("format", "jsonl")),
         help="Telemetry output format (default: jsonl).",
+    )
+    baseline_parser.add_argument(
+        "--duration",
+        type=float,
+        default=duration_default,
+        help=f"Maximum capture duration in seconds (default: {duration_default:g}).",
+    )
+    baseline_parser.add_argument(
+        "--limit",
+        type=int,
+        default=limit_default,
+        help="Maximum number of records ingested when simulating telemetry.",
+    )
+    baseline_parser.add_argument(
+        "--overlay",
+        action="store_true",
+        default=overlay_default,
+        help="Render a Live for Speed overlay while capturing live telemetry.",
+    )
+    baseline_parser.add_argument(
+        "--insim-keepalive",
+        dest="insim_keepalive",
+        type=float,
+        default=insim_keepalive_default,
+        help=(
+            "Interval in seconds between InSim keepalive packets used by the overlay"
+            f" (default: {insim_keepalive_default:g})."
+        ),
     )
     baseline_parser.add_argument(
         "--max-samples",
@@ -272,6 +344,26 @@ def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentPa
         type=int,
         default=int(telemetry_cfg.get("insim_port", 29999)),
         help="Port used by the InSim TCP control channel.",
+    )
+    baseline_parser.add_argument(
+        "--output",
+        dest="output",
+        type=Path,
+        default=output_default,
+        help="Destination file or directory for the recorded baseline.",
+    )
+    baseline_parser.add_argument(
+        "--output-dir",
+        dest="output_dir",
+        type=Path,
+        default=output_dir_default,
+        help="Directory used when auto-generating baseline filenames.",
+    )
+    baseline_parser.add_argument(
+        "--force",
+        action="store_true",
+        default=force_default,
+        help="Overwrite existing files or reuse timestamped runs when colliding.",
     )
     baseline_parser.set_defaults(handler=_handle_baseline)
 
