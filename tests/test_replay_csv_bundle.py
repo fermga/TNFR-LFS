@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import csv
 import math
+import time
 import zipfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from tnfr_lfs.io import ReplayCSVBundleReader
+import tnfr_lfs.io.replay_csv_bundle as replay_csv_bundle
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -101,6 +104,77 @@ def test_replay_csv_aliases_normalised_with_expected_values() -> None:
             assert math.isclose(actual_distance, reference_distance, rel_tol=1e-9)
             assert math.isclose(actual_value, transform(expected_value), rel_tol=1e-6)
 
+
+def test_replay_csv_dataframe_matches_legacy_coercion() -> None:
+    def _build_legacy_frame() -> pd.DataFrame:
+        legacy_reader = ReplayCSVBundleReader(BUNDLE_PATH)
+        pd_module = replay_csv_bundle._get_pandas()
+        frames: list[pd.DataFrame] = []
+        timestamp_present = False
+        for name, frame in legacy_reader._iter_entries():
+            if "d" not in frame.columns:
+                raise AssertionError("Legacy reconstruction expected a distance column")
+            value_column = replay_csv_bundle._extract_value_column(frame)
+            signal_name = replay_csv_bundle._normalise_signal_name(name)
+            if signal_name == "timestamp":
+                timestamp_present = True
+            cleaned = frame.rename(columns={"d": "distance", value_column: signal_name})[
+                ["distance", signal_name]
+            ]
+            frames.append(cleaned.set_index("distance"))
+
+        if not frames or not timestamp_present:
+            raise AssertionError("Legacy reconstruction requires telemetry and timestamp data")
+
+        merged = pd_module.concat(frames, axis=1).sort_index().reset_index()
+        merged.rename(columns={"index": "distance"}, inplace=True)
+
+        def _legacy_coerce(columns: list[str]) -> None:
+            existing = [column for column in columns if column in merged.columns]
+            if not existing:
+                return
+
+            data = merged[existing].to_numpy(copy=True)
+            numeric = pd_module.to_numeric(data.reshape(-1), errors="coerce")
+            values = np.asarray(numeric).reshape(data.shape)
+            values[~np.isfinite(values)] = np.nan
+            coerced = pd_module.DataFrame(values, columns=existing, index=merged.index)
+            merged[existing] = coerced
+
+        _legacy_coerce(["timestamp"])
+
+        if "speed_kmh" in merged.columns:
+            _legacy_coerce(["speed_kmh"])
+            merged["speed"] = merged["speed_kmh"] * replay_csv_bundle._KMH_TO_MS
+
+        _legacy_coerce(["lateral_accel_g", "longitudinal_accel_g", "drift_angle_deg"])
+        _legacy_coerce(["distance"])
+
+        telemetry_columns = {
+            column
+            for column in merged.columns
+            if column.startswith("wheel_")
+            or column.startswith("suspension_")
+            or column.endswith(("_input", "_force", "_load", "_ratio"))
+        }
+        _legacy_coerce(sorted(telemetry_columns))
+
+        return merged
+
+    legacy_start = time.perf_counter()
+    legacy_frame = _build_legacy_frame()
+    legacy_time = time.perf_counter() - legacy_start
+
+    new_reader = ReplayCSVBundleReader(BUNDLE_PATH)
+    new_start = time.perf_counter()
+    new_frame = new_reader.to_dataframe()
+    new_time = time.perf_counter() - new_start
+
+    pd.testing.assert_frame_equal(new_frame, legacy_frame)
+
+    if legacy_time > 0:
+        # Allow for some noise while still ensuring the refactor is not slower.
+        assert new_time <= legacy_time * 2.0
 
 def _is_numeric(value: object) -> bool:
     if isinstance(value, bool):  # Guard against bool being subclass of int.
