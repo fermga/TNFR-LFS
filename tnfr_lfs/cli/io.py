@@ -23,6 +23,11 @@ DEFAULT_CONFIG_FILENAME = "tnfr-lfs.toml"
 
 Records = List[TelemetryRecord]
 
+_PARQUET_DEPENDENCY_MESSAGE = (
+    "Reading Parquet telemetry requires the 'pandas' package and a compatible engine "
+    "(install 'pyarrow' or 'fastparquet')."
+)
+
 
 def load_cli_config(path: Path | None = None) -> Dict[str, Any]:
     """Load CLI defaults from ``tnfr-lfs.toml`` style files."""
@@ -121,20 +126,47 @@ def _load_records(source: Path) -> Records:
     if name.endswith(".jsonl") or name.endswith(".jsonl.gz") or name.endswith(".jsonl.gzip"):
         return list(logs.iter_run(source))
     if suffix == ".parquet":
-        try:
-            import pandas as pd  # type: ignore
-
-            frame = pd.read_parquet(source)
-            data = frame.to_dict(orient="records")
-        except ModuleNotFoundError:
-            with source.open("r", encoding="utf8") as handle:
-                data = json.load(handle)
+        data = _load_parquet_records(source)
         return [TelemetryRecord(**_coerce_payload(item)) for item in data]
     if suffix == ".json":
-        with source.open("r", encoding="utf8") as handle:
-            data = json.load(handle)
-        if isinstance(data, list):
-            return [TelemetryRecord(**_coerce_payload(item)) for item in data]
-        raise ValueError(f"JSON telemetry source {source} must contain a list of samples")
+        data = _load_json_records(source)
+        return [TelemetryRecord(**_coerce_payload(item)) for item in data]
 
     raise ValueError(f"Unsupported telemetry format: {source}")
+
+
+def _load_parquet_records(source: Path) -> List[Mapping[str, Any]]:
+    try:
+        import pandas as pd  # type: ignore
+    except ModuleNotFoundError as exc:
+        if _is_probably_json_document(source):
+            return _load_json_records(source)
+        raise RuntimeError(_PARQUET_DEPENDENCY_MESSAGE) from exc
+
+    try:
+        frame = pd.read_parquet(source)
+    except (ImportError, ModuleNotFoundError, ValueError) as exc:
+        if _is_probably_json_document(source):
+            return _load_json_records(source)
+        raise RuntimeError(_PARQUET_DEPENDENCY_MESSAGE) from exc
+
+    return frame.to_dict(orient="records")
+
+
+def _load_json_records(source: Path) -> List[Mapping[str, Any]]:
+    with source.open("r", encoding="utf8") as handle:
+        data = json.load(handle)
+    if isinstance(data, list):
+        return data
+    raise ValueError(f"JSON telemetry source {source} must contain a list of samples")
+
+
+def _is_probably_json_document(source: Path) -> bool:
+    with source.open("rb") as handle:
+        while True:
+            byte = handle.read(1)
+            if not byte:
+                return False
+            if byte in b" \t\r\n":
+                continue
+            return byte in {b"{", b"["}
