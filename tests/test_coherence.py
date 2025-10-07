@@ -7,6 +7,7 @@ import math
 import pytest
 
 from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
+from tnfr_lfs.core.utils import normalised_entropy
 
 
 BASE_NU_F = {
@@ -188,3 +189,29 @@ def test_sense_index_penalises_goal_frequency_targets():
     )
 
     assert aggressive_index < neutral_index
+
+
+def test_sense_index_entropy_matches_helper():
+    node_deltas = {"tyres": 3.0, "suspension": 3.0}
+    nu_f = {"tyres": 0.2, "suspension": 0.1}
+    entropy_lambda = 0.05
+
+    index_value = sense_index(
+        6.0,
+        node_deltas,
+        500.0,
+        nu_f_by_node=nu_f,
+        active_phase="entry",
+        w_phase={"entry": 1.0},
+        entropy_lambda=entropy_lambda,
+    )
+
+    weighted_sum = sum(
+        (1.0 + nu_f[node]) * abs(node_deltas[node])
+        for node in node_deltas
+    )
+    base_index = 1.0 / (1.0 + weighted_sum)
+    entropy_penalty = entropy_lambda * normalised_entropy([abs(v) for v in node_deltas.values()])
+    expected = max(0.0, min(1.0, base_index - entropy_penalty))
+
+    assert index_value == pytest.approx(expected)
