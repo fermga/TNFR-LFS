@@ -1,3 +1,5 @@
+"""HTML exporter for the extended TNFR × LFS report."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
