@@ -28,6 +28,7 @@ from .spectrum import (
 )
 from .resonance import estimate_excitation_frequency
 from .structural_time import resolve_time_axis
+from .utils import normalised_entropy
 
 __all__ = [
     "AeroBalanceDrift",
@@ -147,25 +148,6 @@ def _normalised_weights(weights: Mapping[str, float]) -> dict[str, float]:
     return {key: value / total for key, value in positive.items()}
 
 
-def _shannon_entropy(probabilities: Iterable[float]) -> float:
-    """Return the Shannon entropy normalised to the [0, 1] range."""
-
-    filtered = [float(value) for value in probabilities if isinstance(value, (int, float))]
-    filtered = [value for value in filtered if value > 0.0 and math.isfinite(value)]
-    if len(filtered) <= 1:
-        return 0.0
-    entropy = -sum(value * math.log(value) for value in filtered)
-    max_entropy = math.log(len(filtered)) if len(filtered) > 1 else 0.0
-    if max_entropy <= 0.0:
-        return 0.0
-    normalised = entropy / max_entropy
-    if normalised < 0.0:
-        return 0.0
-    if normalised > 1.0:
-        return 1.0
-    return normalised
-
-
 def _aggregate_node_delta(
     records: Sequence[TelemetryRecord],
     indices: Sequence[int] | None = None,
@@ -215,7 +197,7 @@ def _phase_delta_distribution(
         key: (value / positive_total) if value > 0.0 else 0.0
         for key, value in phase_totals.items()
     }
-    entropy = _shannon_entropy(probabilities.values())
+    entropy = normalised_entropy(probabilities.values())
     return probabilities, entropy
 
 
@@ -231,7 +213,7 @@ def _phase_node_entropy_map(
     for label, indices in phase_windows.items():
         weights = _aggregate_node_delta(records, indices)
         probabilities = _normalised_weights(weights)
-        entropy_map[str(label)] = _shannon_entropy(probabilities.values())
+        entropy_map[str(label)] = normalised_entropy(probabilities.values())
     return entropy_map
 
 
@@ -1905,7 +1887,7 @@ def compute_window_metrics(
         _phase_node_entropy_map(records, phase_windows)
     )
     node_profile = _normalised_weights(_aggregate_node_delta(records))
-    node_entropy_value = _shannon_entropy(node_profile.values())
+    node_entropy_value = normalised_entropy(node_profile.values())
 
     support_effective = _weighted_average(support_samples, windows)
     load_support_ratio = (

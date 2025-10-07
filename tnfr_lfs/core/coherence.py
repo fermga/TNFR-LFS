@@ -3,24 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC
-from math import log
-from typing import Dict, Iterable, Mapping
+from typing import Dict, Mapping
 
 from .phases import expand_phase_alias, phase_family
+from .utils import normalised_entropy
 
 
 NodeDeltaMap = Dict[str, float]
-
-
-def _entropy(weights: Iterable[float]) -> float:
-    filtered = [value for value in weights if value > 0]
-    if not filtered:
-        return 0.0
-    entropy = -sum(value * log(value) for value in filtered)
-    max_entropy = log(len(filtered)) if len(filtered) > 1 else 1.0
-    if max_entropy == 0:
-        return 0.0
-    return min(1.0, entropy / max_entropy)
 
 
 def compute_node_delta_nfr(
@@ -170,7 +159,7 @@ def sense_index(
         return max(0.0, min(1.0, base_index))
 
     weights = [abs(value) / weights_total for value in deltas_by_node.values()]
-    penalty = entropy_lambda * _entropy(weights)
+    penalty = entropy_lambda * normalised_entropy(weights)
     adjusted = base_index - penalty
     return max(0.0, min(1.0, adjusted))
 
