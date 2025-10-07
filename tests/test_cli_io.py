@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -67,4 +70,46 @@ def test_load_records_converts_json_payload(monkeypatch: pytest.MonkeyPatch, tmp
     assert isinstance(records[0], DummyRecord)
     assert records[0].payload["timestamp"] == 1.5
     assert records[0].payload["gear"] == 3
+
+
+def test_load_records_parquet_requires_pandas(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    telemetry_path = tmp_path / "baseline.parquet"
+    telemetry_path.write_bytes(b"PAR1\x00\x00\x00PAR1")
+
+    original = sys.modules.pop("pandas", None)
+    original_import = builtins.__import__
+
+    def fake_import(name: str, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if name == "pandas":
+            raise ModuleNotFoundError("No module named 'pandas'")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    try:
+        with pytest.raises(RuntimeError, match="requires the 'pandas' package"):
+            cli_io._load_records(telemetry_path)
+    finally:
+        if original is not None:
+            sys.modules["pandas"] = original
+
+
+def test_load_records_parquet_requires_engine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    telemetry_path = tmp_path / "baseline.parquet"
+    telemetry_path.write_bytes(b"PAR1\x00\x00\x00PAR1")
+
+    dummy = types.ModuleType("pandas")
+
+    def read_parquet(path: Path) -> None:  # type: ignore[no-untyped-def]
+        raise ImportError("Unable to find a usable engine")
+
+    dummy.read_parquet = read_parquet  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pandas", dummy)
+
+    with pytest.raises(RuntimeError, match="compatible engine"):
+        cli_io._load_records(telemetry_path)
 
