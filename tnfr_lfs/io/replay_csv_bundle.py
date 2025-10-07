@@ -193,13 +193,11 @@ class ReplayCSVBundleReader:
             if not existing:
                 return
 
-            data = merged[existing].to_numpy(copy=True)
-            numeric = pd.to_numeric(data.reshape(-1), errors="coerce")
-            values = np.asarray(numeric).reshape(data.shape)
-            values[~np.isfinite(values)] = np.nan
-
-            coerced = pd.DataFrame(values, columns=existing, index=merged.index)
-            merged[existing] = coerced
+            for column in existing:
+                numeric = pd.to_numeric(merged[column], errors="coerce")
+                values = numeric.to_numpy(dtype=float, copy=True)
+                values[~np.isfinite(values)] = np.nan
+                merged[column] = values
 
         _coerce_numeric_columns(["timestamp"])
 
@@ -353,7 +351,6 @@ class ReplayCSVBundleReader:
             "clutch_input",
             "handbrake_input",
             "steer_input",
-            "throttle_input",
             "rpm",
             "wheel_load_fl",
             "wheel_load_fr",
