@@ -1,3 +1,7 @@
+recursive-include data/cars *.toml
+recursive-include data/profiles *.toml
+include data/lfs_class_overrides.toml
+include config/global.toml
 recursive-include data/tracks *.toml
 recursive-include data/track_profiles *.toml
 recursive-include modifiers/combos *.toml

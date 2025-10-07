@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from textwrap import dedent
 
@@ -178,3 +179,40 @@ def test_example_pipeline_accepts_custom_data_root(config_pack: Path) -> None:
     resolved = example_pipeline("ABC", data_root=config_pack)
 
     assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
+
+
+def test_load_cars_uses_packaged_resources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from tnfr_lfs import _pack_resources
+
+    pack_root = tmp_path / "pack"
+    cars_dir = pack_root / "data" / "cars"
+    cars_dir.mkdir(parents=True)
+    cars_dir.joinpath("AAA.toml").write_text(
+        dedent(
+            """
+            abbrev = "AAA"
+            name = "Alpha"
+            license = "demo"
+            engine_layout = "front"
+            drive = "RWD"
+            weight_kg = 900
+            wheel_rotation_group_deg = 30
+            profile = "default"
+            """
+        )
+    )
+
+    _pack_resources.set_pack_root_override(pack_root)
+    config_loader_module = importlib.import_module("tnfr_lfs.config_loader")
+    config_loader = importlib.reload(config_loader_module)
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(exist_ok=True)
+    monkeypatch.chdir(workspace)
+    try:
+        cars = config_loader.load_cars()
+    finally:
+        _pack_resources.set_pack_root_override(None)
+        importlib.reload(config_loader_module)
+
+    assert set(cars) == {"AAA"}

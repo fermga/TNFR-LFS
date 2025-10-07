@@ -13,11 +13,13 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
 
-_PACKAGE_ROOT = Path(__file__).resolve().parent
-_DATA_ROOT = _PACKAGE_ROOT.parent / "data"
+from ._pack_resources import data_root, modifiers_root
+
+
+_DATA_ROOT = data_root()
 _TRACKS_ROOT = _DATA_ROOT / "tracks"
 _TRACK_PROFILES_ROOT = _DATA_ROOT / "track_profiles"
-_MODIFIERS_ROOT = _PACKAGE_ROOT.parent / "modifiers" / "combos"
+_MODIFIERS_ROOT = modifiers_root()
 
 
 def _freeze_value(value: Any) -> Any:

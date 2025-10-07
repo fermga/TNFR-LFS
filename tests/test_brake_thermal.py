@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib
 import math
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +46,55 @@ def test_brake_thermal_estimator_heats_and_cools() -> None:
     )
     assert all(temp <= prev for temp, prev in zip(cooled, heated))
     assert all(temp >= config.ambient for temp in cooled)
+
+
+def test_telemetry_fusion_uses_packaged_resources(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from tnfr_lfs import _pack_resources
+
+    pack_root = tmp_path / "pack"
+    config_dir = pack_root / "config"
+    cars_dir = pack_root / "data" / "cars"
+    config_dir.mkdir(parents=True)
+    cars_dir.mkdir(parents=True)
+
+    config_dir.joinpath("global.toml").write_text(
+        """
+[thermal.brakes]
+mode = "auto"
+"""
+    )
+
+    cars_dir.joinpath("AAA.toml").write_text(
+        """
+abbrev = "AAA"
+name = "Alpha"
+license = "demo"
+engine_layout = "front"
+drive = "RWD"
+weight_kg = 900
+wheel_rotation_group_deg = 30
+profile = "default"
+
+[thermal.brakes]
+mode = "auto"
+"""
+    )
+
+    _pack_resources.set_pack_root_override(pack_root)
+    fusion_mod = importlib.import_module("tnfr_lfs.acquisition.fusion")
+    fusion_module = importlib.reload(fusion_mod)
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(exist_ok=True)
+    monkeypatch.chdir(workspace)
+
+    try:
+        fusion_module.TelemetryFusion()  # should locate packaged resources without cwd data
+    finally:
+        _pack_resources.set_pack_root_override(None)
+        importlib.reload(fusion_mod)
 
 
 def _make_outsim_packet(

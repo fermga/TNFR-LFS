@@ -14,6 +14,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
+from .._pack_resources import pack_root
 from ..analysis.brake_thermal import (
     BrakeThermalConfig,
     BrakeThermalEstimator,
@@ -580,6 +581,10 @@ class TelemetryFusion:
         package_root = Path(__file__).resolve().parents[2]
         if package_root not in candidates:
             candidates.append(package_root)
+
+        installed_pack_root = pack_root()
+        if installed_pack_root not in candidates:
+            candidates.append(installed_pack_root)
 
         for root in candidates:
             config_path = root / "config" / "global.toml"

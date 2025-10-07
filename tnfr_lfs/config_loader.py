@@ -14,8 +14,10 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
 
-_PACKAGE_ROOT = Path(__file__).resolve().parent
-_DATA_ROOT = _PACKAGE_ROOT.parent / "data"
+from ._pack_resources import data_root
+
+
+_DATA_ROOT = data_root()
 _LFS_CLASS_OVERRIDES_CACHE: dict[Path, Mapping[str, Mapping[str, Any]]] = {}
 
 
