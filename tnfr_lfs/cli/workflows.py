@@ -38,11 +38,19 @@ from ..acquisition import (
     TelemetryFusion,
 )
 from .osd import OSDController, TelemetryHUD
+from ..core.constants import (
+    PRESSURE_MEAN_KEYS,
+    PRESSURE_STD_KEYS,
+    TEMPERATURE_MEAN_KEYS,
+    TEMPERATURE_STD_KEYS,
+    WHEEL_LABELS,
+    WHEEL_SUFFIXES,
+)
 from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
 from ..core.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
+from ..core.operators import orchestrate_delta_metrics
 from ..core.phases import replicate_phase_aliases
 from ..core.resonance import analyse_modal_resonance
-from ..core.operators import orchestrate_delta_metrics
 from ..core.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
@@ -93,23 +101,6 @@ Bundles = Sequence[Any]
 DEFAULT_OUTPUT_DIR = Path("out")
 PROFILES_ENV_VAR = "TNFR_LFS_PROFILES"
 DEFAULT_PROFILES_FILENAME = "profiles.toml"
-
-WHEEL_SUFFIXES: Tuple[str, ...] = ("fl", "fr", "rl", "rr")
-WHEEL_LABELS = MappingProxyType({
-    "fl": "FL",
-    "fr": "FR",
-    "rl": "RL",
-    "rr": "RR",
-})
-TEMPERATURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_temp_{suffix}" for suffix in WHEEL_SUFFIXES})
-TEMPERATURE_STD_KEYS = MappingProxyType({
-    suffix: f"{TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
-})
-PRESSURE_MEAN_KEYS = MappingProxyType({suffix: f"tyre_pressure_{suffix}" for suffix in WHEEL_SUFFIXES})
-PRESSURE_STD_KEYS = MappingProxyType({
-    suffix: f"{PRESSURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
-})
-
 
 _EMPTY_PLAYBOOK_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({})
 _PLAYBOOK_RULES_CACHE: Mapping[str, tuple[str, ...]] | None = None

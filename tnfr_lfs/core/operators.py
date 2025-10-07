@@ -9,7 +9,7 @@ from math import sqrt
 from statistics import mean, pvariance
 from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
 
-WHEEL_SUFFIXES: tuple[str, ...] = ("fl", "fr", "rl", "rr")
+from .constants import WHEEL_SUFFIXES
 
 from .contextual_delta import (
     apply_contextual_delta,

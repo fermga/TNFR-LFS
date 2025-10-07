@@ -18,6 +18,16 @@ from ..acquisition import (
     OutSimUDPClient,
     TelemetryFusion,
 )
+from ..core.constants import (
+    BRAKE_TEMPERATURE_MEAN_KEYS,
+    BRAKE_TEMPERATURE_STD_KEYS,
+    PRESSURE_MEAN_KEYS,
+    PRESSURE_STD_KEYS,
+    TEMPERATURE_MEAN_KEYS,
+    TEMPERATURE_STD_KEYS,
+    WHEEL_LABELS,
+    WHEEL_SUFFIXES,
+)
 from ..core.epi import EPIExtractor, TelemetryRecord
 from ..core.metrics import (
     AeroBalanceDrift,
@@ -51,26 +61,6 @@ from ..session import format_session_messages
 PAYLOAD_LIMIT = OverlayManager.MAX_BUTTON_TEXT - 1
 DEFAULT_UPDATE_RATE = 6.0
 DEFAULT_PLAN_INTERVAL = 5.0
-
-WHEEL_SUFFIXES: Tuple[str, ...] = ("fl", "fr", "rl", "rr")
-WHEEL_LABELS = {
-    "fl": "FL",
-    "fr": "FR",
-    "rl": "RL",
-    "rr": "RR",
-}
-TEMPERATURE_MEAN_KEYS = {suffix: f"tyre_temp_{suffix}" for suffix in WHEEL_SUFFIXES}
-TEMPERATURE_STD_KEYS = {
-    suffix: f"{TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
-}
-BRAKE_TEMPERATURE_MEAN_KEYS = {suffix: f"brake_temp_{suffix}" for suffix in WHEEL_SUFFIXES}
-BRAKE_TEMPERATURE_STD_KEYS = {
-    suffix: f"{BRAKE_TEMPERATURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
-}
-PRESSURE_MEAN_KEYS = {suffix: f"tyre_pressure_{suffix}" for suffix in WHEEL_SUFFIXES}
-PRESSURE_STD_KEYS = {
-    suffix: f"{PRESSURE_MEAN_KEYS[suffix]}_std" for suffix in WHEEL_SUFFIXES
-}
 
 MOTOR_LATENCY_TARGETS_MS: Mapping[str, float] = {"entry": 250.0, "apex": 180.0, "exit": 220.0}
 
