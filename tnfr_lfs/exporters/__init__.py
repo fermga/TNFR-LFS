@@ -100,27 +100,38 @@ def _extract_setup_plan(results: Mapping[str, Any] | SetupPlan | None) -> Mappin
     raise TypeError("Markdown exporter requires a SetupPlan instance or mapping under 'setup_plan'")
 
 
+def _resolve_session_messages(
+    payload: Mapping[str, Any] | None,
+) -> Tuple[Tuple[str, ...], Dict[str, Any] | None]:
+    session_messages: Tuple[str, ...] = ()
+    abtest_payload: Dict[str, Any] | None = None
+    if not isinstance(payload, Mapping):
+        return session_messages, abtest_payload
+
+    session_messages = format_session_messages(payload.get("session"))
+    if not session_messages:
+        extras = payload.get("session_messages")
+        if isinstance(extras, Sequence):
+            session_messages = tuple(str(item) for item in extras if item)
+
+    session_section = payload.get("session")
+    if isinstance(session_section, Mapping):
+        abtest_candidate = session_section.get("abtest")
+        if is_dataclass(abtest_candidate):
+            abtest_payload = asdict(abtest_candidate)
+        elif isinstance(abtest_candidate, Mapping):
+            abtest_payload = dict(abtest_candidate)
+
+    return session_messages, abtest_payload
+
+
 def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     """Render a setup plan as a Markdown table with rationales."""
 
     plan = _extract_setup_plan(results)
-    session_messages: Tuple[str, ...] = ()
-    abtest_payload: Dict[str, Any] | None = None
-    if isinstance(results, Mapping):
-        session_messages = format_session_messages(results.get("session"))
-        if not session_messages:
-            extras = results.get("session_messages")
-            if isinstance(extras, Sequence):
-                session_messages = tuple(str(item) for item in extras if item)
-        session_section = results.get("session")
-        if isinstance(session_section, Mapping):
-            abtest_candidate = session_section.get("abtest")
-            if is_dataclass(abtest_candidate):
-                abtest_payload = asdict(abtest_candidate)
-            elif isinstance(abtest_candidate, Mapping):
-                abtest_payload = dict(abtest_candidate)
-    else:
-        session_messages = ()
+    session_messages, abtest_payload = _resolve_session_messages(
+        results if isinstance(results, Mapping) else None
+    )
     header = "| Cambio | Ajuste | Racional | Efecto esperado |"
     separator = "| --- | --- | --- | --- |"
     lines = [header, separator]
@@ -381,13 +392,9 @@ def lfs_notes_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     """Render TNFR adjustments as F11/F12 instructions for Live for Speed."""
 
     plan = _extract_setup_plan(results)
-    session_messages: Tuple[str, ...] = ()
-    if isinstance(results, Mapping):
-        session_messages = format_session_messages(results.get("session"))
-        if not session_messages:
-            extras = results.get("session_messages")
-            if isinstance(extras, Sequence):
-                session_messages = tuple(str(item) for item in extras if item)
+    session_messages, _ = _resolve_session_messages(
+        results if isinstance(results, Mapping) else None
+    )
 
     header = "| Cambio | Δ | Acción | Pasos | Racional | Efecto esperado |"
     separator = "| --- | --- | --- | --- | --- | --- |"
