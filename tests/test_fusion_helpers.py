@@ -195,6 +195,52 @@ def test_estimate_thermal_delegates_to_resolvers(monkeypatch: pytest.MonkeyPatch
     )
 
 
+def test_resolve_wheel_temperatures_prefers_layers_when_missing_primary() -> None:
+    fusion = TelemetryFusion()
+    layers = (
+        (80.0, 0.0, 82.0, float("nan")),
+        (82.0, 84.0, 86.0, 88.0),
+        (84.0, 86.0, float("nan"), 90.0),
+    )
+    previous = SimpleNamespace(
+        tyre_temp_fl=70.0,
+        tyre_temp_fr=72.0,
+        tyre_temp_rl=74.0,
+        tyre_temp_rr=76.0,
+    )
+
+    result = fusion._resolve_wheel_temperatures(
+        SimpleNamespace(tyre_temps=(0.0, None, -5.0, float("nan"))),
+        previous,
+        layers=layers,
+    )
+
+    assert result == pytest.approx((82.0, 85.0, 84.0, 89.0))
+
+
+def test_resolve_wheel_temperatures_uses_previous_when_layers_invalid() -> None:
+    fusion = TelemetryFusion()
+    layers = (
+        (0.0, 0.0, 0.0, 0.0),
+        (float("nan"),) * 4,
+        (0.0, 0.0, 0.0, 0.0),
+    )
+    previous = SimpleNamespace(
+        tyre_temp_fl=70.0,
+        tyre_temp_fr=72.0,
+        tyre_temp_rl=74.0,
+        tyre_temp_rr=76.0,
+    )
+
+    result = fusion._resolve_wheel_temperatures(
+        SimpleNamespace(tyre_temps=(0.0, 0.0, 0.0, 0.0)),
+        previous,
+        layers=layers,
+    )
+
+    assert result == pytest.approx((70.0, 72.0, 74.0, 76.0))
+
+
 def test_construct_record_populates_fields() -> None:
     fusion = TelemetryFusion()
     wheels = (
