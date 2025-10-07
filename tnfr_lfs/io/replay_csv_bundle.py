@@ -39,17 +39,40 @@ def _is_finite(value: float) -> bool:
 
 
 def _mean(values: Iterator[float]) -> float:
-    finite = [value for value in values if _is_finite(value)]
-    if not finite:
+    """Return the arithmetic mean of finite values from ``values``.
+
+    The function consumes the ``values`` iterator in a single pass without
+    materialising intermediate lists, making it safe to use with generators and
+    large telemetry streams.
+    """
+
+    total = 0.0
+    count = 0
+    for value in values:
+        if _is_finite(value):
+            total += value
+            count += 1
+    if count == 0:
         return math.nan
-    return sum(finite) / len(finite)
+    return total / count
 
 
 def _sum(values: Iterator[float]) -> float:
-    finite = [value for value in values if _is_finite(value)]
-    if not finite:
+    """Return the sum of finite values from ``values``.
+
+    Similar to :func:`_mean`, the iterator is consumed lazily in a single pass,
+    keeping memory consumption bounded even for large generators.
+    """
+
+    total = 0.0
+    count = 0
+    for value in values:
+        if _is_finite(value):
+            total += value
+            count += 1
+    if count == 0:
         return math.nan
-    return sum(finite)
+    return total
 
 
 _WHEEL_SUFFIXES: Mapping[str, str] = {

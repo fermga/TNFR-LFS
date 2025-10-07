@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Callable
 import math
 import time
+import tracemalloc
 import zipfile
 from pathlib import Path
 
@@ -241,3 +243,42 @@ def test_replay_csv_bundle_missing_distance_column_raises(tmp_path: Path) -> Non
     reader = ReplayCSVBundleReader(bundle)
     with pytest.raises(ValueError, match="does not contain a distance column"):
         reader.to_dataframe()
+
+
+def test_streaming_statistics_ignore_non_finite_values() -> None:
+    values = (value for value in [1.0, math.nan, float("inf"), -float("inf"), 3.0])
+    assert replay_csv_bundle._mean(values) == pytest.approx(2.0)
+
+    values_for_sum = (value for value in [1.0, math.nan, float("inf"), -float("inf"), 3.0])
+    assert replay_csv_bundle._sum(values_for_sum) == pytest.approx(4.0)
+
+
+def test_streaming_statistics_use_bounded_memory() -> None:
+    count = 1_000_000
+    expected_sum = sum(range(100)) * (count // 100)
+    expected_mean = expected_sum / count
+
+    def _measure_peak_bytes(func: Callable[[], float]) -> tuple[float, int]:
+        tracemalloc.start()
+        try:
+            result = func()
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        return result, peak
+
+    mean_result, mean_peak = _measure_peak_bytes(
+        lambda: replay_csv_bundle._mean(float(i % 100) for i in range(count))
+    )
+    sum_result, sum_peak = _measure_peak_bytes(
+        lambda: replay_csv_bundle._sum(float(i % 100) for i in range(count))
+    )
+
+    assert mean_result == pytest.approx(expected_mean)
+    assert sum_result == pytest.approx(expected_sum)
+
+    # A list of ``count`` float objects would require tens of megabytes; the
+    # streaming implementations should stay comfortably below this range.
+    limit_bytes = 5 * 1024 * 1024
+    assert mean_peak < limit_bytes
+    assert sum_peak < limit_bytes
