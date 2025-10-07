@@ -981,7 +981,8 @@ def _resolve_baseline_destination(
         "force": namespace.force,
     }
 
-    output_arg: Path | None = namespace.output
+    positional_output: Path | None = getattr(namespace, "telemetry", None)
+    output_arg: Path | None = namespace.output or positional_output
     if output_arg is None:
         return logs.prepare_run_destination(**auto_kwargs)
 

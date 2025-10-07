@@ -12,6 +12,7 @@ import pytest
 
 from tnfr_lfs.cli import compare as compare_module
 from tnfr_lfs.cli import tnfr_lfs_cli as cli_module
+from tnfr_lfs.cli import workflows as workflows_module
 from tnfr_lfs.cli.tnfr_lfs_cli import run_cli
 from tnfr_lfs.io.profiles import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
@@ -63,6 +64,111 @@ def test_baseline_generates_timestamped_run(
     assert re.match(r"xfg_generic_\d{8}_\d{6}_\d{6}\.jsonl$", run_path.name)
     assert "Baseline saved" in result
     assert str(run_path.relative_to(tmp_path)) in captured.out
+
+
+def test_baseline_simulation_accepts_optional_flags(
+    tmp_path: Path,
+    capsys,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    output_dir = tmp_path / "custom_runs"
+
+    result = run_cli(
+        [
+            "baseline",
+            "--simulate",
+            str(synthetic_stint_path),
+            "--duration",
+            "12",
+            "--limit",
+            "5",
+            "--output",
+            "session.jsonl",
+            "--output-dir",
+            str(output_dir),
+            "--insim-keepalive",
+            "2.5",
+            "--force",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    destination = output_dir / "session.jsonl"
+    assert destination.exists()
+    lines = [line for line in destination.read_text(encoding="utf8").splitlines() if line.strip()]
+    assert len(lines) == 5
+    assert "Baseline saved" in result
+    assert str(destination.relative_to(tmp_path)) in captured.out
+
+
+def test_baseline_overlay_uses_keepalive_and_overlay(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    created_clients: list[dict[str, float | str]] = []
+    overlay_calls: dict[str, object] = {}
+
+    class _DummyInSimClient:
+        def __init__(self, *, host, port, timeout, keepalive_interval, app_name):  # type: ignore[no-untyped-def]
+            created_clients.append(
+                {
+                    "host": host,
+                    "port": port,
+                    "timeout": timeout,
+                    "keepalive_interval": keepalive_interval,
+                    "app_name": app_name,
+                }
+            )
+
+        def close(self) -> None:
+            pass
+
+    class _DummyOverlay:
+        def __init__(self, client, layout):  # type: ignore[no-untyped-def]
+            overlay_calls["client"] = client
+            overlay_calls["layout"] = layout
+            overlay_calls["tick"] = 0
+
+        def connect(self) -> None:
+            overlay_calls["connected"] = True
+
+        def show(self, lines) -> None:  # type: ignore[no-untyped-def]
+            overlay_calls.setdefault("messages", []).append(tuple(lines))
+
+        def tick(self) -> None:
+            overlay_calls["tick"] = overlay_calls.get("tick", 0) + 1
+
+        def close(self) -> None:
+            overlay_calls["closed"] = True
+
+    def _fake_capture(**kwargs):  # type: ignore[no-untyped-def]
+        heartbeat = kwargs.get("heartbeat")
+        if callable(heartbeat):
+            heartbeat()
+        return []
+
+    monkeypatch.setattr(workflows_module, "InSimClient", _DummyInSimClient)
+    monkeypatch.setattr(workflows_module, "OverlayManager", _DummyOverlay)
+    monkeypatch.setattr(workflows_module, "_capture_udp_samples", _fake_capture)
+
+    result = run_cli([
+        "baseline",
+        "--overlay",
+        "--duration",
+        "3",
+        "--insim-keepalive",
+        "1.25",
+    ])
+
+    capsys.readouterr()
+    assert "No telemetry samples captured" in result
+    assert created_clients and created_clients[0]["keepalive_interval"] == pytest.approx(1.25)
+    assert overlay_calls.get("connected")
+    assert overlay_calls.get("tick") == 1
+    assert overlay_calls.get("closed")
 
 
 def test_cli_analyze_accepts_raf_sample(
