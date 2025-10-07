@@ -11,6 +11,26 @@ TNFR × LFS es el toolkit de análisis y automatización que operacionaliza la p
   pueda compilar/instalar ruedas para ambos paquetes.
 - Un dataset de telemetría en `data/`. El repositorio incluye el CSV sintético `data/BL1_XFG_baseline.csv`, la captura real en RAF `data/test1.raf` y el bundle exportado desde Replay Analyzer `data/test1.zip`, de modo que puedes ensayar flujos con cualquiera de los formatos soportados.
 
+### Instalación de dependencias
+
+Para facilitar la puesta en marcha el repositorio publica archivos de requisitos
+compatibles con `pip`:
+
+```bash
+# Entorno mínimo para ejecutar el CLI y los ejemplos
+python -m pip install -r requirements.txt
+
+# Entorno completo de desarrollo (incluye linters, mypy y pytest)
+python -m pip install -r requirements-dev.txt
+
+# También puedes utilizar los atajos declarados en el Makefile
+make install      # instala solo las dependencias base
+make dev-install  # instala dependencias base + herramientas de desarrollo
+```
+
+Si prefieres un entorno editable, ejecuta `pip install -e .` después de instalar
+las dependencias para enlazar el paquete localmente.
+
 ### Ejecución
 Ejecuta el flujo end-to-end simulado con:
 
