@@ -26,7 +26,7 @@ from .epi_models import (
 from .phases import expand_phase_alias, phase_family
 
 # Natural frequencies for each subsystem (Hz) extracted from the
-# "modelos de activación" tables in the manual.  They provide the base
+# Activation-model tables in the manual.  They provide the base
 # rate at which ΔNFR fluctuations modulate the EPI dynamics.
 NU_F_NODE_DEFAULTS: Mapping[str, float] = {
     "tyres": 0.18,
