@@ -1930,50 +1930,50 @@ def _phase_alignment_targets(archetype: str) -> Mapping[str, Tuple[float, float]
 
 def _goal_descriptions(archetype: str) -> Mapping[str, str]:
     base = {
-        "entry1": "Modular la transferencia inicial para consolidar el arquetipo de {archetype}.",
-        "entry2": "Profundizar la preparación de frenada siguiendo el arquetipo de {archetype}.",
-        "apex3a": "Alinear la aproximación al vértice con el patrón de {archetype}.",
-        "apex3b": "Sostener el vértice según el arquetipo de {archetype} manteniendo ΔNFR estable.",
-        "exit4": "Liberar energía siguiendo el arquetipo de {archetype} hacia la salida.",
+        "entry1": "Modulate the initial transfer to consolidate the {archetype} archetype.",
+        "entry2": "Deepen brake preparation in line with the {archetype} archetype.",
+        "apex3a": "Align the approach to the apex with the {archetype} pattern.",
+        "apex3b": "Hold the apex per the {archetype} archetype while keeping ΔNFR steady.",
+        "exit4": "Release energy on exit following the {archetype} archetype.",
     }
     if archetype == ARCHETYPE_HAIRPIN:
         base.update(
             {
-                "entry1": "Extender la frenada para clavar la horquilla con control.",
-                "entry2": "Depositar el coche en apoyo máximo antes del vértice.",
-                "apex3a": "Pivotar con paciencia cerrando la horquilla.",
-                "apex3b": "Administrar la rotación manteniendo el punto de apoyo.",
-                "exit4": "Progresar la reapertura priorizando tracción.",
+                "entry1": "Extend braking to nail the hairpin with control.",
+                "entry2": "Settle the car into maximum support before the apex.",
+                "apex3a": "Pivot patiently to close the hairpin.",
+                "apex3b": "Manage rotation while keeping the support point.",
+                "exit4": "Open the steering while prioritising traction.",
             }
         )
     elif archetype == ARCHETYPE_CHICANE:
         base.update(
             {
-                "entry1": "Preparar el primer cambio de dirección con balance neutro.",
-                "entry2": "Sincronizar el traspaso de masas hacia el segundo apoyo.",
-                "apex3a": "Encadenar vértices manteniendo fluidez en la transición.",
-                "apex3b": "Sostener la ligereza para no saturar el segundo apoyo.",
-                "exit4": "Completar la chicana estabilizando el coche a la salida.",
+                "entry1": "Prepare the first direction change with neutral balance.",
+                "entry2": "Synchronise the weight transfer into the second support.",
+                "apex3a": "Link the apexes while keeping the transition fluid.",
+                "apex3b": "Maintain lightness to avoid saturating the second support.",
+                "exit4": "Complete the chicane by stabilising the car on exit.",
             }
         )
     elif archetype == ARCHETYPE_FAST:
         base.update(
             {
-                "entry1": "Trazar la aproximación rápida sin comprometer estabilidad.",
-                "entry2": "Afinar la trayectoria minimizando correcciones.",
-                "apex3a": "Cruzar el vértice con carga constante y suave.",
-                "apex3b": "Sostener la velocidad en apoyo continuo.",
-                "exit4": "Proyectar la salida manteniendo ritmo alto.",
+                "entry1": "Trace the fast approach without compromising stability.",
+                "entry2": "Refine the line while minimising corrections.",
+                "apex3a": "Cross the apex with smooth, constant load.",
+                "apex3b": "Sustain speed through continuous support.",
+                "exit4": "Project the exit while maintaining high pace.",
             }
         )
     elif archetype == ARCHETYPE_MEDIUM:
         base.update(
             {
-                "entry1": "Asentar la frenada equilibrando el coche.",
-                "entry2": "Preparar el vértice con transferencia progresiva.",
-                "apex3a": "Encadenar el giro manteniendo carga homogénea.",
-                "apex3b": "Controlar la deriva para sostener la línea.",
-                "exit4": "Reaplicar potencia sin romper la estabilidad.",
+                "entry1": "Settle braking while balancing the car.",
+                "entry2": "Prepare the apex with progressive transfer.",
+                "apex3a": "Link the turn while keeping load even.",
+                "apex3b": "Control the drift to hold the line.",
+                "exit4": "Reapply power without breaking stability.",
             }
         )
     return {phase: message.format(archetype=archetype) for phase, message in base.items()}

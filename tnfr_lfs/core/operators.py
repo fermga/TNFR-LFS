@@ -1034,7 +1034,7 @@ def _stage_coherence(
             "coherence_index": 0.0,
             "raw_coherence_index": 0.0,
             "frequency_label": "",
-            "frequency_classification": "sin datos",
+            "frequency_classification": "no data",
         }
 
     context_matrix = load_context_matrix()
@@ -1069,11 +1069,11 @@ def _stage_coherence(
     target_si = max(1e-6, min(1.0, float(objectives.get("sense_index", 0.75))))
     normalised_ct = max(0.0, min(1.0, average_ct * (mean_si / target_si)))
     frequency_label = ""
-    frequency_classification = "sin datos"
+    frequency_classification = "no data"
     if updated_bundles:
         last_bundle = updated_bundles[-1]
         frequency_label = getattr(last_bundle, "nu_f_label", "")
-        frequency_classification = getattr(last_bundle, "nu_f_classification", "sin datos")
+        frequency_classification = getattr(last_bundle, "nu_f_classification", "no data")
 
     return {
         "raw_delta": delta_series,

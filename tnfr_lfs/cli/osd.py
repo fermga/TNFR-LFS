@@ -207,7 +207,7 @@ class TelemetryHUD:
         )
         self._coherence_series: Tuple[float, ...] = ()
         self._coherence_index: float = 0.0
-        self._frequency_classification: str = "sin datos"
+        self._frequency_classification: str = "no data"
         self._sense_state: Dict[str, object] = {
             "series": (),
             "memory": (),
@@ -277,7 +277,7 @@ class TelemetryHUD:
             )
             self._coherence_series = ()
             self._coherence_index = 0.0
-            self._frequency_classification = "sin datos"
+            self._frequency_classification = "no data"
             self._sense_state = {"series": (), "memory": (), "average": 0.0}
             self._quiet_sequences = ()
             self._lap_integrals = ()
@@ -290,7 +290,7 @@ class TelemetryHUD:
         if not bundles:
             self._coherence_series = ()
             self._coherence_index = 0.0
-            self._frequency_classification = "sin datos"
+            self._frequency_classification = "no data"
             self._sense_state = {"series": (), "memory": (), "average": 0.0}
             self._quiet_sequences = ()
             self._lap_integrals = ()
@@ -348,15 +348,15 @@ class TelemetryHUD:
         coherence_series = metrics_state.get("coherence_index_series", ()) if metrics_state else ()
         self._coherence_series = tuple(float(value) for value in coherence_series)
         self._coherence_index = float(metrics_state.get("coherence_index", 0.0)) if metrics_state else 0.0
-        frequency_classification = "sin datos"
+        frequency_classification = "no data"
         if metrics_state:
             frequency_classification = str(
                 metrics_state.get(
                     "frequency_classification",
-                    getattr(bundles[-1], "nu_f_classification", "sin datos") if bundles else "sin datos",
+                    getattr(bundles[-1], "nu_f_classification", "no data") if bundles else "no data",
                 )
             )
-        self._frequency_classification = frequency_classification or "sin datos"
+        self._frequency_classification = frequency_classification or "no data"
         sense_memory = metrics_state.get("sense_memory", {}) if metrics_state else {}
         if isinstance(sense_memory, Mapping):
             series = tuple(float(value) for value in sense_memory.get("series", ()))

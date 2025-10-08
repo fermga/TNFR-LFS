@@ -439,7 +439,7 @@ def test_natural_frequency_analysis_converges_to_dominant_signal():
     expected_ratio = max(settings.min_multiplier, min(settings.max_multiplier, expected_ratio))
 
     base_final = resolve_nu_f_by_node(records[-1]).by_node
-    assert last_snapshot.classification in {"óptima", "alta"}
+    assert last_snapshot.classification in {"optimal", "high"}
     assert "ν_f" in last_snapshot.frequency_label
     assert last_snapshot.coherence_index == pytest.approx(0.0)
     for node in ("driver", "suspension", "transmission", "brakes", "tyres"):
