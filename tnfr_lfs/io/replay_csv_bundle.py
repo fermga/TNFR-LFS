@@ -178,11 +178,20 @@ class ReplayCSVBundleReader:
         else:
             self._path = Path(self.source)
 
-    def to_dataframe(self) -> pd.DataFrame:
-        """Return the bundle contents as a merged :class:`~pandas.DataFrame`."""
+    def to_dataframe(self, copy: bool = True) -> pd.DataFrame:
+        """Return the bundle contents as a merged :class:`~pandas.DataFrame`.
+
+        Parameters
+        ----------
+        copy:
+            If ``True`` (the default) return a defensive copy of the cached
+            frame.  Callers that only need read-only access can pass
+            ``copy=False`` to reuse the cached instance without incurring the
+            overhead of duplicating the underlying data.
+        """
 
         if self._frame_cache is not None:
-            return self._frame_cache.copy()
+            return self._frame_cache.copy() if copy else self._frame_cache
 
         pd = _get_pandas()
 
@@ -241,12 +250,12 @@ class ReplayCSVBundleReader:
         _coerce_numeric_columns(sorted(telemetry_columns))
 
         self._frame_cache = merged
-        return merged.copy()
+        return merged.copy() if copy else merged
 
     def to_records(self) -> list[TelemetryRecord]:
         """Convert the bundle contents into :class:`TelemetryRecord` samples."""
 
-        frame = self.to_dataframe()
+        frame = self.to_dataframe(copy=False)
         column_index = {name: position for position, name in enumerate(frame.columns)}
 
         return [

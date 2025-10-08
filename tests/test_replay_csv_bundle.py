@@ -224,6 +224,28 @@ def test_replay_csv_records_align_with_dataframe() -> None:
                 assert _is_numeric(value)
 
 
+def test_replay_csv_to_records_reuses_cached_dataframe(monkeypatch: pytest.MonkeyPatch) -> None:
+    reader = ReplayCSVBundleReader(BUNDLE_PATH)
+    pd_module = replay_csv_bundle._get_pandas()
+
+    copy_calls = 0
+    original_copy = pd_module.DataFrame.copy
+
+    def _counting_copy(self: pd.DataFrame, deep: bool = True) -> pd.DataFrame:
+        nonlocal copy_calls
+        copy_calls += 1
+        return original_copy(self, deep=deep)
+
+    monkeypatch.setattr(pd_module.DataFrame, "copy", _counting_copy)
+
+    reader.to_dataframe()
+    initial_copy_calls = copy_calls
+
+    reader.to_records()
+
+    assert copy_calls == initial_copy_calls
+
+
 def test_replay_csv_bundle_without_time_entry_raises(tmp_path: Path) -> None:
     bundle = tmp_path / "missing_time.zip"
     with zipfile.ZipFile(bundle, "w") as archive:
