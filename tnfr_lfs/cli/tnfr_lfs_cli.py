@@ -8,10 +8,9 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 
 from . import common as _common_module
 from . import io as _cli_io_module
+from . import workflows as _workflows_module
 from .common import CliError
-from .compare import handle as compare_handle
 from .io import load_cli_config
-from .pareto import handle as pareto_handle
 from .parser import build_parser
 from .workflows import (
     _handle_analyze,
@@ -23,24 +22,9 @@ from .workflows import (
     _handle_template,
     _handle_write_set,
 )
-from . import workflows as _workflows_module
 
 
 CommandHandler = Callable[[argparse.Namespace, Mapping[str, Any]], str]
-
-
-COMMAND_REGISTRY: Mapping[str, CommandHandler] = {
-    "template": _handle_template,
-    "osd": _handle_osd,
-    "diagnose": _handle_diagnose,
-    "baseline": _handle_baseline,
-    "analyze": _handle_analyze,
-    "suggest": _handle_suggest,
-    "compare": compare_handle,
-    "report": _handle_report,
-    "write-set": _handle_write_set,
-    "pareto": pareto_handle,
-}
 
 
 _HELPER_EXPORTS = {
@@ -119,7 +103,7 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
         or config.get("_config_path")
     )
 
-    handler = COMMAND_REGISTRY.get(getattr(namespace, "command", None))
+    handler = getattr(namespace, "handler", None)
     if handler is None:
         raise CliError(f"Unknown command '{getattr(namespace, 'command', None)}'.")
 

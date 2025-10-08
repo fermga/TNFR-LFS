@@ -4,6 +4,7 @@ import csv
 import itertools
 import json
 import re
+import argparse
 from collections.abc import Iterable, Mapping
 from textwrap import dedent
 from pathlib import Path
@@ -22,6 +23,36 @@ try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
 except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreters
     import tomli as tomllib  # type: ignore
+
+
+def test_run_cli_dispatches_registered_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, Mapping[str, object]]] = []
+
+    def dummy_handler(
+        namespace: argparse.Namespace, *, config: Mapping[str, object]
+    ) -> str:
+        calls.append((str(namespace.command), config))
+        return "dummy-result"
+
+    def register_dummy(
+        subparsers: argparse._SubParsersAction[argparse.ArgumentParser], *, config: Mapping[str, object]
+    ) -> None:
+        parser = subparsers.add_parser("dummy", help="Dummy command used for testing.")
+        parser.set_defaults(handler=dummy_handler)
+
+    def build_parser_stub(config: Mapping[str, object] | None = None) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="command", required=True)
+        register_dummy(subparsers, config=config or {})
+        return parser
+
+    monkeypatch.setattr(cli_module, "build_parser", build_parser_stub)
+    monkeypatch.setattr(cli_module, "load_cli_config", lambda path: {})
+
+    result = run_cli(["dummy"])
+
+    assert result == "dummy-result"
+    assert calls == [("dummy", {})]
 
 
 def test_cli_exports_helper_attributes() -> None:
