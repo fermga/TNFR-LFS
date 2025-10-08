@@ -11,7 +11,7 @@ REPORT_JSON="${OUT_DIR}/report.json"
 PLOT_TXT="${OUT_DIR}/sense_index_plot.txt"
 
 if [[ ! -f "${DATA_FILE}" ]]; then
-    echo "Dataset de ejemplo no encontrado: ${DATA_FILE}" >&2
+    echo "Sample dataset not found: ${DATA_FILE}" >&2
     exit 1
 fi
 
@@ -40,10 +40,10 @@ if analysis_path.exists():
             for idx, value in enumerate(values)
         ]
     else:
-        lines = ["No hay muestras de Sense Index disponibles"]
+        lines = ["No Sense Index samples available"]
 else:
-    lines = ["No se encontró el archivo de análisis"]
+    lines = ["Analysis file not found"]
 output_path.write_text("\n".join(lines), encoding="utf8")
 PY
 
-echo "Artefactos generados en ${OUT_DIR}"
+echo "Artefacts generated in ${OUT_DIR}"
