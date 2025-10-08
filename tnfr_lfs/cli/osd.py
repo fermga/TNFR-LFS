@@ -6,7 +6,18 @@ import math
 from collections import deque
 from dataclasses import dataclass
 from time import monotonic, sleep
-from typing import Any, Deque, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Deque,
+    Dict,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from ..acquisition import (
     ButtonEvent,
@@ -170,7 +181,7 @@ class TelemetryHUD:
         recommendation_engine: Optional[RecommendationEngine] = None,
         setup_planner: Optional[SetupPlanner] = None,
         plan_interval: float = DEFAULT_PLAN_INTERVAL,
-        time_fn=monotonic,
+        time_fn: Callable[[], float] = monotonic,
         session: Optional[Mapping[str, Any]] = None,
     ) -> None:
         self._records: Deque[TelemetryRecord] = deque(maxlen=max(8, int(window)))
@@ -205,7 +216,7 @@ class TelemetryHUD:
         self._quiet_sequences: Tuple[Tuple[int, ...], ...] = ()
         self._dirty = True
         self._plan_interval = max(0.0, float(plan_interval))
-        self._time_fn = time_fn
+        self._time_fn: Callable[[], float] = time_fn
         self._last_plan_time = -math.inf
         self._cached_plan: Optional[SetupPlan] = None
         self._macro_status = MacroStatus()
