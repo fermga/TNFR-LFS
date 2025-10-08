@@ -5,6 +5,7 @@ import builtins
 import json
 import sys
 import types
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -112,4 +113,66 @@ def test_load_records_parquet_requires_engine(
 
     with pytest.raises(RuntimeError, match="compatible engine"):
         cli_io._load_records(telemetry_path)
+
+
+@dataclass
+class _DummyRecord:
+    value: int
+
+
+def test_persist_records_parquet_requires_pandas(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    destination = tmp_path / "baseline.parquet"
+    records = [_DummyRecord(1)]
+
+    original = sys.modules.pop("pandas", None)
+    original_import = builtins.__import__
+
+    def fake_import(name: str, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if name == "pandas":
+            raise ModuleNotFoundError("No module named 'pandas'")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    try:
+        with pytest.raises(RuntimeError, match="requires the 'pandas' package"):
+            cli_io._persist_records(records, destination, "parquet")
+    finally:
+        if original is not None:
+            sys.modules["pandas"] = original
+
+    assert not destination.exists()
+
+
+def test_persist_records_parquet_requires_engine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    destination = tmp_path / "baseline.parquet"
+    records = [_DummyRecord(1)]
+
+    original = sys.modules.pop("pandas", None)
+
+    class DummyFrame:
+        def __init__(self, data):  # type: ignore[no-untyped-def]
+            self.data = data
+
+        def to_parquet(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            raise ImportError("Unable to find a usable engine")
+
+    dummy = types.ModuleType("pandas")
+    dummy.DataFrame = lambda data: DummyFrame(data)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pandas", dummy)
+
+    try:
+        with pytest.raises(RuntimeError, match="compatible engine"):
+            cli_io._persist_records(records, destination, "parquet")
+    finally:
+        if original is not None:
+            sys.modules["pandas"] = original
+        else:
+            sys.modules.pop("pandas", None)
+
+    assert not destination.exists()
 
