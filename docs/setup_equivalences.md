@@ -1,80 +1,76 @@
-# Guía de correspondencias de setup TNFR
+# TNFR Setup Equivalence Guide
 
-Esta guía cruza los ajustes tradicionales de setup con las métricas
-fundamentales del marco TNFR × LFS. Cada tabla se organiza por
-subsistema y describe cómo interpretar los indicadores `∇NFR⊥`, `ν_f`
-y `C(t)` dentro del flujo de recomendación y del HUD en vivo. Todas las
-lecturas TNFR provienen de la telemetría OutSim/OutGauge de Live for
-Speed, por lo que es imprescindible habilitar ambos broadcasters y
-configurar `OutSim Opts ff` para transmitir el paquete ampliado de
-ruedas (cargas Fz, fuerzas y deflexiones) que requiere la fusión de
-telemetría.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 Activa también el
-payload extendido de OutGauge (`OutGauge Opts …`) para que el flujo
-incluya las temperaturas por capa y las presiones reales: habilita al menos las
-banderas `OG_EXT_TYRE_TEMP`, `OG_EXT_TYRE_PRESS` y `OG_EXT_BRAKE_TEMP` para que el
-broadcaster envíe los 20 flotantes del bloque extendido (perfiles interno/medio/
-externo, presiones y temperaturas de pinza). De lo contrario TNFR ×
-LFS conservará la última muestra o mostrará “sin datos”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】 Los `slip_ratio`
-y `slip_angle` globales de TNFR × LFS se derivan directamente del
-promedio ponderado de los canales por rueda del bloque OutSim y solo
-recurren a un cálculo cinemático de respaldo cuando la señal llega
-incompleta.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】【F:tnfr_lfs/acquisition/fusion.py†L242-L291】
-Si la captura proviene de CSV, el lector conserva esas columnas faltantes
-como `math.nan` para que los indicadores se muestren como “sin datos” en
-vez de asumir lecturas inventadas.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
+This guide maps traditional setup adjustments to the key metrics used by
+the TNFR × LFS framework. Each table is organised by subsystem and
+explains how to interpret the `∇NFR⊥`, `ν_f`, and `C(t)` indicators within the
+recommendation flow and the live HUD. All TNFR readings come from the
+Live for Speed OutSim/OutGauge telemetry, so both broadcasters must be
+enabled and `OutSim Opts ff` configured to transmit the extended wheel packet
+(Fz loads, forces, and deflections) required by the telemetry fusion
+module.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 Enable the extended
+OutGauge payload (`OutGauge Opts …`) as well so the pipeline includes the
+layer temperatures and actual pressures: enable at least the
+`OG_EXT_TYRE_TEMP`, `OG_EXT_TYRE_PRESS`, and `OG_EXT_BRAKE_TEMP` flags to have
+the broadcaster send the 20 floats in the extended block (inner/middle/outer
+profiles, pressures, and caliper temperatures). Otherwise TNFR × LFS keeps the
+last sample or reports “no data”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】 The
+global `slip_ratio` and `slip_angle` metrics are derived directly from the
+load-weighted average of the per-wheel channels within the OutSim packet and
+fall back to the kinematic estimate only when the signal arrives incomplete.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】【F:tnfr_lfs/acquisition/fusion.py†L242-L291】
+When the capture comes from CSV, the reader preserves missing columns as
+`math.nan` so the indicators render as “no data” instead of fabricating
+values.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
 
-> **Nota sobre ∇NFR:** las métricas `∇NFR∥` y `∇NFR⊥` representan la
-> proyección del gradiente nodal ΔNFR sobre los ejes longitudinal y lateral.
-> Complementan el análisis de equilibrio, pero no sustituyen a los canales de
-> carga reales.  Siempre que el ajuste dependa de la fuerza vertical absoluta,
-> contrasta la señal nodal con los registros `Fz`/`ΔFz` del OutSim extendido.
+> **Note on ∇NFR:** the `∇NFR∥` and `∇NFR⊥` metrics represent the projection of
+> the ΔNFR nodal gradient onto the longitudinal and lateral axes. They
+> complement balance analysis but never replace the actual load channels.
+> Whenever an adjustment depends on absolute vertical force, compare the nodal
+> reading with the extended OutSim `Fz`/`ΔFz` records.
 
-## Señales necesarias por métrica
+## Required signals per metric
 
-- **ΔNFR (gradiente nodal) / ∇NFR∥/∇NFR⊥ (proyecciones)** – integran las cargas
-  Fz (y sus ΔFz), fuerzas y deflexiones de rueda reportadas por OutSim junto al
-  régimen del motor, entradas de pedales y luces ABS/TC que llegan vía OutGauge
-  para evaluar el reparto longitudinal/lateral del gradiente.  Usa los canales
-  `Fz`/`ΔFz` directamente cuando necesites cuantificar fuerzas absolutas antes de
-  mover reglajes.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
-- **ν_f (frecuencia natural)** – aprovecha el reparto de carga Fz, los
-  `slip_ratio`/`slip_angle`, la velocidad y el `yaw_rate` procedentes de
-  OutSim combinados con el estilo de conducción (`throttle`, `gear`) que
-  aporta OutGauge para clasificar nodos y bandas objetivo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】 Los `slip_ratio` y `slip_angle` utilizados aquí corresponden al promedio de las cuatro ruedas transmitidas por OutSim, garantizando que las etiquetas de frecuencia respondan a la adherencia real del tren y solo regresando a la estimación cinemática cuando no hay lecturas válidas.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】
-- **C(t) (coherencia estructural)** – se construye a partir de la
-  distribución nodal de ΔNFR, de los coeficientes `mu_eff_*` derivados de
-  las aceleraciones OutSim y de la actividad ABS/TC reportada por
-  OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
-- **Presupuestos Ackermann / Slide Catch** – dependen únicamente de los
-  `slip_angle_*` y del `yaw_rate` que OutSim transmite para cada rueda;
-  si la fuente no incluye esos campos, TNFR × LFS mostrará `"sin datos"`
-  en las lecturas asociadas.
-- **Deriva de balance aero (`aero_balance_drift`)** – resume el rake a
-  partir del `pitch` y los viajes de suspensión por eje que emite OutSim,
-  además del contraste `μ_front - μ_rear`, sin combinar señales sintéticas
-  adicionales.
-- **Temperaturas/presiones de neumáticos** – la fusión reutiliza las
-  lecturas de OutGauge siempre que las muestras sean positivas y
-  finitas; si el bloque extendido está deshabilitado se conserva la
-  lectura previa o `"sin datos"`, evitando extrapolaciones artificiales.
-- **CPHI (Contact Patch Health Index)** – necesita `slip_ratio`,
-  `slip_angle`, fuerzas laterales/longitudinales y cargas de rueda del
-  paquete extendido de OutSim. Sin esas señales TNFR × LFS etiqueta la
-  salud del parche como `"sin datos"`, por lo que el planificador no
-  aplicará ajustes de balance de neumáticos.
-  Los informes y el HUD comparten umbrales rojo/ámbar/verde (0.62/0.78/0.90)
-  para marcar cuándo conviene intervenir o cuándo el parche está listo para
-  stints de ataque.
+- **ΔNFR (nodal gradient) / ∇NFR∥/∇NFR⊥ (projections)** – integrate the Fz loads
+  (and their ΔFz variations), wheel forces, and deflections reported by OutSim
+  together with the engine regime, pedal inputs, and ABS/TC lights provided by
+  OutGauge to evaluate the longitudinal/lateral gradient distribution. Use the
+  `Fz`/`ΔFz` channels directly whenever you need absolute forces before adjusting
+  the setup.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+- **ν_f (natural frequency)** – leverages the Fz load distribution,
+  `slip_ratio`/`slip_angle`, speed, and `yaw_rate` emitted by OutSim combined with
+  the driving-style signals (`throttle`, `gear`) from OutGauge to classify nodes
+  and target bands.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】 The `slip_ratio` and `slip_angle`
+  used here correspond to the four-wheel average transmitted by OutSim, ensuring
+  the frequency labels react to the actual axle grip and only falling back to the
+  kinematic estimate when no valid readings are available.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】
+- **C(t) (structural coherence)** – built from the nodal ΔNFR distribution, the
+  `mu_eff_*` coefficients derived from OutSim accelerations, and the ABS/TC
+  activity reported by OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+- **Ackermann budgets / Slide Catch** – depend exclusively on the `slip_angle_*`
+  channels and the `yaw_rate` that OutSim transmits for each wheel; if the source
+  omits those fields TNFR × LFS will display `"no data"` for the related
+  readings.
+- **Aero balance drift (`aero_balance_drift`)** – summarises rake from the OutSim
+  `pitch` signal and axle suspension travel together with the `μ_front - μ_rear`
+  contrast without blending synthetic inputs.
+- **Tyre temperatures/pressures** – reuse the OutGauge readings whenever the
+  samples are positive and finite; if the extended block is disabled the pipeline
+  keeps the previous reading or `"no data"`, avoiding artificial extrapolations.
+- **CPHI (Contact Patch Health Index)** – requires `slip_ratio`, `slip_angle`,
+  lateral/longitudinal forces, and wheel loads from the extended OutSim packet.
+  Without those signals TNFR × LFS labels the patch health as `"no data"`, so the
+  planner will not apply tyre-balance adjustments. The reports and the HUD share
+  red/amber/green thresholds (0.62/0.78/0.90) to flag when intervention is needed
+  or when the patch is ready for attack stints.
 
-## Subsistema aerodinámico
+## Aerodynamic subsystem
 
-| Ajuste | Métrica TNFR | Lectura | Aplicación |
+| Adjustment | TNFR metric | Reading | Application |
 | --- | --- | --- | --- |
-| Alerón delantero | `∇NFR⊥` | Deltas laterales positivos apuntan a sobrecarga en el eje delantero durante la fase media. | Reducir ángulo o carga delantera cuando `C(t)` se mantiene alto (>0.75) para devolver equilibrio sin sacrificar coherencia y validar con las tendencias `Fz_front`/`Fz_rear` que el reparto acompaña el ajuste.
-| Alerón trasero | `∇NFR⊥` | Deltas laterales negativos persistentes en microsectores de tracción indican falta de apoyo en el eje trasero. | Añadir uno o dos clics de ala cuando `ν_f` cae por debajo de la banda óptima y el HUD reporta "Δaero ↘", verificando que `Fz_rear` recupera la carga objetivo tras el cambio.
-| Plano Gurney | `C(t)` | Una coherencia estructural decreciente junto a recomendaciones de sobreviraje sugiere turbulencia inducida. | Sustituir el plano por una variante de menor carga hasta que `C(t)` recupere la banda 0.70–0.85 mientras `ν_f` vuelve a la etiqueta "óptima".
+| Front wing | `∇NFR⊥` | Positive lateral deltas point to an overload on the front axle during the middle phase. | Reduce angle or front load when `C(t)` remains high (>0.75) to restore balance without sacrificing coherence and validate via the `Fz_front`/`Fz_rear` trends that the distribution follows the adjustment. |
+| Rear wing | `∇NFR⊥` | Persistent negative lateral deltas in traction microsectors indicate insufficient rear support. | Add one or two clicks of wing when `ν_f` drops below the optimal band and the HUD reports "Δaero ↘", confirming that `Fz_rear` regains the target load after the change. |
+| Gurney flap | `C(t)` | Declining structural coherence together with oversteer recommendations suggests induced turbulence. | Swap the flap for a lower-load variant until `C(t)` returns to the 0.70–0.85 band while `ν_f` settles back on the "optimal" label. |
 
-**Ejemplo CLI**
+**CLI example**
 
 ```bash
 $ tnfr-lfs suggest stint.jsonl --car-model FZR --track AS5 \
@@ -83,84 +79,81 @@ $ tnfr-lfs suggest stint.jsonl --car-model FZR --track AS5 \
   "parameter": "rear_wing_angle",
   "metric": "∇NFR⊥",
   "value": -0.18,
-  "rationale": "∇NFR⊥ trasero fuera del umbral en tracción",
-  "expected_effect": "Aumentar carga trasera"
+  "rationale": "Rear ∇NFR⊥ beyond threshold in traction",
+  "expected_effect": "Increase rear load"
 }
 ```
 
-Cruce la salida con la tabla anterior: un `∇NFR⊥` negativo en tracción
-coincide con la fila **Alerón trasero**, lo que justifica incrementar la
-carga trasera hasta que el HUD muestre `ν_f` en verde y `C(t)` > 0.75.
+Cross the output with the table above: a negative traction-side `∇NFR⊥`
+matches the **Rear wing** row, so increase rear load until the HUD shows
+`ν_f` in green and `C(t)` > 0.75.
 
-## Subsistema de suspensión
+## Suspension subsystem
 
-| Ajuste | Métrica TNFR | Lectura | Aplicación |
+| Adjustment | TNFR metric | Reading | Application |
 | --- | --- | --- | --- |
-| Rigidez de muelles | `ν_f` | Una frecuencia natural fuera de la banda objetivo dispara avisos "muy baja"/"muy alta". | Subir o bajar `spring_rate` en pasos pequeños hasta que `ν_f` retorne a la etiqueta "óptima" y `C(t)` permanezca estable.
-| Amortiguación (rebote) | `C(t)` | Picos de decoherencia tras transiciones rápidas indican que el amortiguador no sigue el perfil TNFR. | Ajustar el rebote para suavizar la respuesta hasta recuperar un `C(t)` creciente tras cada transición.
-| Barras estabilizadoras | `∇NFR⊥` | La diferencia lateral entre ejes se amplifica cuando las barras actúan asimétricamente en curvas medias. | Reequilibrar la barra delantera/trasera según el signo de `∇NFR⊥`; igualar `ν_f` entre ejes previene disonancias.
+| Spring stiffness | `ν_f` | A natural frequency outside the target band triggers "very low"/"very high" alerts. | Increase or decrease `spring_rate` in small steps until `ν_f` returns to the "optimal" label and `C(t)` stays stable. |
+| Damping (rebound) | `C(t)` | Decoherence spikes after quick transitions indicate the damper is not following the TNFR profile. | Adjust rebound to smooth the response until `C(t)` starts rising again after each transition. |
+| Anti-roll bars | `∇NFR⊥` | Lateral imbalance between axles grows when the bars act asymmetrically in medium corners. | Rebalance the front/rear bar based on the sign of `∇NFR⊥`; matching `ν_f` between axles prevents dissonance. |
 
-**Ejemplo HUD/OSD**
+**HUD/OSD example**
 
 ```text
-Página A  ΔNFR [--^--]  ν_f: muy baja  C(t): 0.62
-Recomendación: "Rigidez trasera +1 → recuperar banda ν_f"
+Page A  ΔNFR [--^--]  ν_f: very low  C(t): 0.62
+Recommendation: "Rear stiffness +1 → recover ν_f band"
 ```
 
-Cuando el HUD muestre una etiqueta `ν_f` "muy baja" y `C(t)` caiga por
-debajo de 0.65, consulte la fila **Rigidez de muelles**: incremente la
-rigidez hasta que el indicador cambie a "óptima" y la barra de coherencia
-(`C(t) ███░`) crezca en paralelo.
+When the HUD shows a "very low" `ν_f` label and `C(t)` drops below 0.65,
+check the **Spring stiffness** row: increase stiffness until the badge flips
+to "optimal" and the coherence bar (`C(t) ███░`) grows in parallel.
 
-## Subsistema de neumáticos
+## Tyre subsystem
 
-| Ajuste | Métrica TNFR | Lectura | Aplicación |
+| Adjustment | TNFR metric | Reading | Application |
 | --- | --- | --- | --- |
-| Presión en caliente | `∇NFR⊥` | Deltas laterales irregulares entre vueltas reflejan diferencias de presión. | Ajustar presiones para suavizar `∇NFR⊥` y estabilizar `ν_f` alrededor de la frecuencia nominal del perfil, confirmando con las trazas `Fz` por rueda que las cargas convergen tras el cambio.
-| Caída (camber) | `C(t)` | Una coherencia decreciente en las fases de apoyo indica que el parche de contacto no sigue la carga. | Aumentar la caída negativa hasta que `C(t)` se alinee con la referencia de la tabla de perfil (>0.78).
-| Toe | `ν_f`, `Φsync` | Saltos rápidos del indicador `ν_f~` tras cambios de dirección se asocian a toe excesivo; gaps de `Φsync` en entrada/salida activan correcciones (toe-out delantero si cae, toe-in trasero si se dispara). | Ajustar toe para eliminar artefactos en la señal `ν_f~` y recuperar la banda "óptima"; utiliza las recomendaciones de `Φsync` para abrir toe delante cuando falte sincronía en entrada y cerrar toe detrás cuando aumente en salida.
+| Hot pressure | `∇NFR⊥` | Irregular lateral deltas between laps reveal pressure differences. | Adjust pressures to smooth `∇NFR⊥` and stabilise `ν_f` around the profile’s nominal frequency, confirming with per-wheel `Fz` traces that loads converge after the change. |
+| Camber | `C(t)` | Declining coherence during load phases indicates the contact patch is not following the load. | Increase negative camber until `C(t)` aligns with the profile table reference (>0.78). |
+| Toe | `ν_f`, `Φsync` | Rapid jumps in the `ν_f~` indicator after direction changes point to excessive toe; `Φsync` gaps on entry/exit trigger corrections (front toe-out when it drops, rear toe-in when it spikes). | Adjust toe to remove artefacts in the `ν_f~` signal and recover the "optimal" band; use the `Φsync` guidance to open front toe when entry sync is missing and close rear toe when exit sync increases. |
 
-**Ejemplo CLI**
+**CLI example**
 
 ```bash
 $ tnfr-lfs analyze stint.jsonl --export json \
     | jq '.phase_messages[] | select(.metric=="∇NFR⊥" and .phase=="apex")'
-{
+  {
   "phase": "apex",
   "metric": "∇NFR⊥",
   "status": "high",
-  "message": "Presiones delanteras desbalanceadas"
+  "message": "Front pressures imbalanced"
 }
 ```
 
-La fase «apex» con `∇NFR⊥` alto remite a la fila **Presión en caliente**,
-por lo que conviene igualar las presiones hasta que la métrica vuelva a la
-zona nominal y la alerta desaparezca en la siguiente ejecución de
-`tnfr-lfs analyze`.
+The ``apex`` phase with a high `∇NFR⊥` maps to the **Hot pressure** row,
+so equalise pressures until the metric returns to its nominal zone and the
+alert disappears in the next ``tnfr-lfs analyze`` run.
 
-## Subsistema de frenos y balance
+## Brake and balance subsystem
 
-| Ajuste | Métrica TNFR | Lectura | Aplicación |
+| Adjustment | TNFR metric | Reading | Application |
 | --- | --- | --- | --- |
-| Bias de frenada | `∇NFR⊥` | Spikes positivos en frenadas fuertes indican sobrecarga delantera. | Trasladar el bias hacia el eje trasero hasta que el HUD o el CLI reduzcan los picos reportados y comprobar en las curvas `Fz_front`/`ΔFz_front` que la carga se redistribuye según lo esperado.
-| Potencia ABS/TC | `C(t)` | Un índice de coherencia oscilante tras entradas de ABS revela intervención agresiva. | Suavizar el ABS/TC para mantener `C(t)` estable mientras `ν_f` se mantiene en banda.
-| Balanceo longitudinal | `ν_f` | Un badge `ν_f` "muy alta" en recta sugiere rigidez excesiva en frenada. | Ablandar topes o bumpstops delanteros para alinear la frecuencia con el objetivo.
+| Brake bias | `∇NFR⊥` | Positive spikes under heavy braking indicate front overload. | Shift the bias rearward until the HUD or CLI reduces the reported peaks and confirm via the `Fz_front`/`ΔFz_front` traces that load redistributes as expected. |
+| ABS/TC power | `C(t)` | An oscillating coherence index after ABS entries reveals aggressive intervention. | Soften ABS/TC to keep `C(t)` steady while `ν_f` stays within band. |
+| Longitudinal heave | `ν_f` | A "very high" `ν_f` badge on straights suggests excessive stiffness under braking. | Soften front packers or bump stops to align the frequency with the target. |
 
-**Ejemplo combinado**
+**Combined example**
 
 ```bash
 $ tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 \
     --outgauge-port 3000 --insim-port 29999
-# Durante la frenada, página A muestra:
-∇NFR⊥: +0.24  ν_f: óptima  C(t): 0.81  → "Bias delantero alto"
+# During braking, page A shows:
+∇NFR⊥: +0.24  ν_f: optimal  C(t): 0.81  → "High front bias"
 ```
 
-El HUD enlaza automáticamente con la fila **Bias de frenada**, indicando
-que hay que desplazar el balance hacia atrás hasta que `∇NFR⊥`
-permanezca por debajo del umbral contextual y la recomendación desaparezca.
+The HUD links straight to the **Brake bias** row, signalling that the balance
+must move rearward until `∇NFR⊥` stays below the contextual threshold and the
+recommendation clears.
 
 ---
 
-Para ampliar cómo se calculan las métricas `∇NFR⊥`, `ν_f` y `C(t)`,
-revise los módulos `tnfr_lfs.core` descritos en la [referencia de
-API](api_reference.md).
+For deeper insight into how the `∇NFR⊥`, `ν_f`, and `C(t)` metrics are computed,
+review the `tnfr_lfs.core` modules described in the [API reference](api_reference.md).

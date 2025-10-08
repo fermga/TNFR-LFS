@@ -17,10 +17,10 @@ and `tnfr_lfs.io.raf_to_telemetry_records`. All TNFR indicators (`ΔNFR`, the
 nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)` and nodal derivatives)
 are computed from the Live for Speed OutSim/OutGauge telemetry streams,
 so make sure the simulator exposes both feeds before running any
-subcommand.  Recuerda que las componentes `∇NFR∥`/`∇NFR⊥` reflejan la
-proyección del gradiente nodal; cuando necesites interpretar cargas
-absolutas cruza las recomendaciones con los canales `Fz`/`ΔFz` directos
-de OutSim.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+subcommand. Remember that the `∇NFR∥`/`∇NFR⊥` components capture the
+projection of the nodal gradient; whenever you need to interpret
+absolute loads, cross-check the recommendations with the direct
+`Fz`/`ΔFz` channels from OutSim.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
 
 Replay Analyzer exports can be ingested with `--replay-csv-bundle`:
 
@@ -89,38 +89,37 @@ telemetry interfaces:
 
 The HUD cycles through three pages (press the button to advance):
 
-* **Página A** – curva y fase actuales con la insignia ``ν_f`` (muy
-  baja/óptima/…), un medidor ΔNFR con tolerancias ``[--^--]`` integrado en la
-  línea de objetivos, el arquetipo activo (``hairpin``, ``medium``, ``fast`` o
-  ``chicane``) con sus referencias de proyección ∇NFR∥/∇NFR⊥ y pesos de detune, el resumen dinámico
-  ``Si↺`` de la memoria sensorial y la banda ``ν_f~▁▃▆`` que muestra la evolución
-  reciente de la frecuencia natural.  Debajo se representa la barra de
-  coherencia ``C(t) ███░`` normalizada con el objetivo de Si del perfil actual y
-  se mantiene el indicador ``Δaero`` que refleja el desequilibrio ΔNFR entre
-  ejes a alta velocidad.  Cuando los eventos de operador ``OZ``/``IL`` superan
-  sus umbrales ΔNFR contextualizados se añade un medidor «ΔNFR frenada» con la
-  superficie dominante (``low_grip``/``neutral``/``high_grip``) y el pico observado
-  frente al umbral calculado para el microsector, facilitando el ajuste
-  inmediato del ``brake_bias_pct`` desde el propio HUD.  En los microsectores
-  donde la densidad estructural y las cargas permanecen por debajo de los
-  umbrales configurados aparece además la línea «Silencio …» indicando el
-  porcentaje de cobertura y la densidad media observada para ese estado latente.
-  Si la racha de microsectores silenciosos se extiende durante varios segmentos
-  consecutivos, la cabecera añade un aviso «no tocar» reutilizando el detector
-  ``detect_silencio`` para subrayar que conviene mantener los reglajes actuales.
-  Bajo los indicadores de amortiguación se añade ahora la línea «CPHI»,
-  que colorea cada rueda con 🟢/🟠/🔴 según los umbrales compartidos y añade
-  un «+» cuando el valor supera el objetivo verde para atacar la vuelta.
-* **Página B** – encabezado con la etiqueta de banda ``ν_f`` y su clasificación,
-  junto a la barra de coherencia ``C(t)`` y la onda ``ν_f~`` agregada para la
-  última vuelta.  Debajo se listan las top‑3 contribuciones nodales a
-  |ΔNFR↓| con barras ASCII de anchura fija y el modo resonante dominante
-  (frecuencia, ratio ``ρ`` y clasificación).
-* **Página C** – arranca con ``Si plan`` para exponer el estado de memoria del
-  piloto y a continuación ofrece la pista rápida para el operador activo: las
-  2–3 acciones de setup priorizadas por ``SetupPlanner`` junto a su efecto
-  esperado y una guía aero (“Aero …”) que resume si conviene reforzar el alerón
-  delantero o trasero en la recta.
+* **Page A** – shows the current corner and phase with the ``ν_f`` badge (very
+  low/optimal/…), a ΔNFR gauge with ``[--^--]`` tolerances integrated into the
+  target line, the active archetype (``hairpin``, ``medium``, ``fast`` or
+  ``chicane``) with its ∇NFR∥/∇NFR⊥ projection references and detune weights, the
+  dynamic ``Si↺`` sensory memory summary, and the ``ν_f~▁▃▆`` band that tracks
+  the recent evolution of the natural frequency. Below that sits the
+  normalised coherence bar ``C(t) ███░`` aligned with the current profile target
+  and the ``Δaero`` indicator that reflects the ΔNFR imbalance between axles at
+  high speed. When ``OZ``/``IL`` operator events exceed their contextual ΔNFR
+  thresholds, the HUD appends a “ΔNFR braking” gauge with the dominant surface
+  (``low_grip``/``neutral``/``high_grip``) and the peak observed versus the
+  threshold computed for the microsector, enabling immediate ``brake_bias_pct``
+  adjustments from the HUD. In microsectors where the structural density and the
+  loads stay below the configured thresholds an extra “Silence …” line appears,
+  reporting coverage percentage and mean density for that latent state. If the
+  silent streak spans several consecutive segments the header adds a “do not
+  touch” warning via the ``detect_silencio`` detector to underline that the
+  current setup should be preserved. Beneath the damping indicators the new
+  “CPHI” line colours each wheel with 🟢/🟠/🔴 according to the shared thresholds
+  and appends a “+” when the value clears the green objective before attacking
+  the lap.
+* **Page B** – displays the ``ν_f`` band label and its classification alongside
+  the ``C(t)`` coherence bar and the aggregated ``ν_f~`` waveform for the last
+  lap. The section below lists the top-three nodal contributions to |ΔNFR↓|
+  using fixed-width ASCII bars together with the dominant resonant mode
+  (frequency, ratio ``ρ`` and classification).
+* **Page C** – opens with ``Si plan`` to expose the driver memory state and then
+  surfaces the quick brief for the active operator: the two or three setup
+  actions prioritised by ``SetupPlanner`` with their expected effect and an aero
+  cue (“Aero …”) that summarises whether the front or rear wing should be
+  reinforced along the straight.
 
 The overlay uses the default layout ``left=80, top=20, width=40, height=16``
 and every page is trimmed to 239 bytes so it fits within the
@@ -128,19 +127,19 @@ and every page is trimmed to 239 bytes so it fits within the
 ``--layout-left``/``--layout-top``/``--layout-width``/``--layout-height`` if
 another mod already occupies that region.
 
-### Checklist operativo en HUD/CLI
+### HUD/CLI operations checklist
 
-La página C incorpora una línea «Checklist» que valida los objetivos de
-operaciones: ``Si`` medio ≥ 0.75, integral ΔNFR ≤ 6.00 kN·s⁻¹, ``Head`` ≥
-0.40 y Δμ ≤ 0.12. Cada bloque muestra ✅ cuando la métrica respeta el
-umbral y ⚠️ cuando requiere actuación, reutilizando los mismos límites
-que emplean el motor de reglas y las métricas de ventana.【F:tnfr_lfs/recommender/rules.py†L604-L615】【F:tnfr_lfs/recommender/search.py†L210-L236】【F:tnfr_lfs/core/metrics.py†L2558-L2575】【F:tnfr_lfs/cli/osd.py†L1477-L1567】
+Page C adds a “Checklist” line that validates the operations targets:
+mean ``Si`` ≥ 0.75, ΔNFR integral ≤ 6.00 kN·s⁻¹, ``Head`` ≥ 0.40, and Δμ ≤
+0.12. Each block shows ✅ when the metric respects the threshold and ⚠️ when
+it requires attention, reusing the same limits enforced by the rule engine and
+the window metrics.【F:tnfr_lfs/recommender/rules.py†L604-L615】【F:tnfr_lfs/recommender/search.py†L210-L236】【F:tnfr_lfs/core/metrics.py†L2558-L2575】【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 
 Refer to the [setup equivalence guide](setup_equivalences.md) for a
 metric-by-metric breakdown (`∇NFR⊥`, `ν_f`, `C(t)`) that matches the HUD
-widgets and the recommendations emitted by ``osd``.  Esa guía también explica
-cuándo apoyar esas proyecciones con los canales `Fz`/`ΔFz` si buscas ajustes de
-carga absolutos.
+widgets and the recommendations emitted by ``osd``. That guide also explains
+when to back those projections with the `Fz`/`ΔFz` channels if you need
+absolute load adjustments.
 
 ```bash
 tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
@@ -158,31 +157,31 @@ highlights the longitudinal/lateral focus defined by the detune weights. The new
 ΔNFR gauge (``[--^--]``) and the ``ν_f~`` sparkline quantify how far the current
 stint deviates from the target envelope before the gradient line reports the
 dominant frequency extracted from the steer-versus-yaw/lateral cross-spectrum
-together with the measured phase offset ``θ`` y su coseno ``Siφ``, the structural
-coherence index ``C(t)`` and the frequency badge derived from the vehicle
-category (e.g. GT ``1.9–2.2 Hz``). Justo debajo se imprime ``Δaero`` para que el
-ingeniero visualice cuánto difiere la carga delantera respecto a la trasera a
-alta y baja velocidad.
+together with the measured phase offset ``θ`` and its cosine ``Siφ``, the
+structural coherence index ``C(t)`` and the frequency badge derived from the
+vehicle category (e.g. GT ``1.9–2.2 Hz``). Just below it prints ``Δaero`` so the
+engineer can see how much the front load differs from the rear at both low and
+high speed.
 
 Natural frequency bands can be customised through
 ``NaturalFrequencySettings.frequency_bands`` and per-car categories handled by
-``ProfileManager``.  The resulting badge (muy baja/óptima/…) and the structural
-index ``C(t)`` are scaled with the profile objectives, so GT stints and fórmula
+``ProfileManager``.  The resulting badge (very low/optimal/…) and the structural
+index ``C(t)`` are scaled with the profile objectives, so GT stints and formula
 setups share a consistent vocabulary when reviewing telemetry.
 
 ### ``diagnose``
 
 Verifies that the Live for Speed ``cfg.txt`` file exposes OutSim/OutGauge data streams and that the UDP
-ports are reachable.  Run ``tnfr-lfs diagnose /ruta/a/LFS/cfg.txt`` before a session to receive:
+ports are reachable.  Run ``tnfr-lfs diagnose /path/to/LFS/cfg.txt`` before a session to receive:
 
-* Advertencias si ``OutSim Mode`` u ``OutGauge Mode`` no están establecidos en ``1``.
-* Detalles sobre el puerto ``InSim`` configurado (p. ej. ``29999``) para que puedas lanzar ``/insim 29999``
-  desde el chat del simulador cuando toque inicializar la telemetría.
-* Una comprobación rápida de sockets que informa si los puertos ``4123`` (OutSim) y ``3000`` (OutGauge)
-  pueden reservarse en ``127.0.0.1`` o si otro proceso los está ocupando.
+* Warnings when ``OutSim Mode`` or ``OutGauge Mode`` are not set to ``1``.
+* Details about the configured ``InSim`` port (e.g. ``29999``) so you can launch ``/insim 29999``
+  from the simulator chat when it is time to initialise telemetry.
+* A quick socket check that reports whether ports ``4123`` (OutSim) and ``3000`` (OutGauge)
+  can be reserved on ``127.0.0.1`` or if another process already owns them.
 
-La salida termina en ``Estado: correcto`` cuando todo está disponible; en caso contrario imprime un
-resumen de los fallos detectados y devuelve un código de error.
+The output ends in ``Status: ok`` when everything is available; otherwise it prints
+a summary of the failures detected and returns a non-zero exit code.
 
 ### ``baseline``
 
@@ -290,8 +289,8 @@ The additional artefacts provide:
 * ``coherence_map`` – mean/peak coherence per microsector with the
   reconstructed distance along the lap.
 * ``operator_trajectories`` – structural timelines for ``AL``/``OZ``/``IL``/
-  ``SILENCIO`` detections extraídos de ``Microsector.operator_events`` junto
-  con la cobertura del nuevo estado latente de silencio.
+  ``SILENCIO`` detections extracted from ``Microsector.operator_events`` along
+  with the coverage of the new silent latent state.
 * ``delta_bifurcations`` – ΔNFR sign changes and derivative summaries on
   the structural axis to highlight bifurcation hotspots.
 
@@ -321,7 +320,7 @@ objectives under ``car`` and ``tnfr_targets`` respectively.
   "phase_sensitivities": {
     "entry": {"delta_nfr_integral": {"rear_wing_angle": -0.052}}
   },
-  "aero_guidance": "Alta velocidad → libera alerón trasero/refuerza delantero",
+  "aero_guidance": "High speed → trim rear wing / reinforce front",
   "aero_metrics": {"low_speed_imbalance": 0.03, "high_speed_imbalance": -0.35}
 }
 ```
@@ -335,8 +334,8 @@ the micro-delta experiments.
 Use :meth:`tnfr_lfs.io.profiles.ProfileManager.update_aero_profile` to persist
 the ``race`` and ``stint_save`` aero targets mentioned in the HUD.  The rule
 engine reads them back via the profile snapshot so the new aero coherence
-operator only raises wing tweaks when the stored baseline (baja velocidad)
-permanece dentro de tolerancia.
+operator only raises wing tweaks when the stored baseline (low speed)
+remains within tolerance.
 ## Configuration
 
 The CLI resolves defaults from a ``tnfr-lfs.toml`` file located in the
@@ -389,35 +388,32 @@ The brake thermal proxy honours the ``mode`` declared in ``[thermal.brakes]`` an
 Before running the CLI against Live for Speed you must enable the telemetry broadcasters inside
 ``cfg.txt`` (located in the simulator root directory):
 
-1. Edit the ``OutSim`` block to contain ``Mode 1``, ``Port 4123`` y ``IP 127.0.0.1``.  Estos valores
-   coinciden con las opciones por defecto de ``tnfr-lfs baseline`` y pueden activarse al vuelo con
-   ``/outsim 1 127.0.0.1 4123`` desde el chat del simulador.
-2. Añade ``OutSim Opts ff`` para incluir el ID del jugador, las entradas de piloto y el bloque de ruedas
-   (fuerzas, cargas Fz, deflexión) que requieren los cálculos de ΔNFR y ν_f.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
-3. Actualiza el bloque ``OutGauge`` con ``Mode 1``, ``Port 3000`` e ``IP 127.0.0.1``; Live for Speed acepta
-   ``/outgauge 1 127.0.0.1 3000`` como atajo para la misma configuración.
-4. Reserva un puerto ``InSim`` estableciendo ``InSim Port 29999`` (o el valor preferido) y la IP del equipo
-   donde se ejecuta TNFR × LFS.  Lanza ``/insim 29999`` al iniciar una sesión para realizar el *handshake* que
-   requieren algunos mods de Live for Speed.
+1. Edit the ``OutSim`` block to contain ``Mode 1``, ``Port 4123`` and ``IP 127.0.0.1``. These values
+   match the defaults used by ``tnfr-lfs baseline`` and can be enabled on the fly with
+   ``/outsim 1 127.0.0.1 4123`` from the simulator chat.
+2. Add ``OutSim Opts ff`` to include the player ID, driver inputs, and the wheel packet
+   (forces, Fz loads, deflection) required to compute ΔNFR and ν_f.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+3. Update the ``OutGauge`` block with ``Mode 1``, ``Port 3000`` and ``IP 127.0.0.1``; Live for Speed accepts
+   ``/outgauge 1 127.0.0.1 3000`` as a shortcut for the same configuration.
+4. Reserve an ``InSim`` port by setting ``InSim Port 29999`` (or your preferred value) and the IP of the machine
+   running TNFR × LFS. Launch ``/insim 29999`` when starting a session to perform the handshake required by
+   some Live for Speed mods.
 
-Guarda los cambios y ejecuta ``tnfr-lfs diagnose /ruta/a/cfg.txt`` para confirmar que los valores son
-coherentes y que ningún servicio está bloqueando los puertos UDP.
+Save the changes and run ``tnfr-lfs diagnose /path/to/cfg.txt`` to confirm the values are consistent and that no service is blocking the UDP ports.
 
 ### Telemetry field checklist
 
-- **ΔNFR (gradiente nodal) / ∇NFR⊥ (proyección lateral)** – requieren OutSim para
-  exponer cargas Fz, aceleraciones, fuerzas y deflexión de rueda junto a OutGauge
-  para obtener `rpm`, pedales y luces ABS/TC.  Estas señales alimentan el
-  gradiente nodal; consulta los canales `Fz`/`ΔFz` si necesitas cuantificar
-  cargas absolutas antes de aplicar un ajuste.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
-- **ν_f (frecuencia natural)** – depende de la distribución de cargas Fz,
-  `slip_ratio`/`slip_angle`, velocidad y `yaw_rate` calculados desde
-  OutSim, con señales de estilo (`throttle`, `gear`) procedentes de
-  OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
-- **C(t) (coherencia estructural)** – se alimenta de la misma mezcla de
-  señales OutSim para ΔNFR y de los coeficientes `mu_eff_*`, además de
-  las banderas ABS/TC de OutGauge que el fusionador traduce en eventos de
-  bloqueo.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+- **ΔNFR (nodal gradient) / ∇NFR⊥ (lateral projection)** – require OutSim to
+  expose Fz loads, accelerations, forces, and wheel deflection together with
+  OutGauge to obtain `rpm`, pedal positions, and ABS/TC lights. These signals feed
+  the nodal gradient; consult the `Fz`/`ΔFz` channels if you need to quantify
+  absolute loads before applying an adjustment.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+- **ν_f (natural frequency)** – depends on the distribution of Fz loads,
+  `slip_ratio`/`slip_angle`, speed, and `yaw_rate` computed from OutSim, along
+  with style signals (`throttle`, `gear`) emitted by OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+- **C(t) (structural coherence)** – consumes the same blend of OutSim signals
+  used for ΔNFR together with the `mu_eff_*` coefficients and the ABS/TC flags
+  from OutGauge that the fusion module translates into lockup events.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
 
 Use ``--config`` to point to an alternative file on a per-invocation
 basis:
