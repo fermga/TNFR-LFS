@@ -11,6 +11,7 @@ polled from high-frequency loops.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from types import TracebackType
 import socket
 import struct
@@ -24,6 +25,9 @@ __all__ = [
     "OutSimUDPClient",
     "OutSimWheelState",
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 _BASE_STRUCT = struct.Struct("<I15f")
@@ -193,12 +197,26 @@ class OutSimUDPClient:
         self._socket.bind(("", port))
         local_host, local_port = self._socket.getsockname()
         self._address: Tuple[str, int] = (local_host, local_port)
+        self._timeouts = 0
+        self._ignored_hosts = 0
 
     @property
     def address(self) -> Tuple[str, int]:
         """Return the bound socket address."""
 
         return self._address
+
+    @property
+    def timeouts(self) -> int:
+        """Number of calls that exhausted the retry budget."""
+
+        return self._timeouts
+
+    @property
+    def ignored_hosts(self) -> int:
+        """Number of datagrams dropped due to unexpected hosts."""
+
+        return self._ignored_hosts
 
     def recv(self) -> Optional[OutSimPacket]:
         """Attempt to receive a packet, returning ``None`` on timeout."""
@@ -212,8 +230,29 @@ class OutSimUDPClient:
             if not payload:
                 continue
             if self._remote_addresses and source[0] not in self._remote_addresses:
+                self._ignored_hosts += 1
+                logger.warning(
+                    "Ignoring OutSim datagram from unexpected host.",
+                    extra={
+                        "event": "outsim.ignored_host",
+                        "expected_hosts": sorted(self._remote_addresses),
+                        "source_host": source[0],
+                        "port": self._address[1],
+                    },
+                )
                 continue
             return OutSimPacket.from_bytes(payload)
+        self._timeouts += 1
+        logger.warning(
+            "OutSim recv retries exhausted without receiving a packet.",
+            extra={
+                "event": "outsim.recv_timeout",
+                "retries": self._retries,
+                "timeout": self._timeout,
+                "remote_host": self._remote_host,
+                "port": self._address[1],
+            },
+        )
         return None
 
     @staticmethod

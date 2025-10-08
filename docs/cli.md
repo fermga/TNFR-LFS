@@ -53,6 +53,32 @@ The same options can be persisted inside `tnfr-lfs.toml` under
 `[logging]`. See the updated template at the project root for an example
 with sane defaults.
 
+### Monitoring capture metrics
+
+Live capture commands emit an `info`-level `capture.completed` entry when
+the OutSim/OutGauge loop finishes. The log bundles counters for
+`attempts`, `samples`, `dropped_pairs`, the total capture `duration` and
+the per-stream timeout/ignored-host totals so dashboards can track data
+quality in real time. Follow-up CLI messages (for example the
+`baseline.saved` event) also include a `capture_metrics` object with the
+same payload to simplify downstream ingestion.
+
+When using JSON logging, pipe the stream directly to your collector or a
+CLI filter. For example, to forward the metrics to `jq` before shipping
+them to an aggregator:
+
+```bash
+tnfr-lfs baseline runs/baseline.jsonl \
+  --log-format json \
+  --log-output stdout \
+  | jq 'select(.event == "capture.completed")'
+```
+
+Any warning-level entries emitted by the UDP clients (for exhausted
+retries or datagrams from unexpected hosts) can be routed through the
+same pipeline so alerting systems receive immediate context about packet
+loss or misconfigured endpoints.
+
 ## Subcommands
 
 The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into eight subcommands:

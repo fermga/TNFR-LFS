@@ -104,6 +104,28 @@ from .common import (
 from .io import Records, _persist_records
 
 
+@dataclass(frozen=True, slots=True)
+class CaptureMetrics:
+    attempts: int
+    samples: int
+    dropped_pairs: int
+    duration: float
+    outsim_timeouts: int
+    outgauge_timeouts: int
+    outsim_ignored_hosts: int
+    outgauge_ignored_hosts: int
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureResult:
+    records: Records
+    metrics: CaptureMetrics
+
+    @property
+    def samples(self) -> int:
+        return self.metrics.samples
+
+
 Bundles = Sequence[Any]
 
 DEFAULT_OUTPUT_DIR = Path("out")
@@ -2309,6 +2331,7 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
     destination = _resolve_baseline_destination(namespace, config)
 
     overlay: Optional[OverlayManager] = None
+    capture_result: Optional[CaptureResult] = None
     records: Records = []
     if namespace.overlay and namespace.simulate is not None:
         raise CliError("--overlay is only available for live capture (omit --simulate).")
@@ -2337,9 +2360,22 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
             records = OutSimClient().ingest(namespace.simulate)
             if namespace.limit is not None:
                 records = records[: namespace.limit]
+            capture_result = CaptureResult(
+                records=records,
+                metrics=CaptureMetrics(
+                    attempts=len(records),
+                    samples=len(records),
+                    dropped_pairs=0,
+                    duration=0.0,
+                    outsim_timeouts=0,
+                    outgauge_timeouts=0,
+                    outsim_ignored_hosts=0,
+                    outgauge_ignored_hosts=0,
+                ),
+            )
         else:
             heartbeat = overlay.tick if overlay is not None else None
-            records = _capture_udp_samples(
+            capture_result = _capture_udp_samples(
                 duration=namespace.duration,
                 max_samples=namespace.max_samples,
                 host=namespace.host,
@@ -2349,9 +2385,12 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
                 retries=namespace.retries,
                 heartbeat=heartbeat,
             )
+            records = capture_result.records
     finally:
         if overlay is not None:
             overlay.close()
+
+    metrics_payload = asdict(capture_result.metrics) if capture_result else None
 
     if not records:
         message = "No telemetry samples captured."
@@ -2361,6 +2400,7 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
                 "event": "baseline.empty",
                 "destination": str(destination),
                 "format": namespace.format,
+                "capture_metrics": metrics_payload,
             },
         )
         return message
@@ -2378,6 +2418,7 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
             "destination": str(destination),
             "format": namespace.format,
             "simulate": namespace.simulate is not None,
+            "capture_metrics": metrics_payload,
         },
     )
     return message
@@ -2994,10 +3035,13 @@ def _capture_udp_samples(
     timeout: float,
     retries: int,
     heartbeat: Optional[Callable[[], None]] = None,
-) -> Records:
+) -> CaptureResult:
     fusion = TelemetryFusion()
     records: Records = []
     deadline = monotonic() + max(duration, 0.0)
+    started = monotonic()
+    attempts = 0
+    dropped_pairs = 0
 
     with OutSimUDPClient(
         host=host, port=outsim_port, timeout=timeout, retries=retries
@@ -3005,11 +3049,13 @@ def _capture_udp_samples(
         host=host, port=outgauge_port, timeout=timeout, retries=retries
     ) as outgauge:
         while len(records) < max_samples and monotonic() < deadline:
+            attempts += 1
             if heartbeat is not None:
                 heartbeat()
             outsim_packet = outsim.recv()
             outgauge_packet = outgauge.recv()
             if outsim_packet is None or outgauge_packet is None:
+                dropped_pairs += 1
                 if heartbeat is not None:
                     heartbeat()
                 sleep(timeout)
@@ -3017,6 +3063,27 @@ def _capture_udp_samples(
             record = fusion.fuse(outsim_packet, outgauge_packet)
             records.append(record)
 
-    return records
+        metrics = CaptureMetrics(
+            attempts=attempts,
+            samples=len(records),
+            dropped_pairs=dropped_pairs,
+            duration=monotonic() - started,
+            outsim_timeouts=outsim.timeouts,
+            outgauge_timeouts=outgauge.timeouts,
+            outsim_ignored_hosts=outsim.ignored_hosts,
+            outgauge_ignored_hosts=outgauge.ignored_hosts,
+        )
+
+    logger.info(
+        "UDP capture completed.",
+        extra={
+            "event": "capture.completed",
+            "host": host,
+            "outsim_port": outsim_port,
+            "outgauge_port": outgauge_port,
+            **{f"capture_{key}": value for key, value in asdict(metrics).items()},
+        },
+    )
+    return CaptureResult(records=records, metrics=metrics)
 
 
