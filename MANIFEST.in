@@ -1,6 +1,7 @@
 recursive-include data/cars *.toml
 recursive-include data/profiles *.toml
 include data/lfs_class_overrides.toml
+include data/BL1_XFG_baseline.csv
 include config/global.toml
 recursive-include data/tracks *.toml
 recursive-include data/track_profiles *.toml
