@@ -26,7 +26,9 @@ from .workflows import (
 
 def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.ArgumentParser:
     config = dict(config or {})
-    parser = argparse.ArgumentParser(description="TNFR Load & Force Synthesis")
+    parser = argparse.ArgumentParser(
+        description="TNFR × LFS – Live for Speed Load & Force Synthesis"
+    )
     parser.add_argument(
         "--config",
         dest="config_path",
