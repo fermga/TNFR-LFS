@@ -70,11 +70,11 @@ def _render_definition_list(entries: Mapping[str, str]) -> str:
 
 def _session_heading(session: Mapping[str, Any] | None) -> str:
     if not session:
-        return "Reporte TNFR × LFS"
+        return "TNFR × LFS Report"
     car = session.get("car_model")
     track = session.get("track_profile") or session.get("track_name")
     stint = session.get("session") or session.get("label")
-    parts = ["Reporte TNFR × LFS"]
+    parts = ["TNFR × LFS Report"]
     detail = ", ".join(str(item) for item in (car, track) if item)
     if detail:
         parts.append(detail)
@@ -87,15 +87,15 @@ def _render_global_metrics(results: Mapping[str, Any]) -> str:
     metrics: list[tuple[str, Any]] = [
         ("ΔNFR", results.get("delta_nfr")),
         ("Sense Index", results.get("sense_index")),
-        ("Disonancia", results.get("dissonance")),
-        ("Acoplamiento", results.get("coupling")),
-        ("Resonancia", results.get("resonance")),
+        ("Dissonance", results.get("dissonance")),
+        ("Coupling", results.get("coupling")),
+        ("Resonance", results.get("resonance")),
     ]
     objectives = _as_mapping(results.get("objectives"))
     if objectives:
         metrics.extend(
             (
-                f"Objetivo {escape(str(key))}",
+                f"Objective {escape(str(key))}",
                 objectives.get(key),
             )
             for key in ("target_delta_nfr", "target_sense_index")
@@ -105,7 +105,7 @@ def _render_global_metrics(results: Mapping[str, Any]) -> str:
     for label, value in metrics:
         formatted = _format_float(value)
         rows.append((label, formatted))
-    return _render_table(["Métrica", "Valor"], rows)
+    return _render_table(["Metric", "Value"], rows)
 
 
 def _render_microsector_variability(entries: Sequence[Mapping[str, Any]]) -> str:
@@ -135,10 +135,10 @@ def _render_microsector_variability(entries: Sequence[Mapping[str, Any]]) -> str
         return ""
     headers = [
         "Microsector",
-        "Muestras",
+        "Samples",
         "σ ΔNFR",
         "σ Sense Index",
-        "Estabilidad SI",
+        "SI Stability",
     ]
     return _render_table(headers, rows)
 
@@ -165,19 +165,19 @@ def _render_robustness(results: Mapping[str, Any]) -> str:
     ]
     variability_html = _render_microsector_variability(variability_rows)
     if variability_html:
-        pieces.append("<h3>Variabilidad por microsector</h3>" + variability_html)
+        pieces.append("<h3>Microsector variability</h3>" + variability_html)
     recursive_trace = _as_sequence(results.get("recursive_trace"))
     if recursive_trace:
         stats = {
-            "Mínimo": _format_float(min(recursive_trace)),
-            "Máximo": _format_float(max(recursive_trace)),
-            "Último": _format_float(recursive_trace[-1]),
+            "Minimum": _format_float(min(recursive_trace)),
+            "Maximum": _format_float(max(recursive_trace)),
+            "Latest": _format_float(recursive_trace[-1]),
         }
-        pieces.append("<h3>Memoria recursiva</h3>" + _render_definition_list(stats))
+        pieces.append("<h3>Recursive memory</h3>" + _render_definition_list(stats))
     pairwise = _as_mapping(results.get("pairwise_coupling")) or {}
     flat_pairs = _flatten_pairwise(pairwise)
     if flat_pairs:
-        pieces.append("<h3>Acoplamientos nodales</h3>" + _render_definition_list(flat_pairs))
+        pieces.append("<h3>Nodal couplings</h3>" + _render_definition_list(flat_pairs))
     return "".join(pieces)
 
 
@@ -225,7 +225,7 @@ def _render_pareto(results: Mapping[str, Any], session: Mapping[str, Any]) -> st
             else:
                 cells.append("-")
         rows.append(cells)
-    return "<h2>Frente Pareto</h2>" + _render_table(headers, rows)
+    return "<h2>Pareto Front</h2>" + _render_table(headers, rows)
 
 
 def _render_abtest(session: Mapping[str, Any], results: Mapping[str, Any]) -> str:
@@ -242,32 +242,32 @@ def _render_abtest(session: Mapping[str, Any], results: Mapping[str, Any]) -> st
         return ""
     payload = candidates[0]
     rows = [
-        ("Métrica", payload.get("metric", "-")),
-        ("Media baseline", _format_float(payload.get("baseline_mean"))),
-        ("Media variante", _format_float(payload.get("variant_mean"))),
-        ("Δ media", _format_float(payload.get("mean_difference"))),
+        ("Metric", payload.get("metric", "-")),
+        ("Baseline mean", _format_float(payload.get("baseline_mean"))),
+        ("Variant mean", _format_float(payload.get("variant_mean"))),
+        ("Δ mean", _format_float(payload.get("mean_difference"))),
         (
-            "Intervalo bootstrap",
+            "Bootstrap interval",
             f"[{_format_float(payload.get('bootstrap_low'))}, {_format_float(payload.get('bootstrap_high'))}]",
         ),
         (
-            "p permutación",
+            "Permutation p",
             _format_float(payload.get("permutation_p_value"), decimals=4),
         ),
-        ("Potencia", _format_float(payload.get("estimated_power"), decimals=3)),
+        ("Power", _format_float(payload.get("estimated_power"), decimals=3)),
     ]
     alpha_value = payload.get("alpha")
     if isinstance(alpha_value, (int, float)) and math.isfinite(alpha_value):
         rows.append(("α", _format_float(alpha_value, decimals=3)))
-    table = _render_table(["Estadística", "Valor"], rows)
+    table = _render_table(["Statistic", "Value"], rows)
     baseline_laps = _as_sequence(payload.get("baseline_laps"))
     variant_laps = _as_sequence(payload.get("variant_laps"))
     lap_rows = []
-    for label, values in (("Baseline", baseline_laps), ("Variante", variant_laps)):
+    for label, values in (("Baseline", baseline_laps), ("Variant", variant_laps)):
         formatted = ", ".join(_format_float(value) for value in values) if values else "-"
         lap_rows.append((label, formatted))
-    laps_table = _render_table(["Grupo", "Laps"], lap_rows)
-    section = "<h2>Comparación A/B</h2>" + table
+    laps_table = _render_table(["Group", "Laps"], lap_rows)
+    section = "<h2>A/B comparison</h2>" + table
     if laps_table:
         section += laps_table
     return section
@@ -276,7 +276,7 @@ def _render_abtest(session: Mapping[str, Any], results: Mapping[str, Any]) -> st
 def _render_session_messages(messages: Sequence[str]) -> str:
     if not messages:
         return ""
-    return "<h2>Perfil de sesión</h2>" + _render_list(messages)
+    return "<h2>Session profile</h2>" + _render_list(messages)
 
 
 def _render_playbook(session: Mapping[str, Any] | None) -> str:
@@ -286,7 +286,7 @@ def _render_playbook(session: Mapping[str, Any] | None) -> str:
     text_items = [str(item) for item in suggestions if item]
     if not text_items:
         return ""
-    return "<h2>Sugerencias de playbook</h2>" + _render_list(text_items)
+    return "<h2>Playbook suggestions</h2>" + _render_list(text_items)
 
 
 def html_exporter(results: Mapping[str, Any]) -> str:
@@ -294,7 +294,7 @@ def html_exporter(results: Mapping[str, Any]) -> str:
     messages = [str(item) for item in _as_sequence(results.get("session_messages")) if item]
     title = _session_heading(session)
     head = (
-        "<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\">"
+        "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
         f"<title>{escape(title)}</title>"
         "<style>body{font-family:system-ui, sans-serif;color:#111;background:#fafafa;margin:0;padding:0;}"
         "main{max-width:960px;margin:0 auto;padding:32px;}h1,h2,h3{color:#123;}table{border-collapse:collapse;width:100%;margin:16px 0;}"
@@ -304,22 +304,22 @@ def html_exporter(results: Mapping[str, Any]) -> str:
     )
     body_parts = [f"<main><h1>{escape(title)}</h1>"]
     body_parts.append(
-        "<section><h2>Fuente de datos y estimaciones</h2>"
-        "<p>Live for Speed no expone una temperatura nativa de frenos;"
-        " por ello TNFR trabaja con las señales disponibles.</p>"
-        "<p>Cuando el servidor proporciona lecturas OutGauge se usan"
-        " directamente en los cálculos y gráficos del informe.</p>"
-        "<p>Si OutGauge no está disponible se recurre a un proxy de"
-        " temperatura basado en la dinámica del coche, lo que puede"
-        " introducir mayor incertidumbre en las estimaciones.</p>"
+        "<section><h2>Data sources and estimates</h2>"
+        "<p>Live for Speed does not expose a native brake temperature;"
+        " therefore TNFR operates with the available signals.</p>"
+        "<p>When the server provides OutGauge readings they are used"
+        " directly in the calculations and report charts.</p>"
+        "<p>If OutGauge is unavailable a proxy temperature based on"
+        " the car dynamics is used, which can introduce greater"
+        " uncertainty in the estimates.</p>"
         "</section>"
     )
     global_metrics = _render_global_metrics(results)
     if global_metrics:
-        body_parts.append(f"<section><h2>Métricas globales</h2>{global_metrics}</section>")
+        body_parts.append(f"<section><h2>Global metrics</h2>{global_metrics}</section>")
     robustness = _render_robustness(results)
     if robustness:
-        body_parts.append(f"<section><h2>Robustez</h2>{robustness}</section>")
+        body_parts.append(f"<section><h2>Robustness</h2>{robustness}</section>")
     pareto_section = _render_pareto(results, session)
     if pareto_section:
         body_parts.append(f"<section>{pareto_section}</section>")

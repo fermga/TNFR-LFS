@@ -9,9 +9,9 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 _PHASE_SUMMARY_ORDER: Tuple[str, ...] = ("entry", "apex", "exit")
 _PHASE_SUMMARY_LABELS: Dict[str, str] = {
-    "entry": "Entrada",
-    "apex": "Vértice",
-    "exit": "Salida",
+    "entry": "Entry",
+    "apex": "Apex",
+    "exit": "Exit",
 }
 _AXIS_ORDER: Tuple[str, ...] = ("longitudinal", "lateral")
 _AXIS_SYMBOLS: Dict[str, str] = {"longitudinal": "∥", "lateral": "⊥"}
@@ -88,7 +88,7 @@ def phase_axis_summary_lines(
 ) -> Tuple[str, ...]:
     if not summary:
         return ()
-    header_parts = ["Fase"]
+    header_parts = ["Phase"]
     for phase in _PHASE_SUMMARY_ORDER:
         header_parts.append(f"{_PHASE_SUMMARY_LABELS.get(phase, phase):>7}")
     lines: List[str] = [" ".join(header_parts)]

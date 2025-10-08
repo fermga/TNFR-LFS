@@ -54,10 +54,10 @@ def test_html_exporter_renders_key_sections() -> None:
 
     html = html_exporter(results)
 
-    assert "<h2>Métricas globales</h2>" in html
-    assert "<h2>Robustez</h2>" in html
-    assert "Variabilidad por microsector" in html
-    assert "Frente Pareto" in html
-    assert "Comparación A/B" in html
-    assert "Sugerencias de playbook" in html
-    assert "Perfil de sesión" in html
+    assert "<h2>Global metrics</h2>" in html
+    assert "<h2>Robustness</h2>" in html
+    assert "Microsector variability" in html
+    assert "Pareto Front" in html
+    assert "A/B comparison" in html
+    assert "Playbook suggestions" in html
+    assert "Session profile" in html

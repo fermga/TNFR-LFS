@@ -200,7 +200,7 @@ def test_serialise_setup_plan_collects_unique_fields():
         payload["phase_axis_summary"]["longitudinal"]["entry"]
         == "⇈+0.40"
     )
-    assert any("Entrada ∥" in hint for hint in payload["phase_axis_suggestions"])
+    assert any("Entry ∥" in hint for hint in payload["phase_axis_suggestions"])
 
 
 def test_markdown_exporter_renders_abtest_section() -> None:
@@ -241,7 +241,7 @@ def test_markdown_exporter_renders_table_and_lists():
     assert "**Efectos esperados por fase**" in output
     assert "**Objetivos proyección ∇NFR∥/∇NFR⊥ por fase**" in output
     assert "**Mapa proyección ∇NFR∥/∇NFR⊥ por fase**" in output
-    assert "Entrada ∥" in output
+    assert "Entry ∥" in output
     assert "**Sugerencias de fases prioritarias**" in output
     assert "C(c/d/a)" in output
     assert "**Contribución SCI**" in output
@@ -305,19 +305,19 @@ def test_html_exporter_renders_extended_sections() -> None:
         "session_messages": ("Sesión con viento lateral",),
     }
     html = html_exporter(payload)
-    assert "Métricas globales" in html
-    assert "Robustez" in html
-    assert "Frente Pareto" in html
-    assert "Comparación A/B" in html
+    assert "Global metrics" in html
+    assert "Robustness" in html
+    assert "Pareto Front" in html
+    assert "A/B comparison" in html
     assert "Priorizar apex medio" in html
     assert "Sesión con viento lateral" in html
 
 
 def test_html_exporter_handles_missing_optional_sections() -> None:
     html = html_exporter({"delta_nfr": 0.0})
-    assert "Métricas globales" in html
-    assert "Frente Pareto" not in html
-    assert "Comparación A/B" not in html
+    assert "Global metrics" in html
+    assert "Pareto Front" not in html
+    assert "A/B comparison" not in html
 
 
 def test_native_encoder_writes_gearing(monkeypatch: pytest.MonkeyPatch) -> None:
