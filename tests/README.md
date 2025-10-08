@@ -7,15 +7,15 @@ future.
 
 ## `data/BL1_XFG_baseline.csv`
 
-* Reference dataset for the quickstart flow and the CLI tests.
-* Mirrors the 17-sample synthetic stint used under `tests/data` but lives at
-  the repository root for user-facing workflows.
-* Keep the same headers to preserve compatibility with the
-  `examples/quickstart.sh` script and the typed functions in
-  `typing_targets.quickstart_dataset`.
-* When you need real telemetry for tutorials or manual verification, also rely
-  on the RAF capture ``data/test1.raf`` included at the root; the CLI detects it
-  automatically through the built-in RAF parser.
+* Primary dataset for the quickstart walkthrough and the CLI regression tests.
+* Duplicates the 17-sample synthetic stint stored under `tests/data`, keeping a
+  copy at the repository root so user-facing workflows can consume it directly.
+* Keep its header row aligned with the expectations in
+  `examples/quickstart.sh` and with
+  `typing_targets.quickstart_dataset.dataset_columns()`; update all of them in
+  lockstep if the telemetry schema changes.
+* For tutorials or manual checks you can also rely on the RAF capture
+  `data/test1.raf`; the CLI auto-detects it through the native RAF parser.
 
 To regenerate the file you can copy the contents of
 `tests/data/synthetic_stint.csv` or rerun the script shown below, saving the
@@ -23,10 +23,10 @@ result to `data/BL1_XFG_baseline.csv`.
 
 ## `data/synthetic_stint.csv`
 
-* 17-sample telemetry stint that contains two distinct cornering events.
-* Columns follow the `TelemetryRecord` schema used by the acquisition layer.
-* Generated manually so that the segmentation heuristics detect brake and
-  support events while the ΔNFR baseline produces non-zero node deltas.
+* 17-sample telemetry stint that captures two differentiated cornering events.
+* Columns match the `TelemetryRecord` schema used by the acquisition layer.
+* Handcrafted so segmentation heuristics flag brake/support phases and the
+  ΔNFR baseline yields non-zero node deltas for every subsystem.
 
 To regenerate the file after adjusting the telemetry schema:
 
@@ -72,9 +72,9 @@ with Path("tests/data/synthetic_stint.csv").open("w", newline="", encoding="utf8
 
 ## `data/car_track_profiles.json`
 
-* Simplified library of ΔNFR tolerances per car model and track.
-* Tests load the JSON into `ThresholdProfile` instances to validate the
-  recommendation engine context resolution.
+* Compact library of ΔNFR tolerances defined per car model and track.
+* The tests load the JSON into `ThresholdProfile` instances to validate context
+  resolution inside the recommendation engine.
 
 To tweak tolerances create/update the dictionary and dump it with standard
 `json` tools.  The current structure is:
@@ -110,32 +110,34 @@ Path("tests/data/car_track_profiles.json").write_text(
 
 ## Mini track pack fixtures
 
-The `mini_track_pack` fixture synthesises a compact dataset with:
+The `mini_track_pack` fixture synthesises a compact pack with deterministic
+metadata:
 
-* `data/tracks/AS.toml` describing the `AS3` layout and its extras.
-* `data/track_profiles/p_test_combo.toml` containing deterministic weights and hints.
-* `modifiers/combos/demo_profile__p_test_combo.toml` with scale factors and hint overrides.
-* `data/cars/DEMO.toml` so the CLI can resolve the modifier via the car profile.
+* `data/tracks/AS.toml` describes the `AS3` layout and its auxiliary sections.
+* `data/track_profiles/p_test_combo.toml` provides fixed weights and hints.
+* `modifiers/combos/demo_profile__p_test_combo.toml` pins the scale factors and
+  overrides used by the recommendation engine.
+* `data/cars/DEMO.toml` lets the CLI resolve the modifier through the car
+  profile.
 
-When adding new test circuits or modifiers reuse the fixture by copying its
-structure into new files under the temporary directory. Prefer short manifest
-names and floats with few decimals so assertions stay readable. For additional
-layouts extend the TOML with `[config.XY#]` tables; for more profiles write extra
-`*.toml` files into the generated directories and return their identifiers from
-the fixture as new dataclass fields.
+When adding test circuits or modifiers, replicate this structure inside the
+temporary directory created by the fixture. Keep manifest names short and round
+floats to a few decimals so assertions remain readable. To model extra layouts
+extend the TOML with `[config.XY#]` tables; to add more profiles create
+additional `*.toml` files in the generated directories and expose their
+identifiers as new dataclass fields returned by the fixture.
 
 ## Acceptance orchestration fixtures
 
-The `acceptance_bundle_series`, `acceptance_records` and
+The `acceptance_bundle_series`, `acceptance_records`, and
 `acceptance_microsectors` fixtures exercise the nodal stage, window occupancy
-metrics and modal coupling/resonance operators without relying on the full EPI
-extractor.  They feed deterministic bundles and segmentation metadata to
-`orchestrate_delta_metrics` so that the acceptance tests can validate:
+metrics, and modal coupling/resonance operators without invoking the full EPI
+extractor. They feed deterministic bundles and segmentation metadata into
+`orchestrate_delta_metrics`, allowing the acceptance tests to validate:
 
 * Monotonic smoothing of the Sense Index time series.
-* Pairwise coupling per node and global resonance values derived from the
-  smoothed series.
-* ν_f weighting effects over the entropy-aware Sense Index calculation.
+* Per-node coupling and overall resonance derived from the smoothed series.
+* ν_f weighting effects applied to the entropy-aware Sense Index calculation.
 * Convergence of the recursive memory and mutation operators.
 
 Run the scenarios with:
