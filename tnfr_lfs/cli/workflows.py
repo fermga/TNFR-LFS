@@ -607,8 +607,8 @@ def build_setup_plan_payload(
         if not aggregated_effects:
             aggregated_effects = [rec.message for rec in ordered_actions if rec.message]
     else:
-        default_rationales = aggregated_rationales or ["Optimización de objetivo Si/ΔNFR"]
-        default_effects = aggregated_effects or ["Mejora equilibrada del coche"]
+        default_rationales = aggregated_rationales or ["SI/ΔNFR target optimisation"]
+        default_effects = aggregated_effects or ["Balanced car improvement"]
         changes = [
             SetupChange(
                 parameter=name,
@@ -824,8 +824,8 @@ def _format_quiet_sequence(sequence: Sequence[int]) -> str:
     start = sequence[0] + 1
     end = sequence[-1] + 1
     if start == end:
-        return f"Curva {start}"
-    return f"Curvas {start}-{end}"
+        return f"Corner {start}"
+    return f"Corners {start}-{end}"
 
 
 def _quiet_cli_notice(
@@ -846,14 +846,14 @@ def _quiet_cli_notice(
             coverage_values.append(coverage)
             si_values.append(si_variance)
             epi_values.append(epi_abs)
-    message = f"No tocar: {', '.join(descriptors)}"
+    message = f"Leave untouched: {', '.join(descriptors)}"
     if coverage_values:
         coverage_avg = sum(coverage_values) / len(coverage_values)
         si_avg = sum(si_values) / len(si_values) if si_values else 0.0
         epi_avg = sum(epi_values) / len(epi_values) if epi_values else 0.0
         message = (
-            f"{message} · silencio μ {coverage_avg * 100.0:.0f}%"
-            f" · Siσ μ {si_avg:.4f} · |dEPI| μ {epi_avg:.3f}"
+            f"{message} · quiet μ {coverage_avg * 100.0:.0f}%"
+            f" · SIσ μ {si_avg:.4f} · |dEPI| μ {epi_avg:.3f}"
         )
     return message
 
@@ -947,18 +947,18 @@ def _udp_ping(host: str, port: int, timeout: float, *, expected_size: int, label
             try:
                 sock.sendto(payload, (host, port))
             except OSError as exc:
-                return False, f"No se pudo enviar ping a {description}: {exc}"
+                return False, f"Unable to send ping to {description}: {exc}"
             try:
                 data, addr = sock.recvfrom(expected_size)
             except socket.timeout:
-                return False, f"Sin respuesta de {description} tras {timeout:.2f}s"
+                return False, f"No response from {description} after {timeout:.2f}s"
             except OSError as exc:
-                return False, f"Error recibiendo respuesta de {description}: {exc}"
+                return False, f"Error receiving reply from {description}: {exc}"
             if len(data) < expected_size:
-                return False, f"Respuesta incompleta de {description}: {len(data)} bytes"
-            return True, f"{label} respondió desde {addr[0]}:{addr[1]} ({len(data)} bytes)"
+                return False, f"Incomplete reply from {description}: {len(data)} bytes"
+            return True, f"{label} responded from {addr[0]}:{addr[1]} ({len(data)} bytes)"
     except OSError as exc:
-        return False, f"No se pudo crear socket UDP para {description}: {exc}"
+        return False, f"Unable to create UDP socket for {description}: {exc}"
 
 
 def _outsim_ping(host: str, port: int, timeout: float) -> Tuple[bool, str]:
@@ -975,11 +975,11 @@ def _recv_exact(sock: socket.socket, count: int, *, timeout: float, label: str) 
     while len(data) < count:
         remaining = deadline - monotonic()
         if remaining <= 0:
-            raise TimeoutError(f"Sin respuesta de {label}")
+            raise TimeoutError(f"No response from {label}")
         sock.settimeout(remaining)
         chunk = sock.recv(count - len(data))
         if not chunk:
-            raise ConnectionError(f"Conexión cerrada por {label}")
+            raise ConnectionError(f"Connection closed by {label}")
         data.extend(chunk)
     return bytes(data)
 
@@ -1011,14 +1011,14 @@ def _insim_handshake(host: str, port: int, timeout: float) -> Tuple[bool, str]:
             data = header + payload
             unpacked = InSimClient.VER_STRUCT.unpack(data)
             if unpacked[1] != InSimClient.ISP_VER:
-                return False, f"Respuesta inesperada de {description}"
+                return False, f"Unexpected reply from {description}"
             if unpacked[4] != InSimClient.INSIM_VERSION:
-                return False, f"Versión InSim incompatible en {description}"
-            return True, f"InSim respondió con versión {unpacked[4]}"
+                return False, f"InSim version mismatch at {description}"
+            return True, f"InSim responded with version {unpacked[4]}"
     except TimeoutError as exc:
         return False, f"{exc}"
     except (OSError, ConnectionError) as exc:
-        return False, f"Error en handshake con {description}: {exc}"
+        return False, f"Handshake error with {description}: {exc}"
 
 
 def _copy_to_clipboard(commands: Iterable[str]) -> bool:
@@ -1057,36 +1057,36 @@ def _share_disabled_commands(commands: Iterable[str]) -> None:
     command_list = [command for command in commands if command]
     if not command_list:
         return
-    print("Comandos recomendados para habilitar la telemetría:")
+    print("Recommended commands to enable telemetry:")
     for command in command_list:
         print(f"  {command}")
     if _copy_to_clipboard(command_list):
-        print("Los comandos se han copiado al portapapeles.")
+        print("Commands copied to the clipboard.")
     else:
-        print("Copia manual necesaria: no se pudo acceder al portapapeles.")
+        print("Manual copy required: clipboard access was not available.")
 
 
 def _check_setups_directory(cfg_path: Path) -> Tuple[bool, str]:
     setups_dir = cfg_path.parent.parent / "data" / "setups"
     if not setups_dir.exists():
-        return False, f"No se encontró el directorio de setups en {setups_dir}"
+        return False, f"Setups directory not found at {setups_dir}"
     if not setups_dir.is_dir():
-        return False, f"La ruta de setups no es un directorio: {setups_dir}"
+        return False, f"Setups path is not a directory: {setups_dir}"
     try:
         with tempfile.NamedTemporaryFile(dir=setups_dir, delete=False) as handle:
             test_path = Path(handle.name)
             handle.write(b"tnfr")
     except OSError as exc:
         suggestion = (
-            "Verifica permisos con `chmod u+w` o ejecuta LFS con privilegios de escritura."
+            "Check permissions with `chmod u+w` or run LFS with write privileges."
         )
-        return False, f"No hay permisos de escritura en {setups_dir}: {exc}. {suggestion}"
+        return False, f"No write permissions in {setups_dir}: {exc}. {suggestion}"
     else:
         try:
             test_path.unlink(missing_ok=True)
         except OSError:
             pass
-    return True, f"Permisos de escritura confirmados en {setups_dir}"
+    return True, f"Write permissions confirmed in {setups_dir}"
 
 
 def _phase_tolerances(
@@ -1123,19 +1123,19 @@ def _phase_tolerances(
     return tolerances
 
 
-_PHASE_LABELS = {"entry": "entrada", "apex": "vértice", "exit": "salida"}
+_PHASE_LABELS = {"entry": "entry", "apex": "apex", "exit": "exit"}
 _PHASE_RECOMMENDATIONS = {
     "entry": {
-        "positive": "liberar presión o adelantar el reparto para estabilizar el eje delantero",
-        "negative": "ganar mordida adelantando el apoyo delantero o retrasando el reparto",
+        "positive": "bleed brake pressure or move the bias forward to steady the front axle",
+        "negative": "gain front bite by adding support up front or shifting the bias rearward",
     },
     "apex": {
-        "positive": "aliviar rigidez lateral (barras/altura) para evitar saturar el vértice",
-        "negative": "buscar más rotación aumentando apoyo lateral o ajustando convergencias",
+        "positive": "soften lateral stiffness (bars/ride height) to avoid saturating the apex",
+        "negative": "seek more rotation by increasing lateral support or refining toe",
     },
     "exit": {
-        "positive": "moderar la entrega de par o endurecer el soporte trasero para contener el sobreviraje",
-        "negative": "liberar el eje trasero (altura/damper) para mejorar la tracción a la salida",
+        "positive": "moderate torque delivery or stiffen rear support to contain oversteer",
+        "negative": "free the rear axle (ride height/damping) to improve exit traction",
     },
 }
 
@@ -1150,7 +1150,7 @@ def _microsector_goal(microsector: Microsector, phase: str):
 def _phase_recommendation(phase: str, deviation: float) -> str:
     recommendations = _PHASE_RECOMMENDATIONS.get(phase, {})
     key = "positive" if deviation > 0 else "negative"
-    return recommendations.get(key, "ajustar la puesta a punto para equilibrar ΔNFR")
+    return recommendations.get(key, "tune the setup to balance ΔNFR")
 
 
 def _format_window(window: Tuple[float, float]) -> str:
@@ -1228,18 +1228,18 @@ def _phase_deviation_messages(
     if hints:
         slip_bias = hints.get("slip_ratio_bias")
         if isinstance(slip_bias, str) and slip_bias:
-            direction = "delantero" if slip_bias.lower() == "front" else "trasero"
+            direction = "front" if slip_bias.lower() == "front" else "rear"
             hint_messages.append(
-                f"Hint sesión: prioriza aero {direction} (slip_ratio_bias={slip_bias})."
+                f"Session hint: prioritise {direction} aero (slip_ratio_bias={slip_bias})."
             )
         surface = hints.get("surface")
         if isinstance(surface, str) and surface:
             hint_messages.append(
-                f"Hint sesión: superficie {surface} → ajusta amortiguación y alturas."
+                f"Session hint: surface {surface} → adjust damping and ride heights."
             )
     if not microsectors or not bundles:
         base_messages = [
-            "Sin desviaciones ΔNFR↓ relevantes; no se detectaron curvas segmentadas.",
+            "No meaningful ΔNFR↓ deviations; no segmented corners were detected.",
         ]
         base_messages.extend(hint_messages)
         return base_messages
@@ -1271,19 +1271,19 @@ def _phase_deviation_messages(
             if abs(deviation) <= tolerance:
                 continue
             label = _PHASE_LABELS.get(phase, phase)
-            direction = "exceso" if deviation > 0 else "déficit"
+            direction = "surplus" if deviation > 0 else "deficit"
             recommendation = _phase_recommendation(phase, deviation)
             messages.append(
                 (
-                    f"Curva {microsector.index + 1} ({label}): ΔNFR↓ medio "
-                    f"{actual_delta:+.2f} vs objetivo {goal.target_delta_nfr:+.2f} "
-                    f"({direction} {abs(deviation):.2f}, tolerancia ±{tolerance:.2f}). "
-                    f"Sugerencia: {recommendation}."
+                    f"Corner {microsector.index + 1} ({label}): mean ΔNFR↓ "
+                    f"{actual_delta:+.2f} vs target {goal.target_delta_nfr:+.2f} "
+                    f"({direction} {abs(deviation):.2f}, tolerance ±{tolerance:.2f}). "
+                    f"Suggestion: {recommendation}."
                 )
             )
     if not messages:
         messages = [
-            "Sin desviaciones ΔNFR↓ relevantes por fase; mantener la referencia actual.",
+            "No meaningful ΔNFR↓ deviations per phase; keep the current reference.",
         ]
         messages.extend(hint_messages)
         return messages
@@ -1299,7 +1299,7 @@ def _sense_index_map(
     for microsector in microsectors:
         entry: Dict[str, Any] = {
             "microsector": microsector.index,
-            "label": f"Curva {microsector.index + 1}",
+            "label": f"Corner {microsector.index + 1}",
             "sense_index": {},
         }
         aggregate: List[float] = []
@@ -1603,7 +1603,7 @@ def _generate_out_reports(
     phase_axis_weights_payload: List[Dict[str, Any]] = []
     phase_metrics_payload: List[Dict[str, Any]] = []
     for microsector in microsectors:
-        label = f"Curva {microsector.index + 1}"
+        label = f"Corner {microsector.index + 1}"
         samples_map = _serialise_phase_samples_map(
             getattr(microsector, "phase_samples", {}) or {}
         )
@@ -1741,13 +1741,13 @@ def _generate_out_reports(
         json.dump(memory_payload, handle, indent=2, sort_keys=True)
 
     summary_lines: List[str] = [
-        "# Resumen de métricas avanzadas",
+        "# Advanced metrics summary",
         "",
-        "## Resonancia modal",
+        "## Modal resonance",
     ]
     for axis, analysis in sorted(resonance_payload.items()):
         summary_lines.append(
-            f"- **{axis}** · energía total {analysis['total_energy']:.3f} (Fs={analysis['sample_rate']:.1f} Hz)"
+            f"- **{axis}** · total energy {analysis['total_energy']:.3f} (Fs={analysis['sample_rate']:.1f} Hz)"
         )
         if analysis["peaks"]:
             for peak in analysis["peaks"]:
@@ -1757,25 +1757,25 @@ def _generate_out_reports(
                     f"({peak['energy']:.3f})"
                 )
         else:
-            summary_lines.append("  - Sin picos detectados")
+            summary_lines.append("  - No peaks detected")
 
     if dissonance_payload:
         summary_lines.extend(
             [
                 "",
-                "## Disonancia útil",
-                f"- Magnitud útil: {dissonance_payload.get('useful_magnitude', 0.0):.3f}",
-                f"- Eventos útiles: {int(dissonance_payload.get('useful_events', 0))}",
-                f"- Magnitud parasitaria: {dissonance_payload.get('parasitic_magnitude', 0.0):.3f}",
+                "## Useful dissonance",
+                f"- Useful magnitude: {dissonance_payload.get('useful_magnitude', 0.0):.3f}",
+                f"- Useful events: {int(dissonance_payload.get('useful_events', 0))}",
+                f"- Parasitic magnitude: {dissonance_payload.get('parasitic_magnitude', 0.0):.3f}",
             ]
         )
 
     summary_lines.extend(
         [
             "",
-            "## Acoplamientos",
-            f"- Acoplamiento global ΔNFR↔Si: {coupling_payload['global']['delta_nfr_vs_sense_index']:.3f}",
-            f"- Índice de resonancia global: {coupling_payload['global']['resonance_index']:.3f}",
+            "## Coupling metrics",
+            f"- Global ΔNFR↔SI coupling: {coupling_payload['global']['delta_nfr_vs_sense_index']:.3f}",
+            f"- Global resonance index: {coupling_payload['global']['resonance_index']:.3f}",
         ]
     )
     thermal_summary: List[str] = []
@@ -1792,11 +1792,11 @@ def _generate_out_reports(
         temp_segments.append(f"{label} {mean_value:.1f}±{std_value:.1f}")
     if temp_segments:
         thermal_summary.append(
-            f"- Temperatura (°C): {' · '.join(temp_segments)}"
+            f"- Temperature (°C): {' · '.join(temp_segments)}"
         )
     elif not temperature_samples_present:
         thermal_summary.append(
-            "- Temperatura (°C): sin datos (OutGauge omitió el bloque de neumáticos)"
+            "- Temperature (°C): no data (OutGauge omitted the tyre block)"
         )
     pressure_segments: List[str] = []
     pressure_samples_present = any(
@@ -1811,14 +1811,14 @@ def _generate_out_reports(
         pressure_segments.append(f"{label} {mean_value:.2f}±{std_value:.3f}")
     if pressure_segments:
         thermal_summary.append(
-            f"- Presión (bar): {' · '.join(pressure_segments)}"
+            f"- Pressure (bar): {' · '.join(pressure_segments)}"
         )
     elif not pressure_samples_present:
         thermal_summary.append(
-            "- Presión (bar): sin datos (OutGauge omitió el bloque de neumáticos)"
+            "- Pressure (bar): no data (OutGauge omitted the tyre block)"
         )
     if thermal_summary:
-        summary_lines.extend(["", "## Dispersión térmica de neumáticos", *thermal_summary])
+        summary_lines.extend(["", "## Tyre thermal dispersion", *thermal_summary])
     brake_summary: List[str] = []
     if sense_map:
         ventilation_values: List[float] = []
@@ -1844,22 +1844,22 @@ def _generate_out_reports(
         if ventilation_values:
             avg_vent = mean(ventilation_values)
             brake_summary.append(
-                f"- Ventilación frenos: índice medio {avg_vent:.3f} (pico {max(ventilation_values):.3f})"
+                f"- Brake ventilation: mean index {avg_vent:.3f} (peak {max(ventilation_values):.3f})"
             )
         elif missing_temperature:
             brake_summary.append(
-                "- Ventilación frenos: sin datos (requiere T° de OutGauge)"
+                "- Brake ventilation: no data (requires OutGauge temperatures)"
             )
         if peak_values:
             brake_summary.append(
-                f"- Temperatura máx. freno: {max(peak_values):.0f}°C"
+                f"- Max brake temperature: {max(peak_values):.0f}°C"
             )
         if ventilation_values and fade_values:
             brake_summary.append(
-                f"- Fade detectado: caída máxima {max(fade_values) * 100:.0f}%"
+                f"- Brake fade detected: max drop {max(fade_values) * 100:.0f}%"
             )
     if brake_summary:
-        summary_lines.extend(["", "## Frenos", *brake_summary])
+        summary_lines.extend(["", "## Brakes", *brake_summary])
     if pairwise_payload:
         summary_lines.append("- Pares analizados:")
         for domain, pairs in sorted(pairwise_payload.items()):
@@ -1881,32 +1881,32 @@ def _generate_out_reports(
                 stability = sense_stats.get("stability_score")
                 if isinstance(stability, (int, float)) and math.isfinite(stability):
                     stability_lines.append(
-                        f"- {label}: estabilidad SI {float(stability):.2f}"
+                        f"- {label}: SI stability {float(stability):.2f}"
                     )
         if stability_lines:
-            summary_lines.extend(["", "## Estabilidad microsectores", *stability_lines])
+            summary_lines.extend(["", "## Microsector stability", *stability_lines])
 
     if memory_payload["memory"] or memory_payload["series"]:
         summary_lines.extend(
             [
                 "",
-                "## Memoria del índice de sensibilidad",
-                f"- Promedio suavizado: {memory_payload['average']:.3f}",
-                f"- Último valor de memoria: {memory_payload['memory'][-1]:.3f}",
-                f"- Factor de decaimiento: {memory_payload['decay']:.3f}",
+                "## Sense index memory",
+                f"- Smoothed average: {memory_payload['average']:.3f}",
+                f"- Last memory value: {memory_payload['memory'][-1]:.3f}",
+                f"- Decay factor: {memory_payload['decay']:.3f}",
             ]
         )
     else:
         summary_lines.extend(
             [
                 "",
-                "## Memoria del índice de sensibilidad",
-                "- No se registraron muestras para la traza de memoria.",
+                "## Sense index memory",
+                "- No samples were recorded for the memory trace.",
             ]
         )
 
     if occupancy_payload:
-        summary_lines.extend(["", "## Ocupación de ventanas"])
+        summary_lines.extend(["", "## Window occupancy"])
         phase_totals: Dict[str, List[float]] = {"entry": [], "apex": [], "exit": []}
         for entry in occupancy_payload:
             for phase, values in entry.get("window_occupancy", {}).items():
@@ -1916,7 +1916,7 @@ def _generate_out_reports(
             if not values:
                 continue
             summary_lines.append(
-                f"- {phase}: promedio {sum(values) / len(values):.3f} (ver window_occupancy.json para detalle)"
+                f"- {phase}: average {sum(values) / len(values):.3f} (see window_occupancy.json for details)"
             )
 
     summary_text = "\n".join(summary_lines) + "\n"
@@ -2258,9 +2258,9 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
             overlay.connect()
             overlay.show(
                 [
-                    "Capturando baseline",
-                    f"Duración máx: {int(namespace.duration)} s",
-                    f"Muestras objetivo: {namespace.max_samples}",
+                    "Capturing baseline",
+                    f"Max duration: {int(namespace.duration)} s",
+                    f"Target samples: {namespace.max_samples}",
                 ]
             )
 

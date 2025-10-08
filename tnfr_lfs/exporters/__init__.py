@@ -171,14 +171,14 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
 
     if abtest_payload:
         lines.append("")
-        lines.append("**Comparación A/B**")
+        lines.append("**A/B comparison**")
         metric_label = abtest_payload.get("metric")
         if metric_label:
-            lines.append(f"Métrica: `{metric_label}`")
-        lines.append("| Estadística | Baseline | Variante | Δ / detalle |")
+            lines.append(f"Metric: `{metric_label}`")
+        lines.append("| Statistic | Baseline | Variant | Δ / details |")
         lines.append("| --- | --- | --- | --- |")
         lines.append(
-            "| Media | {baseline} | {variant} | {delta} |".format(
+            "| Mean | {baseline} | {variant} | {delta} |".format(
                 baseline=_fmt(abtest_payload.get("baseline_mean")),
                 variant=_fmt(abtest_payload.get("variant_mean")),
                 delta=_fmt(abtest_payload.get("mean_difference"), signed=True),
@@ -188,7 +188,7 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         ci_low = _fmt(abtest_payload.get("bootstrap_low"), signed=True)
         ci_high = _fmt(abtest_payload.get("bootstrap_high"), signed=True)
         interval = f"[{ci_low}, {ci_high}]"
-        confidence_label = f"IC {int(round((1.0 - alpha) * 100))}%"
+        confidence_label = f"CI {int(round((1.0 - alpha) * 100))}%"
         lines.append(f"| {confidence_label} | - | - | {interval} |")
         lines.append(
             "| p (perm) | - | - | {value} |".format(
@@ -196,7 +196,7 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
             )
         )
         lines.append(
-            "| Potencia | - | - | {value} |".format(
+            "| Power | - | - | {value} |".format(
                 value=_fmt(abtest_payload.get("estimated_power"), decimals=3)
             )
         )
@@ -214,7 +214,7 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
             lines.append(f"Baseline laps: {formatted}")
         if isinstance(variant_laps, Sequence) and variant_laps:
             formatted = ", ".join(_fmt(value) for value in variant_laps)
-            lines.append(f"Variante laps: {formatted}")
+            lines.append(f"Variant laps: {formatted}")
 
     aero_guidance = plan.get("aero_guidance")
     aero_metrics = plan.get("aero_metrics", {}) or {}
@@ -223,7 +223,7 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         amc_value = aero_metrics.get("aero_mechanical_coherence")
     if aero_guidance or aero_metrics or amc_value is not None:
         lines.append("")
-        lines.append("**Indicadores aerodinámicos**")
+        lines.append("**Aerodynamic indicators**")
         if amc_value is not None:
             try:
                 lines.append(f"- C(c/d/a) {float(amc_value):.2f}")
@@ -235,14 +235,14 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         low = aero_metrics.get("low_speed_imbalance")
         if high is not None and low is not None:
             lines.append(
-                f"- Δaero alta {float(high):+.2f} · baja {float(low):+.2f}"
+                f"- High-speed aero Δ {float(high):+.2f} · low-speed {float(low):+.2f}"
             )
 
     sensitivities = plan.get("sensitivities", {})
     if sensitivities:
         lines.append("")
-        lines.append("**Sensibilidades agregadas**")
-        lines.append("| Métrica | Parámetro | Derivada |")
+        lines.append("**Aggregated sensitivities**")
+        lines.append("| Metric | Parameter | Derivative |")
         lines.append("| --- | --- | --- |")
         for metric in sorted(sensitivities):
             derivatives = sensitivities[metric]
@@ -258,7 +258,7 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     if dsi_dparam:
         lines.append("")
         lines.append("**dSi/dparam**")
-        lines.append("| Parámetro | Sensibilidad |")
+        lines.append("| Parameter | Sensitivity |")
         lines.append("| --- | --- |")
         for parameter in sorted(dsi_dparam):
             value = dsi_dparam[parameter]
@@ -272,7 +272,7 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     if dnfr_dparam:
         lines.append("")
         lines.append("**d∫|ΔNFR|/dparam**")
-        lines.append("| Parámetro | Sensibilidad |")
+        lines.append("| Parameter | Sensitivity |")
         lines.append("| --- | --- |")
         for parameter in sorted(dnfr_dparam):
             value = dnfr_dparam[parameter]
@@ -289,8 +289,8 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     )
     if sci_breakdown:
         lines.append("")
-        lines.append("**Contribución SCI**")
-        lines.append("| Término | Aporte |")
+        lines.append("**SCI contribution**")
+        lines.append("| Term | Contribution |")
         lines.append("| --- | --- |")
         for term in sorted(sci_breakdown):
             value = sci_breakdown[term]
@@ -303,8 +303,8 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     phase_dnfr = plan.get("phase_dnfr_integral_dparam", {})
     if phase_dnfr:
         lines.append("")
-        lines.append("**Gradientes de ∫|ΔNFR| por fase**")
-        lines.append("| Fase | Parámetro | Sensibilidad |")
+        lines.append("**∫|ΔNFR| gradients per phase**")
+        lines.append("| Phase | Parameter | Sensitivity |")
         lines.append("| --- | --- | --- |")
         for phase in sorted(phase_dnfr):
             derivatives = phase_dnfr[phase]
@@ -320,8 +320,8 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     axis_weights = plan.get("phase_axis_weights", {}) or {}
     if axis_targets or axis_weights:
         lines.append("")
-        lines.append("**Objetivos proyección ∇NFR∥/∇NFR⊥ por fase**")
-        lines.append("| Fase | ∇NFR∥ obj | ∇NFR⊥ obj | Peso ∥ | Peso ⊥ |")
+        lines.append("**∇NFR∥/∇NFR⊥ projection targets per phase**")
+        lines.append("| Phase | ∇NFR∥ target | ∇NFR⊥ target | Weight ∥ | Weight ⊥ |")
         lines.append("| --- | --- | --- | --- | --- |")
         for phase in sorted(set(axis_targets) | set(axis_weights)):
             target = axis_targets.get(phase, {})
@@ -336,14 +336,14 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     summary_lines = phase_axis_summary_lines(plan.get("phase_axis_summary"))
     if summary_lines:
         lines.append("")
-        lines.append("**Mapa proyección ∇NFR∥/∇NFR⊥ por fase**")
+        lines.append("**∇NFR∥/∇NFR⊥ projection map per phase**")
         lines.append("```")
         lines.extend(summary_lines)
         lines.append("```")
     suggestions = [hint for hint in plan.get("phase_axis_suggestions", []) if hint]
     if suggestions:
         lines.append("")
-        lines.append("**Sugerencias de fases prioritarias**")
+        lines.append("**Priority phase suggestions**")
         for hint in suggestions:
             lines.append(f"- {hint}")
 
@@ -362,13 +362,13 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         for key, entry in items:
             lines.append(f"- **{key}**: {entry}")
 
-    _extend_mapping_section("**Racionales TNFR por nodo**", plan.get("tnfr_rationale_by_node"))
-    _extend_mapping_section("**Racionales TNFR por fase**", plan.get("tnfr_rationale_by_phase"))
-    _extend_mapping_section("**Efectos esperados por nodo**", plan.get("expected_effects_by_node"))
-    _extend_mapping_section("**Efectos esperados por fase**", plan.get("expected_effects_by_phase"))
+    _extend_mapping_section("**TNFR rationales per node**", plan.get("tnfr_rationale_by_node"))
+    _extend_mapping_section("**TNFR rationales per phase**", plan.get("tnfr_rationale_by_phase"))
+    _extend_mapping_section("**Expected effects per node**", plan.get("expected_effects_by_node"))
+    _extend_mapping_section("**Expected effects per phase**", plan.get("expected_effects_by_phase"))
     if session_messages:
         lines.append("")
-        lines.append("**Perfil de sesión**")
+        lines.append("**Session profile**")
         lines.extend(f"- {message}" for message in session_messages)
 
     return "\n".join(lines)
@@ -378,14 +378,14 @@ def _format_key_instruction(delta: Any) -> tuple[str, str, str]:
     try:
         value = float(delta)
     except (TypeError, ValueError):
-        return ("Manual", "N/A", "Ajuste manual requerido")
+        return ("Manual", "N/A", "Manual adjustment required")
 
     if abs(value) < 1e-9:
-        return ("N/A", "0", "Sin cambios necesarios")
+        return ("N/A", "0", "No changes required")
 
     key = "F12" if value > 0 else "F11"
     steps = f"{abs(value):.3f}".rstrip("0").rstrip(".")
-    return (key, steps, f"Pulsa {key} × {steps}")
+    return (key, steps, f"Press {key} × {steps}")
 
 
 def lfs_notes_exporter(results: Dict[str, Any] | SetupPlan) -> str:
@@ -396,9 +396,9 @@ def lfs_notes_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         results if isinstance(results, Mapping) else None
     )
 
-    header = "| Cambio | Δ | Acción | Pasos | Racional | Efecto esperado |"
+    header = "| Change | Δ | Action | Steps | Rationale | Expected effect |"
     separator = "| --- | --- | --- | --- | --- | --- |"
-    lines = ["# Instrucciones rápidas TNFR → LFS", ""]
+    lines = ["# Quick TNFR notes → LFS", ""]
     lines.append(header)
     lines.append(separator)
 
@@ -424,17 +424,17 @@ def lfs_notes_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         lines.append(title)
         lines.extend(f"- {entry}" for entry in entries)
 
-    _extend_list_section("**Notas agregadas**", plan.get("rationales"))
-    _extend_list_section("**Efectos agregados**", plan.get("expected_effects"))
+    _extend_list_section("**Aggregated notes**", plan.get("rationales"))
+    _extend_list_section("**Aggregated expected effects**", plan.get("expected_effects"))
 
     clamped = [item for item in plan.get("clamped_parameters", []) if item]
     if clamped:
         lines.append("")
-        lines.append("**Parámetros bloqueados**")
+        lines.append("**Locked parameters**")
         lines.extend(f"- {item}" for item in clamped)
     if session_messages:
         lines.append("")
-        lines.append("**Perfil de sesión**")
+        lines.append("**Session profile**")
         lines.extend(f"- {message}" for message in session_messages)
 
     return "\n".join(lines)
@@ -443,11 +443,11 @@ def lfs_notes_exporter(results: Dict[str, Any] | SetupPlan) -> str:
 def resolve_car_prefix(car_model: str) -> str:
     key = (car_model or "").strip()
     if not key:
-        raise ValueError("Debe especificarse un 'car_model' para exportar setups.")
+        raise ValueError("A 'car_model' must be provided to export setups.")
     for candidate in (key, key.upper(), key.lower()):
         if candidate in CAR_MODEL_PREFIXES:
             return CAR_MODEL_PREFIXES[candidate]
-    raise ValueError(f"No hay prefijo LFS registrado para '{car_model}'.")
+    raise ValueError(f"No LFS prefix is registered for '{car_model}'.")
 
 
 def normalise_set_output_name(name: str, car_model: str) -> str:
@@ -459,25 +459,25 @@ def _normalise_delta_value(delta: Any) -> str:
     try:
         value = float(delta)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"Delta inválido para exportación .set: {delta!r}") from exc
+        raise ValueError(f"Invalid delta for .set export: {delta!r}") from exc
     return f"{value:+.3f}"
 
 
 def _normalise_setup_name(name: str, prefix: str) -> str:
     candidate = (name or "").strip()
     if not candidate:
-        raise ValueError("Nombre de setup vacío; utilice --set-output para definirlo.")
+        raise ValueError("Setup name cannot be empty; use --set-output to define it.")
     if candidate.lower().endswith(".set"):
         candidate = candidate[:-4]
     if Path(candidate).name != candidate:
-        raise ValueError("El nombre de setup no debe incluir rutas relativas o absolutas.")
+        raise ValueError("The setup name must not include relative or absolute paths.")
     if any(char in INVALID_NAME_CHARS for char in candidate):
         raise ValueError(
-            "Nombre de setup inválido: use solo letras, números y guiones bajos."
+            "Invalid setup name: use only letters, numbers, and underscores."
         )
     if not candidate.upper().startswith(prefix.upper()):
         raise ValueError(
-            f"El nombre '{candidate}' debe comenzar con el prefijo de coche '{prefix}'."
+            f"The name '{candidate}' must start with the car prefix '{prefix}'."
         )
     return f"{candidate}.set"
 
@@ -494,7 +494,7 @@ def lfs_set_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     plan = _extract_setup_plan(results)
     car_model = str(plan.get("car_model") or "").strip()
     if not car_model:
-        raise ValueError("El plan de setup no define 'car_model'.")
+        raise ValueError("The setup plan does not define 'car_model'.")
     prefix = resolve_car_prefix(car_model)
 
     if set_output is None:
@@ -531,7 +531,7 @@ def lfs_set_exporter(results: Dict[str, Any] | SetupPlan) -> str:
         lines.extend(f"; {note}" for note in rationales)
 
     destination.write_text("\n".join(lines) + "\n", encoding="utf8")
-    return f"Setup guardado en {destination.resolve()}"
+    return f"Setup saved to {destination.resolve()}"
 
 
 REPORT_ARTIFACT_FORMATS = ("json", "markdown", "visual")
@@ -1086,8 +1086,8 @@ def render_operator_trajectories(payload: Mapping[str, Any], fmt: str = "json") 
                 )
             )
         lines.append("")
-        lines.append("## Estadísticas por operador")
-        lines.append("| Operador | Eventos | Δt medio | Pico medio |")
+        lines.append("## Operator statistics")
+        lines.append("| Operator | Events | Mean Δt | Mean peak |")
         lines.append("| --- | --- | --- | --- |")
         for name, stats in sorted(payload.get("summary", {}).items()):
             lines.append(
@@ -1106,7 +1106,7 @@ def render_operator_trajectories(payload: Mapping[str, Any], fmt: str = "json") 
         if math.isclose(end, start):
             end = start + 1.0
         width = 42
-        lines = ["# Línea temporal de operadores", ""]
+        lines = ["# Operator timeline", ""]
         for entry in payload.get("events", []):
             start_pos = int((entry["structural_start"] - start) / (end - start) * width)
             end_pos = int((entry["structural_end"] - start) / (end - start) * width)
@@ -1118,7 +1118,7 @@ def render_operator_trajectories(payload: Mapping[str, Any], fmt: str = "json") 
             )
         return "\n".join(lines)
     raise ValueError(
-        f"Formato desconocido para las trayectorias de operadores: {fmt}"
+        f"Unknown format for operator trajectories: {fmt}"
     )
 
 
@@ -1127,26 +1127,26 @@ def render_delta_bifurcation(payload: Mapping[str, Any], fmt: str = "json") -> s
     if fmt == "json":
         return json.dumps(payload, indent=2, sort_keys=True)
     if fmt == "markdown":
-        lines = ["# Análisis de bifurcaciones ΔNFR", ""]
+        lines = ["# ΔNFR bifurcation analysis", ""]
         stats = payload.get("derivative_stats", {})
-        lines.append("## Estadísticas globales")
+        lines.append("## Global statistics")
         lines.append(
-            f"- Transiciones: {len(payload.get('transitions', []))}" \
-            f" · Extremos: {len(payload.get('extrema', []))}"
+            f"- Transitions: {len(payload.get('transitions', []))}" \
+            f" · Extrema: {len(payload.get('extrema', []))}"
         )
         lines.append(
-            f"- Crecimiento max: {_to_float(stats.get('max')):+.3f}"
+            f"- Max growth: {_to_float(stats.get('max')):+.3f}"
         )
         lines.append(
-            f"- Crecimiento min: {_to_float(stats.get('min')):+.3f}"
+            f"- Min growth: {_to_float(stats.get('min')):+.3f}"
         )
         lines.append(
-            f"- Crecimiento medio: {_to_float(stats.get('mean')):+.3f}"
+            f"- Mean growth: {_to_float(stats.get('mean')):+.3f}"
         )
         lines.append("")
         if payload.get("transitions"):
-            lines.append("## Cruces de signo")
-            lines.append("| Índice | tₛ | ΔNFR₀ | ΔNFR₁ | Pendiente |")
+            lines.append("## Sign crossings")
+            lines.append("| Index | tₛ | ΔNFR₀ | ΔNFR₁ | Slope |")
             lines.append("| --- | --- | --- | --- | --- |")
             for entry in payload["transitions"]:
                 lines.append(
@@ -1183,7 +1183,7 @@ def render_delta_bifurcation(payload: Mapping[str, Any], fmt: str = "json") -> s
                 )
         return "\n".join(lines)
     raise ValueError(
-        f"Formato desconocido para el análisis de bifurcaciones: {fmt}"
+        f"Unknown format for the bifurcation analysis: {fmt}"
     )
 
 
