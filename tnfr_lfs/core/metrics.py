@@ -2753,20 +2753,20 @@ def compute_aero_coherence(
 
     guidance: str
     if high_band.samples == 0:
-        guidance = "Sin datos aero"
+        guidance = "No aero data"
     elif abs(high_imbalance) <= imbalance_tolerance:
-        guidance = "Aero alta velocidad equilibrado"
+        guidance = "High speed aero balance is neutral"
     elif high_imbalance > 0.0:
-        guidance = "Alta velocidad → sube alerón trasero"
+        guidance = "High speed → add rear wing"
     else:
-        guidance = "Alta velocidad → libera alerón trasero/refuerza delantero"
+        guidance = "High speed → trim rear wing / add front wing"
 
     if low_band.samples and abs(low_imbalance) > imbalance_tolerance:
-        direction = "trasero" if low_imbalance > 0.0 else "delantero"
-        guidance += f" · baja velocidad sesgo {direction}"
+        direction = "rear" if low_imbalance > 0.0 else "front"
+        guidance += f" · low speed bias {direction}"
     if medium_band.samples and abs(medium_imbalance) > imbalance_tolerance:
-        direction = "trasero" if medium_imbalance > 0.0 else "delantero"
-        guidance += f" · media velocidad sesgo {direction}"
+        direction = "rear" if medium_imbalance > 0.0 else "front"
+        guidance += f" · medium speed bias {direction}"
 
     return AeroCoherence(
         low_speed=low_band,

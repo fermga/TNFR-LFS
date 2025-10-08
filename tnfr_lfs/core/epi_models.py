@@ -8,7 +8,7 @@ from typing import Mapping
 
 @dataclass(frozen=True)
 class TyresNode:
-    """Metrics associated with the tyre (neumáticos) subsystem."""
+    """Metrics associated with the tyre subsystem."""
 
     delta_nfr: float
     sense_index: float
@@ -115,7 +115,7 @@ class TransmissionNode:
 
 @dataclass(frozen=True)
 class TrackNode:
-    """Metrics associated with the track (pista) conditions."""
+    """Metrics associated with the track conditions."""
 
     delta_nfr: float
     sense_index: float
@@ -131,7 +131,7 @@ class TrackNode:
 
 @dataclass(frozen=True)
 class DriverNode:
-    """Metrics associated with the driver (piloto)."""
+    """Metrics associated with the driver."""
 
     delta_nfr: float
     sense_index: float

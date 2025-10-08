@@ -105,7 +105,7 @@ class NaturalFrequencySnapshot:
     @property
     def frequency_label(self) -> str:
         if self.dominant_frequency <= 0.0:
-            return "ν_f sin datos"
+            return "ν_f no data"
         low, high = self.target_band
         return (
             f"ν_f {self.classification} {self.dominant_frequency:.2f}Hz "
@@ -355,16 +355,16 @@ class NaturalFrequencyAnalyzer:
     def _classify_frequency(frequency: float, band: Tuple[float, float]) -> str:
         low, high = band
         if frequency <= 0.0:
-            return "sin datos"
+            return "no data"
         if frequency < low * 0.9:
-            return "muy baja"
+            return "very low"
         if frequency < low:
-            return "baja"
+            return "low"
         if frequency <= high:
-            return "óptima"
+            return "optimal"
         if frequency <= high * 1.1:
-            return "alta"
-        return "muy alta"
+            return "high"
+        return "very high"
 
 AXIS_FEATURE_MAP: Mapping[str, Mapping[str, str]] = {
     "tyres": {

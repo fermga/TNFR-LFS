@@ -497,7 +497,7 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
         rationales=(),
         expected_effects=(),
         sensitivities={},
-        aero_guidance="Alta velocidad → sube alerón trasero",
+        aero_guidance="High speed → add rear wing",
         aero_metrics={
             "low_speed_imbalance": 0.02,
             "high_speed_imbalance": 0.3,
@@ -505,7 +505,7 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
         },
     )
     output = osd_module._render_page_c(None, plan, thresholds, None)
-    assert "Aero Alta velocidad" in output
+    assert "Aero High speed" in output
     assert "Δaero alta" in output
     assert "C(c/d/a) 0.68" in output
 
@@ -670,7 +670,7 @@ def test_render_page_a_includes_wave_when_active_phase():
         mu_symmetry={"window": {"front": 0.02, "rear": -0.03}},
         exit_gear_match=0.85,
         shift_stability=0.9,
-        frequency_label="ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
+        frequency_label="ν_f optimal 1.95Hz (obj 1.90-2.20Hz)",
         aero_coherence=aero,
         aero_mechanical_coherence=0.64,
         epi_derivative_abs=0.12,
@@ -831,7 +831,7 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
         mu_symmetry={"window": {"front": -0.01, "rear": 0.03}},
         exit_gear_match=0.78,
         shift_stability=0.88,
-        frequency_label="ν_f óptima 1.95Hz (obj 1.90-2.20Hz)",
+        frequency_label="ν_f optimal 1.95Hz (obj 1.90-2.20Hz)",
         aero_coherence=aero,
         aero_mechanical_coherence=0.58,
         epi_derivative_abs=0.09,
