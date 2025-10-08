@@ -6,92 +6,82 @@ import argparse
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-import inspect
-import sys
-import types
-
-from .io import load_cli_config
-from .parser import build_parser
-from . import workflows as _workflows_module
+from . import common as _common_module
 from . import io as _cli_io_module
-from . import parser as _parser_module
-
-
-_PROXY_SOURCES: tuple[types.ModuleType, ...] = (
-    _workflows_module,
-    _cli_io_module,
-    _parser_module,
+from .common import CliError
+from .compare import handle as compare_handle
+from .io import load_cli_config
+from .pareto import handle as pareto_handle
+from .parser import build_parser
+from .workflows import (
+    _handle_analyze,
+    _handle_baseline,
+    _handle_diagnose,
+    _handle_osd,
+    _handle_report,
+    _handle_suggest,
+    _handle_template,
+    _handle_write_set,
 )
-
-_ALWAYS_PROXY_NAMES: frozenset[str] = frozenset({
-    "compute_session_robustness",
-})
+from . import workflows as _workflows_module
 
 
-def _gather_proxy_registry() -> dict[str, tuple[types.ModuleType, ...]]:
-    registry: dict[str, list[types.ModuleType]] = {}
-    for module in _PROXY_SOURCES:
-        for name in dir(module):
-            if name.startswith("__"):
-                continue
-            try:
-                value = getattr(module, name)
-            except AttributeError:  # pragma: no cover - defensive fallback
-                continue
-            if not callable(value):
-                continue
-            should_proxy = (
-                name in _ALWAYS_PROXY_NAMES
-                or name.startswith("_")
-                or inspect.isfunction(value)
-            )
-            if not should_proxy:
-                continue
-            registry.setdefault(name, []).append(module)
-    return {key: tuple(modules) for key, modules in registry.items()}
+CommandHandler = Callable[[argparse.Namespace, Mapping[str, Any]], str]
 
 
-_PROXY_REGISTRY = _gather_proxy_registry()
+COMMAND_REGISTRY: Mapping[str, CommandHandler] = {
+    "template": _handle_template,
+    "osd": _handle_osd,
+    "diagnose": _handle_diagnose,
+    "baseline": _handle_baseline,
+    "analyze": _handle_analyze,
+    "suggest": _handle_suggest,
+    "compare": compare_handle,
+    "report": _handle_report,
+    "write-set": _handle_write_set,
+    "pareto": pareto_handle,
+}
 
 
-def _initialise_proxy_bindings(module: types.ModuleType) -> None:
-    namespace = module.__dict__
-    for name, origins in _PROXY_REGISTRY.items():
-        if name in namespace:
-            continue
-        namespace[name] = getattr(origins[0], name)
+_HELPER_EXPORTS = {
+    "compute_session_robustness": _workflows_module.compute_session_robustness,
+    "_outsim_ping": _workflows_module._outsim_ping,
+    "_outgauge_ping": _workflows_module._outgauge_ping,
+    "_insim_handshake": _workflows_module._insim_handshake,
+    "_check_setups_directory": _workflows_module._check_setups_directory,
+    "_copy_to_clipboard": _workflows_module._copy_to_clipboard,
+    "_generate_out_reports": _workflows_module._generate_out_reports,
+    "_sense_index_map": _workflows_module._sense_index_map,
+    "_prepare_pack_context": _workflows_module._prepare_pack_context,
+    "_compute_insights": _workflows_module._compute_insights,
+    "_phase_deviation_messages": _workflows_module._phase_deviation_messages,
+    "orchestrate_delta_metrics": _workflows_module.orchestrate_delta_metrics,
+    "compute_setup_plan": _workflows_module.compute_setup_plan,
+    "build_setup_plan_payload": _workflows_module.build_setup_plan_payload,
+    "assemble_session_payload": _workflows_module.assemble_session_payload,
+    "_assemble_session_payload": _workflows_module.assemble_session_payload,
+    "_resolve_pack_root": _common_module.resolve_pack_root,
+    "_resolve_track_argument": _common_module.resolve_track_argument,
+    "_load_pack_cars": _common_module.load_pack_cars,
+    "_load_pack_track_profiles": _common_module.load_pack_track_profiles,
+    "_load_pack_modifiers": _common_module.load_pack_modifiers,
+    "_group_records_by_lap": _common_module.group_records_by_lap,
+    "_render_payload": _common_module.render_payload,
+    "_resolve_exports": _common_module.resolve_exports,
+    "_validated_export": _common_module.validated_export,
+    "_add_export_argument": _common_module.add_export_argument,
+    "_load_records": _cli_io_module._load_records,
+    "_load_records_from_namespace": _cli_io_module._load_records_from_namespace,
+    "raf_to_telemetry_records": _cli_io_module.raf_to_telemetry_records,
+}
 
+globals().update(_HELPER_EXPORTS)
 
-class _CLIModule(types.ModuleType):
-    """Proxy module that mirrors workflow helpers for monkeypatching tests."""
+for _name in dir(_workflows_module):
+    if not _name.startswith("_") or _name in _HELPER_EXPORTS:
+        continue
+    globals().setdefault(_name, getattr(_workflows_module, _name))
 
-    def __getattr__(self, name: str):
-        if name in self.__dict__:
-            return self.__dict__[name]
-        origins = _PROXY_REGISTRY.get(name)
-        if origins:
-            value = getattr(origins[0], name)
-            super().__setattr__(name, value)
-            return value
-        raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
-
-    def __setattr__(self, name: str, value) -> None:
-        super().__setattr__(name, value)
-        origins = _PROXY_REGISTRY.get(name)
-        if not origins:
-            return
-        for module in origins:
-            setattr(module, name, value)
-
-    def __dir__(self) -> list[str]:
-        base = set(super().__dir__())
-        base.update(_PROXY_REGISTRY)
-        return sorted(base)
-
-
-_module = sys.modules[__name__]
-_module.__class__ = _CLIModule
-_initialise_proxy_bindings(_module)
 
 def run_cli(args: Optional[Sequence[str]] = None) -> str:
     """Execute the TNFR × LFS command line interface."""
@@ -102,17 +92,14 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
         dest="config_path",
         type=Path,
         default=None,
-        help="Ruta del fichero de configuración TOML a utilizar.",
+        help="Path to the TOML configuration file to load.",
     )
     config_parser.add_argument(
         "--pack-root",
         dest="pack_root",
         type=Path,
         default=None,
-        help=(
-            "Directorio raíz de un pack TNFR × LFS con config/ y data/. "
-            "Sobrescribe paths.pack_root."
-        ),
+        help="Root directory of a TNFR × LFS pack overriding paths.pack_root.",
     )
     preliminary, remaining = config_parser.parse_known_args(args)
     remaining = list(remaining)
@@ -129,10 +116,15 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
         or preliminary.config_path
         or config.get("_config_path")
     )
-    handler: Callable[[argparse.Namespace, Mapping[str, Any]], str] = getattr(
-        namespace, "handler"
-    )
-    return handler(namespace, config=config)
+
+    handler = COMMAND_REGISTRY.get(getattr(namespace, "command", None))
+    if handler is None:
+        raise CliError(f"Unknown command '{getattr(namespace, 'command', None)}'.")
+
+    try:
+        return handler(namespace, config=config)
+    except CliError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def main() -> None:  # pragma: no cover - thin wrapper

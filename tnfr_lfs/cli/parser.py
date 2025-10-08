@@ -9,9 +9,8 @@ from typing import Any, Mapping, Optional
 from ..exporters import REPORT_ARTIFACT_FORMATS, exporters_registry
 from . import compare as compare_command
 from . import pareto as pareto_command
+from .common import add_export_argument, default_car_model, default_track_name, validated_export
 from .workflows import (
-    _default_car_model,
-    _default_track_name,
     _handle_analyze,
     _handle_baseline,
     _handle_compare,
@@ -23,25 +22,6 @@ from .workflows import (
     _handle_template,
     _handle_write_set,
 )
-
-
-def _validated_export(value: Any, *, fallback: str) -> str:
-    if isinstance(value, str) and value in exporters_registry:
-        return value
-    return fallback
-
-
-def _add_export_argument(
-    parser: argparse.ArgumentParser, *, default: str, help_text: str
-) -> None:
-    parser.add_argument(
-        "--export",
-        dest="exports",
-        choices=sorted(exporters_registry.keys()),
-        action="append",
-        help=f"{help_text} Puede repetirse para combinar salidas.",
-    )
-    parser.set_defaults(exports=None, export_default=default)
 
 
 def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.ArgumentParser:
@@ -74,13 +54,13 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
     template_parser.add_argument(
         "--car",
         dest="car_model",
-        default=_default_car_model(config),
+        default=default_car_model(config),
         help="Car model used to resolve the preset (default: perfil actual).",
     )
     template_parser.add_argument(
         "--track",
         dest="track",
-        default=_default_track_name(config),
+        default=default_track_name(config),
         help="Identificador de pista usado para seleccionar el perfil (default: actual).",
     )
     template_parser.set_defaults(handler=_handle_template)
@@ -128,12 +108,12 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
     )
     osd_parser.add_argument(
         "--car-model",
-        default=str(osd_cfg.get("car_model", _default_car_model(config))),
+        default=str(osd_cfg.get("car_model", default_car_model(config))),
         help="Car model used to resolve recommendation thresholds.",
     )
     osd_parser.add_argument(
         "--track",
-        default=str(osd_cfg.get("track", _default_track_name(config))),
+        default=str(osd_cfg.get("track", default_track_name(config))),
         help="Track identifier used to resolve recommendation thresholds.",
     )
     osd_parser.add_argument(
@@ -208,12 +188,12 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
     )
     diagnose_parser.add_argument(
         "--car-model",
-        default=str(telemetry_cfg.get("car_model", _default_car_model(config))),
+        default=str(telemetry_cfg.get("car_model", default_car_model(config))),
         help="Car model used to resolve the telemetry profiles.",
     )
     diagnose_parser.add_argument(
         "--track",
-        default=str(telemetry_cfg.get("track", _default_track_name(config))),
+        default=str(telemetry_cfg.get("track", default_track_name(config))),
         help="Track identifier used to resolve the telemetry profiles.",
     )
     diagnose_parser.set_defaults(handler=_handle_diagnose)
@@ -390,19 +370,19 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
             "Directory or ZIP bundle with CSV telemetry exported from the replay analyzer."
         ),
     )
-    _add_export_argument(
+    add_export_argument(
         analyze_parser,
-        default=_validated_export(analyze_cfg.get("export"), fallback="json"),
+        default=validated_export(analyze_cfg.get("export"), fallback="json"),
         help_text="Exporter used to render the analysis payload.",
     )
     analyze_parser.add_argument(
         "--car-model",
-        default=str(analyze_cfg.get("car_model", _default_car_model(config))),
+        default=str(analyze_cfg.get("car_model", default_car_model(config))),
         help="Car model used to resolve the recommendation thresholds.",
     )
     analyze_parser.add_argument(
         "--track",
-        default=str(analyze_cfg.get("track", _default_track_name(config))),
+        default=str(analyze_cfg.get("track", default_track_name(config))),
         help="Track identifier used to resolve the recommendation thresholds.",
     )
     analyze_parser.add_argument(
@@ -454,9 +434,9 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
             "Directory or ZIP bundle with CSV telemetry exported from the replay analyzer."
         ),
     )
-    _add_export_argument(
+    add_export_argument(
         suggest_parser,
-        default=_validated_export(suggest_cfg.get("export"), fallback="json"),
+        default=validated_export(suggest_cfg.get("export"), fallback="json"),
         help_text="Exporter used to render the recommendation payload.",
     )
     suggest_parser.add_argument(
@@ -494,9 +474,9 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
             "Directory or ZIP bundle with CSV telemetry exported from the replay analyzer."
         ),
     )
-    _add_export_argument(
+    add_export_argument(
         report_parser,
-        default=_validated_export(report_cfg.get("export"), fallback="json"),
+        default=validated_export(report_cfg.get("export"), fallback="json"),
         help_text="Exporter used to render the report payload.",
     )
     report_parser.add_argument(
@@ -556,14 +536,14 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
             "Directory or ZIP bundle with CSV telemetry exported from the replay analyzer."
         ),
     )
-    _add_export_argument(
+    add_export_argument(
         write_set_parser,
-        default=_validated_export(write_set_cfg.get("export"), fallback="markdown"),
+        default=validated_export(write_set_cfg.get("export"), fallback="markdown"),
         help_text="Exporter used to render the setup plan (default: markdown).",
     )
     write_set_parser.add_argument(
         "--car-model",
-        default=str(write_set_cfg.get("car_model", _default_car_model(config))),
+        default=str(write_set_cfg.get("car_model", default_car_model(config))),
         help="Car model used to select the decision space for optimisation.",
     )
     write_set_parser.add_argument(

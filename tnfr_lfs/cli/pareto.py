@@ -8,6 +8,16 @@ from typing import Any, Mapping, Optional
 
 from ..recommender import pareto_front, sweep_candidates
 
+from .common import (
+    CliError,
+    add_export_argument,
+    default_car_model,
+    render_payload,
+    resolve_exports,
+    validated_export,
+)
+from .workflows import build_setup_plan_payload, compute_setup_plan
+
 
 def register_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -16,41 +26,37 @@ def register_subparser(
 ) -> None:
     """Register the ``pareto`` sub-command."""
 
-    from . import tnfr_lfs_cli as cli
-
     write_set_cfg = dict(config.get("write_set", {}))
 
     parser = subparsers.add_parser(
         "pareto",
-        help="Evalúa candidatos de setup y exporta el frente de Pareto resultante.",
+        help="Evaluate setup candidates and export the resulting Pareto front.",
     )
     parser.add_argument(
         "telemetry",
         type=Path,
-        help="Ruta al archivo (.raf, .csv, .jsonl, .json, .parquet) con la telemetría base.",
+        help="Path to the baseline telemetry (.raf, .csv, .jsonl, .json, .parquet).",
     )
-    cli._add_export_argument(
+    add_export_argument(
         parser,
-        default=cli._validated_export(write_set_cfg.get("export"), fallback="markdown"),
-        help_text="Exporter usado para representar el frente Pareto (default: markdown).",
+        default=validated_export(write_set_cfg.get("export"), fallback="markdown"),
+        help_text="Exporter used to render the Pareto front (default: markdown).",
     )
     parser.add_argument(
         "--car-model",
-        default=str(write_set_cfg.get("car_model", cli._default_car_model(config))),
-        help="Modelo de coche utilizado para resolver el espacio de decisiones.",
+        default=str(write_set_cfg.get("car_model", default_car_model(config))),
+        help="Car model used to resolve the decision space.",
     )
     parser.add_argument(
         "--session",
         default=None,
-        help="Etiqueta opcional de sesión que acompañará a los resultados.",
+        help="Optional session label attached to the results.",
     )
     parser.add_argument(
         "--radius",
         type=int,
         default=int(write_set_cfg.get("pareto_radius", 1)),
-        help=(
-            "Número de pasos +/- por parámetro en el barrido de candidatos (default: 1)."
-        ),
+        help="Number of +/- steps per parameter when sweeping candidates (default: 1).",
     )
     parser.set_defaults(handler=handle)
 
@@ -58,15 +64,11 @@ def register_subparser(
 def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     """Execute the ``pareto`` command returning the rendered payload."""
 
-    from . import tnfr_lfs_cli as cli
-
-    namespace.car_model = str(namespace.car_model or cli._default_car_model(config)).strip()
+    namespace.car_model = str(namespace.car_model or default_car_model(config)).strip()
     if not namespace.car_model:
-        raise SystemExit(
-            "Debe proporcionar un --car-model válido para evaluar el frente Pareto."
-        )
-    context = cli._compute_setup_plan(namespace, config=config)
-    payload = cli._build_setup_plan_payload(context, namespace)
+        raise CliError("You must provide a valid --car-model to evaluate the Pareto front.")
+    context = compute_setup_plan(namespace, config=config)
+    payload = build_setup_plan_payload(context, namespace)
 
     planner = context.planner
     space = planner._adapt_space(
@@ -114,7 +116,7 @@ def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     payload["session"] = updated_session
     payload["pareto_points"] = pareto_payload
     payload["pareto_radius"] = radius
-    return cli._render_payload(payload, cli._resolve_exports(namespace))
+    return render_payload(payload, resolve_exports(namespace))
 
 
 __all__ = ["register_subparser", "handle"]
