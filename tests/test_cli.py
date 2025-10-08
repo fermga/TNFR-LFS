@@ -718,8 +718,8 @@ def test_analyze_reports_note_missing_tyre_data(
 
     payload = json.loads(output)
     summary_text = payload["reports"]["metrics_summary"]["data"]
-    assert "Temperatura (°C): sin datos" in summary_text
-    assert "Presión (bar): sin datos" in summary_text
+    assert "Temperature (°C): no data" in summary_text
+    assert "Pressure (bar): no data" in summary_text
     thermal_entry = payload["reports"]["tyre_thermal"]
     assert Path(thermal_entry["path"]).exists()
     assert thermal_entry["data"]["temperature"] is None
@@ -923,10 +923,10 @@ def test_write_set_combined_export_outputs(
     captured = capsys.readouterr()
     destination = tmp_path / "LFS/data/setups/FZR_test.set"
     assert destination.exists()
-    assert "Setup guardado" in result
-    assert "Instrucciones rápidas TNFR" in result
-    assert "| Cambio | Δ | Acción |" in result
-    assert "| Cambio | Δ | Acción |" in captured.out
+    assert "Setup saved" in result
+    assert "Quick TNFR notes" in result
+    assert "| Change | Δ | Action |" in result
+    assert "| Change | Δ | Action |" in captured.out
 
 
 def test_write_set_lfs_rejects_invalid_name(
@@ -1099,30 +1099,35 @@ InSim Port 29999
         encoding="utf8",
     )
 
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._outsim_ping",
-        lambda host, port, timeout: (True, f"OutSim respondió desde {host}:{port}"),
-    )
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._outgauge_ping",
-        lambda host, port, timeout: (True, f"OutGauge respondió desde {host}:{port}"),
-    )
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._insim_handshake",
-        lambda host, port, timeout: (True, "InSim respondió con versión 9"),
-    )
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._check_setups_directory",
-        lambda path: (True, "Permisos de escritura confirmados en /fake/setups"),
-    )
+    for module in (cli_module, workflows_module):
+        monkeypatch.setattr(
+            module,
+            "_outsim_ping",
+            lambda host, port, timeout: (True, f"OutSim responded from {host}:{port}"),
+        )
+        monkeypatch.setattr(
+            module,
+            "_outgauge_ping",
+            lambda host, port, timeout: (True, f"OutGauge responded from {host}:{port}"),
+        )
+        monkeypatch.setattr(
+            module,
+            "_insim_handshake",
+            lambda host, port, timeout: (True, "InSim responded with version 9"),
+        )
+        monkeypatch.setattr(
+            module,
+            "_check_setups_directory",
+            lambda path: (True, "Write permissions confirmed in /fake/setups"),
+        )
 
     result = run_cli(["diagnose", str(cfg_path), "--timeout", "0.05"])
     captured = capsys.readouterr()
-    assert "Estado: correcto" in captured.out
-    assert "OutSim respondió" in result
-    assert "OutGauge respondió" in result
-    assert "InSim respondió" in result
-    assert "Permisos de escritura confirmados" in result
+    assert "Status: ok" in captured.out
+    assert "OutSim responded" in result
+    assert "OutGauge responded" in result
+    assert "InSim responded" in result
+    assert "Write permissions confirmed" in result
 
 
 def test_diagnose_detects_disabled_modes(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1148,19 +1153,22 @@ OutGauge Port 3000
         copied.append(list(commands))
         return True
 
-    monkeypatch.setattr("tnfr_lfs.cli.tnfr_lfs_cli._copy_to_clipboard", fake_copy)
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._check_setups_directory",
-        lambda path: (True, "Permisos de escritura confirmados en /fake/setups"),
-    )
+    monkeypatch.setattr(cli_module, "_copy_to_clipboard", fake_copy)
+    monkeypatch.setattr(workflows_module, "_copy_to_clipboard", fake_copy)
+    for module in (cli_module, workflows_module):
+        monkeypatch.setattr(
+            module,
+            "_check_setups_directory",
+            lambda path: (True, "Write permissions confirmed in /fake/setups"),
+        )
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(SystemExit) as excinfo:
         run_cli(["diagnose", str(cfg_path)])
 
     captured = capsys.readouterr()
     assert "/outsim 1 127.0.0.1 4123" in captured.out
     assert "/outgauge 1 127.0.0.1 3000" in captured.out
-    assert "copiado" in captured.out
+    assert "Commands copied to the clipboard." in captured.out
     assert copied and "/outsim 1 127.0.0.1 4123" in copied[0]
     assert "OutSim Mode" in str(excinfo.value)
 
@@ -1322,29 +1330,37 @@ InSim Port 29999
         encoding="utf8",
     )
 
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._outsim_ping",
-        lambda host, port, timeout: (False, "Sin respuesta de OutSim 127.0.0.1:4123 tras 0.05s"),
-    )
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._outgauge_ping",
-        lambda host, port, timeout: (True, "OutGauge respondió"),
-    )
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._insim_handshake",
-        lambda host, port, timeout: (True, "InSim respondió"),
-    )
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._check_setups_directory",
-        lambda path: (True, "Permisos ok"),
-    )
+    for module in (cli_module, workflows_module):
+        monkeypatch.setattr(
+            module,
+            "_outsim_ping",
+            lambda host, port, timeout: (
+                False,
+                "No response from OutSim 127.0.0.1:4123 after 0.05s",
+            ),
+        )
+        monkeypatch.setattr(
+            module,
+            "_outgauge_ping",
+            lambda host, port, timeout: (True, "OutGauge responded"),
+        )
+        monkeypatch.setattr(
+            module,
+            "_insim_handshake",
+            lambda host, port, timeout: (True, "InSim responded"),
+        )
+        monkeypatch.setattr(
+            module,
+            "_check_setups_directory",
+            lambda path: (True, "Permissions ok"),
+        )
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(SystemExit) as excinfo:
         run_cli(["diagnose", str(cfg_path)])
 
     captured = capsys.readouterr()
-    assert "Sin respuesta de OutSim" in captured.out
-    assert "Sin respuesta de OutSim" in str(excinfo.value)
+    assert "No response from OutSim" in captured.out
+    assert "No response from OutSim" in str(excinfo.value)
 
 
 def test_diagnose_reports_permission_error(
@@ -1368,26 +1384,31 @@ InSim Port 29999
         encoding="utf8",
     )
 
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._outsim_ping",
-        lambda host, port, timeout: (True, "OutSim respondió"),
-    )
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._outgauge_ping",
-        lambda host, port, timeout: (True, "OutGauge respondió"),
-    )
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._insim_handshake",
-        lambda host, port, timeout: (True, "InSim respondió"),
-    )
-    monkeypatch.setattr(
-        "tnfr_lfs.cli.tnfr_lfs_cli._check_setups_directory",
-        lambda path: (False, "No hay permisos de escritura en setups"),
-    )
+    for module in (cli_module, workflows_module):
+        monkeypatch.setattr(
+            module,
+            "_outsim_ping",
+            lambda host, port, timeout: (True, "OutSim responded"),
+        )
+        monkeypatch.setattr(
+            module,
+            "_outgauge_ping",
+            lambda host, port, timeout: (True, "OutGauge responded"),
+        )
+        monkeypatch.setattr(
+            module,
+            "_insim_handshake",
+            lambda host, port, timeout: (True, "InSim responded"),
+        )
+        monkeypatch.setattr(
+            module,
+            "_check_setups_directory",
+            lambda path: (False, "No write permissions in setups"),
+        )
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(SystemExit) as excinfo:
         run_cli(["diagnose", str(cfg_path)])
 
     captured = capsys.readouterr()
-    assert "No hay permisos" in captured.out
-    assert "No hay permisos" in str(excinfo.value)
+    assert "No write permissions" in captured.out
+    assert "No write permissions" in str(excinfo.value)
