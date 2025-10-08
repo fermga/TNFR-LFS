@@ -7,7 +7,7 @@ import json
 import os
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -29,7 +29,7 @@ _PARQUET_DEPENDENCY_MESSAGE = (
 )
 
 
-def load_cli_config(path: Path | None = None) -> Dict[str, Any]:
+def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
     """Load CLI defaults from ``tnfr-lfs.toml`` style files."""
 
     candidates: List[Path] = []

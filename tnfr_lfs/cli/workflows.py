@@ -18,7 +18,7 @@ from pathlib import Path
 from statistics import mean, fmean
 from time import monotonic, sleep
 from types import MappingProxyType
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -103,7 +103,7 @@ PROFILES_ENV_VAR = "TNFR_LFS_PROFILES"
 DEFAULT_PROFILES_FILENAME = "profiles.toml"
 
 _EMPTY_PLAYBOOK_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({})
-_PLAYBOOK_RULES_CACHE: Mapping[str, tuple[str, ...]] | None = None
+_PLAYBOOK_RULES_CACHE: Optional[Mapping[str, tuple[str, ...]]] = None
 
 
 def _load_playbook_rules() -> Mapping[str, tuple[str, ...]]:
@@ -123,7 +123,7 @@ def _reset_playbook_rules_cache() -> None:
     _PLAYBOOK_RULES_CACHE = None
 
 
-def _numeric(value: Any) -> float | None:
+def _numeric(value: Any) -> Optional[float]:
     try:
         numeric = float(value)
     except (TypeError, ValueError):
@@ -133,7 +133,7 @@ def _numeric(value: Any) -> float | None:
     return numeric
 
 
-def _resolve_playbook_rules(metrics: Mapping[str, Any] | None) -> tuple[str, ...]:
+def _resolve_playbook_rules(metrics: Optional[Mapping[str, Any]]) -> tuple[str, ...]:
     if not isinstance(metrics, Mapping):
         return ()
     objectives = metrics.get("objectives")
@@ -171,9 +171,9 @@ def _resolve_playbook_rules(metrics: Mapping[str, Any] | None) -> tuple[str, ...
 
 
 def _resolve_playbook_suggestions(
-    metrics: Mapping[str, Any] | None,
+    metrics: Optional[Mapping[str, Any]],
     *,
-    playbook: Mapping[str, Sequence[str]] | None = None,
+    playbook: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> tuple[str, ...]:
     mapping = playbook or _load_playbook_rules()
     if not mapping:
@@ -189,11 +189,11 @@ def _resolve_playbook_suggestions(
 
 
 def _augment_session_with_playbook(
-    session: Mapping[str, Any] | None,
-    metrics: Mapping[str, Any] | None,
+    session: Optional[Mapping[str, Any]],
+    metrics: Optional[Mapping[str, Any]],
     *,
-    playbook: Mapping[str, Sequence[str]] | None = None,
-) -> Mapping[str, Any] | None:
+    playbook: Optional[Mapping[str, Sequence[str]]] = None,
+) -> Optional[Mapping[str, Any]]:
     if not isinstance(session, Mapping):
         return session
     suggestions = _resolve_playbook_suggestions(metrics, playbook=playbook)
@@ -230,14 +230,14 @@ class ProfilesContext:
 class PackContext:
     """Aggregated resources sourced from an optional content pack."""
 
-    pack_root: Path | None
+    pack_root: Optional[Path]
     profiles_ctx: ProfilesContext
     profile_manager: ProfileManager
     cars: Mapping[str, PackCar]
     track_profiles: Mapping[str, Mapping[str, Any]]
     modifiers: Mapping[tuple[str, str], Mapping[str, Any]]
     class_overrides: Mapping[str, Mapping[str, Any]]
-    tnfr_targets: Mapping[str, Any] | None
+    tnfr_targets: Optional[Mapping[str, Any]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,12 +245,12 @@ class TrackSelection:
     """Normalized representation of a CLI track argument."""
 
     name: str
-    layout: str | None = None
-    manifest: Track | None = None
-    config: TrackConfig | None = None
+    layout: Optional[str] = None
+    manifest: Optional[Track] = None
+    config: Optional[TrackConfig] = None
 
     @property
-    def track_profile(self) -> str | None:
+    def track_profile(self) -> Optional[str]:
         return self.config.track_profile if self.config is not None else None
 
 
@@ -265,17 +265,17 @@ class SetupPlanContext:
     microsectors: Sequence[Microsector]
     metrics: Mapping[str, Any]
     delta_metric: float
-    session_payload: Mapping[str, Any] | None
+    session_payload: Optional[Mapping[str, Any]]
     track_selection: TrackSelection
     track_name: str
     profile_manager: ProfileManager
     thresholds: ThresholdProfile
-    snapshot: ProfileSnapshot | None
+    snapshot: Optional[ProfileSnapshot]
     objectives: ProfileObjectives
-    tnfr_targets: Mapping[str, Any] | None
-    car_metadata: Mapping[str, Any] | None
-    pack_delta: float | None
-    pack_si: float | None
+    tnfr_targets: Optional[Mapping[str, Any]]
+    car_metadata: Optional[Mapping[str, Any]]
+    pack_delta: Optional[float]
+    pack_si: Optional[float]
     lap_segments: List[Records]
     records: Records
     cars: Mapping[str, PackCar]
@@ -283,18 +283,18 @@ class SetupPlanContext:
     modifiers: Mapping[tuple[str, str], Mapping[str, Any]]
     class_overrides: Mapping[str, Any]
     profiles_ctx: ProfilesContext
-    pack_root: Path | None
+    pack_root: Optional[Path]
 
 
 _LAYOUT_PATTERN = re.compile(r"^([A-Z]{2,})([0-9]{1,2}[A-Z]?)$")
 
 
 def _resolve_pack_root(
-    namespace: argparse.Namespace | None, config: Mapping[str, Any]
-) -> Path | None:
+    namespace: Optional[argparse.Namespace], config: Mapping[str, Any]
+) -> Optional[Path]:
     """Determine the root directory for an optional configuration pack."""
 
-    candidate: Path | None = None
+    candidate: Optional[Path] = None
     if namespace is not None:
         raw = getattr(namespace, "pack_root", None)
         if raw:
@@ -310,7 +310,7 @@ def _resolve_pack_root(
     return candidate.expanduser()
 
 
-def _pack_data_dir(pack_root: Path | None, name: str) -> Path | None:
+def _pack_data_dir(pack_root: Optional[Path], name: str) -> Optional[Path]:
     """Resolve a directory inside ``data`` or at the root of the pack."""
 
     if pack_root is None:
@@ -333,7 +333,7 @@ def _pack_data_dir(pack_root: Path | None, name: str) -> Path | None:
     return None
 
 
-def _parse_layout_code(value: str) -> tuple[str, str] | None:
+def _parse_layout_code(value: str) -> Optional[tuple[str, str]]:
     match = _LAYOUT_PATTERN.fullmatch(value.strip().upper())
     if match is None:
         return None
@@ -341,12 +341,12 @@ def _parse_layout_code(value: str) -> tuple[str, str] | None:
     return slug, f"{slug}{suffix}"
 
 
-def _load_pack_track_profiles(pack_root: Path | None) -> Mapping[str, Mapping[str, Any]]:
+def _load_pack_track_profiles(pack_root: Optional[Path]) -> Mapping[str, Mapping[str, Any]]:
     profiles_dir = _pack_data_dir(pack_root, "track_profiles")
     return load_track_profiles(profiles_dir) if profiles_dir is not None else load_track_profiles()
 
 
-def _load_pack_modifiers(pack_root: Path | None) -> Mapping[tuple[str, str], Mapping[str, Any]]:
+def _load_pack_modifiers(pack_root: Optional[Path]) -> Mapping[tuple[str, str], Mapping[str, Any]]:
     modifiers_dir = _pack_data_dir(pack_root, "modifiers")
     return (
         load_track_modifiers(modifiers_dir)
@@ -356,7 +356,7 @@ def _load_pack_modifiers(pack_root: Path | None) -> Mapping[tuple[str, str], Map
 
 
 def _prepare_pack_context(
-    namespace: argparse.Namespace | None,
+    namespace: Optional[argparse.Namespace],
     config: Mapping[str, Any],
     *,
     car_model: str,
@@ -509,7 +509,7 @@ def _compute_setup_plan(
 
 
 def _load_pack_lfs_class_overrides(
-    pack_root: Path | None,
+    pack_root: Optional[Path],
 ) -> Mapping[str, Mapping[str, Any]]:
     if pack_root is None:
         return load_pack_lfs_class_overrides()
@@ -526,7 +526,7 @@ def _load_pack_lfs_class_overrides(
     return load_pack_lfs_class_overrides(candidates[0])
 
 
-def _load_pack_track(pack_root: Path | None, slug: str) -> Track:
+def _load_pack_track(pack_root: Optional[Path], slug: str) -> Track:
     tracks_dir = _pack_data_dir(pack_root, "tracks")
     return (
         load_track_manifest(slug, tracks_dir)
@@ -535,7 +535,7 @@ def _load_pack_track(pack_root: Path | None, slug: str) -> Track:
     )
 
 
-def _resolve_track_selection(track: str, *, pack_root: Path | None) -> TrackSelection:
+def _resolve_track_selection(track: str, *, pack_root: Optional[Path]) -> TrackSelection:
     candidate = track.strip()
     if not candidate:
         return TrackSelection(name="")
@@ -558,7 +558,7 @@ def _resolve_track_selection(track: str, *, pack_root: Path | None) -> TrackSele
     return TrackSelection(name=layout_id, layout=layout_id, manifest=manifest, config=config)
 
 
-def _load_pack_profiles(pack_root: Path | None) -> Mapping[str, PackProfile]:
+def _load_pack_profiles(pack_root: Optional[Path]) -> Mapping[str, PackProfile]:
     """Load TNFR profiles from a pack or fall back to bundled resources."""
 
     profiles_dir = _pack_data_dir(pack_root, "profiles")
@@ -567,7 +567,7 @@ def _load_pack_profiles(pack_root: Path | None) -> Mapping[str, PackProfile]:
     return load_pack_profiles()
 
 
-def _load_pack_cars(pack_root: Path | None) -> Mapping[str, PackCar]:
+def _load_pack_cars(pack_root: Optional[Path]) -> Mapping[str, PackCar]:
     """Load car metadata from a pack or from the bundled dataset."""
 
     cars_dir = _pack_data_dir(pack_root, "cars")
@@ -576,7 +576,7 @@ def _load_pack_cars(pack_root: Path | None) -> Mapping[str, PackCar]:
     return load_pack_cars()
 
 
-def _lookup_car_metadata(car_model: str, cars: Mapping[str, PackCar]) -> PackCar | None:
+def _lookup_car_metadata(car_model: str, cars: Mapping[str, PackCar]) -> Optional[PackCar]:
     for key in (car_model, car_model.upper(), car_model.lower()):
         car = cars.get(key)
         if car is not None:
@@ -605,8 +605,8 @@ def _resolve_tnfr_targets(
     cars: Mapping[str, PackCar],
     profiles: Mapping[str, PackProfile],
     *,
-    overrides: Mapping[str, Mapping[str, Any]] | None = None,
-) -> Mapping[str, Any] | None:
+    overrides: Optional[Mapping[str, Mapping[str, Any]]] = None,
+) -> Optional[Mapping[str, Any]]:
     """Return TNFR objectives for ``car_model`` when available."""
 
     car = _lookup_car_metadata(car_model, cars)
@@ -624,8 +624,8 @@ def _assemble_session_payload(
     *,
     cars: Mapping[str, PackCar],
     track_profiles: Mapping[str, Mapping[str, Any]],
-    modifiers: Mapping[tuple[str, str], Mapping[str, Any]] | None,
-) -> Mapping[str, Any] | None:
+    modifiers: Optional[Mapping[tuple[str, str], Mapping[str, Any]]],
+) -> Optional[Mapping[str, Any]]:
     track_profile = selection.track_profile
     if track_profile is None:
         return None
@@ -661,8 +661,8 @@ def _assemble_session_payload(
 
 
 def _extract_target_objectives(
-    targets: Mapping[str, Any] | None,
-) -> tuple[float | None, float | None]:
+    targets: Optional[Mapping[str, Any]],
+) -> Tuple[Optional[float], Optional[float]]:
     """Extract ΔNFR/Sense Index targets from pack metadata if present."""
 
     if not isinstance(targets, Mapping):
@@ -671,8 +671,8 @@ def _extract_target_objectives(
     if not isinstance(targets_section, Mapping):
         return None, None
     balance = targets_section.get("balance")
-    delta_target: float | None = None
-    sense_target: float | None = None
+    delta_target: Optional[float] = None
+    sense_target: Optional[float] = None
     if isinstance(balance, Mapping):
         delta_value = balance.get("delta_nfr")
         if isinstance(delta_value, (int, float)):
@@ -903,7 +903,7 @@ def _resolve_output_dir(config: Mapping[str, Any]) -> Path:
 
 
 def _resolve_profiles_path(
-    config: Mapping[str, Any], *, pack_root: Path | None = None
+    config: Mapping[str, Any], *, pack_root: Optional[Path] = None
 ) -> ProfilesContext:
     """Resolve the profile storage path and pack definitions."""
 
@@ -966,10 +966,10 @@ def _default_track_name(config: Mapping[str, Any]) -> str:
 
 
 def _resolve_track_argument(
-    track_value: str | None,
+    track_value: Optional[str],
     config: Mapping[str, Any],
     *,
-    pack_root: Path | None,
+    pack_root: Optional[Path],
 ) -> TrackSelection:
     candidate = str(track_value).strip() if track_value is not None else ""
     if not candidate:
@@ -1038,7 +1038,7 @@ def _resolve_baseline_destination(
 ) -> Path:
     fmt = namespace.format
     suffix = ".jsonl" if fmt == "jsonl" else ".parquet"
-    output_dir_arg: Path | None = getattr(namespace, "output_dir", None)
+    output_dir_arg: Optional[Path] = getattr(namespace, "output_dir", None)
     if output_dir_arg is not None:
         output_dir_arg = output_dir_arg.expanduser()
     auto_kwargs = {
@@ -1049,8 +1049,8 @@ def _resolve_baseline_destination(
         "force": namespace.force,
     }
 
-    positional_output: Path | None = getattr(namespace, "telemetry", None)
-    output_arg: Path | None = namespace.output or positional_output
+    positional_output: Optional[Path] = getattr(namespace, "telemetry", None)
+    output_arg: Optional[Path] = namespace.output or positional_output
     if output_arg is None:
         return logs.prepare_run_destination(**auto_kwargs)
 
@@ -1098,7 +1098,7 @@ def _parse_lfs_cfg(cfg_path: Path) -> Dict[str, Dict[str, str]]:
     return sections
 
 
-def _coerce_int(value: Any) -> int | None:
+def _coerce_int(value: Any) -> Optional[int]:
     try:
         if value is None:
             return None
@@ -1392,9 +1392,9 @@ def _phase_deviation_messages(
     *,
     car_model: str,
     track_name: str,
-    session: Mapping[str, Any] | None = None,
+    session: Optional[Mapping[str, Any]] = None,
 ) -> List[str]:
-    hints: Mapping[str, Any] | None = None
+    hints: Optional[Mapping[str, Any]] = None
     if isinstance(session, Mapping):
         hints_payload = session.get("hints")
         if isinstance(hints_payload, Mapping):
@@ -1625,8 +1625,8 @@ def _generate_out_reports(
     microsectors: Sequence[Microsector],
     destination: Path,
     *,
-    microsector_variability: Sequence[Mapping[str, Any]] | None = None,
-    metrics: Mapping[str, Any] | None = None,
+    microsector_variability: Optional[Sequence[Mapping[str, Any]]] = None,
+    metrics: Optional[Mapping[str, Any]] = None,
     artifact_format: str = "json",
 ) -> Dict[str, Any]:
     destination.mkdir(parents=True, exist_ok=True)
@@ -1648,7 +1648,7 @@ def _generate_out_reports(
     def _collect_average(
         entries: Sequence[Mapping[str, Any]],
         key_map: Mapping[str, str],
-    ) -> Dict[str, float | None]:
+    ) -> Dict[str, Optional[float]]:
         samples: Dict[str, List[float]] = {suffix: [] for suffix in WHEEL_SUFFIXES}
         for entry in entries:
             measures = entry.get("filtered_measures", {}) if isinstance(entry, Mapping) else {}
@@ -1693,7 +1693,7 @@ def _generate_out_reports(
                 payload[str(key)] = _floatify(value, default=0.0)
         return payload
 
-    def _serialise_average(mapping: Mapping[str, float | None]) -> Dict[str, float | None]:
+    def _serialise_average(mapping: Mapping[str, Optional[float]]) -> Dict[str, Optional[float]]:
         return {
             suffix: (float(value) if value is not None else None)
             for suffix, value in mapping.items()
@@ -2366,7 +2366,7 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
     insim_host = sections["InSim"].get("IP", outsim_host)
     insim_port = _coerce_int(sections["InSim"].get("Port"))
-    insim_command: str | None = None
+    insim_command: Optional[str] = None
     if insim_port is not None:
         insim_command = f"/insim {insim_port}"
         ok, message = _insim_handshake(insim_host, insim_port, timeout)
@@ -2412,7 +2412,7 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     destination = _resolve_baseline_destination(namespace, config)
 
-    overlay: OverlayManager | None = None
+    overlay: Optional[OverlayManager] = None
     records: Records = []
     if namespace.overlay and namespace.simulate is not None:
         raise ValueError("--overlay solo está disponible con captura en vivo (sin --simulate)")
@@ -2955,16 +2955,16 @@ def _compute_insights(
     *,
     car_model: str,
     track_name: str,
-    engine: RecommendationEngine | None = None,
-    profile_manager: ProfileManager | None = None,
-) -> tuple[Bundles, Sequence[Microsector], ThresholdProfile, ProfileSnapshot | None]:
+    engine: Optional[RecommendationEngine] = None,
+    profile_manager: Optional[ProfileManager] = None,
+) -> Tuple[Bundles, Sequence[Microsector], ThresholdProfile, Optional[ProfileSnapshot]]:
     engine = engine or RecommendationEngine(
         car_model=car_model,
         track_name=track_name,
         profile_manager=profile_manager,
     )
     base_profile = engine._lookup_profile(car_model, track_name)
-    snapshot: ProfileSnapshot | None = None
+    snapshot: Optional[ProfileSnapshot] = None
     if profile_manager is not None:
         session_payload = getattr(engine, "session", None)
         snapshot = profile_manager.resolve(
@@ -2999,7 +2999,7 @@ def _capture_udp_samples(
     outgauge_port: int,
     timeout: float,
     retries: int,
-    heartbeat: Callable[[], None] | None = None,
+    heartbeat: Optional[Callable[[], None]] = None,
 ) -> Records:
     fusion = TelemetryFusion()
     records: Records = []

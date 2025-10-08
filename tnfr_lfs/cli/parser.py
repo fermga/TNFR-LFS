@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from ..exporters import REPORT_ARTIFACT_FORMATS, exporters_registry
 from . import compare as compare_command
@@ -44,7 +44,7 @@ def _add_export_argument(
     parser.set_defaults(exports=None, export_default=default)
 
 
-def build_parser(config: Mapping[str, Any] | None = None) -> argparse.ArgumentParser:
+def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.ArgumentParser:
     config = dict(config or {})
     parser = argparse.ArgumentParser(description="TNFR Load & Force Synthesis")
     parser.add_argument(
