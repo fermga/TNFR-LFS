@@ -74,13 +74,13 @@ def format_session_messages(session: Mapping[str, Any] | None) -> Tuple[str, ...
         return ()
     track_profile = session.get("track_profile") if isinstance(session, Mapping) else None
     if isinstance(track_profile, str) and track_profile.strip():
-        title = f"Perfil {track_profile.strip()}"
+        title = f"Profile {track_profile.strip()}"
     else:
-        title = "Perfil sesión"
+        title = "Session profile"
     messages: list[str] = []
     weights_line = _format_weights(session.get("weights")) if isinstance(session, Mapping) else None
     if weights_line:
-        messages.append(f"{title} pesos → {weights_line}")
+        messages.append(f"{title} weights → {weights_line}")
     hints_line = _format_hints(session.get("hints")) if isinstance(session, Mapping) else None
     if hints_line:
         messages.append(f"{title} hints → {hints_line}")
