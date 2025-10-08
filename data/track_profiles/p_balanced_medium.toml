@@ -22,4 +22,4 @@ differential = 1.1
 [hints]
 microsector_span = "standard"
 rho_detune_threshold = 0.7
-notes = "Perfil todoterreno para trazados medios con mezcla de curvas rápidas y lentas."
+notes = "All-round profile for medium layouts mixing fast and slow corners."

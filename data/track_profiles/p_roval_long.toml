@@ -22,4 +22,4 @@ aero = 1.06
 [hints]
 microsector_span = "extended"
 rho_detune_threshold = 0.73
-notes = "Ajustado para rovales con secciones ovales de alta carga lateral."
+notes = "Set for rovals with oval sections generating high lateral load."

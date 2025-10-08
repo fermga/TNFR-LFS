@@ -2,7 +2,7 @@
 id = "gtr_rwd__p_fast_long"
 car_group = "gtr_rwd"
 base_profile = "p_fast_long"
-description = "Escala la salida para GT trasera en circuitos de alta velocidad."
+description = "Scales exit performance for rear-drive GTs on high-speed circuits."
 
 [scale.weights.entry]
 __default__ = 0.96
@@ -21,4 +21,4 @@ differential = 1.18
 
 [hints]
 slip_ratio_bias = "rear"
-notes = "Aumenta la estabilidad longitudinal sin sacrificar velocidad punta."
+notes = "Increases longitudinal stability without sacrificing top speed."

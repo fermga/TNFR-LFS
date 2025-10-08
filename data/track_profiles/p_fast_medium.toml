@@ -21,4 +21,4 @@ differential = 1.12
 [hints]
 microsector_span = "standard"
 rho_detune_threshold = 0.72
-notes = "Entrega rotación rápida manteniendo velocidad media elevada."
+notes = "Delivers quick rotation while sustaining high average speed."

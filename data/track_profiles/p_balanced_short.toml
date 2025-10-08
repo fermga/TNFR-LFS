@@ -22,4 +22,4 @@ differential = 1.08
 [hints]
 microsector_span = "compact"
 rho_detune_threshold = 0.68
-notes = "Prioriza la agilidad y un balance neutro para pistas cortas y encadenadas."
+notes = "Prioritises agility and a neutral balance for short, linked tracks."

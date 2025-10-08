@@ -21,4 +21,4 @@ transmission = 1.05
 [hints]
 microsector_span = "standard"
 rho_detune_threshold = 0.68
-notes = "Compensa curvas mixtas con frenadas fuertes y apoyos largos."
+notes = "Balances mixed corners with heavy braking zones and sustained load."

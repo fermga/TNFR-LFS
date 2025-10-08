@@ -21,4 +21,4 @@ transmission = 1.04
 [hints]
 microsector_span = "micro"
 rho_detune_threshold = 0.62
-notes = "Pensado para layouts de conos con giros muy cerrados y ritmo irregular."
+notes = "Designed for cone layouts with very tight turns and irregular rhythm."

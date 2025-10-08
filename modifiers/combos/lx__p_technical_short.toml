@@ -2,7 +2,7 @@
 id = "lx__p_technical_short"
 car_group = "lx"
 base_profile = "p_technical_short"
-description = "Refuerza el eje trasero en barquetas ligeras para zonas enlazadas."
+description = "Strengthens the rear axle on lightweight sports prototypes for linked sections."
 
 [scale.weights.entry]
 __default__ = 1.08
@@ -21,4 +21,4 @@ transmission = 1.06
 
 [hints]
 slip_ratio_bias = "neutral"
-notes = "Mantiene la agilidad característica reduciendo sobreviraje súbito."
+notes = "Keeps the signature agility while reducing sudden oversteer."

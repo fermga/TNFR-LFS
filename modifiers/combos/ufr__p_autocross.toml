@@ -2,7 +2,7 @@
 id = "ufr__p_autocross"
 car_group = "ufr"
 base_profile = "p_autocross"
-description = "Afinado para microsectores con el Mini de copa."
+description = "Dialled in for micro-sectors with the cup-spec Mini."
 
 [scale.weights.entry]
 __default__ = 1.1
@@ -21,4 +21,4 @@ transmission = 1.04
 
 [hints]
 slip_ratio_bias = "front"
-notes = "Evita el subviraje ajustando convergencia y reparto de frenada."
+notes = "Avoids understeer by trimming toe and brake balance."
