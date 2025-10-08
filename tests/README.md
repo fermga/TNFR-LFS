@@ -7,19 +7,19 @@ future.
 
 ## `data/BL1_XFG_baseline.csv`
 
-* Dataset de referencia para el flujo de quickstart y las pruebas de CLI.
-* Replica el stint sintético de 17 muestras utilizado en `tests/data` pero
-  vive en la raíz del repositorio para el consumo de usuarios.
-* Mantén los mismos encabezados para conservar compatibilidad con el script
-  `examples/quickstart.sh` y con las funciones tipadas en
+* Reference dataset for the quickstart flow and the CLI tests.
+* Mirrors the 17-sample synthetic stint used under `tests/data` but lives at
+  the repository root for user-facing workflows.
+* Keep the same headers to preserve compatibility with the
+  `examples/quickstart.sh` script and the typed functions in
   `typing_targets.quickstart_dataset`.
-* Cuando necesites telemetría real para tutoriales o verificaciones manuales,
-  recurre también a la captura RAF ``data/test1.raf`` incluida en la raíz; el
-  CLI la detecta automáticamente gracias al parser RAF incorporado.
+* When you need real telemetry for tutorials or manual verification, also rely
+  on the RAF capture ``data/test1.raf`` included at the root; the CLI detects it
+  automatically through the built-in RAF parser.
 
-Para regenerarlo puedes copiar el contenido de `tests/data/synthetic_stint.csv`
-o volver a ejecutar el script indicado abajo, guardando el resultado en
-`data/BL1_XFG_baseline.csv`.
+To regenerate the file you can copy the contents of
+`tests/data/synthetic_stint.csv` or rerun the script shown below, saving the
+result to `data/BL1_XFG_baseline.csv`.
 
 ## `data/synthetic_stint.csv`
 
