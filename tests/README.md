@@ -7,14 +7,16 @@ future.
 
 ## `data/BL1_XFG_baseline.csv`
 
-* Primary dataset for the quickstart walkthrough and the CLI regression tests.
-* Duplicates the 17-sample synthetic stint stored under `tests/data`, keeping a
-  copy at the repository root so user-facing workflows can consume it directly.
-* Keep its header row aligned with the expectations in
-  `examples/quickstart.sh` and with
-  `typing_targets.quickstart_dataset.dataset_columns()`; update all of them in
-  lockstep if the telemetry schema changes.
-* For tutorials or manual checks you can also rely on the RAF capture
+* Canonical dataset for the quickstart walkthrough and the CLI regression
+  suite.
+* Mirrors the 17-sample synthetic stint under `tests/data` and stores a copy at
+  the repository root so user-facing workflows can read it without additional
+  setup.
+* Keep the header row in sync with the expectations in
+  `examples/quickstart.sh` and in
+  `typing_targets.quickstart_dataset.dataset_columns()`; update the three
+  sources together if the telemetry schema changes.
+* For tutorials or manual checks you can also fall back to the RAF capture
   `data/test1.raf`; the CLI auto-detects it through the native RAF parser.
 
 To regenerate the file you can copy the contents of
@@ -23,10 +25,11 @@ result to `data/BL1_XFG_baseline.csv`.
 
 ## `data/synthetic_stint.csv`
 
-* 17-sample telemetry stint that captures two differentiated cornering events.
-* Columns match the `TelemetryRecord` schema used by the acquisition layer.
-* Handcrafted so segmentation heuristics flag brake/support phases and the
-  ΔNFR baseline yields non-zero node deltas for every subsystem.
+* Seventeen-sample telemetry stint that captures two distinct cornering
+  segments.
+* Columns mirror the `TelemetryRecord` schema used by the acquisition layer.
+* Crafted so the segmentation heuristics flag brake/support phases and the
+  ΔNFR baseline produces non-zero node deltas for every subsystem.
 
 To regenerate the file after adjusting the telemetry schema:
 
@@ -72,8 +75,8 @@ with Path("tests/data/synthetic_stint.csv").open("w", newline="", encoding="utf8
 
 ## `data/car_track_profiles.json`
 
-* Compact library of ΔNFR tolerances defined per car model and track.
-* The tests load the JSON into `ThresholdProfile` instances to validate context
+* Compact catalogue of ΔNFR tolerances scoped by car model and track.
+* Loaded into `ThresholdProfile` instances so the tests can validate context
   resolution inside the recommendation engine.
 
 To tweak tolerances create/update the dictionary and dump it with standard
@@ -115,22 +118,22 @@ metadata:
 
 * `data/tracks/AS.toml` describes the `AS3` layout and its auxiliary sections.
 * `data/track_profiles/p_test_combo.toml` provides fixed weights and hints.
-* `modifiers/combos/demo_profile__p_test_combo.toml` pins the scale factors and
-  overrides used by the recommendation engine.
-* `data/cars/DEMO.toml` lets the CLI resolve the modifier through the car
+* `modifiers/combos/demo_profile__p_test_combo.toml` locks the scale factors and
+  overrides consumed by the recommendation engine.
+* `data/cars/DEMO.toml` allows the CLI to resolve the modifier from the car
   profile.
 
 When adding test circuits or modifiers, replicate this structure inside the
-temporary directory created by the fixture. Keep manifest names short and round
-floats to a few decimals so assertions remain readable. To model extra layouts
-extend the TOML with `[config.XY#]` tables; to add more profiles create
-additional `*.toml` files in the generated directories and expose their
+temporary directory built by the fixture. Keep manifest names concise and round
+floats to a few decimals so assertions remain readable. To model extra layouts,
+extend the TOML file with `[config.XY#]` tables; to provide more profiles,
+create additional `*.toml` files in the generated directories and expose their
 identifiers as new dataclass fields returned by the fixture.
 
 ## Acceptance orchestration fixtures
 
 The `acceptance_bundle_series`, `acceptance_records`, and
-`acceptance_microsectors` fixtures exercise the nodal stage, window occupancy
+`acceptance_microsectors` fixtures exercise the nodal stage, window-occupancy
 metrics, and modal coupling/resonance operators without invoking the full EPI
 extractor. They feed deterministic bundles and segmentation metadata into
 `orchestrate_delta_metrics`, allowing the acceptance tests to validate:
