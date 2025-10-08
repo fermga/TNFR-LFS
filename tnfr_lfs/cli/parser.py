@@ -34,7 +34,7 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         dest="config_path",
         type=Path,
         default=None,
-        help="Ruta del fichero de configuración TOML a utilizar.",
+        help="Path to the TOML configuration file to load.",
     )
     parser.add_argument(
         "--pack-root",
@@ -42,8 +42,8 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         type=Path,
         default=None,
         help=(
-            "Directorio raíz de un pack TNFR × LFS con config/ y data/. "
-            "Sobrescribe paths.pack_root."
+            "Root directory of a TNFR × LFS pack containing config/ and data/. "
+            "Overrides paths.pack_root."
         ),
     )
 
@@ -57,13 +57,13 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         "--car",
         dest="car_model",
         default=default_car_model(config),
-        help="Car model used to resolve the preset (default: perfil actual).",
+        help="Car model used to resolve the preset (default: configured car model).",
     )
     template_parser.add_argument(
         "--track",
         dest="track",
         default=default_track_name(config),
-        help="Identificador de pista usado para seleccionar el perfil (default: actual).",
+        help="Track identifier used to resolve the preset (default: configured track).",
     )
     template_parser.set_defaults(handler=_handle_template)
 
