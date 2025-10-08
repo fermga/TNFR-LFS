@@ -73,10 +73,10 @@ def _persist_records(records: Records, destination: Path, fmt: str) -> None:
             frame = pd.DataFrame(serialised)
             frame.to_parquet(destination, index=False)
             return
-        except ModuleNotFoundError:
-            with destination.open("w", encoding="utf8") as handle:
-                json.dump(serialised, handle, sort_keys=True)
-            return
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(_PARQUET_DEPENDENCY_MESSAGE) from exc
+        except (ImportError, ValueError) as exc:
+            raise RuntimeError(_PARQUET_DEPENDENCY_MESSAGE) from exc
 
     raise ValueError(f"Unsupported format '{fmt}'.")
 
