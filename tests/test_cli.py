@@ -361,6 +361,21 @@ def test_template_command_emits_phase_presets() -> None:
 def test_compare_command_attaches_abtest(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "tnfr-lfs.toml"
+    config_path.write_text(
+        dedent(
+            """
+            [compare]
+            car_model = "XFG"
+            target_delta = 0.42
+            target_si = 0.86
+            coherence_window = 5
+            recursion_decay = 0.65
+            """
+        ),
+        encoding="utf8",
+    )
     baseline_path = tmp_path / "baseline.csv"
     variant_path = tmp_path / "variant.csv"
     baseline_path.write_text("", encoding="utf8")
@@ -401,14 +416,30 @@ def test_compare_command_attaches_abtest(
         }
     }
     metrics_iter = itertools.cycle([metrics_a, metrics_b])
+    captured_objectives: list[dict[str, float]] = []
+
+    def _capture_orchestrate(
+        lap_segments,
+        target_delta_nfr,
+        target_sense_index,
+        *,
+        coherence_window,
+        recursion_decay,
+        **kwargs,
+    ):
+        captured_objectives.append(
+            {
+                "target_delta": float(target_delta_nfr),
+                "target_si": float(target_sense_index),
+                "coherence_window": int(coherence_window),
+                "recursion_decay": float(recursion_decay),
+            }
+        )
+        return next(metrics_iter)
 
     monkeypatch.setattr(cli_module, "_load_records", lambda path: [])
     monkeypatch.setattr(cli_module, "_group_records_by_lap", lambda records: [[], []])
-    monkeypatch.setattr(
-        compare_module,
-        "orchestrate_delta_metrics",
-        lambda *args, **kwargs: next(metrics_iter),
-    )
+    monkeypatch.setattr(compare_module, "orchestrate_delta_metrics", _capture_orchestrate)
     monkeypatch.setattr(cli_module, "_load_pack_cars", lambda pack: {})
     monkeypatch.setattr(cli_module, "_load_pack_track_profiles", lambda pack: {})
     monkeypatch.setattr(cli_module, "_load_pack_modifiers", lambda pack: {})
@@ -425,6 +456,8 @@ def test_compare_command_attaches_abtest(
 
     output = run_cli(
         [
+            "--config",
+            str(config_path),
             "compare",
             str(baseline_path),
             str(variant_path),
@@ -441,6 +474,12 @@ def test_compare_command_attaches_abtest(
     assert abtest["metric"] == "sense_index"
     assert abtest["baseline_laps"]
     assert abtest["variant_laps"]
+    assert len(captured_objectives) == 2
+    for captured in captured_objectives:
+        assert captured["target_delta"] == pytest.approx(0.42)
+        assert captured["target_si"] == pytest.approx(0.86)
+        assert captured["coherence_window"] == 5
+        assert captured["recursion_decay"] == pytest.approx(0.65)
 
 
 def test_track_argument_resolves_session_payload(mini_track_pack) -> None:

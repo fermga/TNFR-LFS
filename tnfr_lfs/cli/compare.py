@@ -66,11 +66,11 @@ def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     track_selection = cli._resolve_track_argument(None, config, pack_root=pack_root)
     car_model = cli._default_car_model(config)
     track_name = track_selection.name or cli._default_track_name(config)
-    report_cfg = dict(config.get("report", {}))
-    target_delta = float(report_cfg.get("target_delta", 0.0))
-    target_si = float(report_cfg.get("target_si", 0.75))
-    coherence_window = int(report_cfg.get("coherence_window", 3))
-    recursion_decay = float(report_cfg.get("recursion_decay", 0.4))
+    compare_cfg = dict(config.get("compare", {}))
+    target_delta = float(compare_cfg.get("target_delta", 0.0))
+    target_si = float(compare_cfg.get("target_si", 0.75))
+    coherence_window = int(compare_cfg.get("coherence_window", 3))
+    recursion_decay = float(compare_cfg.get("recursion_decay", 0.4))
 
     def _compute_metrics(path: Path) -> Mapping[str, Any]:
         records = cli._load_records(path)
