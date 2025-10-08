@@ -207,7 +207,19 @@ def test_baseline_overlay_uses_keepalive_and_overlay(
         heartbeat = kwargs.get("heartbeat")
         if callable(heartbeat):
             heartbeat()
-        return []
+        return workflows_module.CaptureResult(
+            records=[],
+            metrics=workflows_module.CaptureMetrics(
+                attempts=1,
+                samples=0,
+                dropped_pairs=1,
+                duration=0.0,
+                outsim_timeouts=1,
+                outgauge_timeouts=1,
+                outsim_ignored_hosts=0,
+                outgauge_ignored_hosts=0,
+            ),
+        )
 
     monkeypatch.setattr(workflows_module, "InSimClient", _DummyInSimClient)
     monkeypatch.setattr(workflows_module, "OverlayManager", _DummyOverlay)

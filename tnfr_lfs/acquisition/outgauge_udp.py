@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from types import TracebackType
 import math
 import socket
@@ -11,6 +12,9 @@ import time
 from typing import Optional, Tuple, cast
 
 __all__ = ["OutGaugePacket", "OutGaugeUDPClient"]
+
+
+logger = logging.getLogger(__name__)
 
 
 _PACK_STRUCT = struct.Struct("<I4s16s8s6s6sHBBfffffffIIfff16s16sI")
@@ -209,10 +213,20 @@ class OutGaugeUDPClient:
         self._socket.bind(("", port))
         local_host, local_port = self._socket.getsockname()
         self._address: Tuple[str, int] = (local_host, local_port)
+        self._timeouts = 0
+        self._ignored_hosts = 0
 
     @property
     def address(self) -> Tuple[str, int]:
         return self._address
+
+    @property
+    def timeouts(self) -> int:
+        return self._timeouts
+
+    @property
+    def ignored_hosts(self) -> int:
+        return self._ignored_hosts
 
     def recv(self) -> Optional[OutGaugePacket]:
         for _ in range(self._retries):
@@ -224,8 +238,29 @@ class OutGaugeUDPClient:
             if not payload:
                 continue
             if self._remote_addresses and source[0] not in self._remote_addresses:
+                self._ignored_hosts += 1
+                logger.warning(
+                    "Ignoring OutGauge datagram from unexpected host.",
+                    extra={
+                        "event": "outgauge.ignored_host",
+                        "expected_hosts": sorted(self._remote_addresses),
+                        "source_host": source[0],
+                        "port": self._address[1],
+                    },
+                )
                 continue
             return OutGaugePacket.from_bytes(payload)
+        self._timeouts += 1
+        logger.warning(
+            "OutGauge recv retries exhausted without receiving a packet.",
+            extra={
+                "event": "outgauge.recv_timeout",
+                "retries": self._retries,
+                "timeout": self._timeout,
+                "remote_host": self._remote_host,
+                "port": self._address[1],
+            },
+        )
         return None
 
     def close(self) -> None:
