@@ -82,7 +82,7 @@ class TelemetryFusion:
 
     load_scale: float = 1000.0
     extractor: EPIExtractor = field(default_factory=EPIExtractor)
-    _records: List[TelemetryRecord] = field(default_factory=list, init=False)
+    _last_record: TelemetryRecord | None = field(default=None, init=False, repr=False)
     _calibration_table: Mapping[str, object] = field(default_factory=dict, init=False, repr=False)
     _calibration_cache: Dict[Tuple[str, str], FusionCalibration] = field(
         default_factory=dict, init=False, repr=False
@@ -106,6 +106,7 @@ class TelemetryFusion:
         self._calibration_cache = {}
         self._vertical_history = []
         self._line_history = []
+        self._last_record = None
         (
             self._brake_thermal_defaults,
             self._brake_thermal_mode,
@@ -119,9 +120,10 @@ class TelemetryFusion:
     def reset(self) -> None:
         """Clear the internal telemetry history."""
 
-        self._records.clear()
+        self.extractor.reset()
         self._vertical_history.clear()
         self._line_history.clear()
+        self._last_record = None
         if self._brake_thermal_estimator is not None:
             self._brake_thermal_estimator.reset()
 
@@ -129,7 +131,7 @@ class TelemetryFusion:
         """Return a :class:`TelemetryRecord` derived from both UDP sources."""
 
         timestamp = outsim.time / 1000.0
-        previous = self._records[-1] if self._records else None
+        previous = self._last_record
         dt = timestamp - previous.timestamp if previous else 0.0
 
         calibration = self._select_calibration(outgauge)
@@ -263,15 +265,19 @@ class TelemetryFusion:
             brake_temps=brake_temps,
             line_deviation=line_deviation,
         )
-        self._records.append(record)
+        self._last_record = record
         return record
 
     def fuse_to_bundle(self, outsim: OutSimPacket, outgauge: OutGaugePacket) -> EPIBundle:
         """Return an :class:`EPIBundle` for the latest fused sample."""
 
-        self.fuse(outsim, outgauge)
-        bundles = self.extractor.extract(self._records)
-        return bundles[-1]
+        record = self.fuse(outsim, outgauge)
+        return self.extractor.update(
+            record,
+            car_model=getattr(record, "car_model", None) or outgauge.car,
+            track_name=getattr(record, "track_name", None) or outgauge.track,
+            player_name=outgauge.player_name,
+        )
 
     # ------------------------------------------------------------------
     # Fusion orchestration helpers
@@ -559,6 +565,8 @@ class TelemetryFusion:
             suspension_deflection_fr=wheel_data.deflections[1],
             suspension_deflection_rl=wheel_data.deflections[2],
             suspension_deflection_rr=wheel_data.deflections[3],
+            car_model=outgauge.car,
+            track_name=outgauge.track or outgauge.layout,
         )
 
     # ------------------------------------------------------------------
