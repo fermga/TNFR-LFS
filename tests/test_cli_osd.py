@@ -51,10 +51,10 @@ class DummyHUD:
         self._plan = plan
         self._status = MacroStatus()
         self._pages: Tuple[str, str, str, str] = (
-            "Página A",
-            "Página B",
-            "Página C",
-            "Aplicar recomendaciones",
+            "Page A",
+            "Page B",
+            "Page C",
+            "Apply recommendations",
         )
 
     def pages(self) -> Tuple[str, str, str, str]:
@@ -70,7 +70,7 @@ class DummyHUD:
             self._pages[0],
             self._pages[1],
             self._pages[2],
-            f"{warning_prefix}Aplicar recomendaciones",
+            f"{warning_prefix}Apply recommendations",
         )
 
 
@@ -201,9 +201,9 @@ def _window_metrics_from_parallel_turn(
     def update_macro_status(self, status: MacroStatus) -> None:
         self._status = status
         warnings = [f"⚠️ {warning}" for warning in status.warnings if warning]
-        lines = ["Aplicar recomendaciones"]
+        lines = ["Apply recommendations"]
         if status.queue_size:
-            lines.append(f"Cola macros {status.queue_size}")
+            lines.append(f"Macro queue {status.queue_size}")
         if warnings:
             lines.extend(warnings)
         self._pages = (
@@ -225,15 +225,15 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
     assert "ΔNFR" in page_a
     assert "C(t)" in page_a
     assert "[" in page_a  # ΔNFR gauge present
-    assert "ENTR Δ" in page_a
-    if "Sin microsector activo" not in page_a:
+    assert "ENTRY Δ" in page_a
+    if "No active microsector" not in page_a:
         assert any(char in page_a for char in "▁▂▃▄▅▆▇█")
         assert "ν_f~" in page_a or "ν_f~" in page_b
         assert "Si↺" in page_a or "Si plan" in page_c
-    assert "Líder" in page_b and "ν_f" in page_b
+    assert "Leader" in page_b and "ν_f" in page_b
     assert "C(t)" in page_b
-    assert "Mapa ΔNFR fases" in page_c
-    assert "Aplicar" in page_d
+    assert "ΔNFR phase map" in page_c
+    assert "Apply" in page_d
 
 
 def test_entropy_indicator_uses_thresholds() -> None:
@@ -338,18 +338,18 @@ def test_macro_queue_respects_timing():
 
 def test_hud_macro_status_injects_warnings():
     change = SetupChange(
-        parameter="Presión delantera",
+        parameter="Front pressure",
         delta=1.5,
         rationale="",
         expected_effect="",
     )
     status = MacroStatus(
         next_change=change,
-        warnings=("Abre el menú de boxes (F12)", "Detén el coche antes de aplicar"),
+        warnings=("Open the pit menu (F12)", "Stop the car before applying"),
         queue_size=2,
     )
     page_d = osd_module._render_page_d((change,), status)
-    assert "Cola macros 2" in page_d
+    assert "Macro queue 2" in page_d
     assert page_d.count("⚠️") == 2
 
 
@@ -358,8 +358,8 @@ def test_osd_controller_applies_macro_on_trigger():
         car_model="FZR",
         session=None,
         changes=(
-            SetupChange(parameter="Alerón", delta=2.0, rationale="", expected_effect=""),
-            SetupChange(parameter="Amortiguador", delta=-1.0, rationale="", expected_effect=""),
+            SetupChange(parameter="Wing", delta=2.0, rationale="", expected_effect=""),
+            SetupChange(parameter="Damper", delta=-1.0, rationale="", expected_effect=""),
         ),
         rationales=(),
         expected_effects=(),
@@ -412,7 +412,7 @@ def test_osd_controller_blocks_macro_when_preflight_fails():
         car_model="FZR",
         session=None,
         changes=(
-            SetupChange(parameter="Alerón", delta=2.0, rationale="", expected_effect=""),
+            SetupChange(parameter="Wing", delta=2.0, rationale="", expected_effect=""),
         ),
         rationales=(),
         expected_effects=(),
@@ -451,7 +451,7 @@ def test_osd_controller_blocks_macro_when_preflight_fails():
     assert "⚠️" in page_d
 
 
-def test_render_page_c_marks_riesgos(synthetic_records):
+def test_render_page_c_marks_risks(synthetic_records):
     hud = _populate_hud(synthetic_records[:60])
     thresholds = hud._thresholds
     plan = SetupPlan(
@@ -463,7 +463,7 @@ def test_render_page_c_marks_riesgos(synthetic_records):
                 parameter="front_arb_steps",
                 delta=1.0,
                 rationale="",
-                expected_effect="Mejor apoyo",
+                expected_effect="Better support",
             ),
         ),
         rationales=(),
@@ -479,7 +479,7 @@ def test_render_page_c_marks_riesgos(synthetic_records):
         },
     )
     output = osd_module._render_page_c(None, plan, thresholds, None)
-    assert "riesgos" in output
+    assert "risks" in output
     assert "front_arb_steps" in output
     assert "dSi" in output
     assert "SCI 0.842" in output
@@ -506,7 +506,7 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
     )
     output = osd_module._render_page_c(None, plan, thresholds, None)
     assert "Aero High speed" in output
-    assert "Δaero alta" in output
+    assert "Δaero high" in output
     assert "C(c/d/a) 0.68" in output
 
 
@@ -531,9 +531,9 @@ def test_render_page_c_includes_phase_axis_summary_map(synthetic_records):
         },
     )
     output = osd_module._render_page_c(None, plan, thresholds, None)
-    assert "Mapa ΔNFR fases" in output
+    assert "ΔNFR phase map" in output
     assert "⇈+0.40" in output
-    assert "Entrada ∥ ⇈+0.40" in output
+    assert "Entry ∥ ⇈+0.40" in output
 
 
 def test_render_page_c_adds_operational_checklist(synthetic_records):
@@ -604,7 +604,7 @@ def test_build_setup_plan_includes_phase_axis_summary() -> None:
     ]
     plan = osd_module._build_setup_plan(base_plan, "FZR", None, microsectors)
     assert plan.phase_axis_summary["longitudinal"]["entry"] == "⇈+0.40"
-    assert any("Entrada ∥" in hint for hint in plan.phase_axis_suggestions)
+    assert any("Entry ∥" in hint for hint in plan.phase_axis_suggestions)
 
 
 def test_render_page_a_includes_wave_when_active_phase():
@@ -683,7 +683,7 @@ def test_render_page_a_includes_wave_when_active_phase():
     assert "μΦR" in gradient_line
     assert "τmot" in gradient_line
     output = osd_module._render_page_a(active, bundles[-1], 0.2, window_metrics, bundles)
-    curve_label = f"Curva {microsector.index + 1}"
+    curve_label = f"Corner {microsector.index + 1}"
     assert curve_label in output
     assert osd_module.HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize()) in output
     assert "ν_f" in output
@@ -691,9 +691,9 @@ def test_render_page_a_includes_wave_when_active_phase():
     assert "C(t) 0.40" in output
     assert "∇Acop" in output
     aero_line = osd_module._truncate_line(
-        "Δaero alta "
+        "Δaero high "
         f"{window_metrics.aero_coherence.high_speed_imbalance:+.2f}"
-        f" · baja {window_metrics.aero_coherence.low_speed_imbalance:+.2f}"
+        f" · low {window_metrics.aero_coherence.low_speed_imbalance:+.2f}"
     )
     if len((output + "\n" + aero_line).encode("utf8")) <= osd_module.PAYLOAD_LIMIT:
         assert "Δaero" in output

@@ -76,25 +76,25 @@ DEFAULT_PLAN_INTERVAL = 5.0
 MOTOR_LATENCY_TARGETS_MS: Mapping[str, float] = {"entry": 250.0, "apex": 180.0, "exit": 220.0}
 
 NODE_AXIS_LABELS = {
-    "yaw": "guiñada",
-    "roll": "balanceo",
-    "pitch": "cabeceo",
+    "yaw": "Yaw",
+    "roll": "Roll",
+    "pitch": "Pitch",
 }
 
 MODAL_AXIS_SUMMARY_LABELS = {
-    "yaw": "guiñada",
-    "roll": "balanceo",
-    "pitch": "suspensión",
+    "yaw": "Yaw",
+    "roll": "Roll",
+    "pitch": "Suspension",
 }
 
 SPARKLINE_BLOCKS = "▁▂▃▄▅▆▇█"
 
 HUD_PHASE_LABELS = {
-    "entry1": "Entrada 1",
-    "entry2": "Entrada 2",
-    "apex3a": "Vértice 3A",
-    "apex3b": "Vértice 3B",
-    "exit4": "Salida 4",
+    "entry1": "Entry 1",
+    "entry2": "Entry 2",
+    "apex3a": "Apex 3A",
+    "apex3b": "Apex 3B",
+    "exit4": "Exit 4",
 }
 
 PACKING_HIGH_SPEED_THRESHOLD = 35.0
@@ -127,10 +127,10 @@ class HUDPager:
         self._pages: Tuple[str, ...] = tuple(pages or ())
         if not self._pages:
             self._pages = (
-                "Esperando telemetría…",
-                "ΔNFR nodal en espera",
-                "Plan en preparación…",
-                "Aplicar en espera…",
+                "Waiting for telemetry…",
+                "Nodal ΔNFR pending",
+                "Plan in progress…",
+                "Apply pending…",
             )
         self._index = 0
 
@@ -200,10 +200,10 @@ class TelemetryHUD:
         self._microsectors: Sequence[Microsector] = ()
         self._bundles: Sequence[object] = ()
         self._pages: Tuple[str, str, str, str] = (
-            "Esperando telemetría…",
-            "ΔNFR nodal en espera",
-            "Plan en preparación…",
-            "Aplicar en espera…",
+            "Waiting for telemetry…",
+            "Nodal ΔNFR pending",
+            "Plan in progress…",
+            "Apply pending…",
         )
         self._coherence_series: Tuple[float, ...] = ()
         self._coherence_index: float = 0.0
@@ -270,10 +270,10 @@ class TelemetryHUD:
         records = list(self._records)
         if len(records) < 8:
             self._pages = (
-                "Esperando telemetría…",
-                "ΔNFR nodal en espera",
-                "Plan en preparación…",
-                "Aplicar en espera…",
+                "Waiting for telemetry…",
+                "Nodal ΔNFR pending",
+                "Plan in progress…",
+                "Apply pending…",
             )
             self._coherence_series = ()
             self._coherence_index = 0.0
@@ -540,7 +540,7 @@ def _render_page_a(
     integral_line = _integral_cov_line(integral_cov, integral_lap_count, hud_thresholds)
     if not active:
         lines = [
-            _truncate_line(f"Sin microsector activo{classification_segment}"),
+            _truncate_line(f"No active microsector{classification_segment}"),
             _truncate_line(
                 "ΔNFR -- obj -- ±0.00 "
                 + _delta_threshold_meter(
@@ -591,7 +591,7 @@ def _render_page_a(
                 lines.append(coupling_alert)
         return _ensure_limit("\n".join(lines))
 
-    curve_label = f"Curva {active.microsector.index + 1}"
+    curve_label = f"Corner {active.microsector.index + 1}"
     phase_label = HUD_PHASE_LABELS.get(active.phase, active.phase.capitalize())
     current_delta = getattr(bundle, "delta_nfr", 0.0)
     goal_delta = active.goal.target_delta_nfr if active.goal else 0.0
@@ -691,9 +691,9 @@ def _render_page_a(
         or window_metrics.aero_coherence.low_speed_samples
     ):
         aero_line = _truncate_line(
-            "Δaero alta "
+            "Δaero high "
             f"{window_metrics.aero_coherence.high_speed_imbalance:+.2f}"
-            f" · baja {window_metrics.aero_coherence.low_speed_imbalance:+.2f}"
+            f" · low {window_metrics.aero_coherence.low_speed_imbalance:+.2f}"
         )
         candidate = "\n".join((*lines, aero_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
@@ -1416,8 +1416,8 @@ def _format_quiet_descriptor(sequence: Sequence[int]) -> str:
     start = sequence[0] + 1
     end = sequence[-1] + 1
     if start == end:
-        return f"Curva {start}"
-    return f"Curvas {start}-{end}"
+        return f"Corner {start}"
+    return f"Corners {start}-{end}"
 
 
 def _quiet_notice_line(
@@ -1504,12 +1504,12 @@ def _render_page_b(
         lines.append(nu_wave)
     if not node_values:
         lines.append("ΔNFR nodal")
-        lines.append("Datos insuficientes")
+        lines.append("Insufficient data")
         return _ensure_limit("\n".join(lines))
     ordered = sorted(node_values.items(), key=lambda item: abs(item[1]), reverse=True)[:3]
     max_mag = max(abs(value) for _, value in ordered) or 1.0
     leader = ordered[0][0] if ordered else "--"
-    lines.append(f"ΔNFR nodal · Líder → {leader}")
+    lines.append(f"ΔNFR nodal · Leader → {leader}")
     for name, value in ordered:
         bar = _bar_for_value(value, max_mag)
         lines.append(f"{name:<12}{value:+.2f} {bar}")
@@ -1543,7 +1543,7 @@ def _modal_axis_lines(resonance: Mapping[str, ModalAnalysis]) -> List[str]:
     return lines
 
 
-def _format_riesgos(parameters: Sequence[str]) -> str:
+def _format_risks(parameters: Sequence[str]) -> str:
     unique = [param for param in dict.fromkeys(parameters) if param]
     return " · ".join(unique)
 
@@ -1675,7 +1675,7 @@ def _entropy_indicator_line(
     marker = {2: "🟢", 1: "🟠", 0: "🔴"}.get(severity, "⬜")
     coherence_value = _safe_float(getattr(window_metrics, "coherence_index", None), 0.0) or 0.0
     payload = (
-        f"ENTR Δ {marker}{delta_entropy:.2f} · nod {node_entropy:.2f}"
+        f"ENTRY Δ {marker}{delta_entropy:.2f} · nod {node_entropy:.2f}"
         f" · C(t) {coherence_value:.2f}"
     )
     return _truncate_line(payload)
@@ -1903,9 +1903,9 @@ def _render_page_c(
             if hint:
                 post_plan_lines.append(_truncate_line(f"→ {hint}"))
         if getattr(plan, "clamped_parameters", ()):  # compatibility with older plans
-            riesgos = _format_riesgos(plan.clamped_parameters)
-            if riesgos:
-                post_plan_lines.append(_truncate_line(f"riesgos: {riesgos}"))
+            risks = _format_risks(plan.clamped_parameters)
+            if risks:
+                post_plan_lines.append(_truncate_line(f"risks: {risks}"))
         dsi_line = _format_sensitivities(plan.sensitivities.get("sense_index", {}))
         if dsi_line:
             post_plan_lines.append(_truncate_line(f"dSi {dsi_line}"))
@@ -1959,11 +1959,11 @@ def _render_page_c(
         if high_imbalance is not None and low_imbalance is not None:
             post_plan_lines.append(
                 _truncate_line(
-                    f"Δaero alta {high_imbalance:+.2f} · baja {low_imbalance:+.2f}"
+                    f"Δaero high {high_imbalance:+.2f} · low {low_imbalance:+.2f}"
                 )
             )
     if summary_lines:
-        lines.append("Mapa ΔNFR fases")
+        lines.append("ΔNFR phase map")
         for summary_line in summary_lines:
             lines.append(_truncate_line(summary_line))
     if plan and plan.changes:
@@ -1972,7 +1972,7 @@ def _render_page_c(
             effect = change.expected_effect.strip()
             lines.append(_truncate_line(f"{change.parameter}: {delta} → {effect}"))
     else:
-        lines.append("Plan en preparación…")
+        lines.append("Plan in progress…")
     lines.extend(post_plan_lines)
     return _ensure_limit("\n".join(lines))
 
@@ -1981,7 +1981,7 @@ def _render_page_d(
     top_changes: Sequence[SetupChange],
     status: MacroStatus,
 ) -> str:
-    lines: List[str] = ["Aplicar recomendaciones"]
+    lines: List[str] = ["Apply recommendations"]
     if top_changes:
         for index, change in enumerate(top_changes, start=1):
             descriptor = _truncate_line(
@@ -1989,20 +1989,20 @@ def _render_page_d(
             )
             lines.append(descriptor)
     else:
-        lines.append("Sin recomendaciones disponibles")
+        lines.append("No recommendations available")
 
     if status.next_change:
         change = status.next_change
         lines.append(
-            _truncate_line(f"Siguiente → {change.parameter} {change.delta:+.2f}")
+            _truncate_line(f"Next → {change.parameter} {change.delta:+.2f}")
         )
     else:
-        lines.append("Siguiente → --")
+        lines.append("Next → --")
 
     if status.queue_size:
-        lines.append(f"Cola macros {status.queue_size}")
+        lines.append(f"Macro queue {status.queue_size}")
 
-    lines.append("APLICAR SIGUIENTE (Shift+Clic)")
+    lines.append("APPLY NEXT (Shift+Click)")
 
     for warning in status.warnings:
         if not warning:
@@ -2256,11 +2256,11 @@ class OSDController:
     def _macro_preflight_warnings(self, next_change: Optional[SetupChange]) -> List[str]:
         warnings: List[str] = []
         if next_change is None:
-            warnings.append("Sin cambios pendientes")
+            warnings.append("No changes pending")
         if not self._menu_open:
-            warnings.append("Abre el menú de boxes (F12)")
+            warnings.append("Open the pit menu (F12)")
         if not self._car_stopped:
-            warnings.append("Detén el coche antes de aplicar")
+            warnings.append("Stop the car before applying")
         return warnings
 
     def _refresh_macro_status(self) -> None:
