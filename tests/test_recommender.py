@@ -826,7 +826,7 @@ def test_locking_window_rule_recommends_reducing_preload() -> None:
     assert recommendations
     preload_rec = next(rec for rec in recommendations if rec.parameter == "diff_preload_nm")
     assert preload_rec.delta == pytest.approx(-50.0)
-    assert "precarga" in preload_rec.message.lower()
+    assert "reduce preload" in preload_rec.message.lower()
 
 
 def test_locking_window_rule_requires_transitions() -> None:
@@ -874,8 +874,8 @@ def test_recommendation_engine_suppresses_when_quiet_sequence():
     assert len(recommendations) == 1
     message = recommendations[0].message.lower()
     rationale = recommendations[0].rationale.lower()
-    assert "no tocar" in message
-    assert "silencio" in rationale
+    assert "do not adjust" in message
+    assert "silence" in rationale or "quiet" in rationale
 
 
 def test_aero_coherence_rule_flags_high_speed_bias() -> None:
@@ -911,8 +911,8 @@ def test_aero_coherence_rule_flags_high_speed_bias() -> None:
     rec = recommendations[0]
     assert rec.parameter == "rear_wing_angle"
     assert rec.delta and rec.delta > 0
-    assert "Alta velocidad" in rec.message
-    assert "carga trasera" in rec.rationale
+    assert "High-speed microsector" in rec.message
+    assert "rear load" in rec.rationale.lower()
     assert "C(c/d/a)" in rec.rationale
 
 
@@ -956,8 +956,8 @@ def test_front_wing_balance_rule_targets_front_limited_bias() -> None:
     rec = recommendations[0]
     assert rec.parameter == "front_wing_angle"
     assert rec.delta and rec.delta > 0
-    assert "alerón delantero" in rec.message
-    assert "carga delantera" in rec.rationale.lower()
+    assert "front wing angle" in rec.message.lower()
+    assert "front load" in rec.rationale.lower()
 
 
 def test_aero_coherence_rule_respects_low_speed_window() -> None:
@@ -1177,7 +1177,7 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     assert any("click" in message.lower() or "psi" in message.lower() for message in entry_messages)
 
     apex_messages = [rec.message for rec in recommendations if rec.category == "apex"]
-    assert any("barra" in message.lower() for message in apex_messages)
+    assert any("anti-roll" in message.lower() for message in apex_messages)
     assert any("psi" in message.lower() for message in apex_messages)
 
     exit_messages = [rec.message for rec in recommendations if rec.category == "exit"]
@@ -1464,10 +1464,10 @@ def test_track_specific_profile_tightens_entry_threshold():
     AS5_recs = AS5_engine.generate(results, [microsector])
 
     generic_entry_global = [
-        rec for rec in generic_recs if rec.category == "entry" and "ΔNFR global" in rec.message
+        rec for rec in generic_recs if rec.category == "entry" and "global ΔNFR" in rec.message
     ]
     AS5_entry_global = [
-        rec for rec in AS5_recs if rec.category == "entry" and "ΔNFR global" in rec.message
+        rec for rec in AS5_recs if rec.category == "entry" and "global ΔNFR" in rec.message
     ]
 
     assert not generic_entry_global
@@ -1510,7 +1510,7 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
         goals=(
             Goal(
                 phase="entry",
-                archetype="transición",
+                archetype="transition",
                 description="",
                 target_delta_nfr=0.0,
                 target_sense_index=0.9,
@@ -1528,7 +1528,7 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
             ),
             Goal(
                 phase="apex",
-                archetype="transición",
+                archetype="transition",
                 description="",
                 target_delta_nfr=0.1,
                 target_sense_index=0.9,
@@ -1546,7 +1546,7 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
             ),
             Goal(
                 phase="exit",
-                archetype="tracción",
+                archetype="traction",
                 description="",
                 target_delta_nfr=-0.05,
                 target_sense_index=0.9,
@@ -1621,14 +1621,14 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
     exit_messages = [
         rec
         for rec in recommendations
-        if rec.category == "exit" and "diferencial" in rec.message.lower()
+        if rec.category == "exit" and "traction operator" in rec.message.lower()
     ]
     assert exit_messages
-    assert any("abrir" in rec.message.lower() for rec in exit_messages)
+    assert any("power locking" in rec.message.lower() for rec in exit_messages)
 
     rationale = exit_messages[0].rationale
-    assert "transmisión" in rationale
-    assert "ν_f medio" in rationale
+    assert "differential" in rationale.lower()
+    assert "mean ν_f" in rationale
     assert "FZR/AS5" in rationale
 
 
@@ -1639,7 +1639,7 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
     context = engine._resolve_context("FZR", "AS5")
     rule = PhaseNodeOperatorRule(
         phase="apex",
-        operator_label="Operador",
+        operator_label="Apex operator",
         category="apex",
         priority=25,
         reference_key="antiroll",
@@ -1712,7 +1712,7 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
     assert rebound_actions[0].delta > 0
     assert "θ" in rebound_actions[0].rationale
     assert "Siφ" in rebound_actions[0].rationale
-    assert "invierte el sentido" in rebound_actions[0].rationale.lower()
+    assert "direction is inverted" in rebound_actions[0].rationale.lower()
 
 
 def test_detune_ratio_rule_emits_modal_guidance() -> None:
@@ -1773,7 +1773,7 @@ def test_detune_ratio_rule_emits_modal_guidance() -> None:
     assert recommendations, "expected detune ratio warning"
     rationale = recommendations[0].rationale.lower()
     assert "ρ=" in recommendations[0].rationale
-    assert "barras" in rationale
+    assert "anti-roll" in rationale
     assert "detune" in rationale
     assert "longitudinal" in rationale
 
@@ -1795,7 +1795,7 @@ def test_useful_dissonance_rule_reinforces_rear_when_udr_high(car_track_threshol
 
     assert recommendations, "expected UDR escalation recommendation"
     messages = [rec.message.lower() for rec in recommendations]
-    assert any("reforzar" in message for message in messages)
+    assert any("reinforce" in message and "rear" in message for message in messages)
     rationales = " ".join(rec.rationale.lower() for rec in recommendations)
     assert "udr" in rationales
 
@@ -1817,7 +1817,7 @@ def test_useful_dissonance_rule_softens_axle_when_udr_low(car_track_thresholds):
 
     assert recommendations, "expected UDR softening recommendation"
     messages = [rec.message.lower() for rec in recommendations]
-    assert any("ablandar" in message and "delanter" in message for message in messages)
+    assert any("soften front" in message for message in messages)
 
     # Oversteer scenario should target the rear axle.
     oversteer_results = _udr_bundle_series([-1.2, -1.3, -1.1])
@@ -1832,14 +1832,14 @@ def test_useful_dissonance_rule_softens_axle_when_udr_low(car_track_thresholds):
 
     assert oversteer_recs, "expected UDR rear softening recommendation"
     oversteer_messages = [rec.message.lower() for rec in oversteer_recs]
-    assert any("traser" in message for message in oversteer_messages)
+    assert any("rear" in message for message in oversteer_messages)
 
 def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="entry",
-        operator_label="Operador de frenado",
+        operator_label="Braking operator",
         category="entry",
-        phase_label="entrada",
+        phase_label="entry",
         priority=10,
         reference_key="braking",
     )
@@ -1895,8 +1895,8 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
     thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
     context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
     recommendations = list(rule.evaluate(results, [microsector], context))
-    messages = [rec.message for rec in recommendations]
-    assert any("bias de frenos" in message for message in messages)
+    messages = [rec.message.lower() for rec in recommendations]
+    assert any("brake bias" in message for message in messages)
     targeted = [rec for rec in recommendations if rec.parameter == "brake_bias_pct"]
     assert targeted
     assert all(rec.priority <= rule.priority - 1 for rec in targeted)
@@ -1964,9 +1964,9 @@ def _entry_results_with_gradient(gradient: float) -> Sequence[EPIBundle]:
 def test_phase_delta_rule_offsets_brake_bias_with_downhill_gradient() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="entry",
-        operator_label="Operador de frenado",
+        operator_label="Braking operator",
         category="entry",
-        phase_label="entrada",
+        phase_label="entry",
         priority=10,
         reference_key="braking",
     )
@@ -1988,9 +1988,9 @@ def test_phase_delta_rule_offsets_brake_bias_with_downhill_gradient() -> None:
 def test_phase_delta_rule_offsets_brake_bias_with_uphill_gradient() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="entry",
-        operator_label="Operador de frenado",
+        operator_label="Braking operator",
         category="entry",
-        phase_label="entrada",
+        phase_label="entry",
         priority=10,
         reference_key="braking",
     )
@@ -2026,8 +2026,8 @@ def test_bottoming_priority_rule_switches_focus(bottoming_microsectors) -> None:
     bump_targets = [rec for rec in recommendations if rec.parameter == "rear_compression_clicks"]
     assert height_targets
     assert bump_targets
-    assert "altura" in height_targets[0].message.lower()
-    assert "compresión" in bump_targets[0].message.lower()
+    assert "ride height" in height_targets[0].message.lower()
+    assert "stiffen compression" in bump_targets[0].message.lower()
 
 
 def test_bottoming_priority_rule_prefers_springs_on_apex_energy() -> None:
@@ -2074,8 +2074,8 @@ def test_brake_headroom_rule_increases_force_when_surplus() -> None:
     recommendation = recommendations[0]
     assert recommendation.parameter == "brake_max_per_wheel"
     assert recommendation.delta == pytest.approx(0.03)
-    assert "incrementar fuerza" in recommendation.message.lower()
-    assert "margen de frenada" in recommendation.rationale.lower()
+    assert "raise per-wheel maximum force" in recommendation.message.lower()
+    assert "brake margin" in recommendation.rationale.lower()
 
 
 def test_brake_headroom_rule_reduces_force_on_sustained_locking() -> None:
@@ -2102,8 +2102,8 @@ def test_brake_headroom_rule_reduces_force_on_sustained_locking() -> None:
     assert recommendations
     recommendation = recommendations[0]
     assert recommendation.delta == pytest.approx(-0.04)
-    assert "bloqueo sostenido" in recommendation.message.lower()
-    assert "bloqueo sostenido" in recommendation.rationale.lower()
+    assert "sustained locking" in recommendation.message.lower()
+    assert "sustained locking" in recommendation.rationale.lower()
 
 
 def test_footprint_efficiency_rule_relaxes_delta_when_usage_high() -> None:
@@ -2129,9 +2129,9 @@ def test_footprint_efficiency_rule_relaxes_delta_when_usage_high() -> None:
 
     assert recommendations
     messages = [rec.message.lower() for rec in recommendations]
-    assert any("huella" in message for message in messages)
-    assert any("delanter" in message for message in messages)
-    assert not any("traser" in message for message in messages)
+    assert any("footprint" in message for message in messages)
+    assert any("front" in message for message in messages)
+    assert not any("rear" in message for message in messages)
     rationales = " ".join(rec.rationale.lower() for rec in recommendations)
     assert "0.92" in rationales
 
@@ -2139,9 +2139,9 @@ def test_footprint_efficiency_rule_relaxes_delta_when_usage_high() -> None:
 def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="entry",
-        operator_label="Operador de frenado",
+        operator_label="Braking operator",
         category="entry",
-        phase_label="entrada",
+        phase_label="entry",
         priority=12,
         reference_key="braking",
     )
@@ -2226,9 +2226,9 @@ def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
 def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="apex",
-        operator_label="Operador de vértice",
+        operator_label="Apex operator",
         category="apex",
-        phase_label="vértice",
+        phase_label="apex",
         priority=20,
         reference_key="antiroll",
     )
@@ -2285,8 +2285,8 @@ def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
     thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
     context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
     recommendations = list(rule.evaluate(results, [microsector], context))
-    messages = [rec.message for rec in recommendations]
-    assert any("barras estabilizadoras" in message for message in messages)
+    messages = [rec.message.lower() for rec in recommendations]
+    assert any("anti-roll bar" in message for message in messages)
     sway_recs = [
         rec
         for rec in recommendations
@@ -2299,9 +2299,9 @@ def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
 def test_phase_delta_rule_emits_geometry_actions_for_coherence_gap() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="entry",
-        operator_label="Operador de frenado",
+        operator_label="Braking operator",
         category="entry",
-        phase_label="entrada",
+        phase_label="entry",
         priority=14,
         reference_key="braking",
     )
@@ -2365,9 +2365,9 @@ def test_phase_delta_rule_emits_geometry_actions_for_coherence_gap() -> None:
 def test_phase_delta_rule_targets_front_toe_for_entry_synchrony_gap() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="entry",
-        operator_label="Operador de frenado",
+        operator_label="Braking operator",
         category="entry",
-        phase_label="entrada",
+        phase_label="entry",
         priority=12,
         reference_key="braking",
     )
@@ -2434,9 +2434,9 @@ def test_phase_delta_rule_targets_front_toe_for_entry_synchrony_gap() -> None:
 def test_phase_delta_rule_prioritises_front_spring_with_lateral_bias() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="apex",
-        operator_label="Operador de vértice",
+        operator_label="Apex operator",
         category="apex",
-        phase_label="vértice",
+        phase_label="apex",
         priority=22,
         reference_key="antiroll",
     )
@@ -2502,9 +2502,9 @@ def test_phase_delta_rule_prioritises_front_spring_with_lateral_bias() -> None:
 def test_phase_delta_rule_scales_rear_spring_with_lateral_bias_and_low_frequency() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="exit",
-        operator_label="Operador de salida",
+        operator_label="Traction operator",
         category="exit",
-        phase_label="salida",
+        phase_label="exit",
         priority=24,
         reference_key="differential",
     )
@@ -2570,7 +2570,7 @@ def test_phase_delta_rule_scales_rear_spring_with_lateral_bias_and_low_frequency
 def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
     rule = PhaseNodeOperatorRule(
         phase="apex",
-        operator_label="Operador de vértice",
+        operator_label="Apex operator",
         category="apex",
         priority=24,
         reference_key="antiroll",
@@ -2634,9 +2634,9 @@ def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
 def test_phase_delta_rule_targets_rear_toe_for_exit_synchrony_gap() -> None:
     rule = PhaseDeltaDeviationRule(
         phase="exit",
-        operator_label="Operador de tracción",
+        operator_label="Traction operator",
         category="exit",
-        phase_label="salida",
+        phase_label="exit",
         priority=16,
         reference_key="differential",
     )
