@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import math
 import os
 import re
@@ -58,6 +59,9 @@ from ..core.segmentation import (
     segment_microsectors,
 )
 from ..analysis import compute_session_robustness
+
+
+logger = logging.getLogger(__name__)
 from ..exporters import (
     REPORT_ARTIFACT_FORMATS,
     build_coherence_map_payload,
@@ -1057,13 +1061,25 @@ def _share_disabled_commands(commands: Iterable[str]) -> None:
     command_list = [command for command in commands if command]
     if not command_list:
         return
-    print("Recommended commands to enable telemetry:")
+    logger.info(
+        "Recommended commands to enable telemetry.",
+        extra={"event": "telemetry.commands", "commands": command_list},
+    )
     for command in command_list:
-        print(f"  {command}")
+        logger.info(
+            "Telemetry command available.",
+            extra={"event": "telemetry.command", "command": command},
+        )
     if _copy_to_clipboard(command_list):
-        print("Commands copied to the clipboard.")
+        logger.info(
+            "Commands copied to the clipboard.",
+            extra={"event": "telemetry.clipboard", "copied": True},
+        )
     else:
-        print("Manual copy required: clipboard access was not available.")
+        logger.warning(
+            "Manual copy required: clipboard access was not available.",
+            extra={"event": "telemetry.clipboard", "copied": False},
+        )
 
 
 def _check_setups_directory(cfg_path: Path) -> Tuple[bool, str]:
@@ -2056,7 +2072,15 @@ def _handle_template(namespace: argparse.Namespace, *, config: Mapping[str, Any]
             lines.append("")
 
     result = "\n".join(lines).rstrip() + "\n"
-    print(result)
+    logger.info(
+        "Generated template preset.",
+        extra={
+            "event": "template.generated",
+            "car_model": car_model,
+            "track": track_name,
+            "phases": sorted(templates.keys()),
+        },
+    )
     return result
 
 
@@ -2225,14 +2249,31 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
             summary.append("Additional details:")
             summary.extend(f"  * {success}" for success in successes)
         message = "\n".join(summary)
-        print(message)
+        logger.error(
+            "cfg.txt diagnostics detected issues.",
+            extra={
+                "event": "diagnostics.failed",
+                "path": str(cfg_path),
+                "errors": errors,
+                "successes": successes,
+                "commands": commands,
+            },
+        )
         raise CliError(message)
 
     summary = [header, "Status: ok"]
     summary.extend(f"- {success}" for success in successes)
     _share_disabled_commands(commands)
     message = "\n".join(summary)
-    print(message)
+    logger.info(
+        "cfg.txt diagnostics succeeded.",
+        extra={
+            "event": "diagnostics.succeeded",
+            "path": str(cfg_path),
+            "successes": successes,
+            "commands": commands,
+        },
+    )
     return message
 
 
@@ -2286,7 +2327,14 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
     if not records:
         message = "No telemetry samples captured."
-        print(message)
+        logger.warning(
+            message,
+            extra={
+                "event": "baseline.empty",
+                "destination": str(destination),
+                "format": namespace.format,
+            },
+        )
         return message
 
     _persist_records(records, destination, namespace.format)
@@ -2294,7 +2342,16 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
         f"Baseline saved {len(records)} samples to {destination} "
         f"({namespace.format})."
     )
-    print(message)
+    logger.info(
+        message,
+        extra={
+            "event": "baseline.saved",
+            "samples": len(records),
+            "destination": str(destination),
+            "format": namespace.format,
+            "simulate": namespace.simulate is not None,
+        },
+    )
     return message
 
 

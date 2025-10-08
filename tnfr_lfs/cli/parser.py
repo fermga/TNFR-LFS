@@ -26,6 +26,8 @@ from .workflows import (
 
 def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.ArgumentParser:
     config = dict(config or {})
+    logging_cfg = dict(config.get("logging", {}))
+
     parser = argparse.ArgumentParser(
         description="TNFR × LFS – Live for Speed Load & Force Synthesis"
     )
@@ -45,6 +47,25 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
             "Root directory of a TNFR × LFS pack containing config/ and data/. "
             "Overrides paths.pack_root."
         ),
+    )
+    parser.add_argument(
+        "--log-level",
+        dest="log_level",
+        default=logging_cfg.get("level", "info"),
+        help="Logging level (e.g. debug, info, warning).",
+    )
+    parser.add_argument(
+        "--log-output",
+        dest="log_output",
+        default=logging_cfg.get("output", "stderr"),
+        help="Logging destination (stdout, stderr or a file path).",
+    )
+    parser.add_argument(
+        "--log-format",
+        dest="log_format",
+        choices=("json", "text"),
+        default=logging_cfg.get("format", "json"),
+        help="Logging formatter (json or text).",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
