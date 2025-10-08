@@ -56,7 +56,7 @@ _HELPER_EXPORTS = {
     "_validated_export": _common_module.validated_export,
     "_add_export_argument": _common_module.add_export_argument,
     "_load_records": _cli_io_module._load_records,
-    "_load_records_from_namespace": _cli_io_module._load_records_from_namespace,
+    "_load_records_from_namespace": _common_module._load_records_from_namespace,
     "raf_to_telemetry_records": _cli_io_module.raf_to_telemetry_records,
     "_load_pack_lfs_class_overrides": _workflows_module._load_pack_lfs_class_overrides,
 }

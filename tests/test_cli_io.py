@@ -12,17 +12,19 @@ import pytest
 
 pytest.importorskip("numpy")
 
+from tnfr_lfs.cli import common as cli_common
 from tnfr_lfs.cli import io as cli_io
+from tnfr_lfs.cli.common import CliError
 
 
 def test_load_records_from_namespace_prefers_replay(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     bundle_path = tmp_path / "bundle.zip"
     bundle_path.write_bytes(b"dummy")
     expected = [object()]
-    monkeypatch.setattr(cli_io, "_load_replay_bundle", lambda path: expected)
+    monkeypatch.setattr(cli_common, "_load_replay_bundle", lambda path: expected)
     namespace = argparse.Namespace(replay_csv_bundle=bundle_path, telemetry=None)
 
-    records, resolved = cli_io._load_records_from_namespace(namespace)
+    records, resolved = cli_common._load_records_from_namespace(namespace)
 
     assert records is expected
     assert resolved == bundle_path
@@ -31,8 +33,8 @@ def test_load_records_from_namespace_prefers_replay(monkeypatch: pytest.MonkeyPa
 
 def test_load_records_from_namespace_requires_path() -> None:
     namespace = argparse.Namespace(replay_csv_bundle=None, telemetry=None)
-    with pytest.raises(SystemExit):
-        cli_io._load_records_from_namespace(namespace)
+    with pytest.raises(CliError):
+        cli_common._load_records_from_namespace(namespace)
 
 
 def test_load_records_uses_outsim_for_csv(

@@ -6,7 +6,7 @@ import argparse
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Mapping, Optional, Sequence
+from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
 from ..core.epi import TelemetryRecord
 from ..exporters import exporters_registry
@@ -23,7 +23,7 @@ from ..config_loader import (
     load_cars as _load_pack_cars_dataset,
     load_profiles as _load_pack_profiles_dataset,
 )
-from .io import Records, _load_records as _io_load_records
+from .io import Records, _load_records as _io_load_records, _load_replay_bundle
 
 __all__ = [
     "CliError",
@@ -40,6 +40,7 @@ __all__ = [
     "resolve_track_argument",
     "resolve_track_selection",
     "load_records",
+    "_load_records_from_namespace",
     "group_records_by_lap",
     "render_payload",
     "resolve_exports",
@@ -279,6 +280,33 @@ def load_records(source: Path) -> Records:
         raise CliError(str(exc)) from exc
     except ValueError as exc:
         raise CliError(str(exc)) from exc
+
+
+def _load_records_from_namespace(
+    namespace: argparse.Namespace,
+) -> Tuple[Records, Path]:
+    """Resolve telemetry records and path from CLI ``namespace`` arguments."""
+
+    replay_bundle = getattr(namespace, "replay_csv_bundle", None)
+    telemetry_path = getattr(namespace, "telemetry", None)
+    if replay_bundle is not None:
+        bundle_path = Path(replay_bundle)
+        try:
+            records = _load_replay_bundle(bundle_path)
+        except FileNotFoundError as exc:
+            raise CliError(str(exc)) from exc
+        namespace.telemetry = bundle_path
+        return records, bundle_path
+
+    if telemetry_path is None:
+        raise CliError(
+            "A telemetry baseline path is required unless --replay-csv-bundle is provided."
+        )
+
+    telemetry_path = Path(telemetry_path)
+    namespace.telemetry = telemetry_path
+    records = load_records(telemetry_path)
+    return records, telemetry_path
 
 
 def _unique_export_list(values: Sequence[str]) -> list[str]:

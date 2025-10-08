@@ -16,6 +16,7 @@ from tnfr_lfs.cli import compare as compare_module
 from tnfr_lfs.cli import tnfr_lfs_cli as cli_module
 from tnfr_lfs.cli import workflows as workflows_module
 from tnfr_lfs.cli.tnfr_lfs_cli import run_cli
+from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.io.profiles import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 
@@ -53,6 +54,18 @@ def test_run_cli_dispatches_registered_handler(monkeypatch: pytest.MonkeyPatch) 
 
     assert result == "dummy-result"
     assert calls == [("dummy", {})]
+
+
+def test_run_cli_requires_telemetry_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_module, "load_cli_config", lambda path: {})
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_cli(["analyze"])
+
+    assert str(excinfo.value) == (
+        "A telemetry baseline path is required unless --replay-csv-bundle is provided."
+    )
+    assert isinstance(excinfo.value.__cause__, CliError)
 
 
 def test_cli_exports_helper_attributes() -> None:

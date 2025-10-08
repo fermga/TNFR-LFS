@@ -87,6 +87,7 @@ from .common import (
     default_car_model,
     default_track_name,
     group_records_by_lap,
+    _load_records_from_namespace,
     load_pack_cars,
     load_pack_profiles,
     load_pack_modifiers,
@@ -96,7 +97,7 @@ from .common import (
     resolve_pack_root,
     resolve_track_argument,
 )
-from .io import Records, _load_records_from_namespace, _persist_records
+from .io import Records, _persist_records
 
 
 Bundles = Sequence[Any]
