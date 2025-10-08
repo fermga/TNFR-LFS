@@ -11,6 +11,7 @@ polled from high-frequency loops.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import TracebackType
 import socket
 import struct
 import time
@@ -234,5 +235,10 @@ class OutSimUDPClient:
     def __enter__(self) -> "OutSimUDPClient":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self.close()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from types import TracebackType
 from typing import Any, Mapping
 
 import pytest
@@ -79,7 +80,12 @@ class _MemoryBuffer(io.BytesIO):
     def __enter__(self) -> "_MemoryBuffer":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool:
         self.close()
         return False
 
