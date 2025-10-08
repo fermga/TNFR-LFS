@@ -88,24 +88,6 @@ def _load_replay_bundle(source: Path) -> Records:
     return reader.to_records()
 
 
-def _load_records_from_namespace(
-    namespace: argparse.Namespace,
-) -> Tuple[Records, Path]:
-    replay_bundle = getattr(namespace, "replay_csv_bundle", None)
-    telemetry_path = getattr(namespace, "telemetry", None)
-    if replay_bundle is not None:
-        bundle_path = Path(replay_bundle)
-        records = _load_replay_bundle(bundle_path)
-        namespace.telemetry = bundle_path
-        return records, bundle_path
-    if telemetry_path is None:
-        raise SystemExit(
-            "A telemetry baseline path is required unless --replay-csv-bundle is provided."
-        )
-    records = _load_records(telemetry_path)
-    return records, telemetry_path
-
-
 def _coerce_payload(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     data = dict(payload)
     for key, value in data.items():
