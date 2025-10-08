@@ -55,16 +55,16 @@ from ..core.segmentation import (
 
 
 MANUAL_REFERENCES = {
-    "braking": "Basic Setup Guide · Frenada óptima [BAS-FRE]",
-    "antiroll": "Advanced Setup Guide · Barras estabilizadoras [ADV-ARB]",
-    "differential": "Advanced Setup Guide · Configuración de diferenciales [ADV-DIF]",
-    "curbs": "Basic Setup Guide · Uso de pianos [BAS-CUR]",
-    "ride_height": "Advanced Setup Guide · Alturas y reparto de carga [ADV-RDH]",
-    "aero": "Basic Setup Guide · Balance aerodinámico [BAS-AER]",
-    "driver": "Basic Setup Guide · Constancia de pilotaje [BAS-DRV]",
-    "tyre_balance": "Advanced Setup Guide · Presiones y caídas [ADV-TYR]",
-    "dampers": "Advanced Setup Guide · Amortiguadores [ADV-DMP]",
-    "springs": "Advanced Setup Guide · Rigidez de muelles [ADV-SPR]",
+    "braking": "Basic Setup Guide · Optimal Braking [BAS-FRE]",
+    "antiroll": "Advanced Setup Guide · Anti-Roll Bars [ADV-ARB]",
+    "differential": "Advanced Setup Guide · Differential Configuration [ADV-DIF]",
+    "curbs": "Basic Setup Guide · Kerb Usage [BAS-CUR]",
+    "ride_height": "Advanced Setup Guide · Ride Heights & Load Distribution [ADV-RDH]",
+    "aero": "Basic Setup Guide · Aero Balance [BAS-AER]",
+    "driver": "Basic Setup Guide · Consistent Driving [BAS-DRV]",
+    "tyre_balance": "Advanced Setup Guide · Pressures & Camber [ADV-TYR]",
+    "dampers": "Advanced Setup Guide · Dampers [ADV-DMP]",
+    "springs": "Advanced Setup Guide · Spring Stiffness [ADV-SPR]",
 }
 
 _ALIGNMENT_ALIGNMENT_GAP = 0.15
@@ -108,27 +108,27 @@ _GEOMETRY_METRIC_NODES: Mapping[str, Mapping[str, str]] = {
 
 _AXIS_FOCUS_MAP: Mapping[tuple[str, str], tuple[str, str, Tuple[str, ...]]] = {
     ("entry", "longitudinal"): (
-        "Prioriza el bias de frenos (proyección ∇NFR∥)",
+        "Prioritize brake bias (∇NFR∥ projection)",
         "braking",
         ("brake_bias_pct",),
     ),
     ("exit", "longitudinal"): (
-        "Refuerza el bloqueo de retención (proyección ∇NFR∥)",
+        "Reinforce coast locking (∇NFR∥ projection)",
         "differential",
         ("diff_coast_lock",),
     ),
     ("apex", "lateral"): (
-        "Ajusta las barras estabilizadoras (proyección ∇NFR⊥)",
+        "Tune the anti-roll bars (∇NFR⊥ projection)",
         "antiroll",
         ("front_arb_steps", "rear_arb_steps"),
     ),
     ("entry", "lateral"): (
-        "Afina el toe delantero (proyección ∇NFR⊥)",
+        "Fine-tune front toe (∇NFR⊥ projection)",
         "tyre_balance",
         ("front_toe_deg",),
     ),
     ("exit", "lateral"): (
-        "Afina el toe trasero (proyección ∇NFR⊥)",
+        "Fine-tune rear toe (∇NFR⊥ projection)",
         "tyre_balance",
         ("rear_toe_deg",),
     ),
@@ -136,57 +136,57 @@ _AXIS_FOCUS_MAP: Mapping[tuple[str, str], tuple[str, str, Tuple[str, ...]]] = {
 
 
 NODE_LABELS = {
-    "tyres": "neumáticos",
-    "suspension": "suspensión",
-    "chassis": "chasis",
-    "brakes": "frenos",
-    "transmission": "transmisión",
-    "track": "pista",
-    "driver": "piloto",
+    "tyres": "Tyres",
+    "suspension": "Suspension",
+    "chassis": "Chassis",
+    "brakes": "Brakes",
+    "transmission": "Transmission",
+    "track": "Track",
+    "driver": "Driver",
 }
 
 
 _BASE_PHASE_ACTIONS: Mapping[str, Mapping[str, Mapping[str, str]]] = {
     "entry": {
         "tyres": {
-            "increase": "abrir toe delantero",
-            "decrease": "cerrar toe delantero",
+            "increase": "Increase front toe-out",
+            "decrease": "Reduce front toe-out",
         },
         "brakes": {
-            "increase": "desplazar el balance de frenos hacia delante",
-            "decrease": "desplazar el balance de frenos hacia atrás",
+            "increase": "Shift brake bias forward",
+            "decrease": "Shift brake bias rearward",
         },
         "suspension": {
-            "increase": "endurecer el rebote delantero",
-            "decrease": "ablandar el rebote delantero",
+            "increase": "Stiffen front rebound",
+            "decrease": "Soften front rebound",
         },
     },
     "apex": {
         "suspension": {
-            "increase": "endurecer la barra estabilizadora",
-            "decrease": "ablandar la barra estabilizadora",
+            "increase": "Stiffen the anti-roll bar",
+            "decrease": "Soften the anti-roll bar",
         },
         "chassis": {
-            "increase": "aumentar precarga delantera",
-            "decrease": "reducir precarga delantera",
+            "increase": "Increase front preload",
+            "decrease": "Reduce front preload",
         },
         "tyres": {
-            "increase": "subir presión en neumáticos exteriores",
-            "decrease": "bajar presión en neumáticos exteriores",
+            "increase": "Raise pressure in outside tyres",
+            "decrease": "Lower pressure in outside tyres",
         },
     },
     "exit": {
         "transmission": {
-            "increase": "cerrar el diferencial de aceleración",
-            "decrease": "abrir el diferencial de aceleración",
+            "increase": "Increase power locking",
+            "decrease": "Reduce power locking",
         },
         "tyres": {
-            "increase": "incrementar caída trasera",
-            "decrease": "reducir caída trasera",
+            "increase": "Increase rear camber",
+            "decrease": "Reduce rear camber",
         },
         "suspension": {
-            "increase": "endurecer compresión trasera",
-            "decrease": "ablandar compresión trasera",
+            "increase": "Stiffen rear compression",
+            "decrease": "Soften rear compression",
         },
     },
 }
@@ -218,7 +218,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-1.0,
             min_value=-4.0,
             max_value=4.0,
-            message_pattern="{delta:+.1f}% bias delante",
+            message_pattern="{delta:+.1f}% brake bias forward",
             step=0.5,
             gradient_offset_scale=(60.0, 80.0),
             gradient_offset_limit=1.5,
@@ -230,7 +230,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-900.0,
             min_value=-35.0,
             max_value=35.0,
-            message_pattern="{delta:+.1f} N/mm muelle delantero (νf_susp · ∇NFR⊥)",
+            message_pattern="{delta:+.1f} N/mm front spring (νf_susp · ∇NFR⊥)",
             step=0.5,
             nodes=("suspension",),
             priority_offset=-2,
@@ -241,7 +241,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.5,
             min_value=-6.0,
             max_value=6.0,
-            message_pattern="{delta:+.0f} clicks rebote delante",
+            message_pattern="{delta:+.0f} front rebound clicks",
             step=1.0,
             nodes=("suspension",),
             priority_offset=1,
@@ -252,7 +252,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.5,
             min_value=-6.0,
             max_value=6.0,
-            message_pattern="{delta:+.0f} clicks compresión delante",
+            message_pattern="{delta:+.0f} front compression clicks",
             step=1.0,
             nodes=("suspension",),
             priority_offset=2,
@@ -263,7 +263,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=20.0,
             min_value=-0.6,
             max_value=0.6,
-            message_pattern="{delta:+.1f} psi eje delantero",
+            message_pattern="{delta:+.1f} psi front axle",
             step=0.1,
             priority_offset=3,
         ),
@@ -273,7 +273,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-1.1,
             min_value=-1.5,
             max_value=1.5,
-            message_pattern="{delta:+.1f}° camber delantero",
+            message_pattern="{delta:+.1f}° front camber",
             step=0.1,
             nodes=("suspension",),
             priority_offset=-3,
@@ -295,7 +295,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=0.4,
             min_value=-0.4,
             max_value=0.4,
-            message_pattern="{delta:+.2f}° toe delantero",
+            message_pattern="{delta:+.2f}° front toe",
             step=0.05,
             nodes=("tyres",),
             priority_offset=-3,
@@ -306,7 +306,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.45,
             min_value=-0.5,
             max_value=0.5,
-            message_pattern="{delta:+.2f}° toe delantero",
+            message_pattern="{delta:+.2f}° front toe",
             step=0.05,
             nodes=("tyres",),
             priority_offset=-2,
@@ -319,7 +319,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.6,
             min_value=-5.0,
             max_value=5.0,
-            message_pattern="{delta:+.0f} pasos barra delantera",
+            message_pattern="{delta:+.0f} front anti-roll bar steps",
             step=1.0,
         ),
         PhaseActionTemplate(
@@ -328,7 +328,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-900.0,
             min_value=-35.0,
             max_value=35.0,
-            message_pattern="{delta:+.1f} N/mm muelle delantero (νf_susp · ∇NFR⊥)",
+            message_pattern="{delta:+.1f} N/mm front spring (νf_susp · ∇NFR⊥)",
             step=0.5,
             nodes=("suspension",),
             priority_offset=-2,
@@ -339,7 +339,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=0.6,
             min_value=-5.0,
             max_value=5.0,
-            message_pattern="{delta:+.0f} pasos barra trasera",
+            message_pattern="{delta:+.0f} rear anti-roll bar steps",
             step=1.0,
             priority_offset=1,
         ),
@@ -349,7 +349,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=18.0,
             min_value=-0.6,
             max_value=0.6,
-            message_pattern="{delta:+.1f} psi exteriores",
+            message_pattern="{delta:+.1f} psi outside tyres",
             step=0.1,
             priority_offset=2,
         ),
@@ -359,7 +359,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.5,
             min_value=-6.0,
             max_value=6.0,
-            message_pattern="{delta:+.0f} clicks rebote trasero",
+            message_pattern="{delta:+.0f} rear rebound clicks",
             step=1.0,
             nodes=("suspension",),
             priority_offset=3,
@@ -370,7 +370,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.9,
             min_value=-1.2,
             max_value=1.2,
-            message_pattern="{delta:+.1f}° camber delantero",
+            message_pattern="{delta:+.1f}° front camber",
             step=0.1,
             nodes=("suspension",),
             priority_offset=-3,
@@ -381,7 +381,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.8,
             min_value=-1.2,
             max_value=1.2,
-            message_pattern="{delta:+.1f}° camber trasero",
+            message_pattern="{delta:+.1f}° rear camber",
             step=0.1,
             nodes=("suspension",),
             priority_offset=-2,
@@ -403,7 +403,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.4,
             min_value=-0.5,
             max_value=0.5,
-            message_pattern="{delta:+.2f}° toe delantero",
+            message_pattern="{delta:+.2f}° front toe",
             step=0.05,
             nodes=("tyres",),
             priority_offset=-3,
@@ -414,7 +414,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.35,
             min_value=-0.5,
             max_value=0.5,
-            message_pattern="{delta:+.2f}° toe trasero",
+            message_pattern="{delta:+.2f}° rear toe",
             step=0.05,
             nodes=("tyres",),
             priority_offset=-2,
@@ -427,7 +427,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-2.0,
             min_value=-20.0,
             max_value=20.0,
-            message_pattern="{delta:+.0f}% LSD potencia",
+            message_pattern="{delta:+.0f}% LSD power",
             step=5.0,
         ),
         PhaseActionTemplate(
@@ -436,7 +436,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-900.0,
             min_value=-35.0,
             max_value=35.0,
-            message_pattern="{delta:+.1f} N/mm muelle trasero (νf_susp · ∇NFR⊥)",
+            message_pattern="{delta:+.1f} N/mm rear spring (νf_susp · ∇NFR⊥)",
             step=0.5,
             nodes=("suspension",),
             priority_offset=-2,
@@ -447,7 +447,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.5,
             min_value=-4.0,
             max_value=4.0,
-            message_pattern="{delta:+.1f} mm altura trasera",
+            message_pattern="{delta:+.1f} mm rear ride height",
             step=0.5,
             priority_offset=1,
         ),
@@ -457,7 +457,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=20.0,
             min_value=-0.6,
             max_value=0.6,
-            message_pattern="{delta:+.1f} psi eje trasero",
+            message_pattern="{delta:+.1f} psi rear axle",
             step=0.1,
             priority_offset=2,
         ),
@@ -467,7 +467,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-2.0,
             min_value=-20.0,
             max_value=20.0,
-            message_pattern="{delta:+.0f}% LSD retención",
+            message_pattern="{delta:+.0f}% LSD coast",
             step=5.0,
             nodes=("transmission",),
             priority_offset=3,
@@ -478,7 +478,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=10.0,
             min_value=-3.0,
             max_value=3.0,
-            message_pattern="{delta:+.1f}° ala trasera",
+            message_pattern="{delta:+.1f}° rear wing",
             step=0.5,
             priority_offset=4,
         ),
@@ -488,7 +488,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-1.0,
             min_value=-1.5,
             max_value=1.5,
-            message_pattern="{delta:+.1f}° camber trasero",
+            message_pattern="{delta:+.1f}° rear camber",
             step=0.1,
             nodes=("suspension",),
             priority_offset=-3,
@@ -499,7 +499,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.5,
             min_value=-0.5,
             max_value=0.5,
-            message_pattern="{delta:+.2f}° toe trasero",
+            message_pattern="{delta:+.2f}° rear toe",
             step=0.05,
             nodes=("tyres",),
             priority_offset=-3,
@@ -510,7 +510,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.35,
             min_value=-0.4,
             max_value=0.4,
-            message_pattern="{delta:+.2f}° toe trasero",
+            message_pattern="{delta:+.2f}° rear toe",
             step=0.05,
             nodes=("tyres",),
             priority_offset=-3,
@@ -521,7 +521,7 @@ _PHASE_ACTION_ROADMAP: Mapping[str, Tuple[PhaseActionTemplate, ...]] = {
             scale=-0.4,
             min_value=-0.5,
             max_value=0.5,
-            message_pattern="{delta:+.2f}° toe trasero",
+            message_pattern="{delta:+.2f}° rear toe",
             step=0.05,
             nodes=("tyres",),
             priority_offset=-2,
@@ -1033,13 +1033,13 @@ class LoadBalanceRule:
                 yield Recommendation(
                     category="suspension",
                     message=(
-                        f"{direction.title()} Rear Ride height to rebalance load "
+                        f"{direction.title()} rear ride height to rebalance load "
                         f"({MANUAL_REFERENCES['ride_height']})"
                     ),
                     rationale=(
                         "ΔNFR deviated by "
                         f"{result.delta_nfr:.1f} units relative to baseline at t={result.timestamp:.2f}."
-                        f" Consulta {MANUAL_REFERENCES['ride_height']} para reajustar alturas."
+                        f" Refer to {MANUAL_REFERENCES['ride_height']} to readjust ride heights."
                     ),
                     priority=100,
                 )
@@ -1084,17 +1084,17 @@ class BottomingPriorityRule:
     ) -> Tuple[str, float, str, str]:
         if energy >= self.energy_spring_threshold:
             if phase_category == "apex":
-                return spring_param, self.spring_delta, "reforzar muelle", "springs"
+                return spring_param, self.spring_delta, "Increase spring stiffness", "springs"
             if phase_category == "exit":
-                return ride_param, self.ride_height_delta, "elevar altura", "ride_height"
-            return bump_param, self.bump_delta, "endurecer compresión", "dampers"
+                return ride_param, self.ride_height_delta, "Raise ride height", "ride_height"
+            return bump_param, self.bump_delta, "Stiffen compression", "dampers"
         if energy >= self.energy_compression_threshold:
             if phase_category == "entry":
-                return bump_param, self.bump_delta, "endurecer compresión", "dampers"
-            return spring_param, self.spring_delta, "reforzar muelle", "springs"
+                return bump_param, self.bump_delta, "Stiffen compression", "dampers"
+            return spring_param, self.spring_delta, "Increase spring stiffness", "springs"
         if is_rough or density >= self.density_bias:
-            return bump_param, self.bump_delta, "endurecer compresión", "dampers"
-        return ride_param, self.ride_height_delta, "elevar altura", "ride_height"
+            return bump_param, self.bump_delta, "Stiffen compression", "dampers"
+        return ride_param, self.ride_height_delta, "Raise ride height", "ride_height"
 
     def evaluate(
         self,
@@ -1120,13 +1120,13 @@ class BottomingPriorityRule:
             category = phase_family(getattr(microsector, "active_phase", "apex"))
             for axle, ratio, ride_param, bump_param in (
                 (
-                    "delantero",
+                    "front",
                     front_ratio,
                     "front_ride_height",
                     "front_compression_clicks",
                 ),
                 (
-                    "trasero",
+                    "rear",
                     rear_ratio,
                     "rear_ride_height",
                     "rear_compression_clicks",
@@ -1134,7 +1134,7 @@ class BottomingPriorityRule:
             ):
                 if ratio < self.ratio_threshold:
                     continue
-                position = "front" if axle == "delantero" else "rear"
+                position = axle
                 density = max(
                     0.0,
                     min(1.0, float(measures.get(f"bumpstop_{position}_density", ratio))),
@@ -1153,15 +1153,15 @@ class BottomingPriorityRule:
                     spring_param=spring_param,
                 )
                 reference = MANUAL_REFERENCES[reference_key]
-                surface_label = "bacheada" if is_rough else "lisa"
+                surface_label = "rough" if is_rough else "smooth"
                 message = (
-                    f"Operador bottoming: {focus} {axle} en microsector {microsector.index}"
+                    f"Bottoming operator: {focus} {axle} axle in microsector {microsector.index}"
                 )
                 rationale = (
-                    f"Índice de bottoming {ratio:.2f} en el eje {axle} coincide con picos de ∇NFR∥ "
-                    f"en microsector {microsector.index}. Densidad bump stop {density:.2f} y "
-                    f"energía {energy:.2f} ΔNFR. Superficie {surface_label} (factor {surface_factor:.2f})"
-                    f" → prioriza {focus}. {reference}."
+                    f"Bottoming index {ratio:.2f} on the {axle} axle aligns with ∇NFR∥ peaks "
+                    f"in microsector {microsector.index}. Bump stop density {density:.2f} and "
+                    f"energy {energy:.2f} ΔNFR. Surface {surface_label} (factor {surface_factor:.2f})"
+                    f" → prioritize {focus}. {reference}."
                 )
                 recommendations.append(
                     Recommendation(
@@ -1224,8 +1224,8 @@ class SuspensionVelocityRule:
             rear_ar = _safe_float(measures.get("suspension_velocity_rear_ar_index"), 0.0)
             phase_category = phase_family(getattr(microsector, "active_phase", "apex"))
             for axle_label, high_pct, rebound_pct, ar_index in (
-                ("delantero", front_high_pct, front_rebound_pct, front_ar),
-                ("trasero", rear_high_pct, rear_rebound_pct, rear_ar),
+                ("front", front_high_pct, front_rebound_pct, front_ar),
+                ("rear", rear_high_pct, rear_rebound_pct, rear_ar),
             ):
                 if high_pct < self.packing_threshold_pct:
                     continue
@@ -1234,13 +1234,13 @@ class SuspensionVelocityRule:
                 if rebound_pct >= self.packing_threshold_pct * 0.6:
                     continue
                 message = (
-                    f"Operador amortiguación: aliviar packing {axle_label} "
-                    f"en microsector {microsector.index}"
+                    f"Damper operator: relieve packing on the {axle_label} axle "
+                    f"in microsector {microsector.index}"
                 )
                 rationale = (
-                    f"Compresión HS {high_pct:.1f}% vs rebote HS {rebound_pct:.1f}% "
-                    f"(A/R {ar_index:.2f}) superan el umbral {self.packing_threshold_pct:.1f}%. "
-                    f"Reduce rebote siguiendo {MANUAL_REFERENCES['dampers']}."
+                    f"HS compression {high_pct:.1f}% vs HS rebound {rebound_pct:.1f}% "
+                    f"(A/R {ar_index:.2f}) exceed the {self.packing_threshold_pct:.1f}% threshold. "
+                    f"Reduce rebound following {MANUAL_REFERENCES['dampers']}."
                 )
                 recommendations.append(
                     Recommendation(
@@ -1256,14 +1256,14 @@ class SuspensionVelocityRule:
                 continue
             if max(front_high_pct, rear_high_pct) < self.packing_threshold_pct * 0.5:
                 continue
-            dominant = "delantero" if front_ar > rear_ar else "trasero"
+            dominant = "front" if front_ar > rear_ar else "rear"
             message = (
-                f"Operador amortiguación: equilibrar A/R {dominant} "
-                f"en microsector {microsector.index}"
+                f"Damper operator: balance A/R on the {dominant} axle "
+                f"in microsector {microsector.index}"
             )
             rationale = (
-                f"Índices A/R F {front_ar:.2f} · R {rear_ar:.2f} difieren {ar_gap:.2f}. "
-                f"Compensa clics de compresión/rebote según {MANUAL_REFERENCES['dampers']}."
+                f"A/R indices F {front_ar:.2f} · R {rear_ar:.2f} differ by {ar_gap:.2f}. "
+                f"Offset compression/rebound clicks using {MANUAL_REFERENCES['dampers']}."
             )
             recommendations.append(
                 Recommendation(
@@ -1334,31 +1334,31 @@ class BrakeHeadroomRule:
             if deviation > margin:
                 delta = self.increase_step
                 message = (
-                    f"Operador frenada: incrementar fuerza máxima por rueda en microsector "
+                    f"Brake operator: raise per-wheel maximum force in microsector "
                     f"{microsector.index}"
                 )
             elif deviation < -margin:
                 delta = -self.decrease_step
                 if sustained_ratio >= self.sustained_lock_threshold:
                     message = (
-                        f"Operador frenada: aliviar bloqueo sostenido en microsector "
+                        f"Brake operator: relieve sustained locking in microsector "
                         f"{microsector.index}"
                     )
                 else:
                     message = (
-                        f"Operador frenada: reducir fuerza máxima por rueda en microsector "
+                        f"Brake operator: lower per-wheel maximum force in microsector "
                         f"{microsector.index}"
                     )
             else:
                 continue
             rationale = (
-                f"Margen de frenada μ {headroom:.2f} frente al objetivo {target:.2f} "
-                f"({deviation:+.2f}). Deceleración pico {peak_decel:.2f}m/s², ABS μ {abs_activation:.2f}, "
-                f"bloqueo parcial μ {partial_locking:.2f}."
+                f"Brake margin μ {headroom:.2f} versus target {target:.2f} "
+                f"({deviation:+.2f}). Peak decel {peak_decel:.2f}m/s², ABS μ {abs_activation:.2f}, "
+                f"partial locking μ {partial_locking:.2f}."
             )
             if sustained_ratio >= self.sustained_lock_threshold:
                 rationale = (
-                    f"{rationale} Bloqueo sostenido μ {sustained_ratio:.2f} detectado."
+                    f"{rationale} Sustained locking μ {sustained_ratio:.2f} detected."
                 )
             rationale = f"{rationale} {MANUAL_REFERENCES['braking']}"
             priority_scale = _session_priority_scale(context, "entry", "brakes")
@@ -1467,21 +1467,21 @@ class AeroCoherenceRule:
 
             if high_deviation > 0:
                 delta = self.delta_step
-                action = "Incrementa el ángulo del alerón trasero"
-                direction = "trasera"
+                action = "Increase rear wing angle"
+                direction = "rear"
             else:
                 delta = -self.delta_step
-                action = "Reduce el ángulo del alerón trasero/refuerza la carga delantera"
-                direction = "delantera"
+                action = "Reduce rear wing angle / reinforce front load"
+                direction = "front"
 
             recommendations.append(
                 Recommendation(
                     category="aero",
-                    message=f"Alta velocidad microsector {microsector.index}: {action}",
+                    message=f"High-speed microsector {microsector.index}: {action}",
                     rationale=(
-                        f"ΔNFR aero alta velocidad {high_imbalance:+.2f} frente al objetivo {target_high:+.2f} "
-                        f"con baja velocidad estable ({low_imbalance:+.2f}) y C(c/d/a) {am_coherence:.2f}. "
-                        f"Refuerza carga {direction} "
+                        f"High-speed aero ΔNFR {high_imbalance:+.2f} versus target {target_high:+.2f} "
+                        f"with stable low-speed ({low_imbalance:+.2f}) and C(c/d/a) {am_coherence:.2f}. "
+                        f"Reinforce {direction} load "
                         f"({MANUAL_REFERENCES['aero']})."
                     ),
                     priority=self.priority,
@@ -1552,16 +1552,16 @@ class FrontWingBalanceRule:
             long_rear = float(measures.get("aero_high_rear_longitudinal", 0.0))
 
             rationale = (
-                f"ΔNFR aero alta velocidad {high_imbalance:+.2f} frente al objetivo {target_high:+.2f} "
-                f"con C(c/d/a) {am_coherence:.2f}. Reparto total F/R {front_total:+.2f}/{rear_total:+.2f}. "
-                f"Ejes lateral {lat_front:+.2f}/{lat_rear:+.2f}, longitudinal {long_front:+.2f}/{long_rear:+.2f}. "
-                f"Refuerza carga delantera ({MANUAL_REFERENCES['aero']})."
+                f"High-speed aero ΔNFR {high_imbalance:+.2f} versus target {target_high:+.2f} "
+                f"with C(c/d/a) {am_coherence:.2f}. Total F/R split {front_total:+.2f}/{rear_total:+.2f}. "
+                f"Axle lateral {lat_front:+.2f}/{lat_rear:+.2f}, longitudinal {long_front:+.2f}/{long_rear:+.2f}. "
+                f"Reinforce front load ({MANUAL_REFERENCES['aero']})."
             )
             recommendations.append(
                 Recommendation(
                     category="aero",
                     message=(
-                        f"Alta velocidad microsector {microsector.index}: incrementa ángulo del alerón delantero"
+                        f"High-speed microsector {microsector.index}: increase front wing angle"
                     ),
                     rationale=rationale,
                     priority=self.priority,
@@ -1599,7 +1599,7 @@ class CoherenceRule:
                     rationale=(
                         "Average sense index across the analysed stint is "
                         f"{average_si:.2f}, below the expected threshold of {self.min_average_si:.2f}. "
-                        f"Apóyate en {MANUAL_REFERENCES['driver']} para reforzar hábitos consistentes."
+                        f"Lean on {MANUAL_REFERENCES['driver']} to reinforce consistent habits."
                     ),
                     priority=priority,
                 )
@@ -1764,14 +1764,14 @@ def _phase_action_recommendations(
             continue
         message = template.message_pattern.format(delta=value)
         rationale = (
-            f"{base_rationale} Acción sugerida: {message}. Consulta "
-            f"{MANUAL_REFERENCES[reference_key]} para aplicar el ajuste."
+            f"{base_rationale} Suggested action: {message}. Refer to "
+            f"{MANUAL_REFERENCES[reference_key]} to apply the adjustment."
         )
         if template.parameter in _SPRING_PARAMETERS:
             rationale = (
-                f"{base_rationale} Acción sugerida: {message}. νf_susp pondera el ajuste "
-                f"para homogeneizar ∇NFR⊥ en la banda de G activa. Consulta "
-                f"{MANUAL_REFERENCES[reference_key]} para aplicar el ajuste."
+                f"{base_rationale} Suggested action: {message}. νf_susp weights the adjustment "
+                f"to smooth ∇NFR⊥ across the active G band. Refer to "
+                f"{MANUAL_REFERENCES[reference_key]} to apply the adjustment."
             )
         recommendations.append(
             Recommendation(
@@ -1992,10 +1992,10 @@ def _quiet_recommendation_notice(
             slack_values.append(slack)
             si_values.append(si_variance)
             epi_values.append(epi_abs)
-    message = f"No tocar: {', '.join(descriptors)}"
+    message = f"Do not adjust: {', '.join(descriptors)}"
     if not coverage_values:
         rationale = (
-            "Detectamos una secuencia estable sin activación dinámica reseñable."
+            "Detected a stable sequence without notable dynamic activation."
         )
         return message, rationale
     coverage_avg = sum(coverage_values) / len(coverage_values)
@@ -2003,8 +2003,8 @@ def _quiet_recommendation_notice(
     si_avg = sum(si_values) / len(si_values) if si_values else 0.0
     epi_avg = sum(epi_values) / len(epi_values) if epi_values else 0.0
     rationale = (
-        "Detección de silencio estructural prolongado:"
-        f" silencio μ {coverage_avg * 100.0:.0f}%"
+        "Detection of prolonged structural silence:"
+        f" silence μ {coverage_avg * 100.0:.0f}%"
         f", slack μ {slack_avg:.2f}, Siσ μ {si_avg:.4f}, |dEPI| μ {epi_avg:.3f}."
     )
     return message, rationale
@@ -2358,11 +2358,11 @@ class PhaseDeltaDeviationRule:
                         elif bias_direction == "rearward":
                             recommendation.delta = -abs(recommendation.delta)
                         recommendation.message = (
-                            f"{recommendation.delta:+.1f}% bias delante"
+                            f"{recommendation.delta:+.1f}% brake bias forward"
                         )
                         recommendation.rationale = (
-                            f"{base_rationale} Acción sugerida: {recommendation.message}. "
-                            f"Consulta {MANUAL_REFERENCES[self.reference_key]} para aplicar el ajuste."
+                            f"{base_rationale} Suggested action: {recommendation.message}. "
+                            f"Refer to {MANUAL_REFERENCES[self.reference_key]} to apply the adjustment."
                         )
                     if worst_ratio >= 1.2:
                         recommendation.priority = min(
@@ -2377,14 +2377,14 @@ class PhaseDeltaDeviationRule:
                 recommendations.extend(adjustments)
 
             if delta_triggered:
-                direction = "incrementar" if deviation < 0 else "reducir"
+                direction = "increase" if deviation < 0 else "reduce"
                 summary_message = (
-                    f"{self.operator_label} · objetivo ΔNFR global: {direction} ΔNFR "
-                    f"en microsector {microsector.index} ({MANUAL_REFERENCES[self.reference_key]})"
+                    f"{self.operator_label} · global ΔNFR target: {direction} ΔNFR "
+                    f"in microsector {microsector.index} ({MANUAL_REFERENCES[self.reference_key]})"
                 )
                 summary_rationale = (
-                    f"{base_rationale} Se recomienda {direction} ΔNFR global y revisar "
-                    f"{MANUAL_REFERENCES[self.reference_key]} para la fase de {self.phase_label}."
+                    f"{base_rationale} Recommendation: {direction} global ΔNFR and review "
+                    f"{MANUAL_REFERENCES[self.reference_key]} for the {self.phase_label} phase."
                 )
                 recommendations.append(
                     Recommendation(
@@ -2418,19 +2418,19 @@ class PhaseDeltaDeviationRule:
                     coherence_line = ""
                     if geometry_snapshot["coherence_gap"] > _COHERENCE_THRESHOLD:
                         coherence_line = (
-                            f" C(t) medio {geometry_snapshot['average_coherence']:.2f} "
-                            f"(objetivo {geometry_snapshot['target_coherence']:.2f})."
+                            f" Mean C(t) {geometry_snapshot['average_coherence']:.2f} "
+                            f"(target {geometry_snapshot['target_coherence']:.2f})."
                         )
-                    focus_rationale = (
-                        f"{base_rationale} ΔNFR{axis_label} domina ({axis_delta:+.2f} frente al objetivo "
-                        f"{target_value:+.2f}). θ medido {lag_value:+.2f}rad (objetivo {target_lag:+.2f}). "
-                        f"Reparto objetivo ∥ {weight_long:.2f} · ⊥ {weight_lat:.2f}.{coherence_line}"
-                    )
+                        focus_rationale = (
+                            f"{base_rationale} ΔNFR{axis_label} dominates ({axis_delta:+.2f} versus target "
+                            f"{target_value:+.2f}). Measured θ {lag_value:+.2f}rad (target {target_lag:+.2f}). "
+                            f"Target split ∥ {weight_long:.2f} · ⊥ {weight_lat:.2f}.{coherence_line}"
+                        )
                     recommendations.append(
                         Recommendation(
                             category=self.category,
                             message=focus_message,
-                            rationale=f"{focus_rationale} Consulta {MANUAL_REFERENCES[focus_reference]}.",
+                            rationale=f"{focus_rationale} Refer to {MANUAL_REFERENCES[focus_reference]}.",
                             priority=min(self.priority - 2, self.priority - geometry_urgency),
                         )
                     )
@@ -2445,8 +2445,8 @@ class PhaseDeltaDeviationRule:
                 si_tolerance = 0.01
                 if abs(si_delta) > si_tolerance:
                     si_rationale = (
-                        f"El objetivo de sense index era {target_si:.2f} y se observó "
-                        f"{actual_si:.2f} ({si_delta:+.2f})."
+                        f"Sense index target was {target_si:.2f} and {actual_si:.2f} was observed "
+                        f"({si_delta:+.2f})."
                     )
                     recommendations.extend(
                         _phase_action_recommendations(
@@ -2612,7 +2612,7 @@ class PhaseNodeOperatorRule:
                 suggested_delta = -deviation if flip_alignment else deviation
                 alignment_summary = (
                     f"θ {measured_lag:+.2f}rad / Siφ {measured_alignment:+.2f} "
-                    f"(objetivo θ {target_lag:+.2f}rad / Siφ {target_alignment:+.2f})."
+                    f"(target θ {target_lag:+.2f}rad / Siφ {target_alignment:+.2f})."
                 )
                 frequency_label = ""
                 classification = ""
@@ -2625,28 +2625,28 @@ class PhaseNodeOperatorRule:
                 classification_summary = ""
                 if frequency_label:
                     display_label = frequency_label[3:] if frequency_label.startswith("ν_f ") else frequency_label
-                    classification_summary = f" Estado ν_f: {display_label}."
+                    classification_summary = f" ν_f status: {display_label}."
                 elif classification:
-                    classification_summary = f" Clasificación ν_f {classification}."
+                    classification_summary = f" ν_f classification {classification}."
                 if coherence_index > 0.0:
                     classification_summary += f" C(t) {coherence_index:.2f}."
                 sense_summary = (
-                    f" Objetivo Si perfil {target_si:.2f} para {context.profile_label}."
+                    f" Profile Si target {target_si:.2f} for {context.profile_label}."
                 )
                 coherence_line = (
-                    f" C(t) medio {geometry_snapshot['average_coherence']:.2f} "
-                    f"(objetivo {geometry_snapshot['target_coherence']:.2f})."
+                    f" Mean C(t) {geometry_snapshot['average_coherence']:.2f} "
+                    f"(target {geometry_snapshot['target_coherence']:.2f})."
                 )
                 base_rationale = (
-                    f"{self.operator_label} aplicado al nodo {node_label} en microsector "
-                    f"{microsector.index}. La estrategia del objetivo destaca a "
-                    f"{dominant_list or 'los nodos dominantes'} y fija ν_f={target_nu_f:.2f}. "
-                    f"Se midió ν_f medio {actual_nu_f:.2f} ({deviation:+.2f}), superando la "
-                    f"tolerancia ajustada ±{tolerance:.2f} definida para {context.profile_label}. "
+                    f"{self.operator_label} applied to node {node_label} in microsector "
+                    f"{microsector.index}. The target strategy highlights "
+                    f"{dominant_list or 'the dominant nodes'} and sets ν_f={target_nu_f:.2f}. "
+                    f"Measured mean ν_f {actual_nu_f:.2f} ({deviation:+.2f}) exceeds the "
+                    f"adjusted tolerance ±{tolerance:.2f} defined for {context.profile_label}. "
                     f"{alignment_summary}{classification_summary}{sense_summary}{coherence_line}"
                 )
                 if flip_alignment:
-                    base_rationale += " Se invierte el sentido del ajuste para recuperar la alineación de fase."
+                    base_rationale += " The adjustment direction is inverted to recover phase alignment."
                 actions = _phase_action_recommendations(
                     phase=self.phase,
                     category=self.category,
@@ -2668,13 +2668,13 @@ class PhaseNodeOperatorRule:
                     Recommendation(
                         category=self.category,
                         message=(
-                            f"{self.operator_label} · nodo objetivo {node_label}: {action_text} "
-                            f"para acercar ν_f a {target_nu_f:.2f} "
+                            f"{self.operator_label} · target node {node_label}: {action_text} "
+                            f"to approach ν_f {target_nu_f:.2f} "
                             f"({MANUAL_REFERENCES[self.reference_key]})"
                         ),
                         rationale=(
-                            f"{base_rationale} Acción sugerida: {action_text}. Consulta "
-                            f"{MANUAL_REFERENCES[self.reference_key]} para los ajustes."
+                            f"{base_rationale} Suggested action: {action_text}. Refer to "
+                            f"{MANUAL_REFERENCES[self.reference_key]} for the adjustments."
                         ),
                         priority=self.priority,
                     )
@@ -2730,24 +2730,24 @@ class ParallelSteerRule:
                 min(1.0, _safe_float(measures.get("slide_catch_budget_overshoot"), 0.0)),
             )
             if deviation < 0.0:
-                steer_action = "incrementar"
+                steer_action = "increase"
                 steer_delta = self.delta_step
                 lock_delta = self.lock_step
             else:
-                steer_action = "reducir"
+                steer_action = "reduce"
                 steer_delta = -self.delta_step
                 lock_delta = -self.lock_step
             rationale_header = (
-                f"Desfase Ackermann medio {deviation:+.3f}rad supera el umbral {self.threshold:.3f}."
+                f"Average Ackermann offset {deviation:+.3f}rad exceeds the {self.threshold:.3f} threshold."
             )
             slide_context = (
-                f" Slide Catch Budget {budget:.2f} · yaw {yaw_ratio:.2f} · volante {steer_ratio:.2f} · overshoot {overshoot_ratio:.2f}."
+                f" Slide Catch Budget {budget:.2f} · yaw {yaw_ratio:.2f} · steering {steer_ratio:.2f} · overshoot {overshoot_ratio:.2f}."
             )
             message = (
-                f"Operador Ackermann: {steer_action} parallel steer en microsector {microsector.index}"
+                f"Ackermann operator: {steer_action} parallel steer in microsector {microsector.index}"
             )
             rationale = (
-                f"{rationale_header}{slide_context} Ajusta parallel steer para acercar el par teórico "
+                f"{rationale_header}{slide_context} Adjust parallel steer to approach theoretical torque "
                 f"({MANUAL_REFERENCES['tyre_balance']})."
             )
             recommendations.append(
@@ -2762,13 +2762,13 @@ class ParallelSteerRule:
             )
 
             if budget < 0.45:
-                lock_action = "ampliar" if lock_delta > 0 else "reducir"
+                lock_action = "increase" if lock_delta > 0 else "reduce"
                 lock_message = (
-                    f"Operador Ackermann: {lock_action} steering lock en microsector {microsector.index}"
+                    f"Ackermann operator: {lock_action} steering lock in microsector {microsector.index}"
                 )
                 lock_rationale = (
-                    f"{rationale_header}{slide_context} El margen de corrección es limitado, por lo que se recomienda "
-                    f"ajustar steering lock para facilitar la captura del derrape."
+                    f"{rationale_header}{slide_context} Correction margin is limited, so adjust steering lock "
+                    f"to ease slide recovery."
                 )
                 recommendations.append(
                     Recommendation(
@@ -3024,8 +3024,8 @@ class TyreBalanceRule:
                 f"G {gradient_component:.2f}, μ {mu_component:.2f})"
             )
 
-        front_bias_label = "externo" if front_temp_delta >= 0.0 else "interno"
-        rear_bias_label = "externo" if rear_temp_delta >= 0.0 else "interno"
+        front_bias_label = "outer" if front_temp_delta >= 0.0 else "inner"
+        rear_bias_label = "outer" if rear_temp_delta >= 0.0 else "inner"
 
         front_scale = (
             front_pressure / base_front_pressure
@@ -3045,7 +3045,7 @@ class TyreBalanceRule:
         if abs(front_pressure) > 0.01 or abs(rear_pressure) > 0.01:
             pressure_rationale = (
                 f"ΔNFR_flat {avg_delta_flat:+.2f}. "
-                f"Dispersion gradiente front {avg_front_dispersion:.3f} · rear {avg_rear_dispersion:.3f}. "
+                f"Gradient dispersion front {avg_front_dispersion:.3f} · rear {avg_rear_dispersion:.3f}. "
                 f"Per-wheel ΔP {per_wheel_scaled.get('fl', 0.0):+.2f}/{per_wheel_scaled.get('fr', 0.0):+.2f}/"
                 f"{per_wheel_scaled.get('rl', 0.0):+.2f}/{per_wheel_scaled.get('rr', 0.0):+.2f}."
             )
@@ -3053,7 +3053,7 @@ class TyreBalanceRule:
             if front_action == "pressure":
                 cphi_pressure_segments.append(
                     _format_cphi_label(
-                        "delantero",
+                        "front",
                         front_cphi,
                         front_bias_label,
                         front_temp_component,
@@ -3064,7 +3064,7 @@ class TyreBalanceRule:
             if rear_action == "pressure":
                 cphi_pressure_segments.append(
                     _format_cphi_label(
-                        "trasero",
+                        "rear",
                         rear_cphi,
                         rear_bias_label,
                         rear_temp_component,
@@ -3078,13 +3078,13 @@ class TyreBalanceRule:
                 Recommendation(
                     category="tyres",
                     message=(
-                        "Operador térmico: ajustar presiones ΔPfront "
+                        "Thermal operator: adjust ΔPfront "
                         f"{front_pressure:+.2f} / ΔPrear {rear_pressure:+.2f} bar "
                         f"({MANUAL_REFERENCES['tyre_balance']})"
                     ),
                     rationale=(
-                        f"{pressure_rationale} Sigue las pautas de {MANUAL_REFERENCES['tyre_balance']} "
-                        "para implementar los ajustes."
+                        f"{pressure_rationale} Follow {MANUAL_REFERENCES['tyre_balance']} guidance "
+                        "to implement the adjustments."
                     ),
                     priority=self.priority,
                     parameter="tyre_pressure",
@@ -3099,14 +3099,14 @@ class TyreBalanceRule:
 
         if abs(camber_front) > 0.01 or abs(camber_rear) > 0.01:
             camber_rationale = (
-                f"Gradiente CPHI front {front_gradient_component:.2f} · rear {rear_gradient_component:.2f}. "
-                f"Dispersion gradiente front {avg_front_dispersion:.3f} · rear {avg_rear_dispersion:.3f}."
+                f"CPHI gradient front {front_gradient_component:.2f} · rear {rear_gradient_component:.2f}. "
+                f"Gradient dispersion front {avg_front_dispersion:.3f} · rear {avg_rear_dispersion:.3f}."
             )
             cphi_camber_segments: list[str] = []
             if front_action == "camber":
                 cphi_camber_segments.append(
                     _format_cphi_label(
-                        "delantero",
+                        "front",
                         front_cphi,
                         front_bias_label,
                         front_temp_component,
@@ -3117,7 +3117,7 @@ class TyreBalanceRule:
             if rear_action == "camber":
                 cphi_camber_segments.append(
                     _format_cphi_label(
-                        "trasero",
+                        "rear",
                         rear_cphi,
                         rear_bias_label,
                         rear_temp_component,
@@ -3131,12 +3131,12 @@ class TyreBalanceRule:
                 Recommendation(
                     category="tyres",
                     message=(
-                        "Operador térmico: camber Δfront "
+                        "Thermal operator: adjust camber Δfront "
                         f"{camber_front:+.2f}° / Δrear {camber_rear:+.2f}° "
                         f"({MANUAL_REFERENCES['tyre_balance']})"
                     ),
                     rationale=(
-                        f"{camber_rationale} Ajusta las caídas siguiendo {MANUAL_REFERENCES['tyre_balance']}."
+                        f"{camber_rationale} Adjust camber following {MANUAL_REFERENCES['tyre_balance']}."
                     ),
                     priority=self.priority + 1,
                     parameter="camber",
@@ -3204,19 +3204,19 @@ class FootprintEfficiencyRule:
                 continue
             category = phase_family(goal.phase)
             for axle_label, ratio_value, symbol, reference_key in (
-                ("delantero", front_ratio, "F", "antiroll"),
-                ("trasero", rear_ratio, "R", "differential"),
+                ("front", front_ratio, "F", "antiroll"),
+                ("rear", rear_ratio, "R", "differential"),
             ):
                 if ratio_value < self.threshold:
                     continue
                 reference = MANUAL_REFERENCES[reference_key]
                 message = (
-                    f"Operador huella: aliviar ΔNFR {axle_label} en microsector {microsector.index}"
+                    f"Footprint operator: relieve ΔNFR {axle_label} axle in microsector {microsector.index}"
                 )
                 rationale = (
-                    f"Uso de huella μ{symbol} {ratio_value:.2f} supera el umbral {self.threshold:.2f} "
-                    f"con ΔNFR medio {avg_delta:.2f} (objetivo {goal.target_delta_nfr:.2f}, "
-                    f"tolerancia ±{tolerance:.2f}). Reduce carga axial siguiendo {reference}."
+                    f"Footprint usage μ{symbol} {ratio_value:.2f} exceeds the {self.threshold:.2f} threshold "
+                    f"with mean ΔNFR {avg_delta:.2f} (target {goal.target_delta_nfr:.2f}, "
+                    f"tolerance ±{tolerance:.2f}). Reduce axle load following {reference}."
                 )
                 recommendations.append(
                     Recommendation(
@@ -3264,20 +3264,20 @@ class CurbComplianceRule:
             deviation = actual_delta - goal.target_delta_nfr
             if abs(deviation) <= tolerance:
                 continue
-            action = "liberar" if deviation > 0 else "cargar"
+            action = "release" if deviation > 0 else "load"
             recommendations.append(
                 Recommendation(
                     category="pianos",
                     message=(
-                        f"Operador de pianos: {action} apoyo en microsector {microsector.index}"
+                        f"Kerb operator: {action} support in microsector {microsector.index}"
                         f" ({MANUAL_REFERENCES['curbs']})"
                     ),
                     rationale=(
-                        "Los pianos registraron un ΔNFR medio de "
-                        f"{actual_delta:.2f} frente al objetivo {goal.target_delta_nfr:.2f}. "
-                        f"El desvío {deviation:+.2f} supera la tolerancia ±{tolerance:.2f} "
-                        f"configurada para {context.profile_label}. "
-                        f"Sigue las pautas de {MANUAL_REFERENCES['curbs']} para modular el apoyo."
+                        "Kerbs registered a mean ΔNFR of "
+                        f"{actual_delta:.2f} versus the target {goal.target_delta_nfr:.2f}. "
+                        f"The deviation {deviation:+.2f} exceeds the ±{tolerance:.2f} tolerance "
+                        f"configured for {context.profile_label}. "
+                        f"Follow {MANUAL_REFERENCES['curbs']} to modulate support."
                     ),
                     priority=self.priority,
                 )
@@ -3317,26 +3317,26 @@ class DetuneRatioRule:
             category = phase_family(microsector.active_phase)
             target_text = ""
             if target_rho:
-                target_text += f" Objetivo ρ≈{target_rho:.2f}."
+                target_text += f" Target ρ≈{target_rho:.2f}."
             if target_exc:
-                target_text += f" ν_exc ref {target_exc:.2f}Hz."
+                target_text += f" Reference ν_exc {target_exc:.2f}Hz."
             focus_text = ""
             if isinstance(detune_weights, Mapping):
                 long_weight = float(detune_weights.get("longitudinal", 0.5))
                 lat_weight = float(detune_weights.get("lateral", 0.5))
                 if long_weight > lat_weight:
-                    focus_text = " Prioridad detune longitudinal."
+                    focus_text = " Longitudinal detune priority."
                 elif lat_weight > long_weight:
-                    focus_text = " Prioridad detune lateral."
+                    focus_text = " Lateral detune priority."
             rationale = (
-                f"Detune ratio ρ={rho:.2f} en microsector {microsector.index}"
-                f" cae por debajo del umbral {threshold:.2f} con ∇Res {d_nfr_res:+.2f}."
-                f"{target_text}{focus_text} Revisa barras estabilizadoras y amortiguadores"
+                f"Detune ratio ρ={rho:.2f} in microsector {microsector.index}"
+                f" drops below the {threshold:.2f} threshold with ∇Res {d_nfr_res:+.2f}."
+                f"{target_text}{focus_text} Review anti-roll bars and dampers"
                 f" ({MANUAL_REFERENCES['antiroll']})."
             )
             message = (
-                f"Operador modal · microsector {microsector.index}:"
-                " ajustar barras/amortiguadores para elevar ρ"
+                f"Modal operator · microsector {microsector.index}:"
+                " adjust bars/dampers to raise ρ"
             )
             recommendations.append(
                 Recommendation(
@@ -3389,19 +3389,19 @@ class ShiftStabilityRule:
             details: List[str] = []
             if stability_trigger:
                 details.append(
-                    f"estabilidad {stability:.2f} < umbral {self.stability_threshold:.2f}"
+                    f"stability {stability:.2f} < threshold {self.stability_threshold:.2f}"
                 )
             if gear_trigger:
                 details.append(
-                    f"acoplamiento {gear_match:.2f} < umbral {self.gear_match_threshold:.2f}"
+                    f"gear match {gear_match:.2f} < threshold {self.gear_match_threshold:.2f}"
                 )
             detail_text = ", ".join(details)
             message = (
-                f"Operador transmisión: suavizar cambios apex→exit en microsector {microsector.index}"
+                f"Transmission operator: smooth apex→exit shifts in microsector {microsector.index}"
             )
             rationale = (
-                "Las métricas de transmisión señalan pérdidas en la transición vértice→salida: "
-                f"{detail_text}. Ajusta final drive o ratios de marchas para reducir cambios forzados "
+                "Transmission metrics highlight losses during the apex→exit transition: "
+                f"{detail_text}. Adjust final drive or gear ratios to reduce forced shifts "
                 f"({MANUAL_REFERENCES['differential']})."
             )
             recommendations.append(
@@ -3461,12 +3461,12 @@ class LockingWindowRule:
             if on_score < self.on_threshold:
                 delta = -self.power_lock_step
                 message = (
-                    f"Operador LSD: abrir bloqueo de potencia en microsector {microsector.index}"
+                    f"LSD operator: open power locking in microsector {microsector.index}"
                 )
                 rationale = (
-                    f"LockingWindowScore on-throttle {on_score:.2f} < umbral "
-                    f"{self.on_threshold:.2f} con {transition_count} transiciones (score global {base_score:.2f}). "
-                    f"Reduce el bloqueo de aceleración siguiendo {MANUAL_REFERENCES['differential']}."
+                    f"LockingWindowScore on-throttle {on_score:.2f} < threshold "
+                    f"{self.on_threshold:.2f} with {transition_count} transitions (global score {base_score:.2f}). "
+                    f"Reduce power locking following {MANUAL_REFERENCES['differential']}."
                 )
                 recommendations.append(
                     Recommendation(
@@ -3482,12 +3482,12 @@ class LockingWindowRule:
             if off_score < self.off_threshold:
                 delta = -self.preload_step
                 message = (
-                    f"Operador LSD: reducir precarga en microsector {microsector.index}"
+                    f"LSD operator: reduce preload in microsector {microsector.index}"
                 )
                 rationale = (
-                    f"LockingWindowScore off-throttle {off_score:.2f} < umbral "
-                    f"{self.off_threshold:.2f} con {transition_count} transiciones (score global {base_score:.2f}). "
-                    f"Disminuye la precarga del diferencial según {MANUAL_REFERENCES['differential']}."
+                    f"LockingWindowScore off-throttle {off_score:.2f} < threshold "
+                    f"{self.off_threshold:.2f} with {transition_count} transitions (global score {base_score:.2f}). "
+                    f"Lower differential preload per {MANUAL_REFERENCES['differential']}."
                 )
                 recommendations.append(
                     Recommendation(
@@ -3547,14 +3547,14 @@ class UsefulDissonanceRule:
             if udr >= self.high_threshold and deviation > tolerance:
                 category = phase_family(goal.phase)
                 message = (
-                    f"Operador UDR: reforzar eje trasero/LSD en microsector "
+                    f"UDR operator: reinforce rear axle/LSD in microsector "
                     f"{microsector.index}"
                 )
                 rationale = (
-                    f"UDR {udr:.2f} indica que dΔNFR/dt es negativo bajo alta guiñada, "
-                    f"pero el ΔNFR medio {avg_delta:.2f} supera el objetivo "
-                    f"{goal.target_delta_nfr:.2f} ({deviation:+.2f}). Refuerza la barra "
-                    f"trasera o incrementa el bloqueo del diferencial "
+                    f"UDR {udr:.2f} shows dΔNFR/dt is negative under high yaw, "
+                    f"yet mean ΔNFR {avg_delta:.2f} exceeds the target "
+                    f"{goal.target_delta_nfr:.2f} ({deviation:+.2f}). Reinforce the rear bar "
+                    f"or increase differential locking "
                     f"({MANUAL_REFERENCES['antiroll']} / {MANUAL_REFERENCES['differential']})."
                 )
                 recommendations.append(
@@ -3569,22 +3569,22 @@ class UsefulDissonanceRule:
 
             if udr <= self.low_threshold and abs(deviation) > tolerance:
                 if deviation > 0:
-                    axle = "delantero"
+                    axle = "front"
                     reference = MANUAL_REFERENCES["antiroll"]
-                    action = "ablandar barra/amortiguación delantera"
+                    action = "soften front bar/damping"
                     category = "entry"
                 else:
-                    axle = "trasero"
+                    axle = "rear"
                     reference = MANUAL_REFERENCES["differential"]
-                    action = "ablandar barra trasera o abrir LSD"
+                    action = "soften rear bar or open LSD"
                     category = "exit"
                 message = (
-                    f"Operador UDR: {action} en microsector {microsector.index}"
+                    f"UDR operator: {action} in microsector {microsector.index}"
                 )
                 rationale = (
-                    f"UDR {udr:.2f} sugiere que la guiñada no reduce ΔNFR. El promedio "
-                    f"{avg_delta:.2f} frente al objetivo {goal.target_delta_nfr:.2f} genera "
-                    f"un desvío {deviation:+.2f}; libera el eje {axle} ({reference})."
+                    f"UDR {udr:.2f} suggests yaw is not reducing ΔNFR. The average "
+                    f"{avg_delta:.2f} versus the target {goal.target_delta_nfr:.2f} produces "
+                    f"a {deviation:+.2f} deviation; free up the {axle} axle ({reference})."
                 )
                 recommendations.append(
                     Recommendation(
@@ -3618,15 +3618,15 @@ class RecommendationEngine:
             self.rules = [
                 PhaseDeltaDeviationRule(
                     phase="entry",
-                    operator_label="Operador de frenado",
+                    operator_label="Braking operator",
                     category="entry",
-                    phase_label="entrada",
+                    phase_label="entry",
                     priority=10,
                     reference_key="braking",
                 ),
                 PhaseNodeOperatorRule(
                     phase="entry",
-                    operator_label="Operador de frenado",
+                    operator_label="Braking operator",
                     category="entry",
                     priority=12,
                     reference_key="braking",
@@ -3634,15 +3634,15 @@ class RecommendationEngine:
                 BrakeHeadroomRule(priority=14),
                 PhaseDeltaDeviationRule(
                     phase="apex",
-                    operator_label="Operador de vértice",
+                    operator_label="Apex operator",
                     category="apex",
-                    phase_label="vértice",
+                    phase_label="apex",
                     priority=20,
                     reference_key="antiroll",
                 ),
                 PhaseNodeOperatorRule(
                     phase="apex",
-                    operator_label="Operador de vértice",
+                    operator_label="Apex operator",
                     category="apex",
                     priority=22,
                     reference_key="antiroll",
@@ -3659,15 +3659,15 @@ class RecommendationEngine:
                 CurbComplianceRule(priority=25),
                 PhaseDeltaDeviationRule(
                     phase="exit",
-                    operator_label="Operador de tracción",
+                    operator_label="Traction operator",
                     category="exit",
-                    phase_label="salida",
+                    phase_label="exit",
                     priority=30,
                     reference_key="differential",
                 ),
                 PhaseNodeOperatorRule(
                     phase="exit",
-                    operator_label="Operador de tracción",
+                    operator_label="Traction operator",
                     category="exit",
                     priority=32,
                     reference_key="differential",
