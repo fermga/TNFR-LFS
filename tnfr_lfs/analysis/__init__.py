@@ -1,4 +1,4 @@
-"""Analysis helpers for TNFR LFS."""
+"""Analysis helpers for TNFR × LFS."""
 
 from .abtest import ABResult, SUPPORTED_LAP_METRICS, ab_compare_by_lap
 from .brake_thermal import BrakeThermalConfig, BrakeThermalEstimator
