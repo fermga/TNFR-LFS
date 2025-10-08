@@ -2,7 +2,7 @@
 id = "tbo__p_balanced_short"
 car_group = "tbo"
 base_profile = "p_balanced_short"
-description = "Ajuste para turismos turbo en circuitos cortos urbanos."
+description = "Tune for turbo tourers on short urban circuits."
 
 [scale.weights.entry]
 __default__ = 1.05
@@ -21,4 +21,4 @@ differential = 1.1
 
 [hints]
 slip_ratio_bias = "rear"
-notes = "Controla el lag del turbo con reparto de frenada y diferencial progresivo."
+notes = "Controls turbo lag with brake balance and a progressive differential."

@@ -22,4 +22,4 @@ traction_control = 1.08
 microsector_span = "mixed"
 rho_detune_threshold = 0.64
 surface = "mixed"
-notes = "Preparado para superficies mixtas con saltos y secciones de tierra."
+notes = "Prepared for mixed surfaces with jumps and dirt sections."

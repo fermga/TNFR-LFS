@@ -2,7 +2,7 @@
 id = "fo8__p_fast_long"
 car_group = "FO8"
 base_profile = "p_fast_long"
-description = "Compensa la alta carga aero en monoplazas para circuitos rápidos."
+description = "Offsets the high aero load on single-seaters for fast circuits."
 
 [scale.weights.entry]
 __default__ = 0.94
@@ -21,4 +21,4 @@ differential = 1.14
 
 [hints]
 slip_ratio_bias = "front"
-notes = "Ajusta la resistencia aerodinámica y protege neumáticos delanteros."
+notes = "Tunes aerodynamic drag and protects the front tyres."

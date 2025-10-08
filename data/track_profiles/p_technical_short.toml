@@ -21,4 +21,4 @@ transmission = 1.06
 [hints]
 microsector_span = "compact"
 rho_detune_threshold = 0.66
-notes = "Pensado para secciones enlazadas con cambios de dirección agresivos."
+notes = "Built for linked sections with aggressive direction changes."

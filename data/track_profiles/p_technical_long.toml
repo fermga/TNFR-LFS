@@ -22,4 +22,4 @@ transmission = 1.06
 [hints]
 microsector_span = "extended"
 rho_detune_threshold = 0.7
-notes = "Focaliza estabilidad térmica y consistencia en curvas complejas de larga duración."
+notes = "Focuses on thermal stability and consistency through long, complex corners."

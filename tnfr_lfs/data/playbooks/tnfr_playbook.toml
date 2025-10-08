@@ -1,25 +1,25 @@
 [rules]
 delta_surplus = [
-  "ΔNFR elevado: suaviza la entrega longitudinal y revisa barras traseras.",
-  "Recorta la precarga trasera para equilibrar la entrada y salida.",
+  "High ΔNFR: soften longitudinal delivery and review rear bars.",
+  "Trim rear preload to balance entry and exit.",
 ]
 delta_deficit = [
-  "ΔNFR bajo: incrementa soporte delantero y recupera carga longitudinal.",
-  "Añade precarga delantera para mejorar la respuesta inicial.",
+  "Low ΔNFR: increase front support and recover longitudinal load.",
+  "Add front preload to sharpen initial response.",
 ]
 sense_index_low = [
-  "Sense Index bajo: refuerza puntos de frenada y referencias visuales.",
-  "Trabaja la constancia del piloto y estabiliza transferencias.",
+  "Low Sense Index: reinforce braking points and visual references.",
+  "Work on driver consistency and stabilise weight transfers.",
 ]
 coherence_low = [
-  "Coherencia floja: revisa amortiguadores y sincronía de fases.",
-  "Ajusta repartos para acercar fases entry/apex/exit.",
+  "Loose coherence: review dampers and phase timing.",
+  "Adjust distributions to bring entry/apex/exit phases together.",
 ]
 aero_balance_low = [
-  "Balance aero crítico: nivela carga entre ejes y revisa ángulos de ala.",
-  "Evalúa compensar rake con alturas o rigidez de muelles.",
+  "Critical aero balance: level load between axles and review wing angles.",
+  "Consider offsetting rake with ride heights or spring stiffness.",
 ]
 support_low = [
-  "Soporte insuficiente: aumenta rigidez y bumpstops para sostener cargas.",
-  "Refuerza muelles y compresión para evitar hundimiento estructural.",
+  "Insufficient support: increase stiffness and bump stops to carry loads.",
+  "Reinforce springs and compression to prevent structural collapse.",
 ]
