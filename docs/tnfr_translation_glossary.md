@@ -1,4 +1,4 @@
-# TNFR LFS Spanish → English Glossary
+# TNFR × LFS Spanish → English Glossary
 
 > Developer note: Use this glossary when migrating recommender and setup plan messaging to English. Terminology aligns with existing TNFR vocabulary (entry/apex/exit, Sense Index, ΔNFR, etc.).
 
