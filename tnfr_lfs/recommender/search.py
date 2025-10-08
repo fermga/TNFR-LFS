@@ -713,14 +713,14 @@ class SetupPlanner:
             extra: list[Recommendation] = []
             slip_bias = session_hints.get("slip_ratio_bias")
             if isinstance(slip_bias, str) and slip_bias:
-                direction = "delantero" if slip_bias.lower() == "front" else "trasero"
+                direction = "front axle" if slip_bias.lower() == "front" else "rear axle"
                 extra.append(
                     Recommendation(
                         category="aero",
-                        message=f"Hint sesión: refuerza aero {direction}",
+                        message=f"Session hint: reinforce aero balance on the {direction}",
                         rationale=(
-                            f"El hint slip_ratio_bias={slip_bias} indica priorizar ajustes aerodinámicos "
-                            f"en el eje {direction}."
+                            f"Session hint slip_ratio_bias={slip_bias} prioritises aerodynamic adjustments "
+                            f"on the {direction}."
                         ),
                         priority=108,
                     )
@@ -730,10 +730,10 @@ class SetupPlanner:
                 extra.append(
                     Recommendation(
                         category="suspension",
-                        message=f"Hint sesión: adapta amortiguación a superficie {surface}",
+                        message=f"Session hint: adapt damping to {surface} surface",
                         rationale=(
-                            f"La sesión describe surface={surface}; prioriza amortiguación y alturas "
-                            "para esa condición."
+                            f"Session metadata describes surface={surface}; prioritise damping and ride heights "
+                            "for that condition."
                         ),
                         priority=96,
                     )

@@ -911,8 +911,8 @@ def test_aero_coherence_rule_flags_high_speed_bias() -> None:
     rec = recommendations[0]
     assert rec.parameter == "rear_wing_angle"
     assert rec.delta and rec.delta > 0
-    assert "Microsector de alta velocidad" in rec.message
-    assert "carga trasera" in rec.rationale.lower()
+    assert "High-speed microsector" in rec.message
+    assert "rear axle load" in rec.rationale.lower()
     assert "C(c/d/a)" in rec.rationale
 
 
@@ -956,8 +956,8 @@ def test_front_wing_balance_rule_targets_front_limited_bias() -> None:
     rec = recommendations[0]
     assert rec.parameter == "front_wing_angle"
     assert rec.delta and rec.delta > 0
-    assert "alerón delantero" in rec.message.lower()
-    assert "carga delantera" in rec.rationale.lower()
+    assert "increase front wing angle" in rec.message.lower()
+    assert "front axle load" in rec.rationale.lower()
 
 
 def test_aero_coherence_rule_respects_low_speed_window() -> None:
@@ -2027,7 +2027,7 @@ def test_bottoming_priority_rule_switches_focus(bottoming_microsectors) -> None:
     assert height_targets
     assert bump_targets
     assert "ride height" in height_targets[0].message.lower()
-    assert "refuerza compresión" in bump_targets[0].message.lower()
+    assert "increase bump damping" in bump_targets[0].message.lower()
 
 
 def test_bottoming_priority_rule_prefers_springs_on_apex_energy() -> None:
