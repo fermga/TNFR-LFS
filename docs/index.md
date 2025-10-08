@@ -47,7 +47,7 @@ temperatures, their three-layer profile and pressures; set at least the
 `OG_EXT_TYRE_TEMP`, `OG_EXT_TYRE_PRESS` and `OG_EXT_BRAKE_TEMP` flags so the
 20-float block (inner/middle/outer layers, pressure ring and brake discs)
 is broadcast. Otherwise the HUD and CLI will surface those entries as “sin
-datos”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
+datos” (“no data”).【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
 
 !!! note "Brake temperature estimation"
     Live for Speed only publishes real brake temperatures when the extended OutGauge payload is enabled; otherwise the stream exposes `0 °C` placeholders. TNFR × LFS consumes those native readings whenever they arrive and seamlessly falls back to the brake thermal proxy to keep fade metrics alive, integrating brake work and convective cooling until fresh data shows up again.【F:tnfr_lfs/acquisition/fusion.py†L248-L321】【F:tnfr_lfs/acquisition/fusion.py†L1064-L1126】
@@ -55,7 +55,7 @@ The CSV reader mirrors that philosophy by preserving optional columns as
 `math.nan` when OutSim leaves them out, preventing artificial estimates
 from leaking into the metrics pipeline.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
 When the wheel payload is disabled the toolkit now surfaces tyre loads,
-slip ratios and suspension metrics as “sin datos” rather than
+slip ratios and suspension metrics as “sin datos” (“no data”) rather than
 fabricating zeroed values, making it obvious that the telemetry stream
 is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_acquisition.py†L229-L288】
 
@@ -79,7 +79,7 @@ is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_a
 - **Ackermann / slide-catch budgets** – use only the `slip_angle_*`
   channels and `yaw_rate` broadcast by OutSim to measure parallel-steer
   deltas and slide-recovery headroom; when these signals are absent the
-  toolkit surfaces the literal `"sin datos"` marker instead of synthetic
+  toolkit surfaces the literal `"sin datos"` (“no data”) marker instead of synthetic
   values.
 - **Aero balance drift** – derives rake trends exclusively from OutSim
   `pitch` plus front/rear suspension travel so the drift guidance mirrors
@@ -87,7 +87,7 @@ is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_a
 - **Tyre temperatures/pressures** – TNFR × LFS now consumes the values
   emitted by the OutGauge extended payload when they are finite and
   positive; when the block is disabled the fusion keeps the historical
-  sample or the same `"sin datos"` placeholder so downstream tooling does
+  sample or the same `"sin datos"` (“no data”) placeholder so downstream tooling does
   not fabricate temperatures.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
 
 ## Operational checklist

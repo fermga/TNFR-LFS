@@ -27,7 +27,7 @@ You can mirror the same values from the in-game console using ``/outsim 1 127.0.
 ``/outgauge 1 127.0.0.1 3000`` and ``/insim 29999``.  Afterwards execute
 
 ```bash
-tnfr-lfs diagnose /ruta/a/LFS/cfg.txt
+tnfr-lfs diagnose /path/to/LFS/cfg.txt
 ```
 
 to validate that OutSim/OutGauge are enabled and that the UDP ports are available before
@@ -149,7 +149,7 @@ The command sweeps the decision space around the current vector and produces a P
 When you have two comparable stints, execute a lap-by-lap A/B analysis to quantify which variant improves the target metric:
 
 ```bash
-tnfr-lfs compare baseline.jsonl variante.jsonl --metric sense_index --export html_ext > abtest.html
+tnfr-lfs compare baseline.jsonl variant.jsonl --metric sense_index --export html_ext > abtest.html
 ```
 
 The HTML output summarises stint averages, lap distributions, and session-aware messages.  This makes it easy to see whether the variant delivers higher `Si` or lower ΔNFR before committing the change to the playbook.【F:tnfr_lfs/cli/compare.py†L28-L135】【F:tnfr_lfs/exporters/report_extended.py†L260-L315】【F:tnfr_lfs/exporters/report_extended.py†L290-L324】 Complement the review with the prioritised recommendations for each metric in the operator table and in the TNFR playbook.【F:tnfr_lfs/io/playbook.py†L35-L64】
