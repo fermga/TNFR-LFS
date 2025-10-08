@@ -109,6 +109,18 @@ _EMPTY_PLAYBOOK_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({})
 _PLAYBOOK_RULES_CACHE: Optional[Mapping[str, tuple[str, ...]]] = None
 
 
+def _default_car_model(config: Mapping[str, Any]) -> str:
+    """Return the default car model resolved from the CLI configuration."""
+
+    return default_car_model(config)
+
+
+def _default_track_name(config: Mapping[str, Any]) -> str:
+    """Return the default track name resolved from the CLI configuration."""
+
+    return default_track_name(config)
+
+
 def _load_playbook_rules() -> Mapping[str, tuple[str, ...]]:
     global _PLAYBOOK_RULES_CACHE
     if _PLAYBOOK_RULES_CACHE is not None:
