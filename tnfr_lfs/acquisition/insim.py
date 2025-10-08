@@ -425,11 +425,11 @@ class MacroQueue:
         sender: Callable[[str], None],
         *,
         min_interval: float = 0.35,
-        time_fn=monotonic,
+        time_fn: Callable[[], float] = monotonic,
     ) -> None:
         self._sender = sender
         self._min_interval = max(0.05, float(min_interval))
-        self._time_fn = time_fn
+        self._time_fn: Callable[[], float] = time_fn
         self._steps: Deque[MacroStep] = deque()
         self._last_scheduled = 0.0
 
