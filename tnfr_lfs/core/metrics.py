@@ -395,15 +395,15 @@ class AeroBalanceDrift:
         if effective_tolerance < 0.0:
             effective_tolerance = 0.0
         for label, payload in (
-            ("alta", self.high_speed),
-            ("media", self.medium_speed),
-            ("baja", self.low_speed),
+            ("high", self.high_speed),
+            ("medium", self.medium_speed),
+            ("low", self.low_speed),
         ):
             if payload.samples <= 0:
                 continue
             if abs(payload.mu_delta) <= effective_tolerance:
                 continue
-            direction = "delantera" if payload.mu_delta > 0.0 else "trasera"
+            direction = "front axle" if payload.mu_delta > 0.0 else "rear axle"
             return label, direction, payload
         return None
 
@@ -2298,23 +2298,23 @@ def compute_window_metrics(
     low_drift = _build_drift_bin("low", 0.0, drift_low_threshold)
     medium_drift = _build_drift_bin("medium", drift_low_threshold, drift_high_threshold)
     high_drift = _build_drift_bin("high", drift_high_threshold, None)
-    drift_labels = {"low": "baja", "medium": "media", "high": "alta"}
+    drift_labels = {"low": "low", "medium": "medium", "high": "high"}
     drift_guidance = ""
     for key, payload in (("high", high_drift), ("medium", medium_drift), ("low", low_drift)):
         if payload.samples <= 0:
             continue
         if abs(payload.mu_delta) <= drift_mu_tolerance:
             continue
-        direction = "delantera" if payload.mu_delta > 0.0 else "trasera"
+        direction = "front axle" if payload.mu_delta > 0.0 else "rear axle"
         drift_guidance = (
             f"{drift_labels[key]} μΔ {payload.mu_delta:+.2f} "
-            f"rake {payload.rake_deg:+.2f}° carga {direction}"
+            f"rake {payload.rake_deg:+.2f}° load {direction}"
         )
         guidance_details: list[str] = []
         if abs(payload.mu_balance_slope) > 1e-6 and math.isfinite(payload.mu_balance_slope):
-            guidance_details.append(f"sensibilidad μβ {payload.mu_balance_slope:+.3f}/rad")
+            guidance_details.append(f"μβ sensitivity {payload.mu_balance_slope:+.3f}/rad")
         if payload.mu_balance_sign_change:
-            guidance_details.append("inversión μβ")
+            guidance_details.append("μβ sign change")
         if guidance_details:
             drift_guidance = f"{drift_guidance} ({'; '.join(guidance_details)})"
         break

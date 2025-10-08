@@ -939,8 +939,8 @@ def test_compute_window_metrics_aero_balance_drift_bins() -> None:
     dominant = drift.dominant_bin()
     assert dominant is not None
     band_label, direction, payload = dominant
-    assert band_label == "alta"
-    assert direction == "delantera"
+    assert band_label == "high"
+    assert direction == "front axle"
     assert payload is drift.high_speed
     assert "μΔ" in drift.guidance or drift.guidance == ""
 
@@ -998,7 +998,7 @@ def test_compute_window_metrics_aero_balance_drift_balance_slopes() -> None:
     assert drift.medium_speed.mu_balance_sign_change is False
     assert drift.high_speed.mu_balance_sign_change is False
 
-    assert "sensibilidad μβ" in drift.guidance or drift.guidance == ""
+    assert "μβ sensitivity" in drift.guidance or drift.guidance == ""
 
 
 def test_compute_window_metrics_brake_headroom_components() -> None:
@@ -1329,7 +1329,7 @@ def test_compute_aero_coherence_splits_bins() -> None:
     assert aero.medium_speed.lateral.rear == pytest.approx(0.2)
     assert aero.medium_speed.longitudinal.front == pytest.approx(0.1)
     assert aero.medium_speed.longitudinal.rear == pytest.approx(0.05)
-    assert "media velocidad" in aero.guidance
+    assert "medium speed bias" in aero.guidance
 
 
 def test_aero_mechanical_coherence_blends_components() -> None:

@@ -888,7 +888,7 @@ def _aero_drift_line(aero_drift: Optional[AeroBalanceDrift]) -> Optional[str]:
     mu_segments = _format_aero_drift_mu_segments(payload, tolerance=tolerance)
     mu_block = " ".join(mu_segments) if mu_segments else "μΔ {:+.2f}".format(payload.mu_delta)
     return _truncate_line(
-        "Deriva aero "
+        "Aero drift "
         f"{band_label}: {mu_block} "
         f"rake {payload.rake_deg:+.2f}° → {direction}"
     )
@@ -2329,8 +2329,8 @@ def _build_setup_plan(
     else:
         unique_rationales = list(dict.fromkeys(aggregated_rationales))
         unique_effects = list(dict.fromkeys(aggregated_effects))
-        rationale_text = "; ".join(unique_rationales or ["Optimización de objetivo Si/ΔNFR"])
-        effect_text = "; ".join(unique_effects or ["Mejora equilibrada del coche"])
+        rationale_text = "; ".join(unique_rationales or ["Sense Index objective optimisation"])
+        effect_text = "; ".join(unique_effects or ["Balanced vehicle improvement"])
         changes = [
             SetupChange(
                 parameter=parameter,
@@ -2341,11 +2341,15 @@ def _build_setup_plan(
             for parameter, value in plan.decision_vector.items()
             if abs(value) > 1e-6
         ]
-        aggregated_rationales = unique_rationales or ["Optimización de objetivo Si/ΔNFR"]
-        aggregated_effects = unique_effects or ["Mejora equilibrada del coche"]
+        aggregated_rationales = unique_rationales or ["Sense Index objective optimisation"]
+        aggregated_effects = unique_effects or ["Balanced vehicle improvement"]
 
-    unique_rationales = list(dict.fromkeys(aggregated_rationales or ["Optimización de objetivo Si/ΔNFR"]))
-    unique_effects = list(dict.fromkeys(aggregated_effects or ["Mejora equilibrada del coche"]))
+    unique_rationales = list(
+        dict.fromkeys(aggregated_rationales or ["Sense Index objective optimisation"])
+    )
+    unique_effects = list(
+        dict.fromkeys(aggregated_effects or ["Balanced vehicle improvement"])
+    )
 
     vector = getattr(plan, "decision_vector", {})
     clamped: List[str] = []
