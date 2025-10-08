@@ -26,7 +26,10 @@ def multi_lap_session() -> tuple[Sequence, Sequence[int]]:
 def test_multi_lap_cov_computation(multi_lap_session: tuple[Sequence, Sequence[int]]) -> None:
     bundles, lap_indices = multi_lap_session
     thresholds = {"lap": {"delta_nfr": 0.5, "sense_index": 0.25}}
-    metadata = [{"index": 0, "label": "Clasificación"}]
+    metadata = [
+        {"index": 0, "label": "Qualifying"},
+        {"index": 1, "label": "Lap 2"},
+    ]
 
     robustness = compute_session_robustness(
         bundles,
@@ -37,9 +40,9 @@ def test_multi_lap_cov_computation(multi_lap_session: tuple[Sequence, Sequence[i
 
     assert "laps" in robustness
     entries = {entry["label"]: entry for entry in robustness["laps"]}
-    assert set(entries) == {"Clasificación", "Vuelta 2"}
+    assert set(entries) == {"Qualifying", "Lap 2"}
 
-    first_lap = entries["Clasificación"]
+    first_lap = entries["Qualifying"]
     assert first_lap["samples"] == 3
     delta_summary = first_lap["delta_nfr"]
     assert delta_summary["samples"] == 3
@@ -49,7 +52,7 @@ def test_multi_lap_cov_computation(multi_lap_session: tuple[Sequence, Sequence[i
     si_summary = first_lap["sense_index"]
     assert si_summary["coefficient_of_variation"] == pytest.approx(0.020412, abs=5e-7)
 
-    second_lap = entries["Vuelta 2"]
+    second_lap = entries["Lap 2"]
     assert second_lap["samples"] == 3
     assert second_lap["delta_nfr"]["coefficient_of_variation"] == pytest.approx(0.0)
     assert second_lap["sense_index"]["coefficient_of_variation"] == pytest.approx(0.0)

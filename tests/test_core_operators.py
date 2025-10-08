@@ -199,7 +199,7 @@ def _build_goal(phase: str, target_delta: float, *, archetype: str = "medium") -
     return Goal(
         phase=actual_phase,
         archetype=archetype,
-        description=f"Meta sintética para {actual_phase}",
+        description=f"Synthetic goal for {actual_phase}",
         target_delta_nfr=target_delta,
         target_sense_index=0.9,
         nu_f_target=0.0,

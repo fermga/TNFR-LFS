@@ -15,12 +15,12 @@ from tnfr_lfs.cli.workflows import (
 
 def _playbook() -> Mapping[str, tuple[str, ...]]:
     return {
-        "delta_surplus": ("Ajusta delta", "Equilibra salida"),
-        "delta_deficit": ("Refuerza carga",),
-        "sense_index_low": ("Constancia piloto",),
-        "coherence_low": ("Sincroniza fases",),
-        "aero_balance_low": ("Balance aero",),
-        "support_low": ("Más soporte",),
+        "delta_surplus": ("Trim delta", "Balance exit"),
+        "delta_deficit": ("Reinforce load",),
+        "sense_index_low": ("Driver consistency",),
+        "coherence_low": ("Synchronise phases",),
+        "aero_balance_low": ("Aero balance",),
+        "support_low": ("More support",),
     }
 
 
@@ -43,12 +43,12 @@ def test_resolve_playbook_suggestions_collects_active_rules() -> None:
     playbook = _playbook()
     suggestions = _resolve_playbook_suggestions(metrics, playbook=playbook)
     assert suggestions == (
-        "Ajusta delta",
-        "Equilibra salida",
-        "Constancia piloto",
-        "Sincroniza fases",
-        "Balance aero",
-        "Más soporte",
+        "Trim delta",
+        "Balance exit",
+        "Driver consistency",
+        "Synchronise phases",
+        "Aero balance",
+        "More support",
     )
 
 
@@ -63,16 +63,16 @@ def test_augment_session_with_playbook_preserves_existing() -> None:
     )
     existing = {
         "car_model": "XFG",
-        "playbook_suggestions": ("Ajusta delta",),
+        "playbook_suggestions": ("Trim delta",),
     }
     enriched = _augment_session_with_playbook(existing, metrics, playbook=playbook)
     assert enriched["playbook_suggestions"] == (
-        "Ajusta delta",
-        "Equilibra salida",
-        "Constancia piloto",
-        "Sincroniza fases",
-        "Balance aero",
-        "Más soporte",
+        "Trim delta",
+        "Balance exit",
+        "Driver consistency",
+        "Synchronise phases",
+        "Aero balance",
+        "More support",
     )
 
 
@@ -113,7 +113,7 @@ def test_cli_workflows_loads_playbook_when_available(monkeypatch: pytest.MonkeyP
         attempts["count"] += 1
         if attempts["count"] == 1:
             raise FileNotFoundError
-        payload = b"[rules]\ndelta_surplus = [\"Reforzar delta\"]\n"
+        payload = b"[rules]\ndelta_surplus = [\"Reinforce delta\"]\n"
         return _MemoryBuffer(payload)
 
     monkeypatch.setattr("tnfr_lfs.io.playbook.resources.open_binary", _open_playbook)
@@ -121,7 +121,7 @@ def test_cli_workflows_loads_playbook_when_available(monkeypatch: pytest.MonkeyP
     try:
         metrics = _rich_metrics()
         assert workflows_module._resolve_playbook_suggestions(metrics) == ()
-        assert workflows_module._resolve_playbook_suggestions(metrics) == ("Reforzar delta",)
+        assert workflows_module._resolve_playbook_suggestions(metrics) == ("Reinforce delta",)
         assert attempts["count"] == 2
     finally:
         workflows_module._reset_playbook_rules_cache()
