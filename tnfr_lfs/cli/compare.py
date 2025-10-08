@@ -10,6 +10,24 @@ from ..analysis import SUPPORTED_LAP_METRICS, ab_compare_by_lap
 from ..core.operators import orchestrate_delta_metrics
 from ..session import format_session_messages
 
+from .common import (
+    CliError,
+    add_export_argument,
+    default_car_model,
+    default_track_name,
+    group_records_by_lap,
+    load_pack_cars,
+    load_pack_modifiers,
+    load_pack_track_profiles,
+    load_records,
+    render_payload,
+    resolve_exports,
+    resolve_pack_root,
+    resolve_track_argument,
+    validated_export,
+)
+from .workflows import assemble_session_payload
+
 SUPPORTED_AB_METRICS: tuple[str, ...] = tuple(sorted(SUPPORTED_LAP_METRICS))
 
 
@@ -27,31 +45,29 @@ def register_subparser(
 
     parser = subparsers.add_parser(
         "compare",
-        help="Compara dos stints de telemetría agregando métricas por vuelta.",
+        help="Compare two telemetry runs aggregating lap metrics.",
     )
     parser.add_argument(
         "telemetry_a",
         type=Path,
-        help="Ruta a la telemetría baseline o configuración A.",
+        help="Path to the baseline telemetry or configuration A.",
     )
     parser.add_argument(
         "telemetry_b",
         type=Path,
-        help="Ruta a la telemetría variante o configuración B.",
+        help="Path to the variant telemetry or configuration B.",
     )
     parser.add_argument(
         "--metric",
         choices=SUPPORTED_AB_METRICS,
         default=default_metric,
-        help="Métrica por vuelta utilizada para la comparación (default: sense_index).",
+        help="Lap metric used for the comparison (default: sense_index).",
     )
 
-    from . import tnfr_lfs_cli as cli
-
-    cli._add_export_argument(
+    add_export_argument(
         parser,
-        default=cli._validated_export(compare_cfg.get("export"), fallback="markdown"),
-        help_text="Exporter usado para renderizar la comparación A/B (default: markdown).",
+        default=validated_export(compare_cfg.get("export"), fallback="markdown"),
+        help_text="Exporter used to render the A/B comparison (default: markdown).",
     )
     parser.set_defaults(handler=handle)
 
@@ -59,13 +75,11 @@ def register_subparser(
 def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     """Execute the ``compare`` command returning the rendered payload."""
 
-    from . import tnfr_lfs_cli as cli
-
     metric = str(namespace.metric)
-    pack_root = cli._resolve_pack_root(namespace, config)
-    track_selection = cli._resolve_track_argument(None, config, pack_root=pack_root)
-    car_model = cli._default_car_model(config)
-    track_name = track_selection.name or cli._default_track_name(config)
+    pack_root = resolve_pack_root(namespace, config)
+    track_selection = resolve_track_argument(None, config, pack_root=pack_root)
+    car_model = default_car_model(config)
+    track_name = track_selection.name or default_track_name(config)
     compare_cfg = dict(config.get("compare", {}))
     target_delta = float(compare_cfg.get("target_delta", 0.0))
     target_si = float(compare_cfg.get("target_si", 0.75))
@@ -73,8 +87,8 @@ def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     recursion_decay = float(compare_cfg.get("recursion_decay", 0.4))
 
     def _compute_metrics(path: Path) -> Mapping[str, Any]:
-        records = cli._load_records(path)
-        lap_segments = cli._group_records_by_lap(records)
+        records = load_records(path)
+        lap_segments = group_records_by_lap(records)
         return orchestrate_delta_metrics(
             lap_segments,
             target_delta,
@@ -92,12 +106,12 @@ def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
             metric=metric,
         )
     except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
+        raise CliError(str(exc)) from exc
 
-    cars = cli._load_pack_cars(pack_root)
-    track_profiles = cli._load_pack_track_profiles(pack_root)
-    modifiers = cli._load_pack_modifiers(pack_root)
-    session_payload = cli._assemble_session_payload(
+    cars = load_pack_cars(pack_root)
+    track_profiles = load_pack_track_profiles(pack_root)
+    modifiers = load_pack_modifiers(pack_root)
+    session_payload = assemble_session_payload(
         car_model,
         track_selection,
         cars=cars,
@@ -132,7 +146,7 @@ def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     session_messages = format_session_messages(session_mapping)
     if session_messages:
         payload["session_messages"] = session_messages
-    return cli._render_payload(payload, cli._resolve_exports(namespace))
+    return render_payload(payload, resolve_exports(namespace))
 
 
 __all__ = ["register_subparser", "handle", "SUPPORTED_AB_METRICS"]

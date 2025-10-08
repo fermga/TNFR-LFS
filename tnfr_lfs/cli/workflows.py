@@ -63,7 +63,6 @@ from ..exporters import (
     build_coherence_map_payload,
     build_delta_bifurcation_payload,
     build_operator_trajectories_payload,
-    exporters_registry,
     normalise_set_output_name,
     render_coherence_map,
     render_delta_bifurcation,
@@ -75,24 +74,28 @@ from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
 from ..recommender import Plan, RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
 from ..session import format_session_messages
-from ..track_loader import (
-    Track,
-    TrackConfig,
-    assemble_session_weights,
-    load_modifiers as load_track_modifiers,
-    load_track as load_track_manifest,
-    load_track_profiles,
-)
+from ..track_loader import assemble_session_weights
 from ..config_loader import (
     Car as PackCar,
     Profile as PackProfile,
-    load_cars as load_pack_cars,
     load_lfs_class_overrides as load_pack_lfs_class_overrides,
-    load_profiles as load_pack_profiles,
     resolve_targets as resolve_pack_targets,
 )
-from . import compare as compare_command
-from . import pareto as pareto_command
+from .common import (
+    CliError,
+    TrackSelection,
+    default_car_model,
+    default_track_name,
+    group_records_by_lap,
+    load_pack_cars,
+    load_pack_profiles,
+    load_pack_modifiers,
+    load_pack_track_profiles,
+    render_payload,
+    resolve_exports,
+    resolve_pack_root,
+    resolve_track_argument,
+)
 from .io import Records, _load_records_from_namespace, _persist_records
 
 
@@ -241,20 +244,6 @@ class PackContext:
 
 
 @dataclass(frozen=True, slots=True)
-class TrackSelection:
-    """Normalized representation of a CLI track argument."""
-
-    name: str
-    layout: Optional[str] = None
-    manifest: Optional[Track] = None
-    config: Optional[TrackConfig] = None
-
-    @property
-    def track_profile(self) -> Optional[str]:
-        return self.config.track_profile if self.config is not None else None
-
-
-@dataclass(frozen=True, slots=True)
 class SetupPlanContext:
     """Container storing the artefacts required to build setup outputs."""
 
@@ -286,87 +275,18 @@ class SetupPlanContext:
     pack_root: Optional[Path]
 
 
-_LAYOUT_PATTERN = re.compile(r"^([A-Z]{2,})([0-9]{1,2}[A-Z]?)$")
-
-
-def _resolve_pack_root(
-    namespace: Optional[argparse.Namespace], config: Mapping[str, Any]
-) -> Optional[Path]:
-    """Determine the root directory for an optional configuration pack."""
-
-    candidate: Optional[Path] = None
-    if namespace is not None:
-        raw = getattr(namespace, "pack_root", None)
-        if raw:
-            candidate = Path(raw)
-    if candidate is None:
-        paths_cfg = config.get("paths")
-        if isinstance(paths_cfg, Mapping):
-            raw = paths_cfg.get("pack_root")
-            if isinstance(raw, str) and raw.strip():
-                candidate = Path(raw)
-    if candidate is None:
-        return None
-    return candidate.expanduser()
-
-
-def _pack_data_dir(pack_root: Optional[Path], name: str) -> Optional[Path]:
-    """Resolve a directory inside ``data`` or at the root of the pack."""
-
-    if pack_root is None:
-        return None
-    candidates: list[Path] = []
-    if name == "modifiers":
-        candidates.extend(
-            [
-                pack_root / "modifiers" / "combos",
-                pack_root / "data" / "modifiers" / "combos",
-                pack_root / "modifiers",
-                pack_root / "data" / "modifiers",
-            ]
-        )
-    candidates.extend([pack_root / "data" / name, pack_root / name])
-    for candidate in candidates:
-        expanded = candidate.expanduser()
-        if expanded.exists() and expanded.is_dir():
-            return expanded
-    return None
-
-
-def _parse_layout_code(value: str) -> Optional[tuple[str, str]]:
-    match = _LAYOUT_PATTERN.fullmatch(value.strip().upper())
-    if match is None:
-        return None
-    slug, suffix = match.groups()
-    return slug, f"{slug}{suffix}"
-
-
-def _load_pack_track_profiles(pack_root: Optional[Path]) -> Mapping[str, Mapping[str, Any]]:
-    profiles_dir = _pack_data_dir(pack_root, "track_profiles")
-    return load_track_profiles(profiles_dir) if profiles_dir is not None else load_track_profiles()
-
-
-def _load_pack_modifiers(pack_root: Optional[Path]) -> Mapping[tuple[str, str], Mapping[str, Any]]:
-    modifiers_dir = _pack_data_dir(pack_root, "modifiers")
-    return (
-        load_track_modifiers(modifiers_dir)
-        if modifiers_dir is not None
-        else load_track_modifiers()
-    )
-
-
 def _prepare_pack_context(
     namespace: Optional[argparse.Namespace],
     config: Mapping[str, Any],
     *,
     car_model: str,
 ) -> PackContext:
-    pack_root = _resolve_pack_root(namespace, config)
+    pack_root = resolve_pack_root(namespace, config)
     profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
     profile_manager = ProfileManager(profiles_ctx.storage_path)
-    cars = _load_pack_cars(pack_root)
-    track_profiles = _load_pack_track_profiles(pack_root)
-    modifiers = _load_pack_modifiers(pack_root)
+    cars = load_pack_cars(pack_root)
+    track_profiles = load_pack_track_profiles(pack_root)
+    modifiers = load_pack_modifiers(pack_root)
     class_overrides = _load_pack_lfs_class_overrides(pack_root)
     tnfr_targets = _resolve_tnfr_targets(
         car_model,
@@ -386,7 +306,7 @@ def _prepare_pack_context(
     )
 
 
-def _compute_setup_plan(
+def compute_setup_plan(
     namespace: argparse.Namespace, *, config: Mapping[str, Any]
 ) -> SetupPlanContext:
     records, _ = _load_records_from_namespace(namespace)
@@ -405,14 +325,14 @@ def _compute_setup_plan(
     tnfr_targets = pack_context.tnfr_targets
     car_metadata = _lookup_car_metadata(namespace.car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
-    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
-    track_name = track_selection.name or _default_track_name(config)
+    track_selection = resolve_track_argument(None, config, pack_root=pack_root)
+    track_name = track_selection.name or default_track_name(config)
     engine = RecommendationEngine(
         car_model=namespace.car_model,
         track_name=track_name,
         profile_manager=profile_manager,
     )
-    session_payload = _assemble_session_payload(
+    session_payload = assemble_session_payload(
         namespace.car_model,
         track_selection,
         cars=cars,
@@ -444,7 +364,7 @@ def _compute_setup_plan(
         objectives.target_delta_nfr,
         objectives.target_sense_index,
     )
-    lap_segments = _group_records_by_lap(records)
+    lap_segments = group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
         lap_segments,
         objectives.target_delta_nfr,
@@ -526,56 +446,6 @@ def _load_pack_lfs_class_overrides(
     return load_pack_lfs_class_overrides(candidates[0])
 
 
-def _load_pack_track(pack_root: Optional[Path], slug: str) -> Track:
-    tracks_dir = _pack_data_dir(pack_root, "tracks")
-    return (
-        load_track_manifest(slug, tracks_dir)
-        if tracks_dir is not None
-        else load_track_manifest(slug)
-    )
-
-
-def _resolve_track_selection(track: str, *, pack_root: Optional[Path]) -> TrackSelection:
-    candidate = track.strip()
-    if not candidate:
-        return TrackSelection(name="")
-    parsed = _parse_layout_code(candidate)
-    if parsed is None:
-        return TrackSelection(name=candidate)
-    slug, layout_id = parsed
-    try:
-        manifest = _load_pack_track(pack_root, slug)
-    except FileNotFoundError as exc:
-        raise SystemExit(
-            f"No se encontró el manifest de pista '{slug}' en el pack ni en los recursos."
-        ) from exc
-    try:
-        config = manifest.configs[layout_id]
-    except KeyError as exc:
-        raise SystemExit(
-            f"El layout '{layout_id}' no existe en '{manifest.path.name}'."
-        ) from exc
-    return TrackSelection(name=layout_id, layout=layout_id, manifest=manifest, config=config)
-
-
-def _load_pack_profiles(pack_root: Optional[Path]) -> Mapping[str, PackProfile]:
-    """Load TNFR profiles from a pack or fall back to bundled resources."""
-
-    profiles_dir = _pack_data_dir(pack_root, "profiles")
-    if profiles_dir is not None:
-        return load_pack_profiles(profiles_dir)
-    return load_pack_profiles()
-
-
-def _load_pack_cars(pack_root: Optional[Path]) -> Mapping[str, PackCar]:
-    """Load car metadata from a pack or from the bundled dataset."""
-
-    cars_dir = _pack_data_dir(pack_root, "cars")
-    if cars_dir is not None:
-        return load_pack_cars(cars_dir)
-    return load_pack_cars()
-
-
 def _lookup_car_metadata(car_model: str, cars: Mapping[str, PackCar]) -> Optional[PackCar]:
     for key in (car_model, car_model.upper(), car_model.lower()):
         car = cars.get(key)
@@ -618,7 +488,7 @@ def _resolve_tnfr_targets(
         return None
 
 
-def _assemble_session_payload(
+def assemble_session_payload(
     car_model: str,
     selection: TrackSelection,
     *,
@@ -683,7 +553,7 @@ def _extract_target_objectives(
     return delta_target, sense_target
 
 
-def _build_setup_plan_payload(
+def build_setup_plan_payload(
     context: SetupPlanContext,
     namespace: argparse.Namespace,
 ) -> Mapping[str, Any]:
@@ -918,66 +788,8 @@ def _resolve_profiles_path(
             if isinstance(profile_path, str):
                 storage = Path(profile_path).expanduser()
 
-    pack_profiles = _load_pack_profiles(pack_root)
+    pack_profiles = load_pack_profiles(pack_root)
     return ProfilesContext(storage_path=storage, pack_profiles=pack_profiles)
-
-
-_CAR_MODEL_DEFAULT_SECTIONS: tuple[str, ...] = (
-    "analyze",
-    "suggest",
-    "write_set",
-    "report",
-    "compare",
-    "template",
-    "osd",
-    "baseline",
-    "pareto",
-)
-
-
-def _default_car_model(config: Mapping[str, Any]) -> str:
-    for section in _CAR_MODEL_DEFAULT_SECTIONS:
-        section_cfg = config.get(section)
-        if isinstance(section_cfg, Mapping):
-            candidate = section_cfg.get("car_model")
-            if isinstance(candidate, str) and candidate.strip():
-                return candidate
-    return "XFG"
-
-
-_TRACK_DEFAULT_SECTIONS: tuple[str, ...] = (
-    "analyze",
-    "suggest",
-    "report",
-    "compare",
-    "template",
-    "osd",
-)
-
-
-def _default_track_name(config: Mapping[str, Any]) -> str:
-    for section in _TRACK_DEFAULT_SECTIONS:
-        section_cfg = config.get(section)
-        if isinstance(section_cfg, Mapping):
-            candidate = section_cfg.get("track")
-            if isinstance(candidate, str) and candidate.strip():
-                return candidate
-    return "generic"
-
-
-def _resolve_track_argument(
-    track_value: Optional[str],
-    config: Mapping[str, Any],
-    *,
-    pack_root: Optional[Path],
-) -> TrackSelection:
-    candidate = str(track_value).strip() if track_value is not None else ""
-    if not candidate:
-        candidate = _default_track_name(config)
-    selection = _resolve_track_selection(candidate, pack_root=pack_root)
-    if not selection.name:
-        return TrackSelection(name=candidate)
-    return selection
 
 
 def _effective_delta_metric(metrics: Mapping[str, Any]) -> float:
@@ -1042,8 +854,8 @@ def _resolve_baseline_destination(
     if output_dir_arg is not None:
         output_dir_arg = output_dir_arg.expanduser()
     auto_kwargs = {
-        "car_model": _default_car_model(config),
-        "track_name": _default_track_name(config),
+        "car_model": default_car_model(config),
+        "track_name": default_track_name(config),
         "output_dir": output_dir_arg,
         "suffix": suffix,
         "force": namespace.force,
@@ -1632,9 +1444,9 @@ def _generate_out_reports(
     destination.mkdir(parents=True, exist_ok=True)
     format_key = artifact_format.lower()
     if format_key not in REPORT_ARTIFACT_FORMATS:
-        raise ValueError(
-            f"Formato de artefacto desconocido '{artifact_format}'. "
-            f"Formatos soportados: {', '.join(REPORT_ARTIFACT_FORMATS)}"
+        raise CliError(
+            f"Unknown report artifact format '{artifact_format}'. "
+            f"Supported formats: {', '.join(REPORT_ARTIFACT_FORMATS)}"
         )
     extension_map = {"json": "json", "markdown": "md", "visual": "viz"}
     artifact_extension = extension_map[format_key]
@@ -2190,10 +2002,10 @@ def _generate_out_reports(
     }
 
 def _handle_template(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    car_model = str(namespace.car_model or _default_car_model(config))
-    pack_root = _resolve_pack_root(namespace, config)
-    track_selection = _resolve_track_argument(namespace.track, config, pack_root=pack_root)
-    track_name = track_selection.name or _default_track_name(config)
+    car_model = str(namespace.car_model or default_car_model(config))
+    pack_root = resolve_pack_root(namespace, config)
+    track_selection = resolve_track_argument(namespace.track, config, pack_root=pack_root)
+    track_name = track_selection.name or default_track_name(config)
     engine = RecommendationEngine(car_model=car_model, track_name=track_name)
     context = engine._resolve_context(car_model, track_name)
     profile = context.thresholds
@@ -2248,14 +2060,14 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         style=layout_defaults.style,
         type_in=layout_defaults.type_in,
     )
-    resolved_car_model = str(namespace.car_model or _default_car_model(config)).strip()
+    resolved_car_model = str(namespace.car_model or default_car_model(config)).strip()
     if not resolved_car_model:
-        resolved_car_model = _default_car_model(config)
+        resolved_car_model = default_car_model(config)
     pack_context = _prepare_pack_context(namespace, config, car_model=resolved_car_model)
     pack_root = pack_context.pack_root
     profile_manager = pack_context.profile_manager
-    track_selection = _resolve_track_argument(namespace.track, config, pack_root=pack_root)
-    resolved_track = track_selection.name or _default_track_name(config)
+    track_selection = resolve_track_argument(namespace.track, config, pack_root=pack_root)
+    resolved_track = track_selection.name or default_track_name(config)
     cars = pack_context.cars
     track_profiles = pack_context.track_profiles
     modifiers = pack_context.modifiers
@@ -2267,7 +2079,7 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         track_name=resolved_track,
         profile_manager=profile_manager,
     )
-    session_payload = _assemble_session_payload(
+    session_payload = assemble_session_payload(
         resolved_car_model,
         track_selection,
         cars=cars,
@@ -2314,7 +2126,7 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
 def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     cfg_path: Path = namespace.cfg.expanduser().resolve()
     if not cfg_path.exists():
-        raise FileNotFoundError(f"No se encontró el fichero cfg.txt en {cfg_path}")
+        raise CliError(f"cfg.txt file not found at {cfg_path}")
 
     sections = _parse_lfs_cfg(cfg_path)
     timeout = float(namespace.timeout)
@@ -2330,11 +2142,11 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
         command = f"/outsim 1 {outsim_host} {suggested_port}"
         commands.append(command)
         errors.append(
-            "OutSim Mode debe ser 1 para habilitar la telemetría. "
-            f"Ejecuta `{command}` dentro de LFS."
+            "OutSim Mode must be set to 1 to enable telemetry. "
+            f"Run `{command}` inside Live for Speed."
         )
     elif outsim_port is None:
-        errors.append("OutSim Port no está definido en cfg.txt")
+        errors.append("OutSim Port is not defined in cfg.txt.")
     else:
         ok, message = _outsim_ping(outsim_host, outsim_port, timeout)
         if ok:
@@ -2352,11 +2164,11 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
         command = f"/outgauge 1 {outgauge_host} {suggested_port}"
         commands.append(command)
         errors.append(
-            "OutGauge Mode debe ser 1 para habilitar la transmisión. "
-            f"Ejecuta `{command}` dentro de LFS."
+            "OutGauge Mode must be set to 1 to broadcast telemetry. "
+            f"Run `{command}` inside Live for Speed."
         )
     elif outgauge_port is None:
-        errors.append("OutGauge Port no está definido en cfg.txt")
+        errors.append("OutGauge Port is not defined in cfg.txt.")
     else:
         ok, message = _outgauge_ping(outgauge_host, outgauge_port, timeout)
         if ok:
@@ -2374,13 +2186,15 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
             successes.append(message)
         else:
             commands.append(insim_command)
-            errors.append(f"{message}. Ejecuta `{insim_command}` en el chat de LFS para reintentar.")
+            errors.append(
+                f"{message}. Run `{insim_command}` in the Live for Speed chat to retry."
+            )
     else:
         insim_command = "/insim 29999"
         commands.append(insim_command)
         errors.append(
-            "InSim Port no está definido en cfg.txt. "
-            f"Ejecuta `{insim_command}` y verifica que Live for Speed confirme la conexión."
+            "InSim Port is not defined in cfg.txt. "
+            f"Run `{insim_command}` and confirm that Live for Speed acknowledges the connection."
         )
 
     setups_ok, setups_message = _check_setups_directory(cfg_path)
@@ -2389,19 +2203,19 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
     else:
         errors.append(setups_message)
 
-    header = f"Diagnóstico de cfg.txt en {cfg_path}"
+    header = f"cfg.txt diagnostics for {cfg_path}"
     if errors:
         _share_disabled_commands(commands)
-        summary = [header, "Estado: errores detectados"]
+        summary = [header, "Status: issues detected"]
         summary.extend(f"- {error}" for error in errors)
         if successes:
-            summary.append("Detalles adicionales:")
+            summary.append("Additional details:")
             summary.extend(f"  * {success}" for success in successes)
         message = "\n".join(summary)
         print(message)
-        raise ValueError(message)
+        raise CliError(message)
 
-    summary = [header, "Estado: correcto"]
+    summary = [header, "Status: ok"]
     summary.extend(f"- {success}" for success in successes)
     _share_disabled_commands(commands)
     message = "\n".join(summary)
@@ -2415,7 +2229,7 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
     overlay: Optional[OverlayManager] = None
     records: Records = []
     if namespace.overlay and namespace.simulate is not None:
-        raise ValueError("--overlay solo está disponible con captura en vivo (sin --simulate)")
+        raise CliError("--overlay is only available for live capture (omit --simulate).")
 
     try:
         if namespace.overlay:
@@ -2473,11 +2287,11 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
 def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records, telemetry_path = _load_records_from_namespace(namespace)
-    car_model = _default_car_model(config)
+    car_model = default_car_model(config)
     pack_context = _prepare_pack_context(namespace, config, car_model=car_model)
     pack_root = pack_context.pack_root
-    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
-    track_name = track_selection.name or _default_track_name(config)
+    track_selection = resolve_track_argument(None, config, pack_root=pack_root)
+    track_name = track_selection.name or default_track_name(config)
     profiles_ctx = pack_context.profiles_ctx
     profile_manager = pack_context.profile_manager
     cars = pack_context.cars
@@ -2492,7 +2306,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         track_name=track_name,
         profile_manager=profile_manager,
     )
-    session_payload = _assemble_session_payload(
+    session_payload = assemble_session_payload(
         car_model,
         track_selection,
         cars=cars,
@@ -2523,7 +2337,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     elif not snapshot and target_si == default_target_si and pack_si is not None:
         target_si = pack_si
     profile_manager.update_objectives(car_model, track_name, target_delta, target_si)
-    lap_segments = _group_records_by_lap(records)
+    lap_segments = group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
         lap_segments,
         target_delta,
@@ -2629,7 +2443,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         payload["tnfr_targets"] = _serialise_pack_payload(tnfr_targets)
     if phase_templates:
         payload["phase_templates"] = phase_templates
-    return _render_payload(payload, _resolve_exports(namespace))
+    return render_payload(payload, resolve_exports(namespace))
 
 
 def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
@@ -2648,14 +2462,14 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     tnfr_targets = pack_context.tnfr_targets
     car_metadata = _lookup_car_metadata(namespace.car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
-    track_selection = _resolve_track_argument(namespace.track, config, pack_root=pack_root)
-    track_name = track_selection.name or _default_track_name(config)
+    track_selection = resolve_track_argument(namespace.track, config, pack_root=pack_root)
+    track_name = track_selection.name or default_track_name(config)
     engine = RecommendationEngine(
         car_model=namespace.car_model,
         track_name=track_name,
         profile_manager=profile_manager,
     )
-    session_payload = _assemble_session_payload(
+    session_payload = assemble_session_payload(
         namespace.car_model,
         track_selection,
         cars=cars,
@@ -2671,7 +2485,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         engine=engine,
         profile_manager=profile_manager,
     )
-    lap_segments = _group_records_by_lap(records)
+    lap_segments = group_records_by_lap(records)
     suggest_cfg = dict(config.get("suggest", {}))
     objectives = snapshot.objectives if snapshot else ProfileObjectives()
     if snapshot is None and pack_delta is not None:
@@ -2758,22 +2572,24 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         payload["session"] = session_payload
     if session_messages:
         payload["session_messages"] = session_messages
-    return _render_payload(payload, _resolve_exports(namespace))
+    return render_payload(payload, resolve_exports(namespace))
 
 
 def _handle_compare(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+    from . import compare as compare_command
+
     return compare_command.handle(namespace, config=config)
 
 
 def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
 
     records, telemetry_path = _load_records_from_namespace(namespace)
-    car_model = _default_car_model(config)
+    car_model = default_car_model(config)
     pack_context = _prepare_pack_context(namespace, config, car_model=car_model)
     pack_root = pack_context.pack_root
     profile_manager = pack_context.profile_manager
-    track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
-    track_name = track_selection.name or _default_track_name(config)
+    track_selection = resolve_track_argument(None, config, pack_root=pack_root)
+    track_name = track_selection.name or default_track_name(config)
     cars = pack_context.cars
     track_profiles = pack_context.track_profiles
     modifiers = pack_context.modifiers
@@ -2782,7 +2598,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
         track_name=track_name,
         profile_manager=profile_manager,
     )
-    session_payload = _assemble_session_payload(
+    session_payload = assemble_session_payload(
         car_model,
         track_selection,
         cars=cars,
@@ -2809,7 +2625,7 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
     if snapshot and target_si == default_target_si:
         target_si = objectives.target_sense_index
     profile_manager.update_objectives(car_model, track_name, target_delta, target_si)
-    lap_segments = _group_records_by_lap(records)
+    lap_segments = group_records_by_lap(records)
     metrics = orchestrate_delta_metrics(
         lap_segments,
         target_delta,
@@ -2865,89 +2681,24 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
     phase_templates = _phase_templates_from_config(config, "report")
     if phase_templates:
         payload["phase_templates"] = phase_templates
-    return _render_payload(payload, _resolve_exports(namespace))
+    return render_payload(payload, resolve_exports(namespace))
 
 
 def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    namespace.car_model = str(namespace.car_model or _default_car_model(config)).strip()
+    namespace.car_model = str(namespace.car_model or default_car_model(config)).strip()
     if not namespace.car_model:
-        raise SystemExit("Debe proporcionar un --car-model válido para generar el setup.")
+        raise CliError("You must provide a valid --car-model to generate the setup plan.")
     if namespace.set_output:
         namespace.set_output = normalise_set_output_name(namespace.set_output, namespace.car_model)
-    context = _compute_setup_plan(namespace, config=config)
-    payload = _build_setup_plan_payload(context, namespace)
-    return _render_payload(payload, _resolve_exports(namespace))
+    context = compute_setup_plan(namespace, config=config)
+    payload = build_setup_plan_payload(context, namespace)
+    return render_payload(payload, resolve_exports(namespace))
 
 
 def _handle_pareto(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+    from . import pareto as pareto_command
+
     return pareto_command.handle(namespace, config=config)
-
-
-def _unique_export_list(values: Sequence[str]) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for value in values:
-        if value not in seen:
-            seen.add(value)
-            ordered.append(value)
-    return ordered
-
-
-def _resolve_exports(namespace: argparse.Namespace) -> List[str]:
-    exports = getattr(namespace, "exports", None)
-    if exports:
-        return _unique_export_list(exports)
-    default = getattr(namespace, "export_default", None)
-    if isinstance(default, str):
-        return [default]
-    raise ValueError("No exporter configured for this command")
-
-
-def _render_payload(payload: Mapping[str, Any], exporters: Sequence[str] | str) -> str:
-    if isinstance(exporters, str):
-        selected = [exporters]
-    else:
-        selected = _unique_export_list(exporters)
-
-    rendered_outputs: List[str] = []
-    for exporter_name in selected:
-        exporter = exporters_registry[exporter_name]
-        rendered = exporter(dict(payload))
-        print(rendered)
-        rendered_outputs.append(rendered)
-
-    return "\n\n".join(rendered_outputs)
-
-
-def _group_records_by_lap(records: Records) -> List[Records]:
-    if not records:
-        return []
-    labels: List[Any] = []
-    last_label: Any = None
-    for record in records:
-        lap_value = getattr(record, "lap", None)
-        if lap_value is not None:
-            last_label = lap_value
-        labels.append(last_label)
-    if labels and labels[0] is None:
-        first_label = next((label for label in labels if label is not None), None)
-        if first_label is not None:
-            labels = [label if label is not None else first_label for label in labels]
-    unique_labels = {label for label in labels if label is not None}
-    if len(unique_labels) <= 1:
-        return [records]
-    groups: List[Records] = []
-    current_group: List[TelemetryRecord] = []
-    current_label: Any = labels[0]
-    for record, label in zip(records, labels):
-        if current_group and label != current_label:
-            groups.append(current_group)
-            current_group = []
-        current_group.append(record)
-        current_label = label
-    if current_group:
-        groups.append(current_group)
-    return groups or [records]
 
 
 def _compute_insights(
