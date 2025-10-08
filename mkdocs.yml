@@ -1,0 +1,55 @@
+site_name: "TNFR × LFS Toolkit"
+site_description: "Operational documentation for the TNFR × LFS telemetry and recommender toolkit."
+site_url: ""
+
+theme:
+  name: mkdocs
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Tutorials: tutorials.md
+      - Command line interface: cli.md
+  - Reference:
+      - API Reference: api_reference.md
+      - Design manual: DESIGN.md
+      - Development workflow: DEVELOPMENT.md
+      - Setup equivalences: setup_equivalences.md
+      - Preset workflow: presets.md
+      - Brake thermal proxy: brake_thermal_proxy.md
+  - Glossaries:
+      - TNFR glossary: tnfr_translation_glossary.md
+      - Spanish translation inventory: spanish_translation_inventory.md
+
+plugins:
+  - search
+  - i18n:
+      default_language: en
+      languages:
+        en:
+          name: English
+        es:
+          name: Español
+          site_name: "TNFR × LFS Toolkit (ES)"
+      nav_translations:
+        es:
+          Home: Inicio
+          Getting started: Puesta en marcha
+          Tutorials: Tutoriales
+          "Command line interface": "Interfaz de línea de comandos"
+          Reference: Referencia
+          "API Reference": "Referencia de API"
+          "Design manual": "Manual de diseño"
+          "Development workflow": "Flujo de desarrollo"
+          "Setup equivalences": "Equivalencias de setup"
+          "Preset workflow": "Flujo de presets"
+          "Brake thermal proxy": "Proxy térmico de frenos"
+          Glossaries: Glosarios
+          "TNFR glossary": "Glosario TNFR"
+          "Spanish translation inventory": "Inventario de traducciones"
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - toc:
+      permalink: true

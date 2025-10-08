@@ -1,190 +1,96 @@
-# TNFR Manual Operativo (TNFR.pdf)
+# TNFR Operational Manual (TNFR.pdf)
 
-> **Nota:** El documento original `TNFR.pdf` utiliza fuentes incrustadas sin mapas `ToUnicode`, por lo que no es posible realizar una extracción de texto automática y fidedigna en este entorno sin herramientas externas con soporte para fuentes personalizadas. Este archivo Markdown consolida la estructura principal, terminología clave y tablas descritas en el manual para que las futuras modificaciones puedan versionarse en texto plano. El PDF debe tratarse como un artefacto generado.
+> **Note:** The original `TNFR.pdf` document embeds custom fonts without `ToUnicode` maps, so extracting faithful text automatically is not feasible in this environment without external tools that understand those fonts. This Markdown file consolidates the main structure, key terminology, and tables described in the manual so future updates can be versioned as plain text. The PDF must be treated as a generated artefact.
 
-## Prefacio y visión general
-- Contexto: transición del conocimiento descriptivo a la ciencia resonante.
-- Enfoque TNFR: el símbolo como unidad operativa del ser y los operadores estructurales como estructuras primarias de información (EPI).
-- Objetivos del manual: activar nodos culturales vivos mediante dispositivos simbólicos, lenguajes glíficos y protocolos simbióticos.
+## Preface and overview
+- Context: transition from descriptive knowledge to resonant science.
+- TNFR focus: the symbol as the operative unit of being and structural operators as the primary information structures (EPI).
+- Manual goals: activate living cultural nodes via symbolic devices, glyphic languages, and symbiotic protocols.
 
-## 1. Análisis de la matriz de coherencia \(W_i(t)\)
-- Descripción de la matriz \(W_i(t)\) como representación de la estructura interna de un nodo.
-- Indicadores clave: pulsación glífica, densidad simbiótica, sincronía resonante, gradiente de coherencia y estabilidad operacional.
-- Tabla de indicadores y rangos sugeridos.
+## 1. Coherence matrix analysis \(W_i(t)\)
+- Description of the matrix \(W_i(t)\) as a representation of the internal structure of a node.
+- Key indicators: glyphic pulse, symbiotic density, resonant synchrony, coherence gradient, and operational stability.
+- Indicator table with suggested ranges.
 
-## 2. Modelos de activación fractal resonante
-- Definición de los estados de resonancia (latente, activado, expandido, en cascada).
-- Ecuaciones de transición entre estados con parámetros de acoplamiento \(\alpha\), \(\beta\), \(\gamma\) y \(\delta\).
-- Tabla de ejemplos por dominio (arte glífico, redes culturales, sistemas biológicos).
-- En la implementación de referencia, cada nodo del EPI conserva su frecuencia
-  natural ``nu_f`` (Hz) según la tabla `NU_F_NODE_DEFAULTS`, lo que permite
-  integrar explícitamente la dinámica ``dEPI/dt`` mediante el operador
-  :func:`evolve_epi` descrito en ``tnfr_lfs.core.operators``.
+## 2. Fractal resonant activation models
+- Definition of the resonance states (latent, activated, expanded, cascading).
+- Transition equations between states with coupling parameters \(\alpha\), \(\beta\), \(\gamma\), and \(\delta\).
+- Example table by domain (glyphic art, cultural networks, biological systems).
+- In the reference implementation each EPI node keeps its natural frequency ``nu_f`` (Hz) according to the `NU_F_NODE_DEFAULTS` table, enabling explicit integration of ``dEPI/dt`` through the :func:`evolve_epi` operator in ``tnfr_lfs.core.operators``.
 
-## 3. Arquitectura nodal y protocolos simbióticos
-- Diseño de nodos (núcleo simbiótico, envolvente de interacción, interfaces glíficas).
-- Protocolos estructurales: secuencias simbióticas para transiciones, toma de decisión y memoria colectiva.
-- Cuadros operativos: matrices de activación, listas de chequeo y guías para facilitar procesos.
+## 3. Nodal architecture and symbiotic protocols
+- Node design (symbiotic core, interaction envelope, glyphic interfaces).
+- Structural protocols: symbiotic sequences for transitions, decision making, and collective memory.
+- Operational canvases: activation matrices, checklists, and facilitation guides.
 
-## 4. Prácticas de hipercoherencia intersubjetiva
-- Activación nodal en red: fases de acoplamiento, estabilización y resonancia sostenida.
-- Glifos para la percepción transnodal y la modulación de campos compartidos.
-- Conclusión: la conciencia como campo operativo y resonante.
+## 4. Intersubjective hypercoherence practices
+- Networked node activation: coupling phases, stabilisation, and sustained resonance.
+- Glyphs for transnodal perception and shared-field modulation.
+- Conclusion: consciousness as an operative and resonant field.
 
-## 5. Aplicaciones, validación y diseño simbiótico
-- Protocolo experimental fractal resonante y fundamentos teóricos.
-- Casos experimentales en sistemas físicos, biológicos y culturales.
-- Implicaciones para IA glífica, semántica estructural y redes sociales de coherencia.
+## 5. Applications, validation, and symbiotic design
+- Fractal resonant experimental protocol and theoretical foundations.
+- Experimental cases across physical, biological, and cultural systems.
+- Implications for glyphic AI, structural semantics, and coherence-oriented social networks.
 
-## Apéndices
-- Glosario de términos glíficos clave.
-- Esquemas de instrumentación simbiótica y plantillas para registro de resonancias.
-- Referencias cruzadas a simulaciones y entornos interactivos asociados al QR del manual.
+## Appendices
+- Glossary of key glyphic terms.
+- Symbiotic instrumentation diagrams and resonance log templates.
+- Cross-references to simulations and interactive environments linked from the manual’s QR code.
 
-## Anexo técnico: señales EPI y cálculo de ΔNFR
+## Technical annex: EPI signals and ΔNFR computation
 
-La implementación software incorpora un registro de telemetría extendido para
-cada muestra ``TelemetryRecord`` con orientación (``yaw``, ``pitch``,
-``roll``), presión de freno normalizada y un indicador de bloqueo del ABS/TC.
-Estos campos se combinan con las magnitudes clásicas (carga Fz,
-aceleraciones lateral/longitudinal, slip ratio, ΔNFR y Sense Index) para
-estimar la contribución de cada nodo del vehículo.
+The software implementation extends each telemetry sample ``TelemetryRecord`` with orientation (``yaw``, ``pitch``, ``roll``), normalised brake pressure, and an ABS/TC locking flag. These fields combine with the classic magnitudes (Fz load, lateral/longitudinal accelerations, slip ratio, ΔNFR, and Sense Index) to estimate each vehicle node’s contribution.
 
-El algoritmo :func:`tnfr_lfs.core.epi.delta_nfr_by_node` compara una muestra
-contra su baseline y genera una distribución de ΔNFR por subsistema.  Por
-ejemplo, frente a un baseline con ``nfr = 500`` y sin freno aplicado, una
-muestra con ``nfr = 508``, ``brake_pressure = 0.85`` y ``locking = 1``
-producirá una distribución en la que el nodo de frenos absorbe la mayor parte
-del ΔNFR mientras que suspensión y neumáticos comparten la respuesta
-restante.  El cálculo se apoya en las diferencias absolutas de cada señal y en
-ponderaciones empíricas:
+The :func:`tnfr_lfs.core.epi.delta_nfr_by_node` algorithm compares a sample against its baseline and generates a ΔNFR distribution per subsystem. For example, relative to a baseline with ``nfr = 500`` and no brake input, a sample with ``nfr = 508``, ``brake_pressure = 0.85``, and ``locking = 1`` yields a distribution where the brake node absorbs most of the ΔNFR while suspension and tyres share the remaining response. The calculation relies on the absolute differences of each signal and empirical weightings:
 
-| Nodo          | Señales principales                                      |
+| Node | Key signals |
 | ------------- | -------------------------------------------------------- |
-| ``tyres``     | Δslip ratio, bloqueo ABS/TC, variación de carga Fz (ΔFz), temperaturas y presiones por rueda |
-| ``suspension``| ΔFz, Δpitch, Δroll                                       |
-| ``chassis``   | Δaceleración lateral, Δroll, Δyaw                         |
-| ``brakes``    | Δpresión de freno, indicador de bloqueo, deceleración     |
-| ``transmission`` | Δaceleración longitudinal, Δslip, Δyaw               |
-| ``track``     | Δ(carga × aceleración lateral), Δyaw                      |
-| ``driver``    | ΔSense Index, Δyaw, Δpitch/Δroll                          |
+| ``tyres`` | Δslip ratio, ABS/TC locking, ΔFz load variation, per-wheel temperatures and pressures |
+| ``suspension`` | ΔFz, Δpitch, Δroll |
+| ``chassis`` | Δlateral acceleration, Δroll, Δyaw |
+| ``brakes`` | Δbrake pressure, locking indicator, deceleration |
+| ``transmission`` | Δlongitudinal acceleration, Δslip, Δyaw |
+| ``track`` | Δ(load × lateral acceleration), Δyaw |
+| ``driver`` | ΔSense Index, Δyaw, Δpitch/Δroll |
 
-La suma de los ΔNFR individuales coincide siempre con el ΔNFR global del
-registro, garantizando la coherencia con el Sense Index penalizado por entropía
-que se calcula en :func:`tnfr_lfs.core.coherence.sense_index`.  La métrica se
-evalúa ahora como ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H`` incorporando el
-ritmo natural de cada nodo y la fase del microsector; la interpretación se
-detalla en :doc:`api_reference`.
+The sum of the individual ΔNFR values always matches the global ΔNFR of the record, guaranteeing coherence with the entropy-penalised Sense Index computed by :func:`tnfr_lfs.core.coherence.sense_index`. The metric is now evaluated as ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H`` so each node’s natural rhythm and phase are considered; the interpretation is detailed in :doc:`api_reference`.
 
-El estimador de frecuencias naturales persiste bandas objetivo por categoría
-de vehículo (GT, fórmulas, prototipos, …) a través de
-``NaturalFrequencySettings.frequency_bands``.  Cada muestra expone una
-clasificación ``ν_f`` (muy baja, óptima, muy alta, …) y un índice estructural
-``C(t)`` derivado de la densidad de eventos en el eje estructural.  Ambos
-parámetros se normalizan con los objetivos de ``ProfileManager`` para que la
-misma escala sea válida al comparar stints con diferentes metas de Sense Index.
+The natural-frequency estimator persists target bands per vehicle category (GT, formula cars, prototypes, …) through ``NaturalFrequencySettings.frequency_bands``. Each sample exposes a ``ν_f`` classification (very low, optimal, very high, …) and a structural index ``C(t)`` derived from the event density along the structural axis. Both parameters are normalised with the objectives managed by ``ProfileManager`` so the same scale applies when comparing stints with different Sense Index goals.
 
-### Operadores de memoria y mutación
+### Memory and mutation operators
 
-Para mantener continuidad entre muestras y microsectores, el pipeline utiliza
-dos operadores con estado ubicados en ``tnfr_lfs.core.operators``:
+To maintain continuity between samples and microsectors the pipeline relies on two stateful operators in ``tnfr_lfs.core.operators``:
 
-* ``recursivity_operator`` conserva una traza por microsector y filtra de
-  forma exponencial las métricas térmicas y de estilo (``thermal_load`` y
-  ``style_index``) junto con las temperaturas/presiones por rueda
-  (``tyre_temp_*``/``tyre_pressure_*``).  La memoria queda ahora segmentada por
-  sesión (``car_model``/``track_name``/``tyre_compound``), manteniendo un
-  historial por stint en ``operator_state["recursivity"]``.  Además calcula
-  derivadas ``dT/dt`` para cada rueda, persiste ``ΔNFR_flat`` como referencia y
-  aplica criterios de parada (convergencia, límites de muestras o gaps de
-  tiempo) para iniciar nuevos stints cuando la dinámica cambia.  El operador
-  detecta cambios de fase (entrada, vértice, salida) y reinicia la memoria
-  cuando corresponde para que el filtro no contamine transiciones abruptas; el
-  historial completo se expone a través de ``orchestrate_delta_metrics`` como
-  ``network_memory`` para que HUD y exportadores accedan a la memoria de red.
-  Cuando OutGauge no transmite el bloque extendido (temperaturas y presiones
-  por rueda) las entradas correspondientes en HUD/exportadores muestran
-  explícitamente ``"sin datos"`` para remarcar que la telemetría de LFS no
-  estaba disponible.
-* ``mutation_operator`` observa la entropía del reparto ΔNFR y las desviaciones
-  de estilo filtradas para decidir si el arquetipo táctico debe mutar hacia un
-  candidato alternativo o volver a un modo de recuperación.
+* ``recursivity_operator`` keeps a per-microsector trace and exponentially filters thermal/style metrics (``thermal_load`` and ``style_index``) together with per-wheel temperatures/pressures (``tyre_temp_*``/``tyre_pressure_*``). Memory is now segmented by session (``car_model``/``track_name``/``tyre_compound``), maintaining a stint history in ``operator_state["recursivity"]``. It also computes ``dT/dt`` derivatives per wheel, stores ``ΔNFR_flat`` as a reference, and applies stop criteria (convergence, sample limits, or time gaps) to start new stints when the dynamics change. The operator detects phase changes (entry, apex, exit) and resets memory when needed so the filter does not pollute abrupt transitions; the full history is exposed via ``orchestrate_delta_metrics`` as ``network_memory`` so the HUD and exporters can access the network memory. When OutGauge does not transmit the extended block (per-wheel temperatures and pressures) the HUD/exporters display the literal ``"sin datos"`` marker to highlight that Live for Speed telemetry was unavailable.
+* ``mutation_operator`` observes the ΔNFR distribution entropy and the filtered style deviations to decide when the tactical archetype should mutate toward an alternative candidate or return to a recovery mode.
 
-La segmentación de microsectores invoca ambos operadores: primero suaviza las
-medidas del microsector activo y después evalúa si la combinación de entropía,
-fase y condiciones dinámicas (curvatura sostenida, duración del apoyo,
-reducciones de velocidad y cambios de dirección) requiere mutar los objetivos
-generados por :func:`segment_microsectors`.  Cuando se produce una mutación, la
-segmentación recalcula los objetivos de entrada, vértice y salida con el nuevo
-arquetipo —``hairpin``, ``medium``, ``fast`` o ``chicane``— antes de integrarlos
-en el reporte.  De este modo el estado se conserva entre invocaciones y la
-estrategia resultante se adapta a las condiciones cambiantes del stint.
+Microsector segmentation invokes both operators: it first smooths the active microsector measurements and then evaluates whether the combination of entropy, phase, and dynamic conditions (sustained curvature, support duration, speed reductions, direction changes) requires mutating the entry/apex/exit goals produced by :func:`segment_microsectors`. When a mutation is triggered the segmentation recomputes the entry, apex, and exit objectives with the new archetype — ``hairpin``, ``medium``, ``fast``, or ``chicane`` — before integrating them into the report. This preserves state between invocations and adapts the resulting strategy to the stint’s changing conditions.
 
-### Métricas de alineación de fase
+### Phase alignment metrics
 
-Cada microsector conserva ahora el desfase medido ``θ`` y su coseno ``Siφ``
-para cada fase, junto con los objetivos de alineación y los pesos de detune
-asociados al arquetipo vigente.  Los valores se derivan de un espectro cruzado
-entre la dirección del piloto y la respuesta combinada yaw/aceleración lateral,
-lo que expone la frecuencia dominante del apoyo y permite detectar atrasos o
-adelantos del chasis.  El HUD y las reglas del recomendador utilizan estas
-métricas, junto con los objetivos de proyección ∇NFR⊥/∇NFR∥ y ``ν_f`` fijados por arquetipo, para
-invertir las sugerencias de barras y amortiguadores cuando la fase medida
-pierde la alineación con el objetivo.
+Each microsector now stores the measured phase offset ``θ`` and its cosine ``Siφ`` for every phase, together with the alignment targets and detune weights associated with the active archetype. The values stem from a cross-spectrum between driver heading and the combined yaw/lateral acceleration response, exposing the dominant support frequency and revealing chassis lags or leads. The HUD and recommendation rules rely on these metrics, together with the archetype-driven ∇NFR⊥/∇NFR∥ projections and ``ν_f`` targets, to invert bar and damper suggestions whenever the measured phase drifts away from the objective.
 
-La versión actual refuerza esta lógica con un mapa de acciones específico para
-los parámetros de geometría (caster, camber y toe).  Las plantillas de
-``PhaseActionTemplate`` ahora transforman desviaciones de ``Siφ``, ``θ`` y del
-índice de coherencia ``C(t)`` en ajustes directos sobre los ejes delantero y
-trasero.  El motor de recomendaciones calcula un ``snapshot`` geométrico por
-microsector a partir de los datos agregados en ``Microsector.filtered_measures``
-y de los promedios de ``WindowMetrics``, priorizando los nodos de suspensión y
-neumáticos cuando la transición entre fases pierde coherencia.  Además, el
-optimiser de planes pondera estas desviaciones para que los gradientes de
-geometría formen parte del objetivo prolongado de resonant alignment (RA),
-recompensando configuraciones con mayor ``C(t)`` y penalizando retrasos en la
-respuesta.  Además se exponen indicadores agregados del apoyo estructural en
-``WindowMetrics``:
+The current version reinforces this logic with an action map for geometry parameters (caster, camber, and toe). ``PhaseActionTemplate`` instances now turn deviations in ``Siφ``, ``θ``, and the coherence index ``C(t)`` into direct adjustments for the front and rear axles. The recommendation engine computes a geometry ``snapshot`` per microsector based on the aggregates in ``Microsector.filtered_measures`` and the averages in ``WindowMetrics``, prioritising suspension and tyre nodes when phase transitions lose coherence. The setup-plan optimiser weighs these deviations so geometry gradients become part of the long-term resonant alignment (RA) goal, rewarding configurations with higher ``C(t)`` and penalising delayed responses. ``WindowMetrics`` also surfaces aggregated structural support indicators:
 
-* ``support_effective`` captura el ΔNFR absorbido por neumáticos y suspensión
-  ponderado por las ventanas estructurales del tramo analizado.
-* ``load_support_ratio`` normaliza dicho valor frente a la carga Fz media
-  para contextualizar el esfuerzo requerido al chasis.
-* ``structural_expansion_longitudinal``/``structural_contraction_longitudinal``
-  cuantifican la expansión o contracción del eje estructural inducida por las
-  componentes longitudinales de ΔNFR.
-* ``structural_expansion_lateral``/``structural_contraction_lateral`` replican
-  la métrica para la componente lateral, revelando apoyos que abren o cierran
-  el eje estructural en la ventana.
-* ``ackermann_parallel_index`` y ``slide_catch_budget`` se derivan
-  exclusivamente de los ``slip_angle_*`` y del ``yaw_rate`` emitidos por
-  OutSim; sin esa telemetría los presupuestos de Ackermann y de captura de
-  derrapaje permanecen en cero y los reportes lo indican como ``"sin datos"``.
-* ``aero_balance_drift`` resume el rake medio (pitch + viajes) y la diferencia
-  ``μ_front - μ_rear`` por bandas de velocidad (baja/media/alta).  El rake se
-  calcula únicamente con el ``pitch`` y los viajes de suspensión suministrados
-  por OutSim, de modo que la deriva aerodinámica responde directamente a la
-  telemetría nativa de LFS incluso cuando la coherencia aparente permanece
-  estable.
-* ``delta_nfr_entropy`` y ``node_entropy`` cuantifican con una escala normalizada
-  [0, 1] lo repartido que está el ΔNFR entre fases y nodos respectivamente; los
-  valores cercanos a cero implican concentración en un único grupo mientras que
-  los cercanos a uno indican una ventana equilibrada.  Los mapas
-  ``phase_delta_nfr_entropy``/``phase_node_entropy`` exponen las probabilidades
-  estructurales por fase y la entropía Shannon nodal por fase, replicando los
-  alias heredados para que los tableros compacten la información sin perder
-  granularidad.
+* ``support_effective`` captures ΔNFR absorbed by tyres and suspension with structural weighting for the analysed window.
+* ``load_support_ratio`` normalises that value against the average Fz load to contextualise the effort requested from the chassis.
+* ``structural_expansion_longitudinal``/``structural_contraction_longitudinal`` quantify how the longitudinal ΔNFR component expands or compresses the structural axis.
+* ``structural_expansion_lateral``/``structural_contraction_lateral`` provide the same measurement for the lateral component, revealing supports that open or close the structural axis in the window.
+* ``ackermann_parallel_index`` and ``slide_catch_budget`` come exclusively from the ``slip_angle_*`` channels and ``yaw_rate`` emitted by OutSim; without that telemetry the Ackermann and slide-recovery budgets remain zero and reports show the literal ``"sin datos"`` token.
+* ``aero_balance_drift`` summarises average rake (pitch plus suspension travel) and the ``μ_front - μ_rear`` delta by low/medium/high speed bands. Rake is calculated solely with the ``pitch`` and suspension-travel signals provided by OutSim so aerodynamic drift mirrors native LFS telemetry even when ``AeroCoherence`` still looks neutral.
+* ``delta_nfr_entropy`` and ``node_entropy`` quantify with a normalised [0, 1] scale how ΔNFR is distributed between phases and nodes; values near zero imply concentration in a single group, whereas values near one indicate a balanced window. The ``phase_delta_nfr_entropy``/``phase_node_entropy`` maps expose the structural probabilities per phase and the per-phase Shannon entropy, preserving the legacy aliases so dashboards can condense the information without losing granularity.
 
-## Artefactos generados
+## Generated artefacts
 
-- ``TNFR.pdf`` se mantiene como artefacto compilado. Cualquier actualización sustantiva debe reflejarse primero en este ``DESIGN.md``; el PDF puede regenerarse a partir del contenido actualizado y debe tratarse como derivado.
-- ``coherence_map.<ext>`` serializa el promedio y el rango de ``C(t)`` por microsector junto con la distancia acumulada estimada a partir de ``TransmissionNode.speed``.  Permite reconstruir el mapa de coherencia de toda la vuelta y correlacionarlo con los objetivos de pista.
-- ``operator_trajectories.<ext>`` aplica ``Microsector.operator_events`` para reconstruir la línea temporal estructural de los detectores ``AL``/``OZ``/``IL``/``SILENCIO``.  El agregado conserva la cobertura estructural de los intervalos en silencio para cada microsector, permitiendo detectar estados latentes donde la carga, las aceleraciones y ΔNFR permanecen por debajo de los umbrales configurados.
-- ``delta_bifurcations.<ext>`` analiza las series ΔNFR en el eje estructural, detectando cruces de signo y extremos locales para identificar bifurcaciones que requieran ajustes de setup.
+- ``TNFR.pdf`` remains as a compiled artefact. Any substantive update should first land in this ``DESIGN.md``; the PDF can be regenerated from the updated content and must be treated as a derivative.
+- ``coherence_map.<ext>`` serialises the mean and range of ``C(t)`` per microsector together with the estimated cumulative distance from ``TransmissionNode.speed``. It enables reconstruction of the coherence map for the entire lap and correlation with track targets.
+- ``operator_trajectories.<ext>`` applies ``Microsector.operator_events`` to rebuild the structural timeline for the ``AL``/``OZ``/``IL``/``SILENCIO`` detectors. The aggregate preserves structural coverage for the silent intervals of each microsector, helping identify latent states where load, accelerations, and ΔNFR stay below the configured thresholds.
+- ``delta_bifurcations.<ext>`` analyses the ΔNFR series along the structural axis, detecting sign changes and local extrema to spot bifurcations that demand setup tweaks.
 
-Los sufijos ``.json``, ``.md`` o ``.viz`` dependen del formato elegido con ``--report-format`` y comparten la misma semántica sin importar el modo de renderizado.
+The ``.json``, ``.md``, or ``.viz`` suffixes depend on the format selected with ``--report-format`` and share the same semantics regardless of the rendering mode.
 
-## Próximos pasos sugeridos
-1. Completar la transcripción detallada de cada subsección utilizando herramientas con soporte para fuentes personalizadas o mediante revisión manual.
-2. Validar que las tablas y ecuaciones reproducidas aquí coincidan con las versiones del PDF regenerado.
-3. Documentar en el repositorio el proceso empleado para generar el PDF a partir del Markdown para facilitar futuras automatizaciones.
+## Suggested next steps
+1. Complete the detailed transcription of each subsection using tools that support custom fonts or through manual review.
+2. Validate that the tables and equations reproduced here match the regenerated PDF.
+3. Document in the repository the process used to create the PDF from Markdown to ease future automation.
