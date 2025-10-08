@@ -871,6 +871,179 @@ def resolve_nu_f_by_node(
     return analyzer.update(record, base_map, car_model=car_model)
 
 
+class _RunningBaseline:
+    """Incrementally compute the baseline record statistics."""
+
+    _AVERAGE_FIELDS = (
+        "vertical_load",
+        "slip_ratio",
+        "lateral_accel",
+        "longitudinal_accel",
+        "yaw",
+        "pitch",
+        "roll",
+        "brake_pressure",
+        "locking",
+        "nfr",
+        "si",
+        "speed",
+        "yaw_rate",
+        "slip_angle",
+        "steer",
+        "throttle",
+        "vertical_load_front",
+        "vertical_load_rear",
+        "mu_eff_front",
+        "mu_eff_rear",
+        "mu_eff_front_lateral",
+        "mu_eff_front_longitudinal",
+        "mu_eff_rear_lateral",
+        "mu_eff_rear_longitudinal",
+        "suspension_travel_front",
+        "suspension_travel_rear",
+        "suspension_velocity_front",
+        "suspension_velocity_rear",
+        "slip_ratio_fl",
+        "slip_ratio_fr",
+        "slip_ratio_rl",
+        "slip_ratio_rr",
+        "slip_angle_fl",
+        "slip_angle_fr",
+        "slip_angle_rl",
+        "slip_angle_rr",
+    )
+    _AVERAGE_INT_FIELDS = ("gear",)
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self._count = 0
+        self._sums: Dict[str, float] = {field: 0.0 for field in self._AVERAGE_FIELDS}
+        for field in self._AVERAGE_INT_FIELDS:
+            self._sums[field] = 0.0
+        self._first_timestamp: float | None = None
+        self._first_structural: float | None = None
+        self._car_model: str | None = None
+        self._track_name: str | None = None
+        self._tyre_compound: str | None = None
+
+    @property
+    def count(self) -> int:
+        return self._count
+
+    def add(
+        self,
+        record: TelemetryRecord,
+        *,
+        car_model: str | None = None,
+        track_name: str | None = None,
+        tyre_compound: str | None = None,
+    ) -> None:
+        if self._count == 0:
+            self._first_timestamp = float(record.timestamp)
+            structural = getattr(record, "structural_timestamp", None)
+            if structural is not None and math.isfinite(structural):
+                self._first_structural = float(structural)
+            else:
+                self._first_structural = self._first_timestamp
+            self._car_model = car_model or record.car_model
+            self._track_name = track_name or record.track_name
+            self._tyre_compound = tyre_compound or record.tyre_compound
+        else:
+            if car_model:
+                self._car_model = car_model
+            elif record.car_model:
+                self._car_model = record.car_model
+            if track_name:
+                self._track_name = track_name
+            elif record.track_name:
+                self._track_name = record.track_name
+            if tyre_compound:
+                self._tyre_compound = tyre_compound
+            elif record.tyre_compound:
+                self._tyre_compound = record.tyre_compound
+
+        self._count += 1
+        for field in self._AVERAGE_FIELDS:
+            value = float(getattr(record, field))
+            self._accumulate(field, value)
+        for field in self._AVERAGE_INT_FIELDS:
+            value = float(getattr(record, field))
+            self._accumulate(field, value)
+
+    def build(self) -> TelemetryRecord:
+        if self._count == 0 or self._first_timestamp is None:
+            raise RuntimeError("Cannot build baseline without samples")
+
+        def _average(field: str) -> float:
+            total = self._sums.get(field, 0.0)
+            if math.isnan(total):
+                return math.nan
+            return total / float(self._count)
+
+        gear_total = self._sums.get("gear", 0.0)
+        if math.isnan(gear_total):
+            gear_value = 0
+        else:
+            gear_value = int(round(gear_total / float(self._count)))
+
+        baseline = TelemetryRecord(
+            timestamp=self._first_timestamp,
+            structural_timestamp=self._first_structural,
+            vertical_load=_average("vertical_load"),
+            slip_ratio=_average("slip_ratio"),
+            lateral_accel=_average("lateral_accel"),
+            longitudinal_accel=_average("longitudinal_accel"),
+            yaw=_average("yaw"),
+            pitch=_average("pitch"),
+            roll=_average("roll"),
+            brake_pressure=_average("brake_pressure"),
+            locking=_average("locking"),
+            nfr=_average("nfr"),
+            si=_average("si"),
+            speed=_average("speed"),
+            yaw_rate=_average("yaw_rate"),
+            slip_angle=_average("slip_angle"),
+            steer=_average("steer"),
+            throttle=_average("throttle"),
+            gear=gear_value,
+            vertical_load_front=_average("vertical_load_front"),
+            vertical_load_rear=_average("vertical_load_rear"),
+            mu_eff_front=_average("mu_eff_front"),
+            mu_eff_rear=_average("mu_eff_rear"),
+            mu_eff_front_lateral=_average("mu_eff_front_lateral"),
+            mu_eff_front_longitudinal=_average("mu_eff_front_longitudinal"),
+            mu_eff_rear_lateral=_average("mu_eff_rear_lateral"),
+            mu_eff_rear_longitudinal=_average("mu_eff_rear_longitudinal"),
+            suspension_travel_front=_average("suspension_travel_front"),
+            suspension_travel_rear=_average("suspension_travel_rear"),
+            suspension_velocity_front=_average("suspension_velocity_front"),
+            suspension_velocity_rear=_average("suspension_velocity_rear"),
+            slip_ratio_fl=_average("slip_ratio_fl"),
+            slip_ratio_fr=_average("slip_ratio_fr"),
+            slip_ratio_rl=_average("slip_ratio_rl"),
+            slip_ratio_rr=_average("slip_ratio_rr"),
+            slip_angle_fl=_average("slip_angle_fl"),
+            slip_angle_fr=_average("slip_angle_fr"),
+            slip_angle_rl=_average("slip_angle_rl"),
+            slip_angle_rr=_average("slip_angle_rr"),
+            car_model=self._car_model,
+            track_name=self._track_name,
+            tyre_compound=self._tyre_compound,
+        )
+        return baseline
+
+    def _accumulate(self, field: str, value: float) -> None:
+        if not math.isfinite(value):
+            self._sums[field] = math.nan
+            return
+        current = self._sums.get(field, 0.0)
+        if math.isnan(current):
+            return
+        self._sums[field] = current + value
+
+
 class EPIExtractor:
     """Compute EPI bundles for a stream of telemetry records."""
 
@@ -891,6 +1064,84 @@ class EPIExtractor:
             natural_frequency_settings or NaturalFrequencySettings()
         )
         self._nu_f_analyzer = NaturalFrequencyAnalyzer(self.natural_frequency_settings)
+        self._baseline = _RunningBaseline()
+        self._baseline_record: TelemetryRecord | None = None
+        self._prev_integrated_epi: Optional[float] = None
+        self._prev_timestamp: float | None = None
+        self._prev_structural: float | None = None
+
+    def reset(self) -> None:
+        """Clear the incremental state."""
+
+        self._nu_f_analyzer.reset()
+        self._baseline.reset()
+        self._baseline_record = None
+        self._prev_integrated_epi = None
+        self._prev_timestamp = None
+        self._prev_structural = None
+
+    def update(
+        self,
+        record: TelemetryRecord,
+        *,
+        calibration: "CoherenceCalibrationStore" | None = None,
+        player_name: str | None = None,
+        car_model: str | None = None,
+        track_name: str | None = None,
+        tyre_compound: str | None = None,
+    ) -> EPIBundle:
+        """Process a single telemetry record and return the resulting bundle."""
+
+        self._baseline.add(
+            record,
+            car_model=car_model,
+            track_name=track_name,
+            tyre_compound=tyre_compound,
+        )
+        baseline = self._resolve_baseline(
+            calibration=calibration,
+            player_name=player_name,
+            car_model=car_model,
+        )
+
+        epi_value = self._compute_epi(record)
+        structural_ts = getattr(record, "structural_timestamp", None)
+
+        if self._prev_timestamp is None:
+            dt = 0.0
+        else:
+            if (
+                structural_ts is not None
+                and self._prev_structural is not None
+                and math.isfinite(structural_ts)
+                and math.isfinite(self._prev_structural)
+            ):
+                dt = max(0.0, structural_ts - self._prev_structural)
+            else:
+                dt = max(0.0, record.timestamp - self._prev_timestamp)
+
+        nu_snapshot = resolve_nu_f_by_node(
+            record,
+            analyzer=self._nu_f_analyzer,
+            car_model=car_model or record.car_model,
+        )
+        bundle = DeltaCalculator.compute_bundle(
+            record,
+            baseline,
+            epi_value,
+            prev_integrated_epi=self._prev_integrated_epi,
+            dt=dt,
+            nu_f_by_node=nu_snapshot.by_node,
+            nu_f_snapshot=nu_snapshot,
+        )
+
+        self._baseline_record = baseline
+        self._prev_integrated_epi = bundle.integrated_epi
+        self._prev_timestamp = record.timestamp
+        if structural_ts is not None and math.isfinite(structural_ts):
+            self._prev_structural = structural_ts
+
+        return bundle
 
     def extract(
         self,
@@ -902,52 +1153,19 @@ class EPIExtractor:
     ) -> List[EPIBundle]:
         if not records:
             return []
-        self._nu_f_analyzer.reset()
-        baseline = DeltaCalculator.resolve_baseline(
-            records,
-            calibration=calibration,
-            player_name=player_name,
-            car_model=car_model,
-        )
-        results: List[EPIBundle] = []
-        prev_integrated_epi: Optional[float] = None
-        prev_timestamp = records[0].timestamp
-        prev_structural = getattr(records[0], "structural_timestamp", None)
-        for index, record in enumerate(records):
-            epi_value = self._compute_epi(record)
-            structural_ts = getattr(record, "structural_timestamp", None)
-            if index == 0:
-                dt = 0.0
-            else:
-                if (
-                    structural_ts is not None
-                    and prev_structural is not None
-                    and math.isfinite(structural_ts)
-                    and math.isfinite(prev_structural)
-                ):
-                    dt = max(0.0, structural_ts - prev_structural)
-                else:
-                    dt = max(0.0, record.timestamp - prev_timestamp)
-            nu_snapshot = resolve_nu_f_by_node(
+        self.reset()
+        bundles: List[EPIBundle] = []
+        for record in records:
+            bundle = self.update(
                 record,
-                analyzer=self._nu_f_analyzer,
-                car_model=car_model,
+                calibration=calibration,
+                player_name=player_name,
+                car_model=car_model or record.car_model,
+                track_name=record.track_name,
+                tyre_compound=record.tyre_compound,
             )
-            bundle = DeltaCalculator.compute_bundle(
-                record,
-                baseline,
-                epi_value,
-                prev_integrated_epi=prev_integrated_epi,
-                dt=dt,
-                nu_f_by_node=nu_snapshot.by_node,
-                nu_f_snapshot=nu_snapshot,
-            )
-            results.append(bundle)
-            prev_integrated_epi = bundle.integrated_epi
-            prev_timestamp = record.timestamp
-            if structural_ts is not None and math.isfinite(structural_ts):
-                prev_structural = structural_ts
-        return results
+            bundles.append(bundle)
+        return bundles
 
     def _compute_epi(self, record: TelemetryRecord) -> float:
         # Normalise vertical load between 0 and 10 kN which is a typical
@@ -955,6 +1173,24 @@ class EPIExtractor:
         load_component = min(max(record.vertical_load / 10000.0, 0.0), 1.0)
         slip_component = min(max((record.slip_ratio + 1.0) / 2.0, 0.0), 1.0)
         return (load_component * self.load_weight) + (slip_component * self.slip_weight)
+
+    def _resolve_baseline(
+        self,
+        *,
+        calibration: "CoherenceCalibrationStore" | None,
+        player_name: str | None,
+        car_model: str | None,
+    ) -> TelemetryRecord:
+        raw_baseline = self._baseline.build()
+        if calibration is None or not player_name or not (car_model or raw_baseline.car_model):
+            self._baseline_record = raw_baseline
+            return raw_baseline
+        resolved_car = car_model or raw_baseline.car_model
+        assert resolved_car is not None  # for type checkers
+        resolved = calibration.baseline_for(player_name, resolved_car, raw_baseline)
+        calibration.observe_baseline(player_name, resolved_car, raw_baseline)
+        self._baseline_record = resolved
+        return resolved
 
 
 class DeltaCalculator:

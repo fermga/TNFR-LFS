@@ -7,6 +7,7 @@ from io import StringIO
 import math
 import socket
 import struct
+import time
 
 import pytest
 
@@ -18,7 +19,11 @@ from tnfr_lfs.acquisition.outsim_client import (
     OPTIONAL_SCHEMA_COLUMNS,
     OutSimClient,
 )
-from tnfr_lfs.acquisition.outsim_udp import OutSimPacket, OutSimUDPClient
+from tnfr_lfs.acquisition.outsim_udp import (
+    OutSimPacket,
+    OutSimUDPClient,
+    OutSimWheelState,
+)
 
 
 def _build_extended_outsim_payload() -> bytes:
@@ -126,6 +131,71 @@ def sample_outgauge_packet() -> OutGaugePacket:
     )
 
 
+def _synthetic_packet(index: int) -> tuple[OutSimPacket, OutGaugePacket]:
+    time_ms = index * 50
+    base_speed = 20.0 + 0.02 * index
+    wheels = tuple(
+        OutSimWheelState(
+            slip_ratio=0.01 + 0.0001 * index + offset,
+            slip_angle=0.02 + (offset * 5.0),
+            longitudinal_force=110.0 + index + offset * 10.0,
+            lateral_force=95.0 + index + offset * 8.0,
+            load=900.0 + index + offset * 50.0,
+            suspension_deflection=0.03 + offset,
+            decoded=True,
+        )
+        for offset in (0.0, 0.0005, -0.0004, 0.0003)
+    )
+    outsim = OutSimPacket(
+        time=time_ms,
+        ang_vel_x=0.01,
+        ang_vel_y=0.02,
+        ang_vel_z=0.03,
+        heading=0.1,
+        pitch=0.05,
+        roll=0.02,
+        accel_x=0.5,
+        accel_y=0.3,
+        accel_z=-9.0,
+        vel_x=base_speed,
+        vel_y=0.5,
+        vel_z=0.0,
+        pos_x=float(index) * 0.1,
+        pos_y=float(index) * 0.2,
+        pos_z=0.0,
+        player_id=1,
+        inputs=None,
+        wheels=wheels[:4],
+    )
+    outgauge = OutGaugePacket(
+        time=index,
+        car="XFG",
+        player_name="Driver",
+        plate="",
+        track="BL1",
+        layout="GP",
+        flags=0,
+        gear=3,
+        plid=0,
+        speed=base_speed,
+        rpm=4000.0 + index,
+        turbo=0.0,
+        eng_temp=80.0,
+        fuel=40.0,
+        oil_pressure=0.0,
+        oil_temp=90.0,
+        dash_lights=0,
+        show_lights=0,
+        throttle=0.4,
+        brake=0.2,
+        clutch=0.1,
+        display1="",
+        display2="",
+        packet_id=index,
+    )
+    return outsim, outgauge
+
+
 def test_outsim_ingest_captures_per_wheel_slip_and_radius() -> None:
     schema = DEFAULT_SCHEMA
     header = ",".join(schema.columns)
@@ -192,6 +262,30 @@ def test_outsim_ingest_captures_per_wheel_slip_and_radius() -> None:
     assert record.instantaneous_radius == pytest.approx(14.0)
     assert record.front_track_width == pytest.approx(1.46)
     assert record.wheelbase == pytest.approx(2.74)
+
+
+def test_fusion_incremental_scaling() -> None:
+    fusion = TelemetryFusion()
+    total_samples = 1200
+    half = total_samples // 2
+    start = time.perf_counter()
+    midpoint: float | None = None
+    for index in range(total_samples):
+        outsim, outgauge = _synthetic_packet(index)
+        bundle = fusion.fuse_to_bundle(outsim, outgauge)
+        assert bundle is not None
+        if index == half - 1:
+            midpoint = time.perf_counter()
+    end = time.perf_counter()
+    assert midpoint is not None
+    first_span = midpoint - start
+    second_span = end - midpoint
+    assert second_span <= first_span * 1.8
+    assert len(fusion.extractor._nu_f_analyzer._history) <= 150
+    assert len(fusion._vertical_history) <= 64
+    assert len(fusion._line_history) <= 60
+    assert fusion.extractor._baseline.count == total_samples
+    assert not hasattr(fusion, "_records")
 
 
 def test_fusion_preserves_zero_suspension_deflection(
