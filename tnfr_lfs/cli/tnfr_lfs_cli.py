@@ -63,6 +63,7 @@ _HELPER_EXPORTS = {
     "_resolve_pack_root": _common_module.resolve_pack_root,
     "_resolve_track_argument": _common_module.resolve_track_argument,
     "_load_pack_cars": _common_module.load_pack_cars,
+    "_load_pack_profiles": _common_module.load_pack_profiles,
     "_load_pack_track_profiles": _common_module.load_pack_track_profiles,
     "_load_pack_modifiers": _common_module.load_pack_modifiers,
     "_group_records_by_lap": _common_module.group_records_by_lap,
@@ -73,6 +74,7 @@ _HELPER_EXPORTS = {
     "_load_records": _cli_io_module._load_records,
     "_load_records_from_namespace": _cli_io_module._load_records_from_namespace,
     "raf_to_telemetry_records": _cli_io_module.raf_to_telemetry_records,
+    "_load_pack_lfs_class_overrides": _workflows_module._load_pack_lfs_class_overrides,
 }
 
 globals().update(_HELPER_EXPORTS)
