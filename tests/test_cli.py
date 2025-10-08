@@ -24,6 +24,13 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreter
     import tomli as tomllib  # type: ignore
 
 
+def test_cli_exports_helper_attributes() -> None:
+    assert hasattr(cli_module, "_load_pack_profiles")
+    assert callable(cli_module._load_pack_profiles)
+    assert hasattr(cli_module, "_load_pack_lfs_class_overrides")
+    assert callable(cli_module._load_pack_lfs_class_overrides)
+
+
 def test_baseline_simulation_jsonl(
     tmp_path: Path, capsys, synthetic_stint_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
