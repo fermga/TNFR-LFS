@@ -1469,7 +1469,16 @@ def _generate_out_reports(
     microsector_variability: Optional[Sequence[Mapping[str, Any]]] = None,
     metrics: Optional[Mapping[str, Any]] = None,
     artifact_format: str = "json",
-) -> Dict[str, Any]:
+    ) -> Dict[str, Any]:
+    started = monotonic()
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Preparing report generation",
+            extra={
+                "destination": str(destination),
+                "format": artifact_format,
+            },
+        )
     destination.mkdir(parents=True, exist_ok=True)
     format_key = artifact_format.lower()
     if format_key not in REPORT_ARTIFACT_FORMATS:
@@ -1481,6 +1490,15 @@ def _generate_out_reports(
     artifact_extension = extension_map[format_key]
 
     bundle_list = list(bundles)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Generating reports",
+            extra={
+                "destination": str(destination),
+                "bundle_count": len(bundle_list),
+                "microsector_count": len(microsectors),
+            },
+        )
     sense_map = _sense_index_map(bundle_list, microsectors)
     resonance = analyse_modal_resonance(records)
     breakdown = _delta_breakdown_summary(bundles)
@@ -1989,7 +2007,7 @@ def _generate_out_reports(
     bifurcation_path = destination / f"delta_bifurcations.{artifact_extension}"
     _persist_artifact(bifurcation_path, bifurcation_render)
 
-    return {
+    reports: Dict[str, Any] = {
         "sense_index_map": {"path": str(sense_path), "data": sense_map},
         "modal_resonance": {"path": str(resonance_path), "data": resonance_payload},
         "delta_breakdown": {"path": str(breakdown_path), "data": breakdown},
@@ -2029,6 +2047,16 @@ def _generate_out_reports(
             **({"rendered": bifurcation_render} if format_key != "json" else {}),
         },
     }
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Report generation complete",
+            extra={
+                "destination": str(destination),
+                "artifact_count": len(reports),
+                "duration": monotonic() - started,
+            },
+        )
+    return reports
 
 def _handle_template(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     car_model = str(namespace.car_model or default_car_model(config))
@@ -2356,12 +2384,40 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
 
 def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
+    workflow_started = monotonic()
     records, telemetry_path = _load_records_from_namespace(namespace)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Loaded telemetry records",
+            extra={
+                "samples": len(records),
+                "source": getattr(telemetry_path, "name", str(telemetry_path)),
+            },
+        )
     car_model = default_car_model(config)
     pack_context = _prepare_pack_context(namespace, config, car_model=car_model)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Prepared pack context",
+            extra={
+                "car_model": car_model,
+                "pack_root": str(pack_context.pack_root) if pack_context.pack_root else None,
+                "car_count": len(pack_context.cars),
+                "modifier_count": len(pack_context.modifiers),
+            },
+        )
     pack_root = pack_context.pack_root
     track_selection = resolve_track_argument(None, config, pack_root=pack_root)
     track_name = track_selection.name or default_track_name(config)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Resolved track context",
+            extra={
+                "car_model": car_model,
+                "track_name": track_name,
+                "has_session": track_selection.session is not None,
+            },
+        )
     profiles_ctx = pack_context.profiles_ctx
     profile_manager = pack_context.profile_manager
     cars = pack_context.cars
@@ -2385,6 +2441,15 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     )
     if session_payload is not None:
         engine.session = session_payload
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Assembled session payload",
+            extra={
+                "car_model": car_model,
+                "track_name": track_name,
+                "has_payload": session_payload is not None,
+            },
+        )
     bundles, microsectors, thresholds, snapshot = _compute_insights(
         records,
         car_model=car_model,
@@ -2392,6 +2457,15 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         engine=engine,
         profile_manager=profile_manager,
     )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Computed insights",
+            extra={
+                "bundle_count": len(bundles),
+                "microsector_count": len(microsectors),
+                "has_snapshot": snapshot is not None,
+            },
+        )
     analyze_cfg = dict(config.get("analyze", {}))
     default_target_delta = float(analyze_cfg.get("target_delta", 0.0))
     default_target_si = float(analyze_cfg.get("target_si", 0.75))
@@ -2407,7 +2481,22 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     elif not snapshot and target_si == default_target_si and pack_si is not None:
         target_si = pack_si
     profile_manager.update_objectives(car_model, track_name, target_delta, target_si)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Updated profile objectives",
+            extra={
+                "car_model": car_model,
+                "track_name": track_name,
+                "target_delta": float(target_delta),
+                "target_sense_index": float(target_si),
+            },
+        )
     lap_segments = group_records_by_lap(records)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Grouped lap segments",
+            extra={"segment_count": len(lap_segments)},
+        )
     metrics = orchestrate_delta_metrics(
         lap_segments,
         target_delta,
@@ -2417,6 +2506,15 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         microsectors=microsectors,
         phase_weights=thresholds.phase_weights,
     )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Computed delta metrics",
+            extra={
+                "keys": len(metrics) if isinstance(metrics, Mapping) else None,
+                "target_delta": float(target_delta),
+                "target_sense_index": float(target_si),
+            },
+        )
     session_payload = _augment_session_with_playbook(session_payload, metrics)
     delta_metric = _effective_delta_metric(metrics)
     engine.register_stint_result(
@@ -2425,6 +2523,16 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         car_model=car_model,
         track_name=track_name,
     )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Registered stint result",
+            extra={
+                "car_model": car_model,
+                "track_name": track_name,
+                "delta_metric": float(delta_metric),
+                "sense_index": float(metrics.get("sense_index", 0.0)),
+            },
+        )
     phase_messages = _phase_deviation_messages(
         bundles,
         microsectors,
@@ -2436,15 +2544,24 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     session_messages = format_session_messages(session_payload)
     if session_messages:
         phase_messages.extend(session_messages)
+    output_destination = _resolve_output_dir(config) / telemetry_path.stem
     reports = _generate_out_reports(
         records,
         bundles,
         microsectors,
-        _resolve_output_dir(config) / telemetry_path.stem,
+        output_destination,
         microsector_variability=metrics.get("microsector_variability"),
         metrics=metrics,
         artifact_format=getattr(namespace, "report_format", "json"),
     )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Generated reports",
+            extra={
+                "artifact_count": len(reports),
+                "destination": str(output_destination),
+            },
+        )
     robustness_thresholds = getattr(thresholds, "robustness", None)
     stages_payload = metrics.get("stages") if isinstance(metrics, Mapping) else None
     reception_stage = (
@@ -2461,6 +2578,14 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         microsectors=microsectors,
         thresholds=robustness_thresholds,
     )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Computed session robustness",
+            extra={
+                "has_metrics": bool(robustness_metrics),
+                "lap_indices": len(lap_indices or ()),
+            },
+        )
     if robustness_metrics and session_payload is not None:
         session_mapping = dict(session_payload)
         session_metrics_block = session_mapping.get("metrics")
@@ -2513,6 +2638,15 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         payload["tnfr_targets"] = _serialise_pack_payload(tnfr_targets)
     if phase_templates:
         payload["phase_templates"] = phase_templates
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Analyze workflow completed",
+            extra={
+                "duration": monotonic() - workflow_started,
+                "phase_message_count": len(phase_messages),
+                "report_count": len(reports),
+            },
+        )
     return render_payload(payload, resolve_exports(namespace))
 
 
@@ -2779,6 +2913,16 @@ def _compute_insights(
     engine: Optional[RecommendationEngine] = None,
     profile_manager: Optional[ProfileManager] = None,
 ) -> Tuple[Bundles, Sequence[Microsector], ThresholdProfile, Optional[ProfileSnapshot]]:
+    started = monotonic()
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Computing insights",
+            extra={
+                "car_model": car_model,
+                "track_name": track_name,
+                "record_count": len(records),
+            },
+        )
     engine = engine or RecommendationEngine(
         car_model=car_model,
         track_name=track_name,
@@ -2795,10 +2939,28 @@ def _compute_insights(
     else:
         profile = base_profile
     if not records:
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "No records provided; returning empty insights",
+                extra={
+                    "car_model": car_model,
+                    "track_name": track_name,
+                    "duration": monotonic() - started,
+                },
+            )
         return [], [], profile, snapshot
     extractor = EPIExtractor()
     bundles = extractor.extract(records)
     if not bundles:
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "EPI extraction returned no bundles",
+                extra={
+                    "car_model": car_model,
+                    "track_name": track_name,
+                    "duration": monotonic() - started,
+                },
+            )
         return bundles, [], profile, snapshot
     overrides = (
         snapshot.phase_weights if snapshot is not None else profile.phase_weights
@@ -2808,6 +2970,17 @@ def _compute_insights(
         bundles,
         phase_weight_overrides=overrides if overrides else None,
     )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Insight computation complete",
+            extra={
+                "car_model": car_model,
+                "track_name": track_name,
+                "bundle_count": len(bundles),
+                "microsector_count": len(microsectors),
+                "duration": monotonic() - started,
+            },
+        )
     return bundles, microsectors, profile, snapshot
 
 
