@@ -24,14 +24,14 @@ def test_html_exporter_renders_key_sections() -> None:
             "track_profile": "BL1",
             "session": "Stint 1",
             "abtest": abtest,
-            "playbook_suggestions": ["Ajusta presiones delanteras"],
+            "playbook_suggestions": ["Adjust front pressures"],
         },
-        "session_messages": ["Sesión evaluada correctamente."],
+        "session_messages": ["Session evaluated correctly."],
         "delta_nfr": -1.2,
         "sense_index": 0.88,
         "microsector_variability": [
             {
-                "label": "Curva 1",
+                "label": "Turn 1",
                 "overall": {
                     "samples": 5,
                     "delta_nfr": {"stdev": 0.12},

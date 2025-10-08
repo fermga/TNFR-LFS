@@ -117,13 +117,13 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
                 parameter="brake_bias_pct",
                 delta=2.0,
                 rationale="Rebalance braking support on entry",
-                expected_effect="+2.0% bias delante",
+                expected_effect="Shift brake bias forward by 2.0%",
             ),
             SetupChange(
                 parameter="front_arb_steps",
                 delta=-1.0,
                 rationale="Tighten rotation through apex",
-                expected_effect="-1 pasos barra delantera",
+                expected_effect="Reduce front anti-roll bar by 1 step",
             ),
         ),
         rationales=("Telemetry indicates oscillations during entry phases",),
@@ -142,18 +142,18 @@ def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
         },
         clamped_parameters=("front_arb_steps",),
         tnfr_rationale_by_node={
-            "tyres": ("Ajustar presiones para estabilizar la ventana de agarre",),
-            "suspension": ("Elevar soporte lateral en fases medias",),
+            "tyres": ("Adjust pressures to stabilise the grip window",),
+            "suspension": ("Increase lateral support through mid phases",),
         },
         tnfr_rationale_by_phase={
-            "entry": ("Reducir transferencia hacia el eje delantero",),
-            "exit": ("Aumentar tracción en salida prolongada",),
+            "entry": ("Reduce load transfer towards the front axle",),
+            "exit": ("Increase traction during extended exits",),
         },
         expected_effects_by_node={
-            "tyres": ("Mayor estabilidad térmica",),
+            "tyres": ("Improved thermal stability",),
         },
         expected_effects_by_phase={
-            "entry": ("Frenadas más consistentes",),
+            "entry": ("More consistent braking",),
         },
         phase_axis_targets={
             "entry": {"longitudinal": 0.4, "lateral": 0.1},
@@ -223,34 +223,34 @@ def test_markdown_exporter_renders_abtest_section() -> None:
         "session": {"abtest": abtest},
     }
     rendered = markdown_exporter(payload)
-    assert "Comparación A/B" in rendered
+    assert "A/B comparison" in rendered
     assert "sense_index" in rendered
-    assert "Potencia" in rendered
+    assert "Power" in rendered
 
 
 def test_markdown_exporter_renders_table_and_lists():
     plan = build_setup_plan()
     output = markdown_exporter({"setup_plan": plan})
-    assert "| Cambio | Ajuste | Racional |" in output
+    assert "| Change | Adjustment | Rationale |" in output
     assert "brake_bias_pct" in output
     assert "Telemetry indicates oscillations" in output
     assert "**dSi/dparam**" in output
     assert "**d∫|ΔNFR|/dparam**" in output
-    assert "**Gradientes de ∫|ΔNFR| por fase**" in output
-    assert "**Racionales TNFR por nodo**" in output
-    assert "**Efectos esperados por fase**" in output
-    assert "**Objetivos proyección ∇NFR∥/∇NFR⊥ por fase**" in output
-    assert "**Mapa proyección ∇NFR∥/∇NFR⊥ por fase**" in output
+    assert "**∫|ΔNFR| gradients per phase**" in output
+    assert "**TNFR rationales per node**" in output
+    assert "**Expected effects per phase**" in output
+    assert "**∇NFR∥/∇NFR⊥ projection targets per phase**" in output
+    assert "**∇NFR∥/∇NFR⊥ projection map per phase**" in output
     assert "Entry ∥" in output
-    assert "**Sugerencias de fases prioritarias**" in output
+    assert "**Priority phase suggestions**" in output
     assert "C(c/d/a)" in output
-    assert "**Contribución SCI**" in output
+    assert "**SCI contribution**" in output
 
 
 def test_lfs_notes_exporter_renders_key_instructions():
     plan = build_setup_plan()
     output = lfs_notes_exporter({"setup_plan": plan})
-    assert "Instrucciones rápidas TNFR" in output
+    assert "Quick TNFR notes" in output
 
 
 def test_html_exporter_renders_extended_sections() -> None:
@@ -300,17 +300,17 @@ def test_html_exporter_renders_extended_sections() -> None:
             "pareto": [
                 {"score": 0.77, "breakdown": {"delta_nfr": 0.28, "sense_index": 0.22}}
             ],
-            "playbook_suggestions": ["Priorizar apex medio"],
+            "playbook_suggestions": ["Prioritise mid-apex"],
         },
-        "session_messages": ("Sesión con viento lateral",),
+        "session_messages": ("Session affected by crosswinds",),
     }
     html = html_exporter(payload)
     assert "Global metrics" in html
     assert "Robustness" in html
     assert "Pareto Front" in html
     assert "A/B comparison" in html
-    assert "Priorizar apex medio" in html
-    assert "Sesión con viento lateral" in html
+    assert "Prioritise mid-apex" in html
+    assert "Session affected by crosswinds" in html
 
 
 def test_html_exporter_handles_missing_optional_sections() -> None:
@@ -450,5 +450,5 @@ def test_quickstart_reports_include_new_metrics(monkeypatch: pytest.MonkeyPatch)
     assert "useful_magnitude" in dissonance
 
     summary = summary_path.read_text(encoding="utf8")
-    assert "Disonancia útil" in summary
-    assert "Acoplamientos" in summary
+    assert "Useful dissonance" in summary
+    assert "Coupling metrics" in summary

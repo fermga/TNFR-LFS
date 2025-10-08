@@ -132,7 +132,7 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     session_messages, abtest_payload = _resolve_session_messages(
         results if isinstance(results, Mapping) else None
     )
-    header = "| Cambio | Ajuste | Racional | Efecto esperado |"
+    header = "| Change | Adjustment | Rationale | Expected effect |"
     separator = "| --- | --- | --- | --- |"
     lines = [header, separator]
 
@@ -150,13 +150,13 @@ def markdown_exporter(results: Dict[str, Any] | SetupPlan) -> str:
     rationales = [item for item in plan.get("rationales", []) if item]
     if rationales:
         lines.append("")
-        lines.append("**Racionales**")
+        lines.append("**Rationales**")
         lines.extend(f"- {item}" for item in rationales)
 
     expected_effects = [item for item in plan.get("expected_effects", []) if item]
     if expected_effects:
         lines.append("")
-        lines.append("**Efectos esperados**")
+        lines.append("**Expected effects**")
         lines.extend(f"- {item}" for item in expected_effects)
 
     def _fmt(value: Any, *, signed: bool = False, decimals: int = 4) -> str:
