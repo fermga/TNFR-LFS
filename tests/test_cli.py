@@ -53,7 +53,14 @@ def test_run_cli_dispatches_registered_handler(monkeypatch: pytest.MonkeyPatch) 
     result = run_cli(["dummy"])
 
     assert result == "dummy-result"
-    assert calls == [("dummy", {})]
+    assert len(calls) == 1
+    command, config = calls[0]
+    assert command == "dummy"
+    assert config.get("logging") == {
+        "level": "info",
+        "output": "stderr",
+        "format": "json",
+    }
 
 
 def test_run_cli_requires_telemetry_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -93,7 +100,7 @@ def test_baseline_simulation_jsonl(
     lines = [line for line in baseline_path.read_text(encoding="utf8").splitlines() if line.strip()]
     assert len(lines) == 17
     assert "Baseline saved" in result
-    assert str(baseline_path) in captured.out
+    assert str(baseline_path) in captured.err
 
 
 def test_baseline_generates_timestamped_run(
@@ -115,7 +122,7 @@ def test_baseline_generates_timestamped_run(
     run_path = runs[0]
     assert re.match(r"xfg_generic_\d{8}_\d{6}_\d{6}\.jsonl$", run_path.name)
     assert "Baseline saved" in result
-    assert str(run_path.relative_to(tmp_path)) in captured.out
+    assert str(run_path.relative_to(tmp_path)) in captured.err
 
 
 def test_baseline_simulation_accepts_optional_flags(
@@ -152,7 +159,7 @@ def test_baseline_simulation_accepts_optional_flags(
     lines = [line for line in destination.read_text(encoding="utf8").splitlines() if line.strip()]
     assert len(lines) == 5
     assert "Baseline saved" in result
-    assert str(destination.relative_to(tmp_path)) in captured.out
+    assert str(destination.relative_to(tmp_path)) in captured.err
 
 
 def test_baseline_overlay_uses_keepalive_and_overlay(

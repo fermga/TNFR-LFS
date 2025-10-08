@@ -35,6 +35,24 @@ normalises the signal names to the canonical TNFR × LFS layout (`wheel_load_fl`
 maps the G-based accelerations/drift angle into SI units before generating telemetry
 records.【F:tnfr_lfs/io/replay_csv_bundle.py†L92-L213】
 
+## Logging
+
+All CLI subcommands emit structured log entries through the standard
+library logger. By default the CLI renders each message as a single JSON
+object written to **stderr** at the `info` level. Control the verbosity
+and destination via the top-level flags:
+
+* `--log-level` – accepts standard logging levels (`debug`, `info`,
+  `warning`, `error`, …).
+* `--log-output` – choose between `stderr`, `stdout` or a filesystem path
+  to append newline-delimited logs.
+* `--log-format` – select `json` (default) or `text` for a human-readable
+  formatter.
+
+The same options can be persisted inside `tnfr-lfs.toml` under
+`[logging]`. See the updated template at the project root for an example
+with sane defaults.
+
 ## Subcommands
 
 The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into eight subcommands:

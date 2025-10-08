@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
+
+from ..utils.logging import setup_logging
 
 from . import common as _common_module
 from . import io as _cli_io_module
@@ -87,15 +90,50 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
         default=None,
         help="Root directory of a TNFR × LFS pack overriding paths.pack_root.",
     )
+    config_parser.add_argument(
+        "--log-level",
+        dest="log_level",
+        default=None,
+        help="Logging level (default: info).",
+    )
+    config_parser.add_argument(
+        "--log-output",
+        dest="log_output",
+        default=None,
+        help="Logging destination (stdout, stderr or a file path).",
+    )
+    config_parser.add_argument(
+        "--log-format",
+        dest="log_format",
+        choices=("json", "text"),
+        default=None,
+        help="Logging formatter (json or text).",
+    )
     preliminary, remaining = config_parser.parse_known_args(args)
     remaining = list(remaining)
     if preliminary.pack_root is not None:
         remaining = ["--pack-root", str(preliminary.pack_root)] + remaining
 
     config = load_cli_config(preliminary.config_path)
+    logging_config = dict(config.get("logging", {}))
+    if preliminary.log_level is not None:
+        logging_config["level"] = preliminary.log_level
+    if preliminary.log_output is not None:
+        logging_config["output"] = preliminary.log_output
+    if preliminary.log_format is not None:
+        logging_config["format"] = preliminary.log_format
+    logging_config.setdefault("level", "info")
+    logging_config.setdefault("output", "stderr")
+    logging_config.setdefault("format", "json")
+    config["logging"] = logging_config
+    setup_logging(config)
+
     parser = build_parser(config)
     parser.set_defaults(config_path=preliminary.config_path)
-    namespace = parser.parse_args(remaining)
+    parser.set_defaults(log_level=logging_config.get("level"))
+    parser.set_defaults(log_output=logging_config.get("output"))
+    parser.set_defaults(log_format=logging_config.get("format"))
+    namespace = parser.parse_args(remaining, namespace=preliminary)
     namespace.config = config
     namespace.config_path = (
         getattr(namespace, "config_path", None)
@@ -114,7 +152,11 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
 
 
 def main() -> None:  # pragma: no cover - thin wrapper
-    run_cli()
+    result = run_cli()
+    if result:
+        sys.stdout.write(result)
+        if not result.endswith("\n"):
+            sys.stdout.write("\n")
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI invocation guard
