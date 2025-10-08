@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 import inspect
 import sys
@@ -92,7 +92,7 @@ _module = sys.modules[__name__]
 _module.__class__ = _CLIModule
 _initialise_proxy_bindings(_module)
 
-def run_cli(args: Sequence[str] | None = None) -> str:
+def run_cli(args: Optional[Sequence[str]] = None) -> str:
     """Execute the TNFR × LFS command line interface."""
 
     config_parser = argparse.ArgumentParser(add_help=False)

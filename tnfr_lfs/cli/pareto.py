@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from ..recommender import pareto_front, sweep_candidates
 
@@ -78,8 +78,8 @@ def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
         context.plan.decision_vector or space.initial_guess()
     )
 
-    session_weights: Mapping[str, Mapping[str, float]] | None = None
-    session_hints: Mapping[str, object] | None = None
+    session_weights: Optional[Mapping[str, Mapping[str, float]]] = None
+    session_hints: Optional[Mapping[str, object]] = None
     if isinstance(context.session_payload, Mapping):
         weights_candidate = context.session_payload.get("weights")
         if isinstance(weights_candidate, Mapping):
@@ -103,7 +103,7 @@ def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     front = pareto_front(candidates)
     pareto_payload = [dict(point.as_dict()) for point in front]
 
-    session_section: Mapping[str, Any] | None = payload.get("session")  # type: ignore[assignment]
+    session_section: Optional[Mapping[str, Any]] = payload.get("session")  # type: ignore[assignment]
     if isinstance(session_section, Mapping):
         updated_session = dict(session_section)
     elif isinstance(context.session_payload, Mapping):

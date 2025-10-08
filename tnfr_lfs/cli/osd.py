@@ -6,7 +6,7 @@ import math
 from collections import deque
 from dataclasses import dataclass
 from time import monotonic, sleep
-from typing import Any, Deque, Dict, List, Mapping, MutableMapping, Sequence, Tuple
+from typing import Any, Deque, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 from ..acquisition import (
     ButtonEvent,
@@ -97,14 +97,14 @@ class ActivePhase:
 
     microsector: Microsector
     phase: str
-    goal: Goal | None
+    goal: Optional[Goal]
 
 
 @dataclass(frozen=True)
 class MacroStatus:
     """State exposed in the “Aplicar” HUD page."""
 
-    next_change: SetupChange | None = None
+    next_change: Optional[SetupChange] = None
     warnings: Tuple[str, ...] = ()
     queue_size: int = 0
 
@@ -112,7 +112,7 @@ class MacroStatus:
 class HUDPager:
     """Track the active HUD page and react to button clicks."""
 
-    def __init__(self, pages: Sequence[str] | None = None) -> None:
+    def __init__(self, pages: Optional[Sequence[str]] = None) -> None:
         self._pages: Tuple[str, ...] = tuple(pages or ())
         if not self._pages:
             self._pages = (
@@ -146,7 +146,7 @@ class HUDPager:
             return
         self._index = (self._index + 1) % len(self._pages)
 
-    def handle_event(self, event: ButtonEvent | None, layout: ButtonLayout) -> bool:
+    def handle_event(self, event: Optional[ButtonEvent], layout: ButtonLayout) -> bool:
         if event is None:
             return False
         if event.type_in != 0:
@@ -166,12 +166,12 @@ class TelemetryHUD:
         window: int = 256,
         car_model: str = "XFG",
         track_name: str = "generic",
-        extractor: EPIExtractor | None = None,
-        recommendation_engine: RecommendationEngine | None = None,
-        setup_planner: SetupPlanner | None = None,
+        extractor: Optional[EPIExtractor] = None,
+        recommendation_engine: Optional[RecommendationEngine] = None,
+        setup_planner: Optional[SetupPlanner] = None,
         plan_interval: float = DEFAULT_PLAN_INTERVAL,
         time_fn=monotonic,
-        session: Mapping[str, Any] | None = None,
+        session: Optional[Mapping[str, Any]] = None,
     ) -> None:
         self._records: Deque[TelemetryRecord] = deque(maxlen=max(8, int(window)))
         self.extractor = extractor or EPIExtractor()
@@ -207,7 +207,7 @@ class TelemetryHUD:
         self._plan_interval = max(0.0, float(plan_interval))
         self._time_fn = time_fn
         self._last_plan_time = -math.inf
-        self._cached_plan: SetupPlan | None = None
+        self._cached_plan: Optional[SetupPlan] = None
         self._macro_status = MacroStatus()
         self._session_messages: Tuple[str, ...] = tuple(format_session_messages(session))
         context = self.recommendation_engine._resolve_context(  # type: ignore[attr-defined]
@@ -218,7 +218,7 @@ class TelemetryHUD:
         self._profile_objectives: RuleProfileObjectives = context.objectives
         self._session_hints: Mapping[str, object] = context.session_hints
         self._lap_integrals: Tuple[float, ...] = ()
-        self._integral_cov: float | None = None
+        self._integral_cov: Optional[float] = None
         self._integral_cov_lap_count: int = 0
 
     def append(self, record: TelemetryRecord) -> None:
@@ -230,7 +230,7 @@ class TelemetryHUD:
             self._recompute()
         return self._pages
 
-    def plan(self) -> SetupPlan | None:
+    def plan(self) -> Optional[SetupPlan]:
         if self._dirty:
             self._recompute()
         return self._cached_plan
@@ -354,7 +354,7 @@ class TelemetryHUD:
             self._sense_state = {"series": series, "memory": memory, "average": average}
         else:
             self._sense_state = {"series": (), "memory": (), "average": 0.0}
-        phase_indices: Sequence[int] | None = None
+        phase_indices: Optional[Sequence[int]] = None
         if active:
             phase_indices = active.microsector.phase_samples.get(active.phase)
         window_metrics = compute_window_metrics(
@@ -484,7 +484,7 @@ class TelemetryHUD:
 
 def _resolve_active_phase(
     microsectors: Sequence[Microsector], sample_index: int
-) -> ActivePhase | None:
+) -> Optional[ActivePhase]:
     for microsector in reversed(microsectors):
         for phase in PHASE_SEQUENCE:
             bounds = microsector.phase_boundaries.get(phase)
@@ -498,19 +498,19 @@ def _resolve_active_phase(
 
 
 def _render_page_a(
-    active: ActivePhase | None,
+    active: Optional[ActivePhase],
     bundle,
     tolerance: float,
     window_metrics: WindowMetrics,
-    bundles: Sequence[object] | None = None,
+    bundles: Optional[Sequence[object]] = None,
     *,
-    coherence_series: Sequence[float] | None = None,
-    coherence_index: float | None = None,
+    coherence_series: Optional[Sequence[float]] = None,
+    coherence_index: Optional[float] = None,
     frequency_classification: str = "",
-    sense_state: Mapping[str, object] | None = None,
-    quiet_sequences: Sequence[Sequence[int]] | None = None,
-    hud_thresholds: Mapping[str, float] | None = None,
-    integral_cov: float | None = None,
+    sense_state: Optional[Mapping[str, object]] = None,
+    quiet_sequences: Optional[Sequence[Sequence[int]]] = None,
+    hud_thresholds: Optional[Mapping[str, float]] = None,
+    integral_cov: Optional[float] = None,
     integral_lap_count: int = 0,
 ) -> str:
     coherence_value = (
@@ -622,7 +622,7 @@ def _render_page_a(
         lines.append(sigma_line)
     if sense_line:
         lines.append(sense_line)
-    quiet_line: str | None = None
+    quiet_line: Optional[str] = None
     quiet_line_added = False
     if quiet_sequences and active is not None:
         quiet_line = _quiet_notice_line(active.microsector, quiet_sequences)
@@ -789,7 +789,7 @@ def _format_mu_balance_segments(
 
 
 def _resolve_mu_symmetry(
-    symmetry_map: Mapping[str, Mapping[str, float]] | None,
+    symmetry_map: Optional[Mapping[str, Mapping[str, float]]],
 ) -> Tuple[float, float]:
     if not isinstance(symmetry_map, Mapping):
         return 0.0, 0.0
@@ -866,7 +866,7 @@ def _format_aero_drift_mu_segments(
     return segments
 
 
-def _aero_drift_line(aero_drift: AeroBalanceDrift | None) -> str | None:
+def _aero_drift_line(aero_drift: Optional[AeroBalanceDrift]) -> Optional[str]:
     if not isinstance(aero_drift, AeroBalanceDrift):
         return None
     candidate = aero_drift.dominant_bin()
@@ -928,7 +928,7 @@ def _coupling_alert_line(
     *,
     longitudinal_delta: float,
     tolerance: float,
-) -> str | None:
+) -> Optional[str]:
     try:
         brake_corr = float(
             getattr(window_metrics, "brake_longitudinal_correlation", 0.0)
@@ -974,7 +974,7 @@ def _coupling_alert_line(
     return _truncate_line(payload)
 
 
-def _motor_latency_line(window_metrics: WindowMetrics) -> str | None:
+def _motor_latency_line(window_metrics: WindowMetrics) -> Optional[str]:
     global_latency = float(getattr(window_metrics, "motor_latency_ms", 0.0))
     if not math.isfinite(global_latency):
         global_latency = 0.0
@@ -1001,7 +1001,7 @@ def _motor_latency_line(window_metrics: WindowMetrics) -> str | None:
     return _truncate_line(" · ".join(segments))
 
 
-def _cphi_health_line(report: CPHIReport) -> str | None:
+def _cphi_health_line(report: CPHIReport) -> Optional[str]:
     if not isinstance(report, CPHIReport):
         return None
     segments: List[str] = []
@@ -1040,7 +1040,7 @@ def _format_dispersion_line(
     prefix: str,
     mean_format: str,
     std_format: str,
-) -> str | None:
+) -> Optional[str]:
     segments: List[str] = []
     for suffix in WHEEL_SUFFIXES:
         mean_key = mean_keys.get(suffix)
@@ -1111,7 +1111,7 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     return tuple(lines)
 
 
-def _brake_headroom_line(headroom: BrakeHeadroom | None) -> str | None:
+def _brake_headroom_line(headroom: Optional[BrakeHeadroom]) -> Optional[str]:
     if not isinstance(headroom, BrakeHeadroom):
         return None
     temperature_available = getattr(headroom, "temperature_available", True)
@@ -1171,7 +1171,7 @@ def _brake_headroom_line(headroom: BrakeHeadroom | None) -> str | None:
 
 def _phase_sparkline(
     microsector: Microsector,
-    bundles: Sequence[object] | None,
+    bundles: Optional[Sequence[object]],
     attribute: str,
 ) -> str:
     if not bundles:
@@ -1248,7 +1248,7 @@ def _series_sparkline(values: Sequence[float], width: int = 12) -> str:
 
 
 def _nu_wave_line(
-    bundles: Sequence[object] | None, width: int = 12
+    bundles: Optional[Sequence[object]], width: int = 12
 ) -> str:
     if not bundles:
         return ""
@@ -1266,8 +1266,8 @@ def _nu_wave_line(
 
 def _coherence_meter_line(
     value: float,
-    series: Sequence[float] | None,
-    classification: str | None = None,
+    series: Optional[Sequence[float]],
+    classification: Optional[str] = None,
 ) -> str:
     reference = value
     if series:
@@ -1278,7 +1278,7 @@ def _coherence_meter_line(
 
 
 def _sense_state_line(
-    sense_state: Mapping[str, object] | None,
+    sense_state: Optional[Mapping[str, object]],
     *,
     prefix: str = "Si↺",
     width: int = 12,
@@ -1301,7 +1301,7 @@ def _sense_state_line(
     return _truncate_line(f"{prefix}{spark} μ {avg_value:.2f}")
 
 
-def _brake_event_meter(microsector: Microsector) -> str | None:
+def _brake_event_meter(microsector: Microsector) -> Optional[str]:
     events = getattr(microsector, "operator_events", {}) or {}
     silence_payloads = events.get("SILENCIO", ())
     micro_duration = _safe_float(getattr(microsector, "end_time", 0.0)) - _safe_float(
@@ -1365,7 +1365,7 @@ def _brake_event_meter(microsector: Microsector) -> str | None:
     return _ensure_limit("ΔNFR frenada ⚠️ " + " · ".join(segments))
 
 
-def _silence_event_meter(microsector: Microsector) -> str | None:
+def _silence_event_meter(microsector: Microsector) -> Optional[str]:
     events = getattr(microsector, "operator_events", {}) or {}
     payloads = [
         payload
@@ -1411,7 +1411,7 @@ def _format_quiet_descriptor(sequence: Sequence[int]) -> str:
 
 def _quiet_notice_line(
     microsector: Microsector, sequences: Sequence[Sequence[int]]
-) -> str | None:
+) -> Optional[str]:
     index = getattr(microsector, "index", -1)
     for sequence in sequences:
         if index not in sequence:
@@ -1427,7 +1427,7 @@ def _quiet_notice_line(
 
 def _quiet_summary_line(
     microsectors: Sequence[Microsector], sequences: Sequence[Sequence[int]]
-) -> str | None:
+) -> Optional[str]:
     if not sequences:
         return None
     descriptors: List[str] = []
@@ -1462,10 +1462,10 @@ def _quiet_summary_line(
 def _render_page_b(
     bundle,
     resonance: Mapping[str, ModalAnalysis],
-    bundles: Sequence[object] | None = None,
-    coherence_series: Sequence[float] | None = None,
+    bundles: Optional[Sequence[object]] = None,
+    coherence_series: Optional[Sequence[float]] = None,
     frequency_classification: str = "",
-    coherence_index: float | None = None,
+    coherence_index: Optional[float] = None,
 ) -> str:
     node_values = _nodal_delta_map(bundle)
     lines: List[str] = []
@@ -1549,7 +1549,7 @@ def _format_sensitivities(derivatives: Mapping[str, float], limit: int = 3) -> s
     return " · ".join(parts)
 
 
-def _safe_float(value: object, default: float | None = None) -> float | None:
+def _safe_float(value: object, default: Optional[float] = None) -> Optional[float]:
     try:
         numeric = float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
@@ -1559,7 +1559,7 @@ def _safe_float(value: object, default: float | None = None) -> float | None:
     return numeric
 
 
-def _hint_float(hints: Mapping[str, object] | None, key: str, default: float) -> float:
+def _hint_float(hints: Optional[Mapping[str, object]], key: str, default: float) -> float:
     if not isinstance(hints, Mapping):
         return default
     candidate = hints.get(key)
@@ -1570,7 +1570,7 @@ def _hint_float(hints: Mapping[str, object] | None, key: str, default: float) ->
 
 
 def _hud_threshold_value(
-    thresholds: Mapping[str, float] | None, key: str, default: float
+    thresholds: Optional[Mapping[str, float]], key: str, default: float
 ) -> float:
     if not isinstance(thresholds, Mapping):
         return default
@@ -1585,9 +1585,9 @@ def _hud_threshold_value(
 
 
 def _sense_average(
-    sense_state: Mapping[str, object] | None,
-    bundles: Sequence[object] | None,
-) -> float | None:
+    sense_state: Optional[Mapping[str, object]],
+    bundles: Optional[Sequence[object]],
+) -> Optional[float]:
     if isinstance(sense_state, Mapping):
         average = _safe_float(sense_state.get("average"))
         if average is not None:
@@ -1603,7 +1603,7 @@ def _sense_average(
     return None
 
 
-def _delta_density(bundles: Sequence[object] | None) -> float | None:
+def _delta_density(bundles: Optional[Sequence[object]]) -> Optional[float]:
     if not bundles:
         return None
     series: list[tuple[float, float]] = []
@@ -1635,8 +1635,8 @@ def _delta_density(bundles: Sequence[object] | None) -> float | None:
 
 
 def _entropy_indicator_line(
-    window_metrics: WindowMetrics, thresholds: Mapping[str, float] | None
-) -> str | None:
+    window_metrics: WindowMetrics, thresholds: Optional[Mapping[str, float]]
+) -> Optional[str]:
     delta_entropy = _safe_float(getattr(window_metrics, "delta_nfr_entropy", None))
     node_entropy = _safe_float(getattr(window_metrics, "node_entropy", None))
     if delta_entropy is None or node_entropy is None:
@@ -1717,10 +1717,10 @@ def _lap_integral_series(
 
 
 def _integral_cov_line(
-    cov_value: float | None,
+    cov_value: Optional[float],
     lap_count: int,
-    thresholds: Mapping[str, float] | None,
-) -> str | None:
+    thresholds: Optional[Mapping[str, float]],
+) -> Optional[str]:
     if cov_value is None:
         return None
     green_limit = _hud_threshold_value(thresholds, "integral_cov_green", 0.25)
@@ -1767,13 +1767,13 @@ def _format_value(value: float) -> str:
 
 
 def _operational_checklist_line(
-    bundles: Sequence[object] | None,
-    window_metrics: WindowMetrics | None,
-    objectives: RuleProfileObjectives | None,
-    session_hints: Mapping[str, object] | None,
+    bundles: Optional[Sequence[object]],
+    window_metrics: Optional[WindowMetrics],
+    objectives: Optional[RuleProfileObjectives],
+    session_hints: Optional[Mapping[str, object]],
     *,
-    sense_state: Mapping[str, object] | None = None,
-) -> str | None:
+    sense_state: Optional[Mapping[str, object]] = None,
+) -> Optional[str]:
     entries: list[str] = []
 
     sense_target = _safe_float(getattr(objectives, "target_sense_index", None), 0.75)
@@ -1823,19 +1823,19 @@ def _operational_checklist_line(
 
 
 def _render_page_c(
-    phase_hint: str | None,
-    plan: SetupPlan | None,
+    phase_hint: Optional[str],
+    plan: Optional[SetupPlan],
     thresholds: ThresholdProfile,
-    active: ActivePhase | None,
+    active: Optional[ActivePhase],
     *,
-    sense_state: Mapping[str, object] | None = None,
-    microsectors: Sequence[Microsector] | None = None,
-    quiet_sequences: Sequence[Sequence[int]] | None = None,
-    session_messages: Sequence[str] | None = None,
-    window_metrics: WindowMetrics | None = None,
-    objectives: RuleProfileObjectives | None = None,
-    session_hints: Mapping[str, object] | None = None,
-    bundles: Sequence[object] | None = None,
+    sense_state: Optional[Mapping[str, object]] = None,
+    microsectors: Optional[Sequence[Microsector]] = None,
+    quiet_sequences: Optional[Sequence[Sequence[int]]] = None,
+    session_messages: Optional[Sequence[str]] = None,
+    window_metrics: Optional[WindowMetrics] = None,
+    objectives: Optional[RuleProfileObjectives] = None,
+    session_hints: Optional[Mapping[str, object]] = None,
+    bundles: Optional[Sequence[object]] = None,
 ) -> str:
     lines: List[str] = []
     sense_line = _sense_state_line(sense_state, prefix="Si plan ")
@@ -2026,8 +2026,10 @@ def _bar_for_value(value: float, max_value: float, width: int = 10) -> str:
     return "#" * filled + "." * (width - filled)
 
 
-def _dominant_peak(resonance: Mapping[str, ModalAnalysis]) -> Tuple[str, ModalPeak] | None:
-    best: Tuple[str, ModalPeak] | None = None
+def _dominant_peak(
+    resonance: Mapping[str, ModalAnalysis]
+) -> Optional[Tuple[str, ModalPeak]]:
+    best: Optional[Tuple[str, ModalPeak]] = None
     for axis, analysis in resonance.items():
         for peak in analysis.peaks:
             if best is None or peak.energy > best[1].energy:
@@ -2069,9 +2071,9 @@ class OSDController:
         update_rate: float = DEFAULT_UPDATE_RATE,
         car_model: str = "XFG",
         track_name: str = "generic",
-        layout: ButtonLayout | None = None,
-        fusion: TelemetryFusion | None = None,
-        hud: TelemetryHUD | None = None,
+        layout: Optional[ButtonLayout] = None,
+        fusion: Optional[TelemetryFusion] = None,
+        hud: Optional[TelemetryHUD] = None,
     ) -> None:
         self.host = host
         self.outsim_port = outsim_port
@@ -2088,7 +2090,7 @@ class OSDController:
         )
         self._pager = HUDPager(self.hud.pages())
         self._idle_backoff = 0.01
-        self._macro_queue: MacroQueue | None = None
+        self._macro_queue: Optional[MacroQueue] = None
         self._menu_open = False
         self._menu_open_last_seen = 0.0
         self._car_stopped = True
@@ -2099,10 +2101,10 @@ class OSDController:
     STOPPED_SPEED_THRESHOLD = 1.0
 
     def run(self) -> str:
-        outsim: OutSimUDPClient | None = None
-        outgauge: OutGaugeUDPClient | None = None
-        insim: InSimClient | None = None
-        overlay: OverlayManager | None = None
+        outsim: Optional[OutSimUDPClient] = None
+        outgauge: Optional[OutGaugeUDPClient] = None
+        insim: Optional[InSimClient] = None
+        overlay: Optional[OverlayManager] = None
         last_render = 0.0
         try:
             outsim = OutSimUDPClient(host=self.host, port=self.outsim_port)
@@ -2164,7 +2166,7 @@ class OSDController:
             self._menu_open_last_seen = monotonic()
         self._refresh_macro_status()
 
-    def _handle_button_event(self, event: ButtonEvent | None) -> None:
+    def _handle_button_event(self, event: Optional[ButtonEvent]) -> None:
         if event is None:
             return
         if event.type_in != 0:
@@ -2224,7 +2226,7 @@ class OSDController:
         sequence.append("F12")
         return sequence
 
-    def _resolve_next_change(self) -> SetupChange | None:
+    def _resolve_next_change(self) -> Optional[SetupChange]:
         plan = self.hud.plan()
         if not plan or not plan.changes:
             self._next_change_index = 0
@@ -2240,7 +2242,7 @@ class OSDController:
             self._next_change_index = 0
         return plan.changes[self._next_change_index]
 
-    def _macro_preflight_warnings(self, next_change: SetupChange | None) -> List[str]:
+    def _macro_preflight_warnings(self, next_change: Optional[SetupChange]) -> List[str]:
         warnings: List[str] = []
         if next_change is None:
             warnings.append("Sin cambios pendientes")
@@ -2283,7 +2285,7 @@ def _build_setup_plan(
     plan,
     car_model: str,
     decision_space=None,
-    microsectors: Sequence[Microsector] | None = None,
+    microsectors: Optional[Sequence[Microsector]] = None,
 ) -> SetupPlan:
     action_recommendations = [
         rec
