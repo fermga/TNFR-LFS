@@ -31,13 +31,13 @@ Las aserciones de `tests/test_recommender.py` requieren traducir varios mensajes
 - `Transmission operator: smooth apex→exit shifts in microsector {index}` y `Transmission metrics highlight losses during the apex→exit transition: …` → _Objetivo_: mensajes y racionales que incluyan "transmisión" y describan la transición apex→salida en español. 【F:tests/test_recommender.py†L1607-L1641】【F:tnfr_lfs/recommender/rules.py†L3389-L3405】
 - `Stiffen compression` (varias ramas de `SuspensionVelocityRule`) → _Objetivo_: instrucciones con "compresión" para amortiguadores. 【F:tests/test_recommender.py†L2008-L2033】【F:tnfr_lfs/recommender/rules.py†L1085-L1097】
 
-**Checklist producción ↔ pruebas (pendiente de localización):**
-- [ ] `High-speed microsector {index}: increase rear wing angle` → `Microsector de alta velocidad {index}: aumenta alerón trasero`
-- [ ] `High-speed microsector {index}: reduce rear wing angle / reinforce front load` → `Microsector de alta velocidad {index}: reduce alerón trasero / refuerza carga delantera`
-- [ ] `High-speed microsector {index}: increase front wing angle` → `Microsector de alta velocidad {index}: aumenta alerón delantero`
-- [ ] `Transmission operator: smooth apex→exit shifts in microsector {index}` → `Operador de transmisión: suaviza los cambios apex→salida en el microsector {index}`
-- [ ] `Transmission metrics highlight losses during the apex→exit transition: …` → `Los indicadores de transmisión evidencian pérdidas durante la transición apex→salida: …`
-- [ ] `Stiffen compression` → `Refuerza compresión`
+**Checklist producción ↔ pruebas (localización completada):**
+- [x] `High-speed microsector {index}: increase rear wing angle` → `Microsector de alta velocidad {index}: aumenta alerón trasero`
+- [x] `High-speed microsector {index}: reduce rear wing angle / reinforce front load` → `Microsector de alta velocidad {index}: reduce alerón trasero / refuerza carga delantera`
+- [x] `High-speed microsector {index}: increase front wing angle` → `Microsector de alta velocidad {index}: aumenta alerón delantero`
+- [x] `Transmission operator: smooth apex→exit shifts in microsector {index}` → `Operador de transmisión: suaviza los cambios apex→salida en el microsector {index}`
+- [x] `Transmission metrics highlight losses during the apex→exit transition: …` → `Los indicadores de transmisión evidencian pérdidas durante la transición apex→salida: …`
+- [x] `Stiffen compression` → `Refuerza compresión`
 
 ## 5. Exportador HTML extendido y perfil de sesión
 - `html_exporter` aún utiliza encabezados en inglés como `"<h2>A/B comparison</h2>"`, `"<h2>Session profile</h2>"`, `"<h2>Playbook suggestions</h2>"` y `"<h2>Data sources and estimates</h2>"`. 【F:tnfr_lfs/exporters/report_extended.py†L250-L319】
