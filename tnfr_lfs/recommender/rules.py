@@ -1087,13 +1087,13 @@ class BottomingPriorityRule:
                 return spring_param, self.spring_delta, "Increase spring stiffness", "springs"
             if phase_category == "exit":
                 return ride_param, self.ride_height_delta, "Raise ride height", "ride_height"
-            return bump_param, self.bump_delta, "Stiffen compression", "dampers"
+            return bump_param, self.bump_delta, "Refuerza compresión", "dampers"
         if energy >= self.energy_compression_threshold:
             if phase_category == "entry":
-                return bump_param, self.bump_delta, "Stiffen compression", "dampers"
+                return bump_param, self.bump_delta, "Refuerza compresión", "dampers"
             return spring_param, self.spring_delta, "Increase spring stiffness", "springs"
         if is_rough or density >= self.density_bias:
-            return bump_param, self.bump_delta, "Stiffen compression", "dampers"
+            return bump_param, self.bump_delta, "Refuerza compresión", "dampers"
         return ride_param, self.ride_height_delta, "Raise ride height", "ride_height"
 
     def evaluate(
@@ -1467,21 +1467,23 @@ class AeroCoherenceRule:
 
             if high_deviation > 0:
                 delta = self.delta_step
-                action = "Increase rear wing angle"
-                direction = "rear"
+                action = "aumenta alerón trasero"
+                direction = "trasera"
             else:
                 delta = -self.delta_step
-                action = "Reduce rear wing angle / reinforce front load"
-                direction = "front"
+                action = "reduce alerón trasero / refuerza carga delantera"
+                direction = "delantera"
 
             recommendations.append(
                 Recommendation(
                     category="aero",
-                    message=f"High-speed microsector {microsector.index}: {action}",
+                    message=(
+                        f"Microsector de alta velocidad {microsector.index}: {action}"
+                    ),
                     rationale=(
-                        f"High-speed aero ΔNFR {high_imbalance:+.2f} versus target {target_high:+.2f} "
-                        f"with stable low-speed ({low_imbalance:+.2f}) and C(c/d/a) {am_coherence:.2f}. "
-                        f"Reinforce {direction} load "
+                        f"ΔNFR aerodinámico a alta velocidad {high_imbalance:+.2f} frente al objetivo "
+                        f"{target_high:+.2f} con baja velocidad estable ({low_imbalance:+.2f}) y "
+                        f"C(c/d/a) {am_coherence:.2f}. Refuerza la carga {direction} "
                         f"({MANUAL_REFERENCES['aero']})."
                     ),
                     priority=self.priority,
@@ -1552,16 +1554,16 @@ class FrontWingBalanceRule:
             long_rear = float(measures.get("aero_high_rear_longitudinal", 0.0))
 
             rationale = (
-                f"High-speed aero ΔNFR {high_imbalance:+.2f} versus target {target_high:+.2f} "
-                f"with C(c/d/a) {am_coherence:.2f}. Total F/R split {front_total:+.2f}/{rear_total:+.2f}. "
-                f"Axle lateral {lat_front:+.2f}/{lat_rear:+.2f}, longitudinal {long_front:+.2f}/{long_rear:+.2f}. "
-                f"Reinforce front load ({MANUAL_REFERENCES['aero']})."
+                f"ΔNFR aerodinámico a alta velocidad {high_imbalance:+.2f} frente al objetivo "
+                f"{target_high:+.2f} con C(c/d/a) {am_coherence:.2f}. Reparto F/R {front_total:+.2f}/{rear_total:+.2f}. "
+                f"Ejes lateral {lat_front:+.2f}/{lat_rear:+.2f}, longitudinal {long_front:+.2f}/{long_rear:+.2f}. "
+                f"Refuerza la carga delantera ({MANUAL_REFERENCES['aero']})."
             )
             recommendations.append(
                 Recommendation(
                     category="aero",
                     message=(
-                        f"High-speed microsector {microsector.index}: increase front wing angle"
+                        f"Microsector de alta velocidad {microsector.index}: aumenta alerón delantero"
                     ),
                     rationale=rationale,
                     priority=self.priority,
@@ -3389,19 +3391,21 @@ class ShiftStabilityRule:
             details: List[str] = []
             if stability_trigger:
                 details.append(
-                    f"stability {stability:.2f} < threshold {self.stability_threshold:.2f}"
+                    f"estabilidad {stability:.2f} < umbral {self.stability_threshold:.2f}"
                 )
             if gear_trigger:
                 details.append(
-                    f"gear match {gear_match:.2f} < threshold {self.gear_match_threshold:.2f}"
+                    f"sincronía de marcha {gear_match:.2f} < umbral {self.gear_match_threshold:.2f}"
                 )
             detail_text = ", ".join(details)
             message = (
-                f"Transmission operator: smooth apex→exit shifts in microsector {microsector.index}"
+                "Operador de transmisión: suaviza los cambios apex→salida en "
+                f"el microsector {microsector.index}"
             )
             rationale = (
-                "Transmission metrics highlight losses during the apex→exit transition: "
-                f"{detail_text}. Adjust final drive or gear ratios to reduce forced shifts "
+                "Los indicadores de transmisión evidencian pérdidas durante la transición "
+                f"apex→salida: {detail_text}. Ajusta el grupo final o las relaciones de marcha "
+                "para reducir cambios forzados "
                 f"({MANUAL_REFERENCES['differential']})."
             )
             recommendations.append(
