@@ -301,7 +301,7 @@ def acceptance_records() -> List[TelemetryRecord]:
                 suspension_travel_rear=0.018 + index * 0.001,
                 suspension_velocity_front=0.12 + index * 0.005,
                 suspension_velocity_rear=0.11 + index * 0.004,
-                lap="Validación",
+                lap="Validation",
             )
         )
     return payload
@@ -315,7 +315,7 @@ def acceptance_microsectors() -> List[Microsector]:
         Goal(
             phase="entry",
             archetype="hairpin",
-            description="Entrada controlada",
+            description="Extend braking to nail the hairpin with control.",
             target_delta_nfr=0.3,
             target_sense_index=0.7,
             nu_f_target=0.18,
@@ -333,7 +333,7 @@ def acceptance_microsectors() -> List[Microsector]:
         Goal(
             phase="apex",
             archetype="chicane",
-            description="Apoyo estable",
+            description="Maintain lightness to avoid saturating the second support.",
             target_delta_nfr=0.6,
             target_sense_index=0.8,
             nu_f_target=0.2,
@@ -351,7 +351,7 @@ def acceptance_microsectors() -> List[Microsector]:
         Goal(
             phase="exit",
             archetype="fast",
-            description="Tracción progresiva",
+            description="Project the exit while maintaining high pace.",
             target_delta_nfr=0.2,
             target_sense_index=0.75,
             nu_f_target=0.16,
