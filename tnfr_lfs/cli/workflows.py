@@ -922,8 +922,21 @@ def _resolve_profiles_path(
     return ProfilesContext(storage_path=storage, pack_profiles=pack_profiles)
 
 
+_CAR_MODEL_DEFAULT_SECTIONS: tuple[str, ...] = (
+    "analyze",
+    "suggest",
+    "write_set",
+    "report",
+    "compare",
+    "template",
+    "osd",
+    "baseline",
+    "pareto",
+)
+
+
 def _default_car_model(config: Mapping[str, Any]) -> str:
-    for section in ("analyze", "suggest", "write_set"):
+    for section in _CAR_MODEL_DEFAULT_SECTIONS:
         section_cfg = config.get(section)
         if isinstance(section_cfg, Mapping):
             candidate = section_cfg.get("car_model")
@@ -932,8 +945,18 @@ def _default_car_model(config: Mapping[str, Any]) -> str:
     return "XFG"
 
 
+_TRACK_DEFAULT_SECTIONS: tuple[str, ...] = (
+    "analyze",
+    "suggest",
+    "report",
+    "compare",
+    "template",
+    "osd",
+)
+
+
 def _default_track_name(config: Mapping[str, Any]) -> str:
-    for section in ("analyze", "suggest"):
+    for section in _TRACK_DEFAULT_SECTIONS:
         section_cfg = config.get(section)
         if isinstance(section_cfg, Mapping):
             candidate = section_cfg.get("track")

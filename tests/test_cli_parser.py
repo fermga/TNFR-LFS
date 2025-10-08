@@ -8,6 +8,7 @@ pytest.importorskip("numpy")
 
 from tnfr_lfs.cli.parser import build_parser
 from tnfr_lfs.cli import workflows
+from tnfr_lfs.cli import compare as compare_command
 
 
 @pytest.fixture()
@@ -51,4 +52,31 @@ def test_command_defaults(
 def test_write_set_default_export(parser: argparse.ArgumentParser) -> None:
     namespace = parser.parse_args(["write-set"])
     assert namespace.export_default == "markdown"
+
+
+@pytest.mark.parametrize(
+    "argv, handler",
+    [
+        (["report"], workflows._handle_report),
+        (
+            ["compare", "baseline.raf", "variant.raf"],
+            compare_command.handle,
+        ),
+    ],
+)
+def test_report_and_compare_inherit_report_defaults(
+    argv: list[str], handler: object
+) -> None:
+    config = {"report": {"car_model": "FXR", "track": "BL1"}}
+    parser = build_parser(config)
+    namespace = parser.parse_args(argv)
+    assert namespace.handler is handler
+    assert workflows._default_car_model(config) == "FXR"
+    assert workflows._default_track_name(config) == "BL1"
+
+
+def test_compare_specific_defaults_are_used() -> None:
+    config = {"compare": {"car_model": "RB4", "track": "SO1"}}
+    assert workflows._default_car_model(config) == "RB4"
+    assert workflows._default_track_name(config) == "SO1"
 
