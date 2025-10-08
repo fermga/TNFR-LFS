@@ -1,22 +1,16 @@
-# Desarrollo y verificación
+# Development and verification
 
-Este repositorio utiliza herramientas de linting, tipado y pruebas para mantener
-el toolkit TNFR × LFS en un estado saludable. Tras clonar el proyecto instala
-las dependencias de desarrollo (esto incluye `numpy>=1.24,<2.0` y
-`pandas>=1.5,<3.0`, requeridos por las pruebas y los pipelines de análisis).
-Puedes usar los archivos de requisitos incluidos o instalar el paquete con sus
-extras de desarrollo:
+This repository relies on linting, typing, and testing workflows to keep the TNFR × LFS toolkit healthy. After cloning the project install the development dependencies (this includes `numpy>=1.24,<2.0` and `pandas>=1.5,<3.0`, required by the tests and analysis pipelines). You can rely on the bundled requirement files or install the package with its development extras:
 
 ```bash
 pip install -r requirements-dev.txt
-# o, para un entorno editable
+# or, for an editable environment
 pip install -e .[dev]
 ```
 
-## Flujo de verificación
+## Verification flow
 
-Ejecuta los siguientes comandos antes de enviar un cambio. Cada herramienta está
-integrada en la configuración de CI y en GitHub Actions:
+Run the following commands before submitting a change. Each tool is integrated with CI and GitHub Actions:
 
 ```bash
 ruff check .
@@ -24,20 +18,10 @@ mypy --strict
 pytest
 ```
 
-- ``ruff`` aplica las reglas de estilo y limpieza del código definidas en
-  ``pyproject.toml``.
-- ``mypy --strict`` analiza ``tnfr_lfs`` y el resto de rutas añadidas al
-  proyecto (por ejemplo ``typing_targets``). Si necesitas pasar las rutas de
-  forma explícita puedes ejecutar ``mypy --strict tnfr_lfs typing_targets``;
-  ten en cuenta que el análisis estricto sobre todo ``tnfr_lfs`` tarda algo más
-  que el conjunto reducido anterior.
-- ``pytest`` ejecuta la batería de pruebas unitaria e integración, incluida la
-  verificación de los datasets de ejemplo ``data/test1.raf`` y ``data/test1.zip``.
+- `ruff` enforces the code-style and cleanliness rules defined in `pyproject.toml`.
+- `mypy --strict` analyses `tnfr_lfs` and the rest of the declared typing targets (for example `typing_targets`). If you need to pass the paths explicitly run `mypy --strict tnfr_lfs typing_targets`; note that strict analysis across the whole package takes longer than the reduced subset.
+- `pytest` runs the unit and integration test suite, including verification for the example datasets `data/test1.raf` and `data/test1.zip`.
 
-## Dataset de referencia
+## Reference dataset
 
-El flujo de quickstart y los tests de integración dependen de la captura
-``data/test1.raf`` y del bundle ``data/test1.zip`` exportado desde Replay
-Analyzer. Ambos artefactos recogen telemetría real de Live for Speed y sirven
-como datasets de referencia para los flujos de ingesta binaria, las pruebas de
-regresión y los tutoriales del CLI.
+The quickstart flow and the integration tests depend on the capture `data/test1.raf` and on the bundle `data/test1.zip` exported from Replay Analyzer. Both artefacts contain real Live for Speed telemetry and serve as reference datasets for the binary ingestion flows, regression tests, and CLI tutorials.

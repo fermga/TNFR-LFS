@@ -79,14 +79,13 @@ isnan(records[0].tyre_temp_fl)
 ### `tnfr_lfs.core.epi.EPIExtractor`
 
 Computes :class:`tnfr_lfs.core.epi_models.EPIBundle` objects including EPI,
-ΔNFR, entropy-penalised sense index values, and the nodal distribution
-calculated by :func:`tnfr_lfs.core.epi.delta_nfr_by_node`.  For additional
-subcomponent breakdowns use
-:func:`tnfr_lfs.core.coherence.compute_node_delta_nfr` together with
-:func:`tnfr_lfs.core.coherence.sense_index` inside custom pipelines.  The
-updated Sense Index consumes the natural-frequency map, the active phase, and
-the ``w_phase`` weights to evaluate ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H``
-with a configurable entropy penalty.
+ΔNFR, entropy-penalised sense index values, y el reparto nodal calculado por
+:func:`tnfr_lfs.core.epi.delta_nfr_by_node`.  Para desgloses adicionales por
+subcaracterística utilice :func:`tnfr_lfs.core.coherence.compute_node_delta_nfr`
+combinado con :func:`tnfr_lfs.core.coherence.sense_index` dentro de pipelines
+personalizados.  El nuevo Sense Index acepta el mapa de frecuencias naturales,
+la fase activa y los pesos ``w_phase`` para evaluar ``1 / (1 + Σ w · |ΔNFR| ·
+g(ν_f)) - λ·H`` con penalización entrópica configurable.
 
 Each :class:`EPIBundle` records the per-node natural frequency ``nu_f`` (Hz),
 allowing downstream tooling to weigh ΔNFR contributions using documented
@@ -114,8 +113,8 @@ tnfr_lfs.core.operators.evolve_epi(prev_epi: float, delta_map: Mapping[str, floa
 ```
 
 These functions compose an end-to-end ΔNFR/Sense Index pipeline covering
-objective setting (Emission), telemetry reception, smoothing (Coherence),
-contrast measurement (Dissonance) with a breakdown of useful vs. parasitic
+objective setting (Emisión), telemetry reception, smoothing (Coherencia),
+contrast measurement (Disonancia) with a breakdown of useful vs. parasitic
 support events, coupling analysis, resonance estimation, recursive filtering,
 and orchestration over segmented telemetry streams. The orchestrator exposes
 ``microsector_variability`` entries summarising ΔNFR↓ and Sense Index variance
@@ -126,48 +125,36 @@ Ratio (UDR) through the ``useful_dissonance_ratio``/``useful_dissonance_samples`
 fields, quantifying the fraction of high yaw-acceleration samples where
 ΔNFR is already decaying.
 
-``orchestrate_delta_metrics`` also surfaces support metrics derived from
-``WindowMetrics``: ``support_effective`` (ΔNFR sustained by tyres and suspension
-with structural weighting), ``load_support_ratio`` (normalised by the average
-Fz load), and the pairs
-``structural_expansion_longitudinal``/``structural_contraction_longitudinal`` and
-``structural_expansion_lateral``/``structural_contraction_lateral`` which
-describe how the longitudinal/lateral ΔNFR components expand or compress the
-structural axis of the analysed window.  The steering budgets
-``ackermann_parallel_index`` and ``slide_catch_budget`` are derived exclusively
-from the ``slip_angle_*`` channels and the ``yaw_rate`` emitted by OutSim; when
-that Live for Speed telemetry is missing the output reports the literal
-``"sin datos"`` marker.  The ``aero_balance_drift`` entry groups the average
-rake (pitch plus per-axle travel) and the ``μ_front - μ_rear`` delta for low,
-medium, and high speed bands.  Rake relies solely on the ``pitch`` and
-suspension-travel channels provided by OutSim, ensuring the aerodynamic drift
-matches the native data even if ``AeroCoherence`` appears neutral.
+``orchestrate_delta_metrics`` también expone métricas de apoyo derivadas de
+``WindowMetrics``: ``support_effective`` (ΔNFR sostenido por neumáticos y
+suspensión ponderado estructuralmente), ``load_support_ratio`` (normalizado por
+la carga Fz media) y los pares
+``structural_expansion_longitudinal``/``structural_contraction_longitudinal`` y
+``structural_expansion_lateral``/``structural_contraction_lateral`` que
+describen cómo las componentes longitudinal/lateral de ΔNFR expanden o
+comprimen el eje estructural de la ventana analizada.  Los presupuestos de
+dirección ``ackermann_parallel_index`` y ``slide_catch_budget`` se calculan
+exclusivamente a partir de los ``slip_angle_*`` y del ``yaw_rate`` que OutSim
+emite; cuando esa telemetría de Live for Speed no está presente la salida
+reporta ``"sin datos"``.  Además se publica ``aero_balance_drift``, que agrupa
+el rake medio (pitch + viajes por eje) y la diferencia ``μ_front - μ_rear`` por
+bandas de velocidad baja/media/alta.  El rake se evalúa únicamente con el
+``pitch`` y los viajes de suspensión proporcionados por OutSim, garantizando
+que la deriva aerodinámica refleja directamente los datos nativos incluso si
+``AeroCoherence`` todavía parece neutra.
 
-``WindowMetrics`` also publishes the ΔNFR entropy. ``delta_nfr_entropy``
-summarises the structural distribution per phase (0 ≙ energy concentrated in a
-single phase, 1 ≙ balanced window across all observed phases) while
-``node_entropy`` captures the overall nodal diversity using the same normalised
-range [0, 1]. The ``phase_delta_nfr_entropy`` map contains the normalised phase
-probabilities (summing to 1.0) used to compute entropy, and
-``phase_node_entropy`` details the Shannon entropy per phase derived from the
-nodal contributions.  Both maps stay within the [0, 1] interval and preserve the
-legacy phase aliases so HUDs and the CLI can consume them directly.
+``WindowMetrics`` también publica la entropía de ΔNFR. ``delta_nfr_entropy`` resume el reparto estructural por fases (0 ≙ energía concentrada en una sola fase, 1 ≙ ventana equilibrada entre todas las fases presentes) mientras que ``node_entropy`` cuantifica la diversidad nodal global con el mismo rango normalizado [0, 1]. El mapa ``phase_delta_nfr_entropy`` contiene las probabilidades normalizadas por fase (suman 1.0) utilizadas para calcular la entropía y ``phase_node_entropy`` detalla la entropía Shannon por fase a partir de las contribuciones nodales. Los valores de ambos mapas permanecen en el intervalo [0, 1] y replican los alias de fases heredados para facilitar su consumo en HUDs y CLI.
 
-``WindowMetrics.cphi`` now yields a :class:`~tnfr_lfs.core.metrics.CPHIReport`
-with per-wheel :class:`~tnfr_lfs.core.metrics.CPHIWheel` data and the shared
-:class:`~tnfr_lfs.core.metrics.CPHIThresholds`. The thresholds follow a
-red/amber/green traffic-light scheme so HUD pages and CLI reports colour tyre
-health consistently. Consumers that require the historical flat keys can rely
-on :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_legacy_mapping`.
+``WindowMetrics.cphi`` now yields a :class:`~tnfr_lfs.core.metrics.CPHIReport` with per-wheel :class:`~tnfr_lfs.core.metrics.CPHIWheel` data and the shared :class:`~tnfr_lfs.core.metrics.CPHIThresholds`. The thresholds follow a red/amber/green traffic-light scheme so HUD pages and CLI reports colour tyre health consistently. Consumers that require the historical flat keys can rely on :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_legacy_mapping`.
 
-When the ``operator_state`` shared by ``segment_microsectors`` is supplied, the
-orchestrator adds the ``network_memory`` field and a mirror in
-``sense_memory["network"]`` with the per-session memory
-(``car_model``/``track_name``/``tyre_compound``), including stint histories and
-each microsector’s active state.  If OutGauge does not transmit the extended
-per-wheel temperature/pressure block, HUD surfaces and exporters show the
-literal ``"sin datos"`` token in those fields to make it clear that LFS telemetry
-was unavailable.
+Cuando se comparte el ``operator_state`` utilizado por
+``segment_microsectors``, la orquestación añade el campo ``network_memory`` y
+un espejo en ``sense_memory["network"]`` con la memoria de red por sesión
+(``car_model``/``track_name``/``tyre_compound``), incluyendo historiales por
+stint y el estado activo de cada microsector.  Si OutGauge no transmite el
+bloque extendido con temperaturas/presiones por rueda, las superficies de HUD y
+los exportadores muestran ``"sin datos"`` en esos campos para dejar claro que la
+telemetría de LFS no estaba disponible.
 
 ### `tnfr_lfs.core.segmentation`
 
@@ -187,8 +174,8 @@ Sense Index averages but also longitudinal/lateral ΔNFR objectives and the
 relative weighting between them.  These values are propagated to
 :class:`Microsector` objects (``phase_axis_targets``/``phase_axis_weights``)
 so downstream recommenders and exporters can highlight whether the
-microsector demands longitudinal support (brake bias, differential locking)
-or lateral balance (anti-roll bars, toe, alignments).
+microsector demands longitudinal support (bias de frenos, bloqueo del
+diferencial) or lateral balance (barras, toe, alineaciones).
 
 The ``filtered_measures`` mapping now exposes a structured ``"cphi"`` block
 that mirrors :class:`~tnfr_lfs.core.metrics.CPHIReport`, including the
@@ -207,12 +194,13 @@ the same red/amber/green semantics without recomputing the bands.
 * ``dominant_nodes`` – the subsystems whose ΔNFR signature anchors the goal.
 * ``window_occupancy`` – percentage of telemetry samples that remain within
   each window for entry, apex, and exit.
-* ``operator_events`` – grouped by ``AL``/``OZ``/``IL``/``SILENCIO`` and enriched
-  with the surface type derived from ``context_factors`` plus the contextual
-  ΔNFR threshold (``delta_nfr_threshold``) for the microsector.  Each event
-  lists the peak/mean ΔNFR observed in the window and its ratio to the
-  threshold (``delta_nfr_ratio``), while the aggregate ``SILENCIO`` entry adds
-  average coverage and structural density to flag low-activation latent states.
+* ``operator_events`` – agrupados por ``AL``/``OZ``/``IL``/``SILENCIO`` e
+  incrementados con el tipo de superficie derivado de ``context_factors`` y
+  el umbral ΔNFR contextual (``delta_nfr_threshold``) asociado al microsector.
+  Cada evento incluye el pico/medio ΔNFR observado durante la ventana y la
+  relación frente al umbral (``delta_nfr_ratio``), mientras que el agregado
+  ``SILENCIO`` añade cobertura y densidad estructural medias para identificar
+  estados latentes de baja activación.
 
 ## Recommendation Engine
 
