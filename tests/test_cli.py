@@ -7,6 +7,7 @@ import re
 from collections.abc import Iterable, Mapping
 from textwrap import dedent
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -178,6 +179,16 @@ def test_cli_analyze_accepts_raf_sample(
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
+    prepare_calls = {"count": 0}
+
+    original_prepare = workflows_module._prepare_pack_context
+
+    def _instrumented_prepare(namespace, config, *, car_model):
+        prepare_calls["count"] += 1
+        return original_prepare(namespace, config, car_model=car_model)
+
+    monkeypatch.setattr(workflows_module, "_prepare_pack_context", _instrumented_prepare)
+
     captured_records: dict[str, list] = {}
 
     original = cli_module.raf_to_telemetry_records
@@ -245,6 +256,8 @@ def test_cli_analyze_accepts_raf_sample(
             ]
         )
     )
+
+    assert prepare_calls["count"] == 1
 
     assert payload["telemetry_samples"] == 9586
     records = captured_records.get("records")
@@ -472,6 +485,29 @@ def test_track_argument_resolves_session_payload(mini_track_pack) -> None:
     assert context.session_hints["surface"] == "asphalt"
 
 
+def test_prepare_pack_context_matches_loaders() -> None:
+    namespace = SimpleNamespace(pack_root=None)
+    config: dict[str, object] = {}
+    pack_context = workflows_module._prepare_pack_context(
+        namespace,
+        config,
+        car_model="FZR",
+    )
+
+    assert pack_context.pack_root is None
+    assert pack_context.cars == workflows_module._load_pack_cars(None)
+    assert pack_context.track_profiles == workflows_module._load_pack_track_profiles(None)
+    assert pack_context.modifiers == workflows_module._load_pack_modifiers(None)
+    assert pack_context.class_overrides == workflows_module._load_pack_lfs_class_overrides(None)
+    assert pack_context.profile_manager.path == pack_context.profiles_ctx.storage_path
+    assert pack_context.tnfr_targets == workflows_module._resolve_tnfr_targets(
+        "FZR",
+        pack_context.cars,
+        pack_context.profiles_ctx.pack_profiles,
+        overrides=pack_context.class_overrides,
+    )
+
+
 def test_analyze_pipeline_json_export(
     tmp_path: Path,
     capsys,
@@ -479,6 +515,15 @@ def test_analyze_pipeline_json_export(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    prepare_calls = {"count": 0}
+
+    original_prepare = workflows_module._prepare_pack_context
+
+    def _instrumented_prepare(namespace, config, *, car_model):
+        prepare_calls["count"] += 1
+        return original_prepare(namespace, config, car_model=car_model)
+
+    monkeypatch.setattr(workflows_module, "_prepare_pack_context", _instrumented_prepare)
     baseline_path = tmp_path / "baseline.jsonl"
     run_cli([
         "baseline",
@@ -496,6 +541,7 @@ def test_analyze_pipeline_json_export(
 
     captured = capsys.readouterr()
     payload = json.loads(output)
+    assert prepare_calls["count"] == 1
     assert payload["car"]["abbrev"] == "XFG"
     assert payload["tnfr_targets"]["meta"]["category"] == "road"
     assert payload["telemetry_samples"] == 17
@@ -597,6 +643,15 @@ def test_suggest_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    prepare_calls = {"count": 0}
+
+    original_prepare = workflows_module._prepare_pack_context
+
+    def _instrumented_prepare(namespace, config, *, car_model):
+        prepare_calls["count"] += 1
+        return original_prepare(namespace, config, car_model=car_model)
+
+    monkeypatch.setattr(workflows_module, "_prepare_pack_context", _instrumented_prepare)
     baseline_path = tmp_path / "baseline.jsonl"
     run_cli([
         "baseline",
@@ -615,6 +670,7 @@ def test_suggest_pipeline(
     ])
 
     payload = json.loads(output)
+    assert prepare_calls["count"] == 1
     if "car" in payload:
         assert isinstance(payload["car"], dict)
     if "tnfr_targets" in payload:
@@ -637,6 +693,15 @@ def test_report_generation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    prepare_calls = {"count": 0}
+
+    original_prepare = workflows_module._prepare_pack_context
+
+    def _instrumented_prepare(namespace, config, *, car_model):
+        prepare_calls["count"] += 1
+        return original_prepare(namespace, config, car_model=car_model)
+
+    monkeypatch.setattr(workflows_module, "_prepare_pack_context", _instrumented_prepare)
     baseline_path = tmp_path / "baseline.jsonl"
     run_cli([
         "baseline",
@@ -655,6 +720,7 @@ def test_report_generation(
     ])
 
     payload = json.loads(output)
+    assert prepare_calls["count"] == 1
     assert "delta_nfr" in payload
     assert "sense_index" in payload
     assert Path(payload["reports"]["sense_index_map"]["path"]).exists()

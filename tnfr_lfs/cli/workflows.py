@@ -227,6 +227,20 @@ class ProfilesContext:
 
 
 @dataclass(frozen=True, slots=True)
+class PackContext:
+    """Aggregated resources sourced from an optional content pack."""
+
+    pack_root: Path | None
+    profiles_ctx: ProfilesContext
+    profile_manager: ProfileManager
+    cars: Mapping[str, PackCar]
+    track_profiles: Mapping[str, Mapping[str, Any]]
+    modifiers: Mapping[tuple[str, str], Mapping[str, Any]]
+    class_overrides: Mapping[str, Mapping[str, Any]]
+    tnfr_targets: Mapping[str, Any] | None
+
+
+@dataclass(frozen=True, slots=True)
 class TrackSelection:
     """Normalized representation of a CLI track argument."""
 
@@ -341,10 +355,12 @@ def _load_pack_modifiers(pack_root: Path | None) -> Mapping[tuple[str, str], Map
     )
 
 
-def _compute_setup_plan(
-    namespace: argparse.Namespace, *, config: Mapping[str, Any]
-) -> SetupPlanContext:
-    records, _ = _load_records_from_namespace(namespace)
+def _prepare_pack_context(
+    namespace: argparse.Namespace | None,
+    config: Mapping[str, Any],
+    *,
+    car_model: str,
+) -> PackContext:
     pack_root = _resolve_pack_root(namespace, config)
     profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
     profile_manager = ProfileManager(profiles_ctx.storage_path)
@@ -353,11 +369,40 @@ def _compute_setup_plan(
     modifiers = _load_pack_modifiers(pack_root)
     class_overrides = _load_pack_lfs_class_overrides(pack_root)
     tnfr_targets = _resolve_tnfr_targets(
-        namespace.car_model,
+        car_model,
         cars,
         profiles_ctx.pack_profiles,
         overrides=class_overrides,
     )
+    return PackContext(
+        pack_root=pack_root,
+        profiles_ctx=profiles_ctx,
+        profile_manager=profile_manager,
+        cars=cars,
+        track_profiles=track_profiles,
+        modifiers=modifiers,
+        class_overrides=class_overrides,
+        tnfr_targets=tnfr_targets,
+    )
+
+
+def _compute_setup_plan(
+    namespace: argparse.Namespace, *, config: Mapping[str, Any]
+) -> SetupPlanContext:
+    records, _ = _load_records_from_namespace(namespace)
+    pack_context = _prepare_pack_context(
+        namespace,
+        config,
+        car_model=namespace.car_model,
+    )
+    pack_root = pack_context.pack_root
+    profiles_ctx = pack_context.profiles_ctx
+    profile_manager = pack_context.profile_manager
+    cars = pack_context.cars
+    track_profiles = pack_context.track_profiles
+    modifiers = pack_context.modifiers
+    class_overrides = pack_context.class_overrides
+    tnfr_targets = pack_context.tnfr_targets
     car_metadata = _lookup_car_metadata(namespace.car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
@@ -2180,24 +2225,19 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         style=layout_defaults.style,
         type_in=layout_defaults.type_in,
     )
-    pack_root = _resolve_pack_root(namespace, config)
-    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
-    profile_manager = ProfileManager(profiles_ctx.storage_path)
     resolved_car_model = str(namespace.car_model or _default_car_model(config)).strip()
     if not resolved_car_model:
         resolved_car_model = _default_car_model(config)
+    pack_context = _prepare_pack_context(namespace, config, car_model=resolved_car_model)
+    pack_root = pack_context.pack_root
+    profile_manager = pack_context.profile_manager
     track_selection = _resolve_track_argument(namespace.track, config, pack_root=pack_root)
     resolved_track = track_selection.name or _default_track_name(config)
-    cars = _load_pack_cars(pack_root)
-    track_profiles = _load_pack_track_profiles(pack_root)
-    modifiers = _load_pack_modifiers(pack_root)
-    class_overrides = _load_pack_lfs_class_overrides(pack_root)
-    tnfr_targets = _resolve_tnfr_targets(
-        resolved_car_model,
-        cars,
-        profiles_ctx.pack_profiles,
-        overrides=class_overrides,
-    )
+    cars = pack_context.cars
+    track_profiles = pack_context.track_profiles
+    modifiers = pack_context.modifiers
+    class_overrides = pack_context.class_overrides
+    tnfr_targets = pack_context.tnfr_targets
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     engine = RecommendationEngine(
         car_model=resolved_car_model,
@@ -2411,21 +2451,17 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records, telemetry_path = _load_records_from_namespace(namespace)
     car_model = _default_car_model(config)
-    pack_root = _resolve_pack_root(namespace, config)
+    pack_context = _prepare_pack_context(namespace, config, car_model=car_model)
+    pack_root = pack_context.pack_root
     track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
     track_name = track_selection.name or _default_track_name(config)
-    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
-    profile_manager = ProfileManager(profiles_ctx.storage_path)
-    cars = _load_pack_cars(pack_root)
-    track_profiles = _load_pack_track_profiles(pack_root)
-    modifiers = _load_pack_modifiers(pack_root)
-    class_overrides = _load_pack_lfs_class_overrides(pack_root)
-    tnfr_targets = _resolve_tnfr_targets(
-        car_model,
-        cars,
-        profiles_ctx.pack_profiles,
-        overrides=class_overrides,
-    )
+    profiles_ctx = pack_context.profiles_ctx
+    profile_manager = pack_context.profile_manager
+    cars = pack_context.cars
+    track_profiles = pack_context.track_profiles
+    modifiers = pack_context.modifiers
+    class_overrides = pack_context.class_overrides
+    tnfr_targets = pack_context.tnfr_targets
     car_metadata = _lookup_car_metadata(car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     engine = RecommendationEngine(
@@ -2575,19 +2611,18 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 
 def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     records, telemetry_path = _load_records_from_namespace(namespace)
-    pack_root = _resolve_pack_root(namespace, config)
-    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
-    profile_manager = ProfileManager(profiles_ctx.storage_path)
-    cars = _load_pack_cars(pack_root)
-    track_profiles = _load_pack_track_profiles(pack_root)
-    modifiers = _load_pack_modifiers(pack_root)
-    class_overrides = _load_pack_lfs_class_overrides(pack_root)
-    tnfr_targets = _resolve_tnfr_targets(
-        namespace.car_model,
-        cars,
-        profiles_ctx.pack_profiles,
-        overrides=class_overrides,
+    pack_context = _prepare_pack_context(
+        namespace,
+        config,
+        car_model=namespace.car_model,
     )
+    pack_root = pack_context.pack_root
+    profile_manager = pack_context.profile_manager
+    cars = pack_context.cars
+    track_profiles = pack_context.track_profiles
+    modifiers = pack_context.modifiers
+    class_overrides = pack_context.class_overrides
+    tnfr_targets = pack_context.tnfr_targets
     car_metadata = _lookup_car_metadata(namespace.car_model, cars)
     pack_delta, pack_si = _extract_target_objectives(tnfr_targets)
     track_selection = _resolve_track_argument(namespace.track, config, pack_root=pack_root)
@@ -2711,14 +2746,14 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
 
     records, telemetry_path = _load_records_from_namespace(namespace)
     car_model = _default_car_model(config)
-    pack_root = _resolve_pack_root(namespace, config)
-    profiles_ctx = _resolve_profiles_path(config, pack_root=pack_root)
-    profile_manager = ProfileManager(profiles_ctx.storage_path)
+    pack_context = _prepare_pack_context(namespace, config, car_model=car_model)
+    pack_root = pack_context.pack_root
+    profile_manager = pack_context.profile_manager
     track_selection = _resolve_track_argument(None, config, pack_root=pack_root)
     track_name = track_selection.name or _default_track_name(config)
-    cars = _load_pack_cars(pack_root)
-    track_profiles = _load_pack_track_profiles(pack_root)
-    modifiers = _load_pack_modifiers(pack_root)
+    cars = pack_context.cars
+    track_profiles = pack_context.track_profiles
+    modifiers = pack_context.modifiers
     engine = RecommendationEngine(
         car_model=car_model,
         track_name=track_name,
