@@ -1,6 +1,6 @@
 # TNFR × LFS Toolkit
 
-TNFR × LFS is the analysis and automation toolkit that operationalises the **Fractal-Resonant Telemetry Analytics for Live for Speed** proposal and the **Fractal-Resonant Nature Theory (TNFR)**. While the theory describes the conceptual foundations (symbols, structural operators and the ΔNFR/ΔSi metrics), the package provides reproducible implementations to instrument those ideas within telemetry workflows.
+TNFR × LFS is the analysis and automation toolkit that operationalises the **Live for Speed** racing simulator and the **Fractal-Resonant Nature Theory (TNFR)**. While the theory describes the conceptual foundations (symbols, structural operators and the ΔNFR/ΔSi metrics), the package provides reproducible implementations to instrument those ideas within telemetry workflows for LFS.
 
 ## Quickstart
 
