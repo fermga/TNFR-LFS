@@ -7,6 +7,7 @@ import socket
 import struct
 from collections import deque
 from dataclasses import dataclass
+from types import TracebackType
 from time import monotonic
 from typing import Callable, Deque, Optional, Sequence
 
@@ -110,7 +111,12 @@ class InSimClient:
         self.connect()
         return self
 
-    def __exit__(self, exc_type, exc, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     # ------------------------------------------------------------------
@@ -354,7 +360,12 @@ class OverlayManager:
         self.connect()
         return self
 
-    def __exit__(self, exc_type, exc, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     def connect(self) -> None:
