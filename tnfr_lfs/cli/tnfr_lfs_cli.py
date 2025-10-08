@@ -10,16 +10,17 @@ import inspect
 import sys
 import types
 
-from .io import load_cli_config, raf_to_telemetry_records
-from .parser import build_parser, _add_export_argument, _validated_export
-from ..core.operators import orchestrate_delta_metrics
+from .io import load_cli_config
+from .parser import build_parser
 from . import workflows as _workflows_module
 from . import io as _cli_io_module
+from . import parser as _parser_module
 
 
 _PROXY_SOURCES: tuple[types.ModuleType, ...] = (
     _workflows_module,
     _cli_io_module,
+    _parser_module,
 )
 
 _ALWAYS_PROXY_NAMES: frozenset[str] = frozenset({
@@ -96,8 +97,23 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
     """Execute the TNFR × LFS command line interface."""
 
     config_parser = argparse.ArgumentParser(add_help=False)
-    config_parser.add_argument("--config", dest="config_path", type=Path, default=None)
-    config_parser.add_argument("--pack-root", dest="pack_root", type=Path, default=None)
+    config_parser.add_argument(
+        "--config",
+        dest="config_path",
+        type=Path,
+        default=None,
+        help="Ruta del fichero de configuración TOML a utilizar.",
+    )
+    config_parser.add_argument(
+        "--pack-root",
+        dest="pack_root",
+        type=Path,
+        default=None,
+        help=(
+            "Directorio raíz de un pack TNFR × LFS con config/ y data/. "
+            "Sobrescribe paths.pack_root."
+        ),
+    )
     preliminary, remaining = config_parser.parse_known_args(args)
     remaining = list(remaining)
     if preliminary.pack_root is not None:
