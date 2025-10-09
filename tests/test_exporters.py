@@ -305,12 +305,19 @@ def test_html_exporter_renders_extended_sections() -> None:
         "session_messages": ("Session affected by crosswinds",),
     }
     html = html_exporter(payload)
-    assert "Global metrics" in html
-    assert "Robustness" in html
-    assert "Pareto Front" in html
-    assert "A/B comparison" in html
-    assert "Prioritise mid-apex" in html
-    assert "Session affected by crosswinds" in html
+    expected_fragments = [
+        "<h2>Global metrics</h2>",
+        "<h2>Robustness</h2>",
+        "<h3>Microsector variability</h3>",
+        "<h2>Pareto Front</h2>",
+        "<h2>A/B comparison</h2>",
+        "<h2>Playbook suggestions</h2>",
+        "<h2>Session profile</h2>",
+        "Prioritise mid-apex",
+        "Session affected by crosswinds",
+    ]
+    for fragment in expected_fragments:
+        assert fragment in html
 
 
 def test_html_exporter_handles_missing_optional_sections() -> None:
