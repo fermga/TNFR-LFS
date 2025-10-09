@@ -3,9 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_FILE="$(python - <<'PY'
-from tnfr_lfs._pack_resources import data_root
+from tnfr_lfs.examples.quickstart_dataset import dataset_path
 
-print(data_root() / "BL1_XFG_baseline.csv")
+print(dataset_path())
 PY
 )"
 OUT_DIR="${ROOT_DIR}/examples/out"

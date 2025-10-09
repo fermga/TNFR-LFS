@@ -19,7 +19,7 @@ pytest
 ```
 
 - `ruff` enforces the code-style and cleanliness rules defined in `pyproject.toml`.
-- `mypy --strict` analyses `tnfr_lfs` and the rest of the declared typing targets (for example `typing_targets`). If you need to pass the paths explicitly run `mypy --strict tnfr_lfs typing_targets`; note that strict analysis across the whole package takes longer than the reduced subset.
+- `mypy --strict` analyses `tnfr_lfs` and the rest of the declared typing targets (including the tests and examples helper). If you need to pass the paths explicitly run `mypy --strict tnfr_lfs tests`; note that strict analysis across the whole package takes longer than the reduced subset.
 - `pytest` runs the unit and integration test suite, including verification for the example datasets `tnfr_lfs/pack/data/test1.raf` and `tnfr_lfs/pack/data/test1.zip`.
 
 ### CI triggering rules

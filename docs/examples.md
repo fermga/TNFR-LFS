@@ -15,7 +15,9 @@ produces.
 
 - `tnfr_lfs` available on `PYTHONPATH` (e.g., `pip install -e .` from the repo
   root).
-- Sample telemetry at `data/BL1_XFG_baseline.csv` (included in the repository).
+- Sample telemetry resolved with
+  ``python -c "from tnfr_lfs.examples.quickstart_dataset import dataset_path; print(dataset_path())"``
+  (included in the repository).
 - Write access to `examples/out/` for generated JSON/Markdown reports.
 
 **Run it**

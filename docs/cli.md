@@ -11,7 +11,7 @@ The example converts the bundled RAF capture (`data/test1.raf`) into a
 JSONL baseline. The CLI inspects the suffix of every telemetry source
 (`.raf`, `.csv`, `.jsonl`, `.parquet`…) and automatically routes it
 through the appropriate parser. CSV inputs continue to use the
-`--simulate` flag (`tnfr-lfs baseline runs/demo.jsonl --simulate data/BL1_XFG_baseline.csv`),
+`--simulate` flag (`tnfr-lfs baseline runs/demo.jsonl --simulate "$(python -c 'from tnfr_lfs.examples.quickstart_dataset import dataset_path; print(dataset_path())')"`),
 while RAF captures are parsed natively through `tnfr_lfs.io.read_raf`
 and `tnfr_lfs.io.raf_to_telemetry_records`. All TNFR indicators (`ΔNFR`, the
 nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)` and nodal derivatives)
@@ -492,7 +492,8 @@ tnfr-lfs --config configs/tnfr-lfs.stint.toml analyze stint.jsonl
 
 The repository ships with ``examples/quickstart.sh`` which executes the
 end-to-end flow (CSV → baseline → analyze → suggest → report → write-set)
-using the bundled baseline dataset ``data/BL1_XFG_baseline.csv``.  The
+using the bundled baseline dataset resolved through
+``tnfr_lfs.examples.quickstart_dataset.dataset_path()``.  The
 script stores artefacts under ``examples/out`` and generates a quick ASCII
 plot of the Sense Index series to visualise the lap at a glance.  The
 dataset mirrors a short 17-sample stint captured at BL1/XFG pace so that
