@@ -18,6 +18,7 @@ from .core.epi_models import EPIBundle
 from .core.segmentation import Goal, Microsector, segment_microsectors
 from .ingestion.live import OutSimClient
 from .recommender.rules import Recommendation, RecommendationEngine
+from .processing import InsightsResult, compute_insights
 from .exporters import exporters_registry
 from .config_loader import (
     Car,
@@ -52,6 +53,8 @@ __all__ = [
     "OutSimClient",
     "Recommendation",
     "RecommendationEngine",
+    "InsightsResult",
+    "compute_insights",
     "exporters_registry",
     "Car",
     "Profile",

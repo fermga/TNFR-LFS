@@ -43,6 +43,7 @@ _HELPER_EXPORTS = {
     "_generate_out_reports": _workflows_module._generate_out_reports,
     "_sense_index_map": _workflows_module._sense_index_map,
     "_prepare_pack_context": _workflows_module._prepare_pack_context,
+    "compute_insights": _workflows_module.compute_insights,
     "_compute_insights": _workflows_module._compute_insights,
     "_phase_deviation_messages": _workflows_module._phase_deviation_messages,
     "orchestrate_delta_metrics": _workflows_module.orchestrate_delta_metrics,

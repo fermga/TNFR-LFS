@@ -69,6 +69,8 @@ def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
         raise CliError("You must provide a valid --car-model to evaluate the Pareto front.")
     context = compute_setup_plan(namespace, config=config)
     payload = build_setup_plan_payload(context, namespace)
+    if isinstance(payload, dict):
+        payload.setdefault("_markdown_locale", "es")
 
     planner = context.planner
     space = planner._adapt_space(
