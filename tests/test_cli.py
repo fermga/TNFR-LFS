@@ -220,6 +220,10 @@ def test_baseline_overlay_uses_keepalive_and_overlay(
                 outgauge_timeouts=1,
                 outsim_ignored_hosts=0,
                 outgauge_ignored_hosts=0,
+                outsim_loss_events=0,
+                outgauge_loss_events=0,
+                outsim_recovered_packets=0,
+                outgauge_recovered_packets=0,
             ),
         )
 

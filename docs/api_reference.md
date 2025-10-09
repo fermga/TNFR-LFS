@@ -105,32 +105,56 @@ the bundled EPI extractor so downstream tooling can immediately reuse the
 examples from the :mod:`tnfr_lfs.core.epi` documentation.【F:tnfr_lfs/ingestion/fusion.py†L130-L320】
 
 ```python
-from tnfr_lfs.ingestion.live import OutGaugeUDPClient, OutSimUDPClient, TelemetryFusion
+from collections import deque
+from tnfr_lfs.ingestion.live import (
+    OutGaugePacket,
+    OutGaugeUDPClient,
+    OutSimPacket,
+    OutSimUDPClient,
+    TelemetryFusion,
+)
 from tnfr_lfs.core.epi import TelemetryRecord
 
 fusion = TelemetryFusion()
 records: list[TelemetryRecord] = []
 
 with OutSimUDPClient(port=4123) as outsim, OutGaugeUDPClient(port=3000) as outgauge:
+    outsim_buffer: deque[OutSimPacket] = deque()
+    outgauge_buffer: deque[OutGaugePacket] = deque()
     while True:
-        outsim_packet = outsim.recv()
-        outgauge_packet = outgauge.recv()
-        if not outsim_packet or not outgauge_packet:
-            continue  # wait until both broadcasters emit their next datagram
+        outsim_buffer.extend(outsim.drain_ready())
+        outgauge_buffer.extend(outgauge.drain_ready())
+        if not outsim_buffer:
+            packet = outsim.recv()
+            if packet:
+                outsim_buffer.append(packet)
+        if not outgauge_buffer:
+            packet = outgauge.recv()
+            if packet:
+                outgauge_buffer.append(packet)
 
-        record = fusion.fuse(outsim_packet, outgauge_packet)
-        records.append(record)
+        while outsim_buffer and outgauge_buffer:
+            outsim_packet = outsim_buffer.popleft()
+            outgauge_packet = outgauge_buffer.popleft()
+            record = fusion.fuse(outsim_packet, outgauge_packet)
+            records.append(record)
 
-        # Bridge straight into the EPI workflows used by the examples.
-        bundle = fusion.fuse_to_bundle(outsim_packet, outgauge_packet)
-        print(bundle.delta_nfr, bundle.sense_index)
+            # Bridge straight into the EPI workflows used by the examples.
+            bundle = fusion.fuse_to_bundle(outsim_packet, outgauge_packet)
+            print(bundle.delta_nfr, bundle.sense_index)
+
+        if outsim.statistics["loss_events"] or outgauge.statistics["loss_events"]:
+            print("Loss detected", outsim.statistics, outgauge.statistics)
 ```
 
 The example above illustrates the minimal glue required to bridge raw UDP
 telemetry with the existing EPI tutorials: reuse the same ``TelemetryFusion``
-instance, buffer each ``TelemetryRecord`` if you need time-series access,
-and call ``fuse_to_bundle`` (or ``fusion.extractor.update``) whenever you
-need the aggregated ΔNFR/SI metrics.
+instance, maintain a deque per stream via ``drain_ready`` so that out-of-order
+packets can be reinserted automatically, and call ``fuse_to_bundle`` (or
+``fusion.extractor.update``) whenever you need the aggregated ΔNFR/SI metrics.
+Inspect :attr:`OutSimUDPClient.statistics` or
+:attr:`OutGaugeUDPClient.statistics` to surface warnings when suspected loss
+events occur.
 
 ## Core Analytics
 
