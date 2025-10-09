@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tnfr_lfs._pack_resources import data_root
+
 from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
@@ -34,7 +36,7 @@ from tnfr_lfs.recommender.rules import ThresholdProfile
 def quickstart_dataset_path() -> Path:
     """Baseline dataset referenced by the quickstart flow."""
 
-    dataset = ROOT / "data" / "BL1_XFG_baseline.csv"
+    dataset = data_root() / "BL1_XFG_baseline.csv"
     if not dataset.exists():  # pragma: no cover - defensive guard for local runs
         raise FileNotFoundError(dataset)
     return dataset
@@ -44,7 +46,7 @@ def quickstart_dataset_path() -> Path:
 def raf_sample_path() -> Path:
     """Location of the bundled RAF telemetry sample."""
 
-    sample = ROOT / "data" / "test1.raf"
+    sample = data_root() / "test1.raf"
     if not sample.exists():  # pragma: no cover - defensive guard for local runs
         raise FileNotFoundError(sample)
     return sample

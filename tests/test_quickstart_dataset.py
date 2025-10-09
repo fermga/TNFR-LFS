@@ -29,7 +29,7 @@ def test_quickstart_script_points_to_dataset(quickstart_dataset_path: Path) -> N
 
     script_path = Path(__file__).resolve().parents[1] / "examples" / "quickstart.sh"
     content = script_path.read_text(encoding="utf8")
-    assert "data/BL1_XFG_baseline.csv" in content
+    assert "tnfr_lfs._pack_resources import data_root" in content
     assert quickstart_dataset_path.name in content
 
 

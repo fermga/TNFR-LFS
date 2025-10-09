@@ -15,10 +15,10 @@ import pytest
 from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.io import ReplayCSVBundleReader
 import tnfr_lfs.io.replay_csv_bundle as replay_csv_bundle
+from tnfr_lfs._pack_resources import data_root
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = REPO_ROOT / "data"
+DATA_DIR = data_root()
 BUNDLE_PATH = DATA_DIR / "test1.zip"
 REFERENCE_CSV_DIR = DATA_DIR / "csv"
 
