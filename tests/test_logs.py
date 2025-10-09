@@ -4,7 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from tnfr_lfs.core.epi import TelemetryRecord
-from tnfr_lfs.io.logs import DeterministicReplayer, iter_run, write_run
+from tnfr_lfs.ingestion.offline import DeterministicReplayer, iter_run, write_run
 
 
 def _sample_record(seed: int) -> TelemetryRecord:

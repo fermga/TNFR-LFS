@@ -1,4 +1,4 @@
-from tnfr_lfs.io import load_playbook
+from tnfr_lfs.ingestion.offline import load_playbook
 
 
 def test_load_playbook_returns_rules() -> None:

@@ -7,12 +7,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from tnfr_lfs.acquisition.fusion import (
+from tnfr_lfs.ingestion.live import (
     FusionCalibration,
+    OutSimWheelState,
     TelemetryFusion,
     _WheelTelemetry,
 )
-from tnfr_lfs.acquisition.outsim_udp import OutSimWheelState
 
 
 def _simple_outsim(*wheels: OutSimWheelState) -> SimpleNamespace:

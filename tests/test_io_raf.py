@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from tnfr_lfs.io.raf import raf_to_telemetry_records, read_raf
+from tnfr_lfs.ingestion.offline import raf_to_telemetry_records, read_raf
 
 
 @pytest.fixture(scope="session")

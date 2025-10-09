@@ -198,8 +198,8 @@ class OutSimClient:
         source:
             Either a path to a CSV file or any iterable that yields lines
             of text.  When working with RAF captures, prefer
-            :func:`tnfr_lfs.io.raf_to_telemetry_records` in combination
-            with :func:`tnfr_lfs.io.read_raf` before handing the
+            :func:`tnfr_lfs.ingestion.offline.raf_to_telemetry_records` in combination
+            with :func:`tnfr_lfs.ingestion.offline.read_raf` before handing the
             resulting records to other consumers.
         """
 

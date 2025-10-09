@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 
 from tnfr_lfs.analysis.brake_thermal import BrakeThermalConfig, BrakeThermalEstimator
-from tnfr_lfs.acquisition.fusion import TelemetryFusion
-from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket
-from tnfr_lfs.acquisition.outsim_udp import (
+from tnfr_lfs.ingestion.live import (
+    OutGaugePacket,
     OutSimDriverInputs,
     OutSimPacket,
     OutSimWheelState,
+    TelemetryFusion,
 )
 
 
@@ -83,15 +83,17 @@ mode = "auto"
     )
 
     _pack_resources.set_pack_root_override(pack_root)
-    fusion_mod = importlib.import_module("tnfr_lfs.acquisition.fusion")
-    fusion_module = importlib.reload(fusion_mod)
+    ingestion_mod = importlib.import_module("tnfr_lfs.ingestion.live")
+    fusion_mod = importlib.import_module(ingestion_mod.TelemetryFusion.__module__)
+    importlib.reload(fusion_mod)
+    ingestion_module = importlib.reload(ingestion_mod)
 
     workspace = tmp_path / "workspace"
     workspace.mkdir(exist_ok=True)
     monkeypatch.chdir(workspace)
 
     try:
-        fusion_module.TelemetryFusion()  # should locate packaged resources without cwd data
+        ingestion_module.TelemetryFusion()  # should locate packaged resources without cwd data
     finally:
         _pack_resources.set_pack_root_override(None)
         importlib.reload(fusion_mod)

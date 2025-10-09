@@ -7,7 +7,7 @@ from typing import Tuple
 import pytest
 from types import SimpleNamespace
 
-from tnfr_lfs.acquisition import ButtonEvent, ButtonLayout, MacroQueue, OverlayManager
+from tnfr_lfs.ingestion.live import ButtonEvent, ButtonLayout, MacroQueue, OverlayManager
 from tnfr_lfs.cli import osd as osd_module
 from tnfr_lfs.cli import app as cli_app
 from tnfr_lfs.cli.osd import HUDPager, MacroStatus, OSDController, TelemetryHUD

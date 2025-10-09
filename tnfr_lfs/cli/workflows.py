@@ -26,7 +26,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreters
     import tomli as tomllib  # type: ignore
 
-from ..acquisition import (
+from ..ingestion.live import (
     ButtonLayout,
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT,
@@ -73,8 +73,13 @@ from ..exporters import (
     render_operator_trajectories,
 )
 from ..exporters.setup_plan import SetupChange, SetupPlan
-from ..io import load_playbook, logs
-from ..io.profiles import ProfileManager, ProfileObjectives, ProfileSnapshot
+from ..ingestion.offline import (
+    ProfileManager,
+    ProfileObjectives,
+    ProfileSnapshot,
+    load_playbook,
+)
+from ..io import logs
 from ..recommender import Plan, RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
 from ..session import format_session_messages
