@@ -17,10 +17,10 @@ from tnfr_lfs.core.epi_models import (
     TyresNode,
 )
 from tnfr_lfs.core.segmentation import Goal, Microsector
-from tnfr_lfs.io.profiles import ProfileManager
 from tnfr_lfs.recommender import RecommendationEngine
 import tnfr_lfs.recommender.search as search_module
 from tnfr_lfs.recommender.search import DEFAULT_DECISION_LIBRARY, SetupPlanner, objective_score
+from tests.profile_manager_helpers import preloaded_profile_manager
 
 
 SUPPORTED_CAR_MODELS = [
@@ -607,29 +607,9 @@ def test_setup_planner_rejects_unknown_car_model():
 
 
 def test_setup_planner_consults_profile_jacobian(tmp_path: Path) -> None:
-    profiles_path = tmp_path / "profiles.toml"
-    manager = ProfileManager(profiles_path)
     car_model = "FZR"
     track = "generic"
-    manager.resolve(car_model, track)
-    manager.register_plan(
-        car_model,
-        track,
-        {"entry": 1.0},
-        baseline_metrics=(0.6, 4.0),
-        jacobian={
-            "sense_index": {
-                "rear_wing_angle": 1.6,
-                "front_camber_deg": 0.1,
-            },
-            "delta_nfr_integral": {"rear_wing_angle": -0.9},
-        },
-        phase_jacobian={"entry": {"delta_nfr_integral": {"rear_wing_angle": -0.5}}},
-    )
-    manager.register_result(car_model, track, sense_index=0.7, delta_nfr=3.2)
-    stored_overall, _ = manager.gradient_history(car_model, track)
-    assert stored_overall["sense_index"]["rear_wing_angle"] == pytest.approx(1.6)
-    assert stored_overall["delta_nfr_integral"]["rear_wing_angle"] == pytest.approx(-0.9)
+    manager = preloaded_profile_manager(tmp_path, car_model=car_model, track=track)
 
     engine = RecommendationEngine(
         car_model=car_model, track_name=track, profile_manager=manager
