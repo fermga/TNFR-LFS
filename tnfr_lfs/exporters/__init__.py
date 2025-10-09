@@ -1018,8 +1018,8 @@ def render_coherence_map(payload: Mapping[str, Any], fmt: str = "json") -> str:
     if fmt == "json":
         return json.dumps(payload, indent=2, sort_keys=True)
     if fmt == "markdown":
-        lines = ["# Mapa de coherencia ΔNFR", ""]
-        lines.append("| Microsector | Fase | C̄ | Cmax | Cmin | Distancia |")
+        lines = ["# ΔNFR coherence map", ""]
+        lines.append("| Microsector | Phase | C̄ | Cmax | Cmin | Distance |")
         lines.append("| --- | --- | --- | --- | --- | --- |")
         for entry in payload.get("microsectors", []):
             track = entry.get("track", {})
@@ -1038,7 +1038,7 @@ def render_coherence_map(payload: Mapping[str, Any], fmt: str = "json") -> str:
             )
         lines.append("")
         global_summary = payload.get("global", {})
-        lines.append("## Resumen global")
+        lines.append("## Global summary")
         lines.append(
             f"- C̄ = {_to_float(global_summary.get('mean_coherence')):.3f}"
         )
@@ -1050,11 +1050,11 @@ def render_coherence_map(payload: Mapping[str, Any], fmt: str = "json") -> str:
         )
         span = global_summary.get("distance_span", {})
         lines.append(
-            f"- Cobertura pista = {_to_float(span.get('start')):.1f}→{_to_float(span.get('end')):.1f}"
+            f"- Track coverage = {_to_float(span.get('start')):.1f}→{_to_float(span.get('end')):.1f}"
         )
         return "\n".join(lines)
     if fmt == "visual":
-        lines = ["# Coherencia por microsector", ""]
+        lines = ["# Coherence by microsector", ""]
         for entry in payload.get("microsectors", []):
             series = entry.get("coherence", {}).get("series", []) or []
             sparkline = _sparkline([_to_float(value) for value in series])
@@ -1063,7 +1063,7 @@ def render_coherence_map(payload: Mapping[str, Any], fmt: str = "json") -> str:
                 f"{sparkline} (C̄ {_to_float(entry.get('coherence', {}).get('mean')):.3f})"
             )
         return "\n".join(lines)
-    raise ValueError(f"Formato desconocido para el mapa de coherencia: {fmt}")
+    raise ValueError(f"Unknown format for the coherence map: {fmt}")
 
 
 def render_operator_trajectories(payload: Mapping[str, Any], fmt: str = "json") -> str:
@@ -1071,8 +1071,8 @@ def render_operator_trajectories(payload: Mapping[str, Any], fmt: str = "json") 
     if fmt == "json":
         return json.dumps(payload, indent=2, sort_keys=True)
     if fmt == "markdown":
-        lines = ["# Trayectorias de operadores", ""]
-        lines.append("| Operador | Microsector | t₀ | t₁ | Δt | ΔNFR pico |")
+        lines = ["# Operator trajectories", ""]
+        lines.append("| Operator | Microsector | t₀ | t₁ | Δt | Peak ΔNFR |")
         lines.append("| --- | --- | --- | --- | --- | --- |")
         for entry in payload.get("events", []):
             lines.append(
@@ -1160,8 +1160,8 @@ def render_delta_bifurcation(payload: Mapping[str, Any], fmt: str = "json") -> s
                 )
         if payload.get("microsector_bifurcations"):
             lines.append("")
-            lines.append("## Bifurcaciones por microsector")
-            lines.append("| Microsector | Eventos | ΔNFR medio |")
+            lines.append("## Microsector bifurcations")
+            lines.append("| Microsector | Events | Mean ΔNFR |")
             lines.append("| --- | --- | --- |")
             for key, entry in sorted(payload["microsector_bifurcations"].items()):
                 lines.append(
@@ -1169,14 +1169,14 @@ def render_delta_bifurcation(payload: Mapping[str, Any], fmt: str = "json") -> s
                 )
         return "\n".join(lines)
     if fmt == "visual":
-        lines = ["# ΔNFR (eje estructural)", ""]
+        lines = ["# ΔNFR (structural axis)", ""]
         series = [_to_float(entry.get("delta_nfr")) for entry in payload.get("series", [])]
         sparkline = _sparkline(series)
         if sparkline:
-            lines.append(f"Serie: {sparkline}")
+            lines.append(f"Series: {sparkline}")
         if payload.get("transitions"):
             lines.append("")
-            lines.append("Cruces:")
+            lines.append("Crossings:")
             for entry in payload["transitions"]:
                 lines.append(
                     f"· tₛ {entry['structural']:.2f}: {entry['from']:+.3f} → {entry['to']:+.3f}"
