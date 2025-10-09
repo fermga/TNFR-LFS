@@ -433,7 +433,7 @@ def test_compare_command_attaches_abtest(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    config_path = tmp_path / "tnfr-lfs.toml"
+    config_path = tmp_path / "tnfr_lfs.toml"
     config_path.write_text(
         dedent(
             """
@@ -1035,7 +1035,7 @@ def test_configuration_defaults_are_applied(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    config_path = tmp_path / "tnfr-lfs.toml"
+    config_path = tmp_path / "tnfr_lfs.toml"
     config_path.write_text(
         """
 [telemetry]
@@ -1081,7 +1081,7 @@ exit = 0.2
 
 
 def test_repository_template_configures_default_ports_and_profiles() -> None:
-    config_path = Path(__file__).resolve().parents[1] / "tnfr-lfs.toml"
+    config_path = Path(__file__).resolve().parents[1] / "tnfr_lfs.toml"
     data = tomllib.loads(config_path.read_text(encoding="utf8"))
 
     telemetry = data["telemetry"]
@@ -1199,7 +1199,7 @@ def test_profiles_persist_and_adjust(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    config_path = tmp_path / "tnfr-lfs.toml"
+    config_path = tmp_path / "tnfr_lfs.toml"
     config_path.write_text(
         """
 [suggest]

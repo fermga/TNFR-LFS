@@ -49,7 +49,7 @@ and destination via the top-level flags:
 * `--log-format` – select `json` (default) or `text` for a human-readable
   formatter.
 
-The same options can be persisted inside `tnfr-lfs.toml` under
+The same options can be persisted inside `tnfr_lfs.toml` under
 `[logging]`. See the updated template at the project root for an example
 with sane defaults.
 
@@ -88,7 +88,7 @@ The ``tnfr_lfs`` executable (part of the TNFR × LFS toolkit) organises the work
 Generates ΔNFR objectives together with slip/yaw windows for a given
 car/track profile.  The command resolves the same threshold library used
 by the recommendation engine (backed by ``data/threshold_profiles.toml``)
-and emits a TOML snippet that can be dropped into ``tnfr-lfs.toml``.
+and emits a TOML snippet that can be dropped into ``tnfr_lfs.toml``.
 
 ```bash
 tnfr_lfs template --car FZR --track AS5 > presets/fzr_as5.toml
@@ -382,9 +382,9 @@ operator only raises wing tweaks when the stored baseline (low speed)
 remains within tolerance.
 ## Configuration
 
-The CLI resolves defaults from a ``tnfr-lfs.toml`` file located in the
+The CLI resolves defaults from a ``tnfr_lfs.toml`` file located in the
 current working directory, the path referenced by the
-``TNFR_LFS_CONFIG`` environment variable, or ``~/.config/tnfr-lfs.toml``
+``TNFR_LFS_CONFIG`` environment variable, or ``~/.config/tnfr_lfs.toml``
 as a fallback.  Any explicit CLI flag takes precedence, but the file can
 define sensible defaults for ports, exporters, car/track profiles and
 report locations:
@@ -420,7 +420,7 @@ highlighting ΔNFR↓ deviations in ``phase_messages``.
 Cache defaults now live in the pack's ``config/global.toml`` and are
 shared by the CLI and analysis helpers.  The block is omitted from the
 example above, but you can still override individual values by adding a
-``[cache]`` table to ``tnfr-lfs.toml``:
+``[cache]`` table to ``tnfr_lfs.toml``:
 
 ```toml
 [cache]
@@ -485,7 +485,7 @@ Use ``--config`` to point to an alternative file on a per-invocation
 basis:
 
 ```bash
-tnfr_lfs --config configs/tnfr-lfs.stint.toml analyze stint.jsonl
+tnfr_lfs --config configs/tnfr_lfs.stint.toml analyze stint.jsonl
 ```
 
 ## Quickstart script
