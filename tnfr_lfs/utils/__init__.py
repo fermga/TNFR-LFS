@@ -4,4 +4,5 @@ __all__ = [
     "immutables",
     "logging",
     "numeric",
+    "sparkline",
 ]

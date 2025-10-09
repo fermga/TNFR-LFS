@@ -69,6 +69,7 @@ from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObjectives
 from ..session import format_session_messages
 from ..utils.numeric import _safe_float
+from ..utils.sparkline import DEFAULT_SPARKLINE_BLOCKS, render_sparkline
 
 PAYLOAD_LIMIT = OverlayManager.MAX_BUTTON_TEXT - 1
 DEFAULT_UPDATE_RATE = 6.0
@@ -88,7 +89,8 @@ MODAL_AXIS_SUMMARY_LABELS = {
     "pitch": "Suspension",
 }
 
-SPARKLINE_BLOCKS = "▁▂▃▄▅▆▇█"
+SPARKLINE_BLOCKS = DEFAULT_SPARKLINE_BLOCKS
+SPARKLINE_MIDPOINT_BLOCK = SPARKLINE_BLOCKS[len(SPARKLINE_BLOCKS) // 2]
 
 HUD_PHASE_LABELS = {
     "entry1": "Entry 1",
@@ -1236,29 +1238,6 @@ def _coherence_bar(value: float, width: int = 10) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
-def _series_sparkline(values: Sequence[float], width: int = 12) -> str:
-    if not values:
-        return ""
-    trimmed = list(values)[-width:]
-    if not trimmed:
-        return ""
-    min_value = min(trimmed)
-    max_value = max(trimmed)
-    if math.isclose(max_value, min_value):
-        index = len(SPARKLINE_BLOCKS) // 2
-        return SPARKLINE_BLOCKS[index] * len(trimmed)
-    span = max_value - min_value
-    if span <= 0.0:
-        span = 1.0
-    blocks = []
-    for value in trimmed:
-        ratio = (value - min_value) / span
-        block_index = int(round(ratio * (len(SPARKLINE_BLOCKS) - 1)))
-        block_index = max(0, min(len(SPARKLINE_BLOCKS) - 1, block_index))
-        blocks.append(SPARKLINE_BLOCKS[block_index])
-    return "".join(blocks)
-
-
 def _nu_wave_line(
     bundles: Optional[Sequence[object]], width: int = 12
 ) -> str:
@@ -1272,7 +1251,11 @@ def _nu_wave_line(
         values.append(float(nu_value))
     if not values:
         return ""
-    spark = _series_sparkline(values, width=len(values))
+    spark = render_sparkline(
+        values,
+        width=len(values),
+        constant_block=SPARKLINE_MIDPOINT_BLOCK,
+    )
     return _truncate_line(f"ν_f~{spark} {values[-1]:.2f}Hz")
 
 
@@ -1304,7 +1287,11 @@ def _sense_state_line(
         values = []
     if not values:
         return ""
-    spark = _series_sparkline(values, width=len(values))
+    spark = render_sparkline(
+        values,
+        width=len(values),
+        constant_block=SPARKLINE_MIDPOINT_BLOCK,
+    )
     average = sense_state.get("average", sum(values) / len(values))
     try:
         avg_value = float(average)

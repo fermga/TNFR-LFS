@@ -18,6 +18,7 @@ from .setup_plan import (
 )
 from .report_extended import html_exporter
 from ..session import format_session_messages
+from ..utils.sparkline import render_sparkline
 
 
 CAR_MODEL_PREFIXES = {
@@ -626,24 +627,6 @@ def _microsector_indices(microsector: Any) -> Sequence[int]:
     return tuple(sorted(indices))
 
 
-def _sparkline(series: Sequence[float]) -> str:
-    if not series:
-        return ""
-    minimum = min(series)
-    maximum = max(series)
-    if math.isclose(maximum, minimum, abs_tol=1e-9):
-        return "▁" * len(series)
-    span = maximum - minimum
-    chars = "▁▂▃▄▅▆▇█"
-    buckets = len(chars) - 1
-    output = []
-    for value in series:
-        normalised = max(0.0, min(1.0, (value - minimum) / span))
-        index = int(round(normalised * buckets))
-        output.append(chars[index])
-    return "".join(output)
-
-
 def build_coherence_map_payload(results: Mapping[str, Any]) -> Dict[str, Any]:
     series = list(_series_from_results(results))
     microsectors = _microsectors_from_results(results)
@@ -1057,7 +1040,7 @@ def render_coherence_map(payload: Mapping[str, Any], fmt: str = "json") -> str:
         lines = ["# Coherence by microsector", ""]
         for entry in payload.get("microsectors", []):
             series = entry.get("coherence", {}).get("series", []) or []
-            sparkline = _sparkline([_to_float(value) for value in series])
+            sparkline = render_sparkline([_to_float(value) for value in series])
             lines.append(
                 f"MS{entry.get('microsector'):02d} {entry.get('phase', '-')}: "
                 f"{sparkline} (C̄ {_to_float(entry.get('coherence', {}).get('mean')):.3f})"
@@ -1171,7 +1154,7 @@ def render_delta_bifurcation(payload: Mapping[str, Any], fmt: str = "json") -> s
     if fmt == "visual":
         lines = ["# ΔNFR (structural axis)", ""]
         series = [_to_float(entry.get("delta_nfr")) for entry in payload.get("series", [])]
-        sparkline = _sparkline(series)
+        sparkline = render_sparkline(series)
         if sparkline:
             lines.append(f"Series: {sparkline}")
         if payload.get("transitions"):
