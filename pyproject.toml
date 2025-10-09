@@ -3,7 +3,7 @@ requires = ["setuptools>=67", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tnfr-lfs"
+name = "tnfr_lfs"
 dynamic = ["version"]
 description = "Fractal-Resonant Telemetry Analytics for Live for Speed toolkit"
 readme = "docs/index.md"
@@ -33,10 +33,10 @@ benchmark = [
 ]
 
 [project.urls]
-Homepage = "https://example.com/tnfr-lfs"
+Homepage = "https://example.com/tnfr_lfs"
 
 [project.scripts]
-"tnfr-lfs" = "tnfr_lfs.cli:main"
+"tnfr_lfs" = "tnfr_lfs.cli:main"
 
 [tool.pytest.ini_options]
 minversion = "7.0"

@@ -22,11 +22,11 @@ fi
 
 mkdir -p "${OUT_DIR}"
 
-tnfr-lfs baseline "${BASELINE}" --simulate "${DATA_FILE}" --force
-tnfr-lfs analyze "${BASELINE}" --export json > "${ANALYZE_JSON}"
-tnfr-lfs suggest "${BASELINE}" --car-model XFG --track BL1 --export json > "${SUGGEST_JSON}"
-tnfr-lfs report "${BASELINE}" --export json > "${REPORT_JSON}"
-tnfr-lfs write-set "${BASELINE}" --car-model XFG --export markdown > "${OUT_DIR}/setup_plan.md"
+tnfr_lfs baseline "${BASELINE}" --simulate "${DATA_FILE}" --force
+tnfr_lfs analyze "${BASELINE}" --export json > "${ANALYZE_JSON}"
+tnfr_lfs suggest "${BASELINE}" --car-model XFG --track BL1 --export json > "${SUGGEST_JSON}"
+tnfr_lfs report "${BASELINE}" --export json > "${REPORT_JSON}"
+tnfr_lfs write-set "${BASELINE}" --car-model XFG --export markdown > "${OUT_DIR}/setup_plan.md"
 
 python <<'PY'
 import json

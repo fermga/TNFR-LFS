@@ -17,7 +17,7 @@ apply those ideas in racing telemetry pipelines:
 4. **Exporters** – serialise analysis results to JSON or CSV with the
    functions in :mod:`tnfr_lfs.exporters`.
 
-The project ships with a CLI (`tnfr-lfs`) as well as examples and unit
+The project ships with a CLI (`tnfr_lfs`) as well as examples and unit
 tests to illustrate the workflow.
 
 ## Installation
@@ -115,9 +115,9 @@ aerodynamic imbalance).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 - **TNFR theory** describes the conceptual framework and vocabulary.
 - **TNFR × LFS toolkit** is the software package documented in this
   site; it contains the CLI, Python modules and exporter pipelines.
-- Identifiers that keep the hyphen (e.g. `tnfr-lfs`, `tnfr-lfs.toml`)
-  remain for compatibility with existing scripts while representing the
-  same TNFR × LFS toolkit.
+- Identifiers that now use underscores (e.g. `tnfr_lfs`) coexist with
+  configuration templates that retain their hyphenated names (e.g.
+  `tnfr-lfs.toml`) to preserve compatibility with existing scripts.
 
 ## Resources
 

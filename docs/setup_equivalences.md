@@ -73,7 +73,7 @@ values.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
 **CLI example**
 
 ```bash
-$ tnfr-lfs suggest stint.jsonl --car-model FZR --track AS5 \
+$ tnfr_lfs suggest stint.jsonl --car-model FZR --track AS5 \
     | jq '.recommendations[] | select(.parameter=="rear_wing_angle")'
 {
   "parameter": "rear_wing_angle",
@@ -118,7 +118,7 @@ to "optimal" and the coherence bar (`C(t) ███░`) grows in parallel.
 **CLI example**
 
 ```bash
-$ tnfr-lfs analyze stint.jsonl --export json \
+$ tnfr_lfs analyze stint.jsonl --export json \
     | jq '.phase_messages[] | select(.metric=="∇NFR⊥" and .phase=="apex")'
   {
   "phase": "apex",
@@ -130,7 +130,7 @@ $ tnfr-lfs analyze stint.jsonl --export json \
 
 The ``apex`` phase with a high `∇NFR⊥` maps to the **Hot pressure** row,
 so equalise pressures until the metric returns to its nominal zone and the
-alert disappears in the next ``tnfr-lfs analyze`` run.
+alert disappears in the next ``tnfr_lfs analyze`` run.
 
 ## Brake and balance subsystem
 
@@ -143,7 +143,7 @@ alert disappears in the next ``tnfr-lfs analyze`` run.
 **Combined example**
 
 ```bash
-$ tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 \
+$ tnfr_lfs osd --host 127.0.0.1 --outsim-port 4123 \
     --outgauge-port 3000 --insim-port 29999
 # During braking, page A shows:
 ∇NFR⊥: +0.24  ν_f: optimal  C(t): 0.81  → "High front bias"
