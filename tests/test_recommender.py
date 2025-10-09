@@ -46,6 +46,8 @@ from tnfr_lfs.recommender.rules import (
 )
 from tnfr_lfs.core.operators import tyre_balance_controller
 
+from tests.helpers.steering import build_steering_bundle, build_steering_record
+
 
 BASE_NU_F = {
     "tyres": 0.18,
@@ -56,102 +58,6 @@ BASE_NU_F = {
     "track": 0.08,
     "driver": 0.05,
 }
-
-
-def _steering_record(
-    timestamp: float,
-    *,
-    yaw_rate: float,
-    steer: float,
-    slip_angle_fl: float,
-    slip_angle_fr: float,
-    nfr: float,
-) -> TelemetryRecord:
-    return TelemetryRecord(
-        timestamp=timestamp,
-        vertical_load=5000.0,
-        slip_ratio=0.0,
-        lateral_accel=0.0,
-        longitudinal_accel=0.0,
-        yaw=0.0,
-        pitch=0.0,
-        roll=0.0,
-        brake_pressure=0.0,
-        locking=0.0,
-        nfr=nfr,
-        si=0.8,
-        speed=45.0,
-        yaw_rate=yaw_rate,
-        slip_angle=0.0,
-        steer=steer,
-        throttle=0.4,
-        gear=3,
-        vertical_load_front=2500.0,
-        vertical_load_rear=2500.0,
-        mu_eff_front=1.0,
-        mu_eff_rear=1.0,
-        mu_eff_front_lateral=1.0,
-        mu_eff_front_longitudinal=0.95,
-        mu_eff_rear_lateral=1.0,
-        mu_eff_rear_longitudinal=0.95,
-        suspension_travel_front=0.0,
-        suspension_travel_rear=0.0,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
-        slip_angle_fl=slip_angle_fl,
-        slip_angle_fr=slip_angle_fr,
-    )
-
-
-def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBundle:
-    share = record.nfr / 7.0
-    return EPIBundle(
-        timestamp=record.timestamp,
-        epi=0.0,
-        delta_nfr=record.nfr,
-        sense_index=record.si,
-        tyres=TyresNode(delta_nfr=share, sense_index=record.si),
-        suspension=SuspensionNode(delta_nfr=share, sense_index=record.si),
-        chassis=ChassisNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            yaw=record.yaw,
-            pitch=record.pitch,
-            roll=record.roll,
-            yaw_rate=record.yaw_rate,
-            lateral_accel=record.lateral_accel,
-            longitudinal_accel=record.longitudinal_accel,
-        ),
-        brakes=BrakesNode(delta_nfr=share, sense_index=record.si),
-        transmission=TransmissionNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            throttle=record.throttle,
-            gear=record.gear,
-            speed=record.speed,
-            longitudinal_accel=record.longitudinal_accel,
-            rpm=record.rpm,
-            line_deviation=record.line_deviation,
-        ),
-        track=TrackNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            axle_load_balance=0.0,
-            axle_velocity_balance=0.0,
-            yaw=record.yaw,
-            lateral_accel=record.lateral_accel,
-        ),
-        driver=DriverNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            steer=record.steer,
-            throttle=record.throttle,
-            style_index=record.si,
-        ),
-        ackermann_parallel_index=ackermann_delta,
-    )
-
-
 def _parallel_window_metrics(
     slip_angles: Sequence[tuple[float, float]],
     *,
@@ -177,7 +83,7 @@ def _parallel_window_metrics(
         else:
             slip_fl, slip_fr = outer, inner
         records.append(
-            _steering_record(
+            build_steering_record(
                 timestamp,
                 yaw_rate=yaw_rate,
                 steer=steer,
@@ -191,7 +97,7 @@ def _parallel_window_metrics(
         _ackermann_parallel_delta(record, baseline) for record in records
     ]
     bundles = [
-        _steering_bundle(record, ackermann)
+        build_steering_bundle(record, ackermann)
         for record, ackermann in zip(records, ackermann_values)
     ]
     metrics = compute_window_metrics(records, bundles=bundles)

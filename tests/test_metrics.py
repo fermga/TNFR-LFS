@@ -42,6 +42,8 @@ from tnfr_lfs.core.epi_models import (
 )
 from tnfr_lfs.core.utils import normalised_entropy
 
+from tests.helpers.steering import build_steering_bundle
+
 
 def _record(timestamp: float, nfr: float, si: float = 0.8, **overrides) -> TelemetryRecord:
     base = TelemetryRecord(
@@ -133,57 +135,6 @@ def test_motor_input_correlations_prefers_steer_yaw_pair() -> None:
     assert dominant.latency_ms == pytest.approx(expected_latency, abs=5.0)
 
 
-def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBundle:
-    share = record.nfr / 7.0
-    return EPIBundle(
-        timestamp=record.timestamp,
-        epi=0.0,
-        delta_nfr=record.nfr,
-        delta_nfr_proj_longitudinal=0.0,
-        delta_nfr_proj_lateral=0.0,
-        sense_index=record.si,
-        tyres=TyresNode(delta_nfr=share, sense_index=record.si),
-        suspension=SuspensionNode(delta_nfr=share, sense_index=record.si),
-        chassis=ChassisNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            yaw=record.yaw,
-            pitch=record.pitch,
-            roll=record.roll,
-            yaw_rate=record.yaw_rate,
-            lateral_accel=record.lateral_accel,
-            longitudinal_accel=record.longitudinal_accel,
-        ),
-        brakes=BrakesNode(delta_nfr=share, sense_index=record.si),
-        transmission=TransmissionNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            throttle=record.throttle,
-            gear=record.gear,
-            speed=record.speed,
-            longitudinal_accel=record.longitudinal_accel,
-            rpm=record.rpm,
-            line_deviation=record.line_deviation,
-        ),
-        track=TrackNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            axle_load_balance=0.0,
-            axle_velocity_balance=0.0,
-            yaw=record.yaw,
-            lateral_accel=record.lateral_accel,
-        ),
-        driver=DriverNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            steer=record.steer,
-            throttle=record.throttle,
-            style_index=record.si,
-        ),
-        ackermann_parallel_index=ackermann_delta,
-    )
-
-
 def test_ackermann_parallel_delta_uses_wheel_slip_angles() -> None:
     baseline = _record(
         0.0,
@@ -264,7 +215,7 @@ def test_compute_window_metrics_tracks_ackermann_overshoot() -> None:
         _ackermann_parallel_delta(record, baseline) for record in records
     ]
     bundles = [
-        _steering_bundle(record, ackermann)
+        build_steering_bundle(record, ackermann)
         for record, ackermann in zip(records, ackermann_values)
     ]
     metrics = compute_window_metrics(records, bundles=bundles)
@@ -1143,7 +1094,7 @@ def test_slide_catch_budget_aggregates_components() -> None:
         replace(base, timestamp=1.0, yaw_rate=-0.2, steer=-0.3, throttle=0.32),
         replace(base, timestamp=1.5, yaw_rate=0.1, steer=0.1, throttle=0.34),
     ]
-    bundles = [_steering_bundle(record, 0.18) for record in records]
+    bundles = [build_steering_bundle(record, 0.18) for record in records]
     metrics = compute_window_metrics(records, bundles=bundles)
     budget = metrics.slide_catch_budget
     assert budget.yaw_acceleration_ratio == pytest.approx(1.0)
