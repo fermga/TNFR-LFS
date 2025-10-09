@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+import threading
 from typing import Callable, Generic, Hashable, Mapping, Sequence, Tuple, TypeVar
 
 _T = TypeVar("_T")
@@ -13,34 +14,38 @@ _V = TypeVar("_V")
 class _LRUCache(Generic[_K, _V]):
     """Minimal LRU cache with targeted invalidation support."""
 
-    __slots__ = ("_maxsize", "_data")
+    __slots__ = ("_maxsize", "_data", "_lock")
 
     def __init__(self, maxsize: int) -> None:
         if maxsize <= 0:
             raise ValueError("maxsize must be positive")
         self._maxsize = int(maxsize)
         self._data: "OrderedDict[_K, _V]" = OrderedDict()
+        self._lock = threading.RLock()
 
     def get_or_create(self, key: _K, factory: Callable[[], _V]) -> _V:
-        try:
-            value = self._data.pop(key)
-        except KeyError:
-            value = factory()
-        else:
+        with self._lock:
+            try:
+                value = self._data.pop(key)
+            except KeyError:
+                value = factory()
+            else:
+                self._data[key] = value
+                return value
             self._data[key] = value
+            if len(self._data) > self._maxsize:
+                self._data.popitem(last=False)
             return value
-        self._data[key] = value
-        if len(self._data) > self._maxsize:
-            self._data.popitem(last=False)
-        return value
 
     def invalidate(self, predicate: Callable[[_K], bool]) -> None:
-        for candidate in list(self._data.keys()):
-            if predicate(candidate):
-                self._data.pop(candidate, None)
+        with self._lock:
+            for candidate in list(self._data.keys()):
+                if predicate(candidate):
+                    self._data.pop(candidate, None)
 
     def clear(self) -> None:
-        self._data.clear()
+        with self._lock:
+            self._data.clear()
 
 
 _DEFAULT_DELTA_CACHE_SIZE = 1024
@@ -146,20 +151,28 @@ def configure_cache(*, enable_delta_cache: bool | None = None, nu_f_cache_size: 
 
     if enable_delta_cache is not None:
         enable = bool(enable_delta_cache)
+        cache = _DELTA_NFR_CACHE
         if not enable:
-            clear_delta_cache()
-            _DELTA_NFR_CACHE = None
-        elif _DELTA_NFR_CACHE is None:
+            if cache is not None:
+                with cache._lock:
+                    cache.clear()
+                    _DELTA_NFR_CACHE = None
+        elif cache is None:
             _DELTA_NFR_CACHE = _LRUCache(maxsize=_DEFAULT_DELTA_CACHE_SIZE)
         _ENABLE_DELTA_CACHE = enable
 
     if nu_f_cache_size is not None:
         size = int(nu_f_cache_size)
         if size <= 0:
-            clear_dynamic_cache()
-            _DYNAMIC_MULTIPLIER_CACHE = None
+            cache = _DYNAMIC_MULTIPLIER_CACHE
+            if cache is not None:
+                with cache._lock:
+                    cache.clear()
+                    _DYNAMIC_MULTIPLIER_CACHE = None
         else:
-            _DYNAMIC_MULTIPLIER_CACHE = _LRUCache(maxsize=size)
+            cache = _DYNAMIC_MULTIPLIER_CACHE
+            if cache is None or cache._maxsize != size:
+                _DYNAMIC_MULTIPLIER_CACHE = _LRUCache(maxsize=size)
 
 
 def delta_cache_enabled() -> bool:
