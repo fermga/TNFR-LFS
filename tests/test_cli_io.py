@@ -100,30 +100,6 @@ def test_load_records_converts_json_payload(monkeypatch: pytest.MonkeyPatch, tmp
     assert records[0].payload["gear"] == 3
 
 
-def test_load_records_parquet_requires_pandas(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    telemetry_path = tmp_path / "baseline.parquet"
-    telemetry_path.write_bytes(b"PAR1\x00\x00\x00PAR1")
-
-    original = sys.modules.pop("pandas", None)
-    original_import = builtins.__import__
-
-    def fake_import(name: str, *args, **kwargs):  # type: ignore[no-untyped-def]
-        if name == "pandas":
-            raise ModuleNotFoundError("No module named 'pandas'")
-        return original_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-
-    try:
-        with pytest.raises(RuntimeError, match="requires the 'pandas' package"):
-            cli_io._load_records(telemetry_path)
-    finally:
-        if original is not None:
-            sys.modules["pandas"] = original
-
-
 def test_load_records_parquet_requires_engine(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -147,30 +123,57 @@ class _DummyRecord:
     value: int
 
 
-def test_persist_records_parquet_requires_pandas(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def _build_load_parquet_args(tmp_path: Path) -> tuple[tuple[Path, ...], dict[str, object], Path | None]:
+    telemetry_path = tmp_path / "baseline.parquet"
+    telemetry_path.write_bytes(b"PAR1\x00\x00\x00PAR1")
+    return (telemetry_path,), {}, None
+
+
+def _build_persist_parquet_args(
+    tmp_path: Path,
+) -> tuple[tuple[list[_DummyRecord], Path, str], dict[str, object], Path | None]:
     destination = tmp_path / "baseline.parquet"
     records = [_DummyRecord(1)]
+    return (records, destination, "parquet"), {}, destination
+
+
+@pytest.mark.parametrize(
+    ("target", "arguments_builder"),
+    [
+        (cli_io._load_records, _build_load_parquet_args),
+        (cli_io._persist_records, _build_persist_parquet_args),
+    ],
+    ids=["load", "persist"],
+)
+def test_parquet_operations_require_pandas(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    target,
+    arguments_builder,
+) -> None:
+    args, kwargs, destination = arguments_builder(tmp_path)
 
     original = sys.modules.pop("pandas", None)
     original_import = builtins.__import__
 
-    def fake_import(name: str, *args, **kwargs):  # type: ignore[no-untyped-def]
+    def fake_import(name: str, *f_args, **f_kwargs):  # type: ignore[no-untyped-def]
         if name == "pandas":
             raise ModuleNotFoundError("No module named 'pandas'")
-        return original_import(name, *args, **kwargs)
+        return original_import(name, *f_args, **f_kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
     try:
         with pytest.raises(RuntimeError, match="requires the 'pandas' package"):
-            cli_io._persist_records(records, destination, "parquet")
+            target(*args, **kwargs)
     finally:
         if original is not None:
             sys.modules["pandas"] = original
+        else:
+            sys.modules.pop("pandas", None)
 
-    assert not destination.exists()
+    if destination is not None:
+        assert not destination.exists()
 
 
 def test_persist_records_parquet_requires_engine(
