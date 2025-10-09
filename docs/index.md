@@ -40,24 +40,24 @@ streams; the toolkit does not synthesise additional inputs. Enable both
 UDP broadcasters and extend OutSim with `OutSim Opts ff` in `cfg.txt`
 (or run `/outsim Opts ff` before `/outsim 1 …`) so the UDP packets
 include the player identifier, driver inputs and the four-wheel block
-that feeds the telemetry fusion layer.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】
+that feeds the telemetry fusion layer.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】
 Likewise, enable the extended OutGauge payload (via `OutGauge Opts …` in
 `cfg.txt` or `/outgauge Opts …`) so the simulator transmits tyre
 temperatures, their three-layer profile and pressures; set at least the
 `OG_EXT_TYRE_TEMP`, `OG_EXT_TYRE_PRESS` and `OG_EXT_BRAKE_TEMP` flags so the
 20-float block (inner/middle/outer layers, pressure ring and brake discs)
 is broadcast. Otherwise the HUD and CLI will surface those entries as “no
-data”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
+data”.【F:tnfr_lfs/ingestion/fusion.py†L594-L657】
 
 !!! note "Brake temperature estimation"
-    Live for Speed only publishes real brake temperatures when the extended OutGauge payload is enabled; otherwise the stream exposes `0 °C` placeholders. TNFR × LFS consumes those native readings whenever they arrive and seamlessly falls back to the brake thermal proxy to keep fade metrics alive, integrating brake work and convective cooling until fresh data shows up again.【F:tnfr_lfs/acquisition/fusion.py†L248-L321】【F:tnfr_lfs/acquisition/fusion.py†L1064-L1126】
+    Live for Speed only publishes real brake temperatures when the extended OutGauge payload is enabled; otherwise the stream exposes `0 °C` placeholders. TNFR × LFS consumes those native readings whenever they arrive and seamlessly falls back to the brake thermal proxy to keep fade metrics alive, integrating brake work and convective cooling until fresh data shows up again.【F:tnfr_lfs/ingestion/fusion.py†L248-L321】【F:tnfr_lfs/ingestion/fusion.py†L1064-L1126】
 The CSV reader mirrors that philosophy by preserving optional columns as
 `math.nan` when OutSim leaves them out, preventing artificial estimates
-from leaking into the metrics pipeline.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
+from leaking into the metrics pipeline.【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】
 When the wheel payload is disabled the toolkit now surfaces tyre loads,
 slip ratios and suspension metrics as “no data” rather than
 fabricating zeroed values, making it obvious that the telemetry stream
-is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_acquisition.py†L229-L288】
+is incomplete.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】【F:tests/test_acquisition.py†L229-L288】
 
 ### Metric field checklist
 
@@ -68,14 +68,14 @@ is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_a
   resolve the nodal gradient.  The ∇NFR∥/∇NFR⊥ projections are components of
   that gradient and do not replace the raw load channels; always cross-check
   recommendations against the `Fz`/`ΔFz` logs when you need absolute forces.
-  【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+  【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
 - **ν_f (natural frequency)** – requires load split, slip ratios/angles,
   and yaw rate/velocity from OutSim, plus driver style signals (throttle,
   gear) resolved via OutGauge to tailor node categories and spectral
-  windows.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+  windows.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
 - **C(t) (structural coherence)** – builds on the ΔNFR distribution and
   ν_f bands, leveraging the same OutSim data, the derived `mu_eff_*`
-  coefficients, and the ABS/TC flags that OutGauge exposes.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+  coefficients, and the ABS/TC flags that OutGauge exposes.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
 - **Ackermann / slide-catch budgets** – use only the `slip_angle_*`
   channels and `yaw_rate` broadcast by OutSim to measure parallel-steer
   deltas and slide-recovery headroom; when these signals are absent the
@@ -88,7 +88,7 @@ is incomplete.【F:tnfr_lfs/acquisition/fusion.py†L93-L200】【F:tests/test_a
   emitted by the OutGauge extended payload when they are finite and
   positive; when the block is disabled the fusion keeps the historical
   sample or the same `"no data"` placeholder so downstream tooling does
-  not fabricate temperatures.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】
+  not fabricate temperatures.【F:tnfr_lfs/ingestion/fusion.py†L594-L657】
 
 ## Operational checklist
 

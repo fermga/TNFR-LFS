@@ -19,7 +19,7 @@ from typing import (
     Tuple,
 )
 
-from ..acquisition import (
+from ..ingestion import (
     ButtonEvent,
     ButtonLayout,
     InSimClient,

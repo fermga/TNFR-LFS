@@ -14,7 +14,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from ..acquisition import OutSimClient
+from ..ingestion import OutSimClient
 from ..io import ReplayCSVBundleReader, logs, raf_to_telemetry_records, read_raf
 from ..core.epi import TelemetryRecord
 from .errors import CliError

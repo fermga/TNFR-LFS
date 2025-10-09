@@ -161,20 +161,26 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
         )
 
     try:
-        return handler(namespace, config=config)
+        result = handler(namespace, config=config)
     except CliError as exc:
         if not exc.logged:
             log_cli_error(exc.payload, exc_info=exc)
             exc.logged = True
+        message = exc.payload.message if exc.payload else str(exc)
+        if message:
+            sys.stdout.write(message)
+            if not message.endswith("\n"):
+                sys.stdout.write("\n")
         raise SystemExit(exc.status_code) from exc
-
-
-def main() -> None:  # pragma: no cover - thin wrapper
-    result = run_cli()
     if result:
         sys.stdout.write(result)
         if not result.endswith("\n"):
             sys.stdout.write("\n")
+    return result
+
+
+def main() -> None:  # pragma: no cover - thin wrapper
+    run_cli()
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI invocation guard
