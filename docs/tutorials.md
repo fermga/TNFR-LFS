@@ -80,7 +80,7 @@ suggestion files summarise the recommended setup changes, while
 ```markdown
 | Change | Adjustment | Rationale | Expected effect |
 | --- | --- | --- | --- |
-| caster_deg | -0.250 | Braking operator aplicado sobre la fase de entry en microsector 0... | -0.2° caster |
+| caster_deg | -0.250 | Braking operator applied to the entry phase in microsector 0... | -0.2° caster |
 ```
 
 Use the Markdown output to brief engineers or paste the JSON artefacts into
