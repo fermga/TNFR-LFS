@@ -21,6 +21,7 @@ from ..analysis.brake_thermal import (
     merge_brake_config,
 )
 from ..core.epi import EPIExtractor, EPIBundle, TelemetryRecord
+from ..utils.numeric import _safe_float
 from .outsim_udp import OutSimPacket, OutSimWheelState
 from .outgauge_udp import OutGaugePacket
 
@@ -29,16 +30,6 @@ __all__ = ["TelemetryFusion"]
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(value, maximum))
-
-
-def _safe_float(value: float, default: float = 0.0) -> float:
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return default
-    if not math.isfinite(numeric):
-        return default
-    return numeric
 
 
 

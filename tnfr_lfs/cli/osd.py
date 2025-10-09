@@ -68,6 +68,7 @@ from ..exporters.setup_plan import (
 from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObjectives
 from ..session import format_session_messages
+from ..utils.numeric import _safe_float
 
 PAYLOAD_LIMIT = OverlayManager.MAX_BUTTON_TEXT - 1
 DEFAULT_UPDATE_RATE = 6.0
@@ -1558,23 +1559,11 @@ def _format_sensitivities(derivatives: Mapping[str, float], limit: int = 3) -> s
     for param, value in ordered[:limit]:
         parts.append(f"{param} {value:+.2f}")
     return " · ".join(parts)
-
-
-def _safe_float(value: object, default: Optional[float] = None) -> Optional[float]:
-    try:
-        numeric = float(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return default
-    if not math.isfinite(numeric):
-        return default
-    return numeric
-
-
 def _hint_float(hints: Optional[Mapping[str, object]], key: str, default: float) -> float:
     if not isinstance(hints, Mapping):
         return default
     candidate = hints.get(key)
-    value = _safe_float(candidate)
+    value = _safe_float(candidate, None)
     if value is None:
         return default
     return value
@@ -1600,13 +1589,13 @@ def _sense_average(
     bundles: Optional[Sequence[object]],
 ) -> Optional[float]:
     if isinstance(sense_state, Mapping):
-        average = _safe_float(sense_state.get("average"))
+        average = _safe_float(sense_state.get("average"), None)
         if average is not None:
             return average
     values: list[float] = []
     if bundles:
         for bundle in bundles:
-            value = _safe_float(getattr(bundle, "sense_index", None))
+            value = _safe_float(getattr(bundle, "sense_index", None), None)
             if value is not None:
                 values.append(value)
     if values:
@@ -1619,8 +1608,8 @@ def _delta_density(bundles: Optional[Sequence[object]]) -> Optional[float]:
         return None
     series: list[tuple[float, float]] = []
     for bundle in bundles:
-        timestamp = _safe_float(getattr(bundle, "timestamp", None))
-        delta = _safe_float(getattr(bundle, "delta_nfr", None))
+        timestamp = _safe_float(getattr(bundle, "timestamp", None), None)
+        delta = _safe_float(getattr(bundle, "delta_nfr", None), None)
         if timestamp is None or delta is None:
             continue
         series.append((timestamp, abs(delta)))
@@ -1648,8 +1637,8 @@ def _delta_density(bundles: Optional[Sequence[object]]) -> Optional[float]:
 def _entropy_indicator_line(
     window_metrics: WindowMetrics, thresholds: Optional[Mapping[str, float]]
 ) -> Optional[str]:
-    delta_entropy = _safe_float(getattr(window_metrics, "delta_nfr_entropy", None))
-    node_entropy = _safe_float(getattr(window_metrics, "node_entropy", None))
+    delta_entropy = _safe_float(getattr(window_metrics, "delta_nfr_entropy", None), None)
+    node_entropy = _safe_float(getattr(window_metrics, "node_entropy", None), None)
     if delta_entropy is None or node_entropy is None:
         return None
 
@@ -1694,12 +1683,12 @@ def _lap_integral_series(
     order: List[str] = []
     prev_record = records[0]
     prev_bundle = bundles[0]
-    prev_structural = _safe_float(getattr(prev_record, "structural_timestamp", None))
+    prev_structural = _safe_float(getattr(prev_record, "structural_timestamp", None), None)
     prev_timestamp = _safe_float(getattr(prev_record, "timestamp", None), 0.0) or 0.0
 
     for index in range(1, limit):
         record = records[index]
-        structural_ts = _safe_float(getattr(record, "structural_timestamp", None))
+        structural_ts = _safe_float(getattr(record, "structural_timestamp", None), None)
         timestamp = _safe_float(getattr(record, "timestamp", None), prev_timestamp) or prev_timestamp
         if structural_ts is not None and prev_structural is not None:
             dt = structural_ts - prev_structural
@@ -1806,7 +1795,7 @@ def _operational_checklist_line(
     headroom_value = None
     if window_metrics is not None:
         brake_headroom = getattr(window_metrics, "brake_headroom", None)
-        headroom_value = _safe_float(getattr(brake_headroom, "value", None))
+        headroom_value = _safe_float(getattr(brake_headroom, "value", None), None)
     if headroom_value is not None and headroom_target is not None:
         entries.append(
             _format_check_entry("Hd", headroom_value, headroom_target, threshold_type="min")
@@ -1816,13 +1805,13 @@ def _operational_checklist_line(
     aero_value = None
     if window_metrics is not None:
         aero_coherence = getattr(window_metrics, "aero_coherence", None)
-        aero_value = _safe_float(getattr(aero_coherence, "high_speed_imbalance", None))
+        aero_value = _safe_float(getattr(aero_coherence, "high_speed_imbalance", None), None)
     if aero_value is None and window_metrics is not None:
         aero_drift = getattr(window_metrics, "aero_balance_drift", None)
         if aero_drift is not None:
             high_speed = getattr(aero_drift, "high_speed", None)
             if high_speed is not None:
-                aero_value = _safe_float(getattr(high_speed, "mu_delta", None))
+                aero_value = _safe_float(getattr(high_speed, "mu_delta", None), None)
     if aero_value is not None and aero_target is not None:
         entries.append(
             _format_check_entry("Δμ", abs(aero_value), aero_target, threshold_type="max")
