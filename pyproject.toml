@@ -27,6 +27,9 @@ dev = [
     "mypy>=1.11.0",
     "black>=24.4.0",
 ]
+benchmark = [
+    "pytest-benchmark>=4.0.0",
+]
 
 [project.urls]
 Homepage = "https://example.com/tnfr-lfs"

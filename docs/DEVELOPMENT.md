@@ -25,3 +25,29 @@ pytest
 ## Reference dataset
 
 The quickstart flow and the integration tests depend on the capture `data/test1.raf` and on the bundle `data/test1.zip` exported from Replay Analyzer. Both artefacts contain real Live for Speed telemetry and serve as reference datasets for the binary ingestion flows, regression tests, and CLI tutorials.
+
+## Performance regression benchmark
+
+The repository ships a focused ΔNFR/ν_f benchmark under `benchmarks/`. Install the optional
+extra and execute the module locally whenever a change touches the caching helpers or the
+natural-frequency analysis:
+
+```bash
+python -m pip install -e .[benchmark]
+python -m benchmarks.delta_cache_benchmark
+# or use the Makefile shortcut
+make benchmark-delta-cache
+```
+
+The script loads `data/test1.zip` through `ReplayCSVBundleReader`, iterates over the telemetry,
+and times ΔNFR and ν_f computations with the caches disabled versus the same workload with the
+LRU layers warm.【F:benchmarks/delta_cache_benchmark.py†L1-L174】 The default configuration processes
+128 samples twice per run (three measured repeats) and currently reports ≈0.0106 s per uncached pass
+against ≈0.0089 s with caches enabled, a ~1.2× speed-up.【af1ae4†L1-L4】 Treat a cached mean above
+0.010 s or a speed-up below ×1.1 as a regression and investigate before merging.
+
+Increasing `--sample-limit` grows the workload linearly because each sample runs spectral analysis
+for the natural-frequency estimator.【F:benchmarks/delta_cache_benchmark.py†L84-L113】 Use higher limits
+when you need to stress-test longer stints, but expect minute-long runs once you reach the full
+6 500-sample replay bundle; record those timings in the pull request description so reviewers can
+compare them with the baseline numbers above.
