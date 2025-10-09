@@ -1,7 +1,12 @@
 import math
 
+from dataclasses import replace
+from typing import Dict
+
 import pytest
 
+from tnfr_lfs.core import cache as cache_helpers
+from tnfr_lfs.core import epi as epi_module
 from tnfr_lfs.core.epi import (
     DeltaCalculator,
     EPIExtractor,
@@ -21,6 +26,15 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_epi_cache_state():
+    cache_helpers.clear_delta_cache()
+    cache_helpers.clear_dynamic_cache()
+    yield
+    cache_helpers.clear_delta_cache()
+    cache_helpers.clear_dynamic_cache()
 
 
 def _frequency_record(
@@ -453,3 +467,88 @@ def test_natural_frequency_analysis_converges_to_dominant_signal():
     if driver_steps:
         max_step = max(driver_steps)
         assert max_step < base_reference["driver"] * 0.6
+
+
+def test_delta_nfr_cache_reuses_result(monkeypatch):
+    baseline = _frequency_record(0.0, steer=0.1, throttle=0.6, brake=0.1, suspension=0.02)
+    record = replace(
+        _frequency_record(0.1, steer=0.2, throttle=0.4, brake=0.2, suspension=0.05),
+        reference=baseline,
+        nfr=baseline.nfr + 10.0,
+    )
+
+    call_count = {"value": 0}
+
+    def _fake_compute(target: TelemetryRecord) -> Dict[str, float]:
+        call_count["value"] += 1
+        return {"tyres": 1.0, "suspension": 0.5}
+
+    monkeypatch.setattr(
+        epi_module,
+        "_delta_nfr_by_node_uncached",
+        _fake_compute,
+    )
+
+    first = delta_nfr_by_node(record)
+    second = delta_nfr_by_node(record)
+
+    assert call_count["value"] == 1
+    assert first == second
+
+    cache_helpers.invalidate_delta_record(record)
+    third = delta_nfr_by_node(record)
+    assert call_count["value"] == 2
+    assert third == first
+
+
+def test_dynamic_multiplier_cache_invalidation(monkeypatch):
+    settings = NaturalFrequencySettings(
+        min_window_seconds=0.05,
+        max_window_seconds=0.12,
+        bandpass_low_hz=0.1,
+        bandpass_high_hz=4.0,
+    )
+    analyzer = NaturalFrequencyAnalyzer(settings)
+
+    samples = [
+        _frequency_record(0.00, steer=0.1, throttle=0.5, brake=0.2, suspension=0.03),
+        _frequency_record(0.05, steer=0.2, throttle=0.6, brake=0.1, suspension=0.04),
+        _frequency_record(0.10, steer=0.15, throttle=0.55, brake=0.12, suspension=0.02),
+    ]
+    for sample in samples:
+        analyzer._append_record(sample)
+
+    compute_calls = {"count": 0}
+
+    def _fake_dynamic(self, history, car_model):
+        compute_calls["count"] += 1
+        return {"tyres": 1.1, "driver": 0.9}, 2.0
+
+    monkeypatch.setattr(
+        NaturalFrequencyAnalyzer,
+        "_compute_dynamic_multipliers_raw",
+        _fake_dynamic,
+        raising=False,
+    )
+
+    invalidated: list[float] = []
+
+    def _fake_invalidate(record: TelemetryRecord) -> None:
+        invalidated.append(record.timestamp)
+
+    monkeypatch.setattr(epi_module, "invalidate_dynamic_record", _fake_invalidate)
+
+    first = analyzer._dynamic_multipliers("proto_car")
+    second = analyzer._dynamic_multipliers("proto_car")
+
+    assert compute_calls["count"] == 1
+    assert first == second
+
+    analyzer._append_record(
+        _frequency_record(0.20, steer=0.25, throttle=0.65, brake=0.15, suspension=0.05)
+    )
+
+    third = analyzer._dynamic_multipliers("proto_car")
+    assert compute_calls["count"] == 2
+    assert third == first
+    assert invalidated  # Old history entries should trigger invalidation.
