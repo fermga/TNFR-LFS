@@ -16,6 +16,7 @@ nav:
       - API Reference: api_reference.md
       - Design manual: DESIGN.md
       - Development workflow: DEVELOPMENT.md
+      - Release process: release_process.md
       - Setup equivalences: setup_equivalences.md
       - Preset workflow: presets.md
       - Brake thermal proxy: brake_thermal_proxy.md
