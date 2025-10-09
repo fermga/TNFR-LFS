@@ -115,9 +115,9 @@ aerodynamic imbalance).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 - **TNFR theory** describes the conceptual framework and vocabulary.
 - **TNFR × LFS toolkit** is the software package documented in this
   site; it contains the CLI, Python modules and exporter pipelines.
-- Identifiers that now use underscores (e.g. `tnfr_lfs`) coexist with
-  configuration templates that retain their hyphenated names (e.g.
-  `tnfr-lfs.toml`) to preserve compatibility with existing scripts.
+- Identifiers that use underscores (e.g. `tnfr_lfs`) coexist with
+  configuration templates that share the same convention (e.g.
+  `tnfr_lfs.toml`) to preserve compatibility with existing scripts.
 
 ## Resources
 

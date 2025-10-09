@@ -20,7 +20,7 @@ from ..core.epi import TelemetryRecord
 from .errors import CliError
 
 CONFIG_ENV_VAR = "TNFR_LFS_CONFIG"
-DEFAULT_CONFIG_FILENAME = "tnfr-lfs.toml"
+DEFAULT_CONFIG_FILENAME = "tnfr_lfs.toml"
 
 Records = List[TelemetryRecord]
 
@@ -31,7 +31,7 @@ _PARQUET_DEPENDENCY_MESSAGE = (
 
 
 def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
-    """Load CLI defaults from ``tnfr-lfs.toml`` style files."""
+    """Load CLI defaults from ``tnfr_lfs.toml`` style files."""
 
     candidates: List[Path] = []
     if path is not None:

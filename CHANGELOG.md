@@ -220,7 +220,7 @@ Update CLI help text to English ([`83b0d5b`](https://github.com/fermga/TNFR-LFS/
 
 * Update CLI help text to English ([`3f2d846`](https://github.com/fermga/TNFR-LFS/commit/3f2d84661c74fab8f4d6f33d479ea11ef6dae56b))
 
-* Merge pull request #250 from fermga/codex/update-tnfr-lfs-spanish-glossary-title
+* Merge pull request #250 from fermga/codex/update-tnfr_lfs-spanish-glossary-title
 
 Update TNFR × LFS glossary heading ([`f4d710c`](https://github.com/fermga/TNFR-LFS/commit/f4d710c353b1cc1f1401f136d36cfee4426c877d))
 
@@ -1654,11 +1654,11 @@ Add compressed telemetry log helpers and deterministic replayer ([`32f9df7`](htt
 
 * Add telemetry log utilities with compression support ([`0eb4ccd`](https://github.com/fermga/TNFR-LFS/commit/0eb4ccda03309be6a0cac4009e4016b9e72faea6))
 
-* Merge pull request #27 from fermga/codex/create-tnfr-lfs.toml-configuration-file
+* Merge pull request #27 from fermga/codex/create-tnfr_lfs.toml-configuration-file
 
-Add configurable tnfr-lfs.toml template to repository ([`ba81d20`](https://github.com/fermga/TNFR-LFS/commit/ba81d20275513b666d8cd1e500206402437dd580))
+Add configurable tnfr_lfs.toml template to repository ([`ba81d20`](https://github.com/fermga/TNFR-LFS/commit/ba81d20275513b666d8cd1e500206402437dd580))
 
-* Add default tnfr-lfs configuration template ([`8b09cab`](https://github.com/fermga/TNFR-LFS/commit/8b09cab93cf6a0c041a21245a4471824641bdd74))
+* Add default tnfr_lfs configuration template ([`8b09cab`](https://github.com/fermga/TNFR-LFS/commit/8b09cab93cf6a0c041a21245a4471824641bdd74))
 
 * Merge pull request #26 from fermga/codex/add-threshold-profiles-resource
 

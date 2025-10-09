@@ -43,7 +43,7 @@ jobs:
               - 'pyproject.toml'
               - 'requirements*.txt'
               - 'tests/**'
-              - 'tnfr-lfs.toml'
+              - 'tnfr_lfs.toml'
               - 'tnfr_lfs/**'
               - 'tnfr_lfs_pack/**'
               - 'typing_targets/**'

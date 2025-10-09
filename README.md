@@ -108,7 +108,7 @@ The complete documentation lives under `docs/` and is published with MkDocs.
 - **TNFR × LFS** identifies the software toolkit that implements and automates
   those principles.
 - The CLI (`tnfr_lfs`), Python modules (`tnfr_lfs`) and configuration paths
-  (`tnfr-lfs.toml`) retain their respective naming conventions for
+  (`tnfr_lfs.toml`) retain their respective naming conventions for
   compatibility.
 
 ## Development
