@@ -5,6 +5,7 @@ from typing import Dict
 
 import pytest
 
+from tnfr_lfs.cache_settings import CacheOptions
 from tnfr_lfs.core import cache as cache_helpers
 from tnfr_lfs.core import epi as epi_module
 from tnfr_lfs.core.epi import (
@@ -30,9 +31,11 @@ from tnfr_lfs.core.epi_models import (
 
 @pytest.fixture(autouse=True)
 def _clear_epi_cache_state():
+    cache_helpers.configure_cache(enable_delta_cache=True, nu_f_cache_size=256)
     cache_helpers.clear_delta_cache()
     cache_helpers.clear_dynamic_cache()
     yield
+    cache_helpers.configure_cache(enable_delta_cache=True, nu_f_cache_size=256)
     cache_helpers.clear_delta_cache()
     cache_helpers.clear_dynamic_cache()
 
@@ -501,6 +504,62 @@ def test_delta_nfr_cache_reuses_result(monkeypatch):
     assert third == first
 
 
+def test_delta_nfr_cache_disable(monkeypatch):
+    baseline = _frequency_record(0.0, steer=0.1, throttle=0.6, brake=0.1, suspension=0.02)
+    record = replace(
+        _frequency_record(0.1, steer=0.2, throttle=0.4, brake=0.2, suspension=0.05),
+        reference=baseline,
+        nfr=baseline.nfr + 8.0,
+    )
+
+    call_count = {"value": 0}
+
+    def _fake_compute(target: TelemetryRecord) -> Dict[str, float]:
+        call_count["value"] += 1
+        return {"tyres": 1.0}
+
+    monkeypatch.setattr(
+        epi_module,
+        "_delta_nfr_by_node_uncached",
+        _fake_compute,
+    )
+
+    cache_helpers.configure_cache(enable_delta_cache=False)
+
+    delta_nfr_by_node(record)
+    delta_nfr_by_node(record)
+
+    assert call_count["value"] == 2
+
+
+def test_delta_nfr_cache_options_override(monkeypatch):
+    baseline = _frequency_record(0.0, steer=0.1, throttle=0.6, brake=0.1, suspension=0.02)
+    record = replace(
+        _frequency_record(0.1, steer=0.2, throttle=0.4, brake=0.2, suspension=0.05),
+        reference=baseline,
+        nfr=baseline.nfr + 6.0,
+    )
+
+    call_count = {"value": 0}
+
+    def _fake_compute(target: TelemetryRecord) -> Dict[str, float]:
+        call_count["value"] += 1
+        return {"tyres": 1.0}
+
+    monkeypatch.setattr(
+        epi_module,
+        "_delta_nfr_by_node_uncached",
+        _fake_compute,
+    )
+
+    options = CacheOptions(enable_delta_cache=False, nu_f_cache_size=64, telemetry_cache_size=1)
+
+    delta_nfr_by_node(record, cache_options=options)
+    delta_nfr_by_node(record, cache_options=options)
+
+    assert call_count["value"] == 2
+
+
 def test_dynamic_multiplier_cache_invalidation(monkeypatch):
     settings = NaturalFrequencySettings(
         min_window_seconds=0.05,
@@ -552,3 +611,43 @@ def test_dynamic_multiplier_cache_invalidation(monkeypatch):
     assert compute_calls["count"] == 2
     assert third == first
     assert invalidated  # Old history entries should trigger invalidation.
+
+
+def test_dynamic_multiplier_cache_disable(monkeypatch):
+    settings = NaturalFrequencySettings(
+        min_window_seconds=0.05,
+        max_window_seconds=0.12,
+        bandpass_low_hz=0.1,
+        bandpass_high_hz=4.0,
+    )
+    analyzer = NaturalFrequencyAnalyzer(
+        settings,
+        cache_options=CacheOptions(
+            enable_delta_cache=True, nu_f_cache_size=0, telemetry_cache_size=1
+        ),
+    )
+
+    samples = [
+        _frequency_record(0.00, steer=0.1, throttle=0.5, brake=0.2, suspension=0.03),
+        _frequency_record(0.05, steer=0.2, throttle=0.6, brake=0.1, suspension=0.04),
+    ]
+    for sample in samples:
+        analyzer._append_record(sample)
+
+    compute_calls = {"count": 0}
+
+    def _fake_dynamic(self, history, car_model):
+        compute_calls["count"] += 1
+        return {"tyres": 1.0}, 2.0
+
+    monkeypatch.setattr(
+        NaturalFrequencyAnalyzer,
+        "_compute_dynamic_multipliers_raw",
+        _fake_dynamic,
+        raising=False,
+    )
+
+    analyzer._dynamic_multipliers("FZR")
+    analyzer._dynamic_multipliers("FZR")
+
+    assert compute_calls["count"] == 2

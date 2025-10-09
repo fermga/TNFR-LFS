@@ -289,7 +289,11 @@ def _load_records_from_namespace(
     if replay_bundle is not None:
         bundle_path = Path(replay_bundle)
         try:
-            records = _load_replay_bundle(bundle_path)
+            cache_options = getattr(namespace, "cache_options", None)
+            cache_size = None
+            if cache_options is not None:
+                cache_size = getattr(cache_options, "telemetry_cache_size", None)
+            records = _load_replay_bundle(bundle_path, cache_size=cache_size)
         except FileNotFoundError as exc:
             raise CliError(str(exc)) from exc
         namespace.telemetry = bundle_path

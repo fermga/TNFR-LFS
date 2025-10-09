@@ -15,11 +15,34 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 from ._pack_resources import data_root
+from .cache_settings import CacheOptions
 from .utils.immutables import _freeze_dict, _freeze_value
 
 
 _DATA_ROOT = data_root()
 _LFS_CLASS_OVERRIDES_CACHE: dict[Path, Mapping[str, Mapping[str, Any]]] = {}
+
+
+def _coerce_bool(value: Any, fallback: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+    return fallback
+
+
+def _coerce_int(value: Any, fallback: int, *, minimum: int = 0) -> int:
+    try:
+        numeric = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    if numeric < minimum:
+        return minimum
+    return numeric
 
 
 def _deep_merge(
@@ -85,6 +108,32 @@ def load_lfs_class_overrides(
     """Public wrapper to access the cached LFS class overrides mapping."""
 
     return _load_lfs_class_overrides(overrides_path)
+
+
+def parse_cache_options(config: Mapping[str, Any] | None = None) -> CacheOptions:
+    """Normalise cache configuration from CLI and pack TOML payloads."""
+
+    payload: Mapping[str, Any]
+    if config is None:
+        payload = MappingProxyType({})
+    else:
+        candidate = config.get("cache")
+        if isinstance(candidate, ABCMapping):
+            payload = candidate
+        else:
+            payload = MappingProxyType({})
+
+    telemetry_raw = payload.get("telemetry")
+    telemetry_cfg = telemetry_raw if isinstance(telemetry_raw, ABCMapping) else {}
+
+    options = CacheOptions(
+        enable_delta_cache=_coerce_bool(payload.get("enable_delta_cache"), True),
+        nu_f_cache_size=_coerce_int(payload.get("nu_f_cache_size"), 256, minimum=0),
+        telemetry_cache_size=_coerce_int(
+            telemetry_cfg.get("telemetry_cache_size"), 1, minimum=0
+        ),
+    )
+    return options.with_defaults()
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,4 +306,6 @@ __all__ = [
     "resolve_targets",
     "example_pipeline",
     "load_lfs_class_overrides",
+    "CacheOptions",
+    "parse_cache_options",
 ]

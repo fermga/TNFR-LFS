@@ -24,3 +24,10 @@ pack_root = "."
 entry = 0.5
 apex = 0.4
 exit = 0.6
+
+[cache]
+enable_delta_cache = true
+nu_f_cache_size = 256
+
+[cache.telemetry]
+telemetry_cache_size = 1

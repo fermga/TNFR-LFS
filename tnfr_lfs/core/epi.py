@@ -11,11 +11,14 @@ from typing import Deque, Dict, List, Mapping, Optional, Sequence, Tuple, TYPE_C
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
     from .coherence_calibration import CoherenceCalibrationStore
+    from ..cache_settings import CacheOptions
 
 from .cache import (
     cached_delta_nfr_map,
     cached_dynamic_multipliers,
     invalidate_dynamic_record,
+    delta_cache_enabled,
+    dynamic_cache_enabled,
 )
 from .coherence import compute_node_delta_nfr, sense_index
 from .epi_models import (
@@ -47,9 +50,6 @@ DEFAULT_PHASE_WEIGHTS: Mapping[str, float] = {"__default__": 1.0}
 
 _AVERAGE_NU_F = sum(NU_F_NODE_DEFAULTS.values()) / float(len(NU_F_NODE_DEFAULTS))
 _MISSING_FLOAT = float("nan")
-
-
-CACHE_EPI_RESULTS = True
 
 
 @dataclass(frozen=True)
@@ -124,15 +124,25 @@ class NaturalFrequencySnapshot:
 class NaturalFrequencyAnalyzer:
     """Track dominant frequencies over a sliding telemetry window."""
 
-    def __init__(self, settings: NaturalFrequencySettings | None = None) -> None:
+    def __init__(
+        self,
+        settings: NaturalFrequencySettings | None = None,
+        cache_options: "CacheOptions" | None = None,
+    ) -> None:
         self.settings = settings or NaturalFrequencySettings()
         self._history: Deque[TelemetryRecord] = deque()
         self._smoothed: Dict[str, float] = {}
         self._last_car: str | None = None
         self._last_snapshot: NaturalFrequencySnapshot | None = None
+        self._cache_options = cache_options
+
+    def _dynamic_cache_active(self) -> bool:
+        if self._cache_options is not None:
+            return self._cache_options.nu_f_cache_size > 0
+        return dynamic_cache_enabled()
 
     def reset(self) -> None:
-        if CACHE_EPI_RESULTS:
+        if self._dynamic_cache_active():
             for sample in list(self._history):
                 invalidate_dynamic_record(sample)
         self._history.clear()
@@ -159,7 +169,7 @@ class NaturalFrequencyAnalyzer:
         record: TelemetryRecord | None = None,
         car_model: str | None = None,
     ) -> NaturalFrequencySnapshot:
-        if CACHE_EPI_RESULTS:
+        if self._dynamic_cache_active():
             for sample in list(self._history):
                 invalidate_dynamic_record(sample)
         self._history.clear()
@@ -178,7 +188,7 @@ class NaturalFrequencyAnalyzer:
             and (self._history[-1].timestamp - self._history[0].timestamp) > max_window
         ):
             removed = self._history.popleft()
-            if CACHE_EPI_RESULTS:
+            if self._dynamic_cache_active():
                 invalidate_dynamic_record(removed)
 
     def _resolve(
@@ -207,7 +217,7 @@ class NaturalFrequencyAnalyzer:
         history = tuple(self._history)
         if len(history) < 2:
             return {}, 0.0
-        if not CACHE_EPI_RESULTS:
+        if not self._dynamic_cache_active():
             return self._compute_dynamic_multipliers_raw(history, car_model)
         return cached_dynamic_multipliers(
             car_model,
@@ -807,7 +817,11 @@ def _delta_nfr_by_node_uncached(record: TelemetryRecord) -> Dict[str, float]:
     return _distribute_node_delta(delta_nfr, node_signals)
 
 
-def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
+def delta_nfr_by_node(
+    record: TelemetryRecord,
+    *,
+    cache_options: "CacheOptions" | None = None,
+) -> Mapping[str, float]:
     """Compute ΔNFR contributions for each subsystem.
 
     The function expects ``record`` to optionally provide a ``reference``
@@ -817,7 +831,11 @@ def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
     uniform distribution.
     """
 
-    if not CACHE_EPI_RESULTS:
+    if cache_options is not None:
+        use_cache = cache_options.enable_delta_cache
+    else:
+        use_cache = delta_cache_enabled()
+    if not use_cache:
         return _delta_nfr_by_node_uncached(record)
     return cached_delta_nfr_map(record, lambda: _delta_nfr_by_node_uncached(record))
 
@@ -885,6 +903,7 @@ def resolve_nu_f_by_node(
     car_model: str | None = None,
     analyzer: NaturalFrequencyAnalyzer | None = None,
     settings: NaturalFrequencySettings | None = None,
+    cache_options: "CacheOptions" | None = None,
 ) -> NaturalFrequencySnapshot:
     """Return the natural frequency snapshot for a telemetry sample.
 
@@ -897,7 +916,7 @@ def resolve_nu_f_by_node(
     base_map = _base_nu_f_map(record, phase=phase, phase_weights=phase_weights)
 
     if analyzer is None:
-        analyzer = NaturalFrequencyAnalyzer(settings)
+        analyzer = NaturalFrequencyAnalyzer(settings, cache_options=cache_options)
 
     if history is not None:
         return analyzer.compute_from_history(
@@ -1091,6 +1110,7 @@ class EPIExtractor:
         slip_weight: float = 0.4,
         *,
         natural_frequency_settings: NaturalFrequencySettings | None = None,
+        cache_options: "CacheOptions" | None = None,
     ) -> None:
         if not 0 <= load_weight <= 1:
             raise ValueError("load_weight must be in the 0..1 range")
@@ -1101,7 +1121,10 @@ class EPIExtractor:
         self.natural_frequency_settings = (
             natural_frequency_settings or NaturalFrequencySettings()
         )
-        self._nu_f_analyzer = NaturalFrequencyAnalyzer(self.natural_frequency_settings)
+        self._cache_options = cache_options
+        self._nu_f_analyzer = NaturalFrequencyAnalyzer(
+            self.natural_frequency_settings, cache_options=cache_options
+        )
         self._baseline = _RunningBaseline()
         self._baseline_record: TelemetryRecord | None = None
         self._prev_integrated_epi: Optional[float] = None
@@ -1162,6 +1185,7 @@ class EPIExtractor:
             record,
             analyzer=self._nu_f_analyzer,
             car_model=car_model or record.car_model,
+            cache_options=self._cache_options,
         )
         bundle = DeltaCalculator.compute_bundle(
             record,

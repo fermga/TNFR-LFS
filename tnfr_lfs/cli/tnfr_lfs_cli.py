@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+from ..config_loader import parse_cache_options
+from ..core import cache as cache_helpers
 from ..utils.logging import setup_logging
 
 from . import common as _common_module
@@ -116,6 +118,12 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
         remaining = ["--pack-root", str(preliminary.pack_root)] + remaining
 
     config = load_cli_config(preliminary.config_path)
+    cache_options = parse_cache_options(config)
+    cache_helpers.configure_cache(
+        enable_delta_cache=cache_options.enable_delta_cache,
+        nu_f_cache_size=cache_options.nu_f_cache_size,
+    )
+    config["_cache_options"] = cache_options
     logging_config = dict(config.get("logging", {}))
     if preliminary.log_level is not None:
         logging_config["level"] = preliminary.log_level
@@ -136,6 +144,7 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
     parser.set_defaults(log_format=logging_config.get("format"))
     namespace = parser.parse_args(remaining, namespace=preliminary)
     namespace.config = config
+    namespace.cache_options = cache_options
     namespace.config_path = (
         getattr(namespace, "config_path", None)
         or preliminary.config_path
