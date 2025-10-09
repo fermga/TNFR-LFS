@@ -275,10 +275,12 @@ def test_cli_analyze_accepts_raf_sample(
         phase_weights: Mapping[str, float] = {}
         robustness: Mapping[str, float] | None = None
 
+    from tnfr_lfs.processing import InsightsResult
+
     monkeypatch.setattr(
         cli_module,
-        "_compute_insights",
-        lambda *args, **kwargs: ([], [], _StubThresholds(), None),
+        "compute_insights",
+        lambda *args, **kwargs: InsightsResult([], [], _StubThresholds(), None, {}),
     )
 
     monkeypatch.setattr(
@@ -307,8 +309,10 @@ def test_cli_analyze_accepts_raf_sample(
         lambda *args, **kwargs: [],
     )
 
+    import tnfr_lfs.processing as processing_module
+
     monkeypatch.setattr(
-        cli_module,
+        processing_module,
         "compute_session_robustness",
         lambda *args, **kwargs: {},
     )
