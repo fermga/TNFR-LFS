@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 import math
 import time
 import tracemalloc
@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.io import ReplayCSVBundleReader
 import tnfr_lfs.io.replay_csv_bundle as replay_csv_bundle
 
@@ -244,6 +245,61 @@ def test_replay_csv_to_records_reuses_cached_dataframe(monkeypatch: pytest.Monke
     reader.to_records()
 
     assert copy_calls == initial_copy_calls
+
+
+def test_replay_csv_to_records_uses_cached_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    reader = ReplayCSVBundleReader(BUNDLE_PATH)
+
+    call_count = 0
+    original = ReplayCSVBundleReader._row_to_record
+
+    def _counting_row_to_record(
+        self: ReplayCSVBundleReader, row: tuple[object, ...], column_index: Mapping[str, int]
+    ) -> TelemetryRecord:
+        nonlocal call_count
+        call_count += 1
+        return original(self, row, column_index)
+
+    monkeypatch.setattr(ReplayCSVBundleReader, "_row_to_record", _counting_row_to_record)
+
+    first_records = reader.to_records()
+    first_call_count = call_count
+
+    second_records = reader.to_records()
+
+    assert call_count == first_call_count
+    assert first_records == second_records
+    assert first_records is not second_records
+
+
+def test_replay_csv_clear_cache_refreshes_records(monkeypatch: pytest.MonkeyPatch) -> None:
+    reader = ReplayCSVBundleReader(BUNDLE_PATH)
+
+    call_count = 0
+    original = ReplayCSVBundleReader._row_to_record
+
+    def _counting_row_to_record(
+        self: ReplayCSVBundleReader, row: tuple[object, ...], column_index: Mapping[str, int]
+    ) -> TelemetryRecord:
+        nonlocal call_count
+        call_count += 1
+        return original(self, row, column_index)
+
+    monkeypatch.setattr(ReplayCSVBundleReader, "_row_to_record", _counting_row_to_record)
+
+    reader.to_records()
+    baseline_calls = call_count
+
+    reader.to_records()
+    assert call_count == baseline_calls
+
+    reader.clear_cache()
+    reader.to_records()
+    assert call_count > baseline_calls
+
+    mutation_calls = call_count
+    reader.to_records(copy=False)
+    assert call_count > mutation_calls
 
 
 def test_replay_csv_bundle_without_time_entry_raises(tmp_path: Path) -> None:

@@ -171,12 +171,21 @@ class ReplayCSVBundleReader:
     source: Path | str
     _path: Path = field(init=False)
     _frame_cache: Any | None = field(init=False, default=None)
+    _records_cache: tuple[int, list[TelemetryRecord]] | None = field(
+        init=False, default=None
+    )
 
     def __post_init__(self) -> None:
         if isinstance(self.source, Path):
             self._path = self.source
         else:
             self._path = Path(self.source)
+
+    def clear_cache(self) -> None:
+        """Invalidate cached dataframe and record representations."""
+
+        self._frame_cache = None
+        self._records_cache = None
 
     def to_dataframe(self, copy: bool = True) -> pd.DataFrame:
         """Return the bundle contents as a merged :class:`~pandas.DataFrame`.
@@ -192,6 +201,9 @@ class ReplayCSVBundleReader:
 
         if self._frame_cache is not None:
             return self._frame_cache.copy() if copy else self._frame_cache
+
+        # Rebuilding the dataframe invalidates any cached representations.
+        self.clear_cache()
 
         pd = _get_pandas()
 
@@ -252,16 +264,42 @@ class ReplayCSVBundleReader:
         self._frame_cache = merged
         return merged.copy() if copy else merged
 
-    def to_records(self) -> list[TelemetryRecord]:
-        """Convert the bundle contents into :class:`TelemetryRecord` samples."""
+    def to_records(self, copy: bool = True) -> list[TelemetryRecord]:
+        """Convert the bundle contents into :class:`TelemetryRecord` samples.
+
+        Parameters
+        ----------
+        copy:
+            If ``True`` (the default) return a copy of the cached records so
+            callers can safely mutate the result.  Pass ``copy=False`` to obtain
+            a mutable list backed by the cache, which forces the records to be
+            recomputed to avoid exposing shared mutable state.
+        """
 
         frame = self.to_dataframe(copy=False)
+        cached_frame = self._frame_cache
+        fingerprint = id(cached_frame) if cached_frame is not None else id(frame)
+
+        cache = self._records_cache
+        if copy and cache is not None:
+            cached_fingerprint, cached_records = cache
+            if cached_fingerprint == fingerprint:
+                return list(cached_records)
+
+        if not copy:
+            # Discard any cached list to avoid exposing shared mutable state.
+            self._records_cache = None
+
         column_index = {name: position for position, name in enumerate(frame.columns)}
 
-        return [
+        records = [
             self._row_to_record(row, column_index)
             for row in frame.itertuples(index=False, name=None)
         ]
+
+        self._records_cache = (fingerprint, records)
+
+        return list(records) if copy else records
 
     def _iter_entries(self) -> Iterator[tuple[str, pd.DataFrame]]:
         pd = _get_pandas()
