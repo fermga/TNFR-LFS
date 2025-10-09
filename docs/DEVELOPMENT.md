@@ -22,6 +22,14 @@ pytest
 - `mypy --strict` analyses `tnfr_lfs` and the rest of the declared typing targets (for example `typing_targets`). If you need to pass the paths explicitly run `mypy --strict tnfr_lfs typing_targets`; note that strict analysis across the whole package takes longer than the reduced subset.
 - `pytest` runs the unit and integration test suite, including verification for the example datasets `data/test1.raf` and `data/test1.zip`.
 
+### CI triggering rules
+
+The CI workflow skips documentation-only pushes and pull requests (`docs/**` and Markdown files). Any
+change touching code, configuration, tests, benchmarks, or the automation itself still runs the lint,
+type-check, and test jobs. The `make quickstart` pipeline executes on merges to `main` and whenever the
+`examples/` tree changes, so example scenarios stay covered without running the heavier simulation for
+purely editorial branches.
+
 ## Reference dataset
 
 The quickstart flow and the integration tests depend on the capture `data/test1.raf` and on the bundle `data/test1.zip` exported from Replay Analyzer. Both artefacts contain real Live for Speed telemetry and serve as reference datasets for the binary ingestion flows, regression tests, and CLI tutorials.
