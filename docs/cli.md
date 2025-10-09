@@ -410,13 +410,6 @@ pack_root = "~/tnfr-pack"
 entry = 0.5
 apex = 0.4
 exit = 0.6
-
-[cache]
-enable_delta_cache = true
-nu_f_cache_size = 256
-
-[cache.telemetry]
-telemetry_cache_size = 1
 ```
 
 This configuration adjusts the default UDP ports used by ``baseline``,
@@ -424,10 +417,23 @@ selects the exporter for analytics/reporting, sets the default
 car/track for ``suggest`` and overrides the tolerance used when
 highlighting ΔNFR↓ deviations in ``phase_messages``.
 
-The optional ``[cache]`` block tunes the memoisation used by delta and
-natural-frequency helpers.  ``enable_delta_cache = false`` recomputes the
-ΔNFR-by-node maps for every sample instead of keeping a per-record LRU,
-while ``nu_f_cache_size`` sets the maximum history snapshots stored for
+Cache defaults now live in the pack's ``config/global.toml`` and are
+shared by the CLI and analysis helpers.  The block is omitted from the
+example above, but you can still override individual values by adding a
+``[cache]`` table to ``tnfr-lfs.toml``:
+
+```toml
+[cache]
+enable_delta_cache = false
+nu_f_cache_size = 128
+
+[cache.telemetry]
+telemetry_cache_size = 8
+```
+
+``enable_delta_cache = false`` recomputes the ΔNFR-by-node maps for
+every sample instead of keeping a per-record LRU, while
+``nu_f_cache_size`` controls the maximum history snapshots stored for
 dynamic ν_f smoothing (set it to ``0`` to disable caching entirely).
 ``[cache.telemetry]`` applies the same semantics to replay bundles via
 ``telemetry_cache_size`` so large CSV archives can be streamed without
