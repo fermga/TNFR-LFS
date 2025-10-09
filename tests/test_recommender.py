@@ -1751,7 +1751,7 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
     )
     goal = Goal(
         phase="entry1",
-        archetype="frenada",
+        archetype="braking",
         description="",
         target_delta_nfr=0.1,
         target_sense_index=0.9,
@@ -1811,7 +1811,7 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
 def _entry_goal_with_gradient(gradient: float) -> Goal:
     return Goal(
         phase="entry1",
-        archetype="frenada",
+        archetype="braking",
         description="",
         target_delta_nfr=0.2,
         target_sense_index=0.9,
@@ -2053,7 +2053,7 @@ def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
     )
     goal = Goal(
         phase="entry1",
-        archetype="frenada",
+        archetype="braking",
         description="",
         target_delta_nfr=0.3,
         target_sense_index=0.85,
@@ -2279,7 +2279,7 @@ def test_phase_delta_rule_targets_front_toe_for_entry_synchrony_gap() -> None:
     )
     goal = Goal(
         phase="entry1",
-        archetype="frenada",
+        archetype="braking",
         description="",
         target_delta_nfr=0.3,
         target_sense_index=0.9,
