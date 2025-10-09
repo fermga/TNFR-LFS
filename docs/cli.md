@@ -7,6 +7,12 @@ pip install -e .
 tnfr_lfs baseline runs/test1.jsonl data/test1.raf --format jsonl
 ```
 
+!!! tip
+    The CLI entry point uses an underscore: invoke commands as `tnfr_lfs ...` and
+    keep configuration overrides in `tnfr_lfs.toml` (for example
+    `~/.config/tnfr_lfs.toml`). Update any local scripts that still call `tnfr-lfs`
+    so they point to the underscore-prefixed executable.
+
 The example converts the bundled RAF capture (`data/test1.raf`) into a
 JSONL baseline. The CLI inspects the suffix of every telemetry source
 (`.raf`, `.csv`, `.jsonl`, `.parquet`…) and automatically routes it
