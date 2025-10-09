@@ -40,6 +40,7 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
+from tnfr_lfs.core.utils import normalised_entropy
 
 
 def _record(timestamp: float, nfr: float, si: float = 0.8, **overrides) -> TelemetryRecord:
@@ -476,10 +477,15 @@ def test_compute_window_metrics_entropy_maps(monkeypatch) -> None:
         _record(1.5, 103.0),
     ]
 
+    contributions: Mapping[float, Mapping[str, float]] = {
+        0.0: {"tyres": 2.0, "brakes": 1.0},
+        0.5: {"tyres": 1.0, "brakes": 1.0},
+        1.0: {"tyres": 3.0, "suspension": 0.5},
+        1.5: {"tyres": 0.5, "suspension": 2.5},
+    }
+
     def _fake_distribution(record: TelemetryRecord) -> Mapping[str, float]:
-        if record.timestamp < 1.0:
-            return {"tyres": 2.0, "brakes": 1.0}
-        return {"tyres": 1.0, "suspension": 3.0}
+        return contributions[record.timestamp]
 
     monkeypatch.setattr(
         "tnfr_lfs.core.metrics.delta_nfr_by_node",
@@ -489,63 +495,85 @@ def test_compute_window_metrics_entropy_maps(monkeypatch) -> None:
     phase_indices = {"entry1": (0, 1), "exit4": (2, 3)}
     metrics = compute_window_metrics(records, phase_indices=phase_indices)
 
-    phase_totals = {"entry1": 6.0, "exit4": 8.0}
+    def _total_magnitude(values: Mapping[str, float]) -> float:
+        return sum(abs(value) for value in values.values())
+
+    phase_totals = {
+        phase: sum(
+            _total_magnitude(contributions[records[index].timestamp])
+            for index in indices
+        )
+        for phase, indices in phase_indices.items()
+    }
     total = sum(phase_totals.values())
 
-    def _entropy(probabilities: Mapping[str, float]) -> float:
-        values = [value for value in probabilities.values() if value > 0.0]
-        if len(values) <= 1:
-            return 0.0
-        entropy = -sum(value * math.log(value) for value in values)
-        max_entropy = math.log(len(values))
-        return entropy / max_entropy
+    expected_phase_entropy = normalised_entropy(phase_totals.values())
+    assert metrics.delta_nfr_entropy == pytest.approx(
+        expected_phase_entropy,
+        rel=1e-6,
+    )
 
     expected_phase_distribution = {
-        key: value / total for key, value in phase_totals.items()
+        phase: value / total for phase, value in phase_totals.items()
     }
-    assert metrics.phase_delta_nfr_entropy["entry1"] == pytest.approx(
-        expected_phase_distribution["entry1"],
-        rel=1e-6,
-    )
-    assert metrics.phase_delta_nfr_entropy["exit4"] == pytest.approx(
-        expected_phase_distribution["exit4"],
-        rel=1e-6,
-    )
+    for phase, probability in expected_phase_distribution.items():
+        assert metrics.phase_delta_nfr_entropy[phase] == pytest.approx(
+            probability,
+            rel=1e-6,
+        )
     assert metrics.phase_delta_nfr_entropy["entry"] == pytest.approx(
         expected_phase_distribution["entry1"],
         rel=1e-6,
     )
-    assert metrics.delta_nfr_entropy == pytest.approx(
-        _entropy(expected_phase_distribution),
+    assert metrics.phase_delta_nfr_entropy["exit"] == pytest.approx(
+        expected_phase_distribution["exit4"],
         rel=1e-6,
     )
 
-    entry_weights = {"tyres": 4.0, "brakes": 2.0}
-    exit_weights = {"tyres": 2.0, "suspension": 6.0}
+    node_totals: dict[str, float] = {}
+    for values in contributions.values():
+        for node, magnitude in values.items():
+            node_totals[node] = node_totals.get(node, 0.0) + abs(magnitude)
 
-    def _node_probabilities(weights: Mapping[str, float]) -> Mapping[str, float]:
-        weight_sum = sum(weights.values())
-        return {key: value / weight_sum for key, value in weights.items()}
-
-    expected_entry_entropy = _entropy(_node_probabilities(entry_weights))
-    expected_exit_entropy = _entropy(_node_probabilities(exit_weights))
-    assert metrics.phase_node_entropy["entry1"] == pytest.approx(
-        expected_entry_entropy,
-        rel=1e-6,
-    )
-    assert metrics.phase_node_entropy["exit4"] == pytest.approx(
-        expected_exit_entropy,
-        rel=1e-6,
-    )
-    assert metrics.phase_node_entropy["entry"] == pytest.approx(
-        expected_entry_entropy,
-        rel=1e-6,
-    )
-
-    combined_weights = {"tyres": 6.0, "brakes": 2.0, "suspension": 6.0}
-    expected_node_entropy = _entropy(_node_probabilities(combined_weights))
+    expected_node_entropy = normalised_entropy(node_totals.values())
     assert metrics.node_entropy == pytest.approx(
         expected_node_entropy,
+        rel=1e-6,
+    )
+
+    phase_node_totals: dict[str, dict[str, float]] = {}
+    for phase, indices in phase_indices.items():
+        phase_totals_by_node: dict[str, float] = {}
+        for index in indices:
+            for node, magnitude in contributions[records[index].timestamp].items():
+                phase_totals_by_node[node] = (
+                    phase_totals_by_node.get(node, 0.0) + abs(magnitude)
+                )
+        phase_node_totals[phase] = phase_totals_by_node
+
+    for phase, totals in phase_node_totals.items():
+        expected_entropy = normalised_entropy(totals.values())
+        assert metrics.phase_node_entropy[phase] == pytest.approx(
+            expected_entropy,
+            rel=1e-6,
+        )
+
+    entry_aggregate = {node: 0.0 for node in node_totals}
+    exit_aggregate = {node: 0.0 for node in node_totals}
+    for phase, totals in phase_node_totals.items():
+        if phase.startswith("entry"):
+            for node, magnitude in totals.items():
+                entry_aggregate[node] += magnitude
+        if phase.startswith("exit"):
+            for node, magnitude in totals.items():
+                exit_aggregate[node] += magnitude
+
+    assert metrics.phase_node_entropy["entry"] == pytest.approx(
+        normalised_entropy(entry_aggregate.values()),
+        rel=1e-6,
+    )
+    assert metrics.phase_node_entropy["exit"] == pytest.approx(
+        normalised_entropy(exit_aggregate.values()),
         rel=1e-6,
     )
 
