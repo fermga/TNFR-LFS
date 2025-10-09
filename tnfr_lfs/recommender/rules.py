@@ -2079,7 +2079,7 @@ def _brake_event_summary(
         count = len(typed)
         worst = max(typed, key=lambda item: item["ratio"])
         max_ratio = max(max_ratio, _safe_float(worst["ratio"]))
-        surface_name = worst["surface"] or "superficie"
+        surface_name = worst["surface"] or "surface"
         threshold = _safe_float(worst["threshold"])
         peak = _safe_float(worst["peak"])
         label = worst.get("label") or canonical_operator_label(event_type)
@@ -2172,9 +2172,9 @@ class PhaseDeltaDeviationRule:
                     microsector
                 )
             phase_summary = (
-                f"{self.operator_label} aplicado sobre la fase de {self.phase_label} en "
-                f"microsector {microsector.index}. El objetivo ΔNFR era "
-                f"{goal.target_delta_nfr:.2f}, pero la media registrada fue "
+                f"{self.operator_label} applied to the {self.phase_label} phase in "
+                f"microsector {microsector.index}. The ΔNFR target was "
+                f"{goal.target_delta_nfr:.2f}, but the recorded average reached "
                 f"{actual_delta:.2f} ({deviation:+.2f})."
             )
             if event_summary:
@@ -2185,8 +2185,8 @@ class PhaseDeltaDeviationRule:
 
             if geometry_snapshot["alignment_gap"] > _ALIGNMENT_THRESHOLD:
                 alignment_rationale = (
-                    f"{phase_summary} Siφ objetivo {geometry_snapshot['target_alignment']:+.2f} "
-                    f"frente al medido {geometry_snapshot['measured_alignment']:+.2f} "
+                    f"{phase_summary} Target Siφ {geometry_snapshot['target_alignment']:+.2f} "
+                    f"versus measured {geometry_snapshot['measured_alignment']:+.2f} "
                     f"({geometry_snapshot['alignment_delta']:+.2f})."
                 )
                 alignment_node = geometry_nodes.get("phase_alignment")
@@ -2207,8 +2207,8 @@ class PhaseDeltaDeviationRule:
 
             if geometry_snapshot["synchrony_gap"] > _SYNCHRONY_THRESHOLD:
                 synchrony_rationale = (
-                    f"{phase_summary} Φsync objetivo {geometry_snapshot['target_synchrony']:.2f} "
-                    f"frente al medido {geometry_snapshot['measured_synchrony']:.2f} "
+                    f"{phase_summary} Target Φsync {geometry_snapshot['target_synchrony']:.2f} "
+                    f"versus measured {geometry_snapshot['measured_synchrony']:.2f} "
                     f"({geometry_snapshot['synchrony_delta']:+.2f})."
                 )
                 synchrony_node = geometry_nodes.get("phase_synchrony_index") or geometry_nodes.get(
@@ -2231,8 +2231,8 @@ class PhaseDeltaDeviationRule:
 
             if geometry_snapshot["lag_gap"] > _LAG_THRESHOLD:
                 lag_rationale = (
-                    f"{phase_summary} θ medido {geometry_snapshot['measured_lag']:+.2f}rad "
-                    f"frente al objetivo {geometry_snapshot['target_lag']:+.2f}rad "
+                    f"{phase_summary} Measured θ {geometry_snapshot['measured_lag']:+.2f}rad "
+                    f"versus target {geometry_snapshot['target_lag']:+.2f}rad "
                     f"({geometry_snapshot['lag_delta']:+.2f})."
                 )
                 lag_node = geometry_nodes.get("phase_lag")
@@ -2253,8 +2253,8 @@ class PhaseDeltaDeviationRule:
 
             if geometry_snapshot["coherence_gap"] > _COHERENCE_THRESHOLD:
                 coherence_rationale = (
-                    f"{phase_summary} C(t) medio {geometry_snapshot['average_coherence']:.2f} "
-                    f"(objetivo {geometry_snapshot['target_coherence']:.2f}, Δ "
+                    f"{phase_summary} Mean C(t) {geometry_snapshot['average_coherence']:.2f} "
+                    f"(target {geometry_snapshot['target_coherence']:.2f}, Δ "
                     f"{geometry_snapshot['coherence_delta']:+.2f})."
                 )
                 coherence_node = geometry_nodes.get("coherence_index")
@@ -2287,8 +2287,8 @@ class PhaseDeltaDeviationRule:
             base_rationale = phase_summary
             if delta_triggered:
                 base_rationale = (
-                    f"{phase_summary} La tolerancia definida para {context.profile_label} "
-                    f"es ±{tolerance:.2f}."
+                    f"{phase_summary} The tolerance defined for {context.profile_label} "
+                    f"is ±{tolerance:.2f}."
                 )
             spring_recommendations: List[Recommendation] = []
             if axis_bias == "lateral":
@@ -2313,10 +2313,10 @@ class PhaseDeltaDeviationRule:
                         spring_signal = lat_dev * nu_f_delta
                         if abs(spring_signal) > 1e-6:
                             spring_rationale = (
-                                f"{base_rationale} νf_susp objetivo {target_nu_f:.2f} frente al medido "
-                                f"{actual_nu_f:.2f} ({nu_f_delta:+.2f}). ∇NFR⊥ medio {avg_lat:.2f} "
-                                f"(objetivo {target_lat:.2f}, Δ {lat_dev:+.2f}). El ajuste del muelle busca "
-                                "homogeneizar ∇NFR⊥ en la banda de G activa."
+                                f"{base_rationale} Target νf_susp {target_nu_f:.2f} versus measured "
+                                f"{actual_nu_f:.2f} ({nu_f_delta:+.2f}). Mean ∇NFR⊥ {avg_lat:.2f} "
+                                f"(target {target_lat:.2f}, Δ {lat_dev:+.2f}). The spring adjustment aims "
+                                "to equalise ∇NFR⊥ within the active G band."
                             )
                             spring_recommendations = _phase_action_recommendations(
                                 phase=self.phase,
@@ -2526,16 +2526,16 @@ class PhaseNodeOperatorRule:
             geometry_urgency = _geometry_urgency(geometry_snapshot)
             dominant_list = ", ".join(_node_label(name) for name in goal.dominant_nodes)
             geometry_context = (
-                f"{self.operator_label} aplicado en microsector {microsector.index} "
-                f"con nodos dominantes {dominant_list or 'de referencia'}."
+                f"{self.operator_label} applied in microsector {microsector.index} "
+                f"with dominant nodes {dominant_list or 'the reference nodes'}."
             )
             if (
                 geometry_snapshot["alignment_gap"] > _ALIGNMENT_THRESHOLD
                 and geometry_nodes.get("phase_alignment")
             ):
                 alignment_rationale = (
-                    f"{geometry_context} Siφ objetivo {geometry_snapshot['target_alignment']:+.2f} "
-                    f"frente al medido {geometry_snapshot['measured_alignment']:+.2f} "
+                    f"{geometry_context} Target Siφ {geometry_snapshot['target_alignment']:+.2f} "
+                    f"versus measured {geometry_snapshot['measured_alignment']:+.2f} "
                     f"({geometry_snapshot['alignment_delta']:+.2f})."
                 )
                 alignment_actions = _phase_action_recommendations(
@@ -2556,8 +2556,8 @@ class PhaseNodeOperatorRule:
                 and geometry_nodes.get("phase_lag")
             ):
                 lag_rationale = (
-                    f"{geometry_context} θ medido {geometry_snapshot['measured_lag']:+.2f}rad "
-                    f"frente al objetivo {geometry_snapshot['target_lag']:+.2f}rad "
+                    f"{geometry_context} Measured θ {geometry_snapshot['measured_lag']:+.2f}rad "
+                    f"versus target {geometry_snapshot['target_lag']:+.2f}rad "
                     f"({geometry_snapshot['lag_delta']:+.2f})."
                 )
                 lag_actions = _phase_action_recommendations(
@@ -2578,8 +2578,8 @@ class PhaseNodeOperatorRule:
                 and geometry_nodes.get("coherence_index")
             ):
                 coherence_rationale = (
-                    f"{geometry_context} C(t) medio {geometry_snapshot['average_coherence']:.2f} "
-                    f"(objetivo {geometry_snapshot['target_coherence']:.2f}, Δ "
+                    f"{geometry_context} Mean C(t) {geometry_snapshot['average_coherence']:.2f} "
+                    f"(target {geometry_snapshot['target_coherence']:.2f}, Δ "
                     f"{geometry_snapshot['coherence_delta']:+.2f})."
                 )
                 coherence_actions = _phase_action_recommendations(

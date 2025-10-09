@@ -1279,13 +1279,13 @@ def compute_window_metrics(
                     or fade_slope_value >= _FADE_SLOPE_CRITICAL
                     or ventilation_index >= 0.9
                 ):
-                    ventilation_alert = "critica"
+                    ventilation_alert = "critical"
                 elif (
                     temp_peak_value >= _VENT_TEMP_WARNING
                     or fade_ratio_value >= _FADE_RATIO_WARNING
                     or ventilation_index >= 0.45
                 ):
-                    ventilation_alert = "atencion"
+                    ventilation_alert = "attention"
         else:
             ventilation_index = math.nan
         value = (1.0 - normalized_peak) * (1.0 - stress)

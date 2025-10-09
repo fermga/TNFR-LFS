@@ -19,16 +19,16 @@ number of text-dependent assertions.
   or `"InSim respondió con versión 9"`, already implemented in the `_udp_ping`
   helper and in `_insim_handshake`. 【F:tests/test_cli.py†L1102-L1124】
   【F:tnfr_lfs/cli/workflows.py†L941-L1017】
-- The thermal summary includes `"- Presión (bar): sin datos (OutGauge omitió el
-  bloque de neumáticos)"`, matching the `_build_summary` logic.
+- The thermal summary includes `"- Pressure (bar): no data (OutGauge omitted the
+  tyre block)"`, matching the `_build_summary` logic.
   【F:tests/test_cli.py†L704-L728】【F:tnfr_lfs/cli/workflows.py†L1801-L1819】
 - The advanced report contains Spanish headings such as `"## Disonancia útil"`,
   confirmed in `_summarise_advanced_metrics`.
   【F:tests/test_exporters.py†L438-L456】【F:tnfr_lfs/cli/workflows.py†L1743-L1778】
 - **Production ↔ tests checklist** (already aligned):
-  - [x] `{label} responded from {addr}` → `{label} respondió desde {addr}`
-  - [x] `- Pressure (bar): no data …` → `- Presión (bar): sin datos …`
-  - [x] `## Useful dissonance` → `## Disonancia útil`
+  - [x] `{label} responded from {addr}`
+  - [x] `- Pressure (bar): no data …`
+  - [x] `## Useful dissonance`
 
 ## 3. Setup exporters (`tnfr_lfs/exporters/__init__.py`)
 - The tests expect headings such as `"**Comparación A/B**"`,
