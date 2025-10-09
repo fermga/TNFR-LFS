@@ -14,6 +14,7 @@ import pytest
 
 from tnfr_lfs.cli import compare as compare_module
 from tnfr_lfs.cli import app as cli_module
+from tnfr_lfs.cli import io as cli_io_module
 from tnfr_lfs.cli import workflows as workflows_module
 from tnfr_lfs.cli import run_cli
 from tnfr_lfs.cli.common import CliError
@@ -262,27 +263,29 @@ def test_cli_analyze_accepts_raf_sample(
 
     captured_records: dict[str, list] = {}
 
-    original = cli_module.raf_to_telemetry_records
+    original = cli_io_module.raf_to_telemetry_records
 
     def _capture_records(raf_file):
         records = original(raf_file)
         captured_records["records"] = records
         return records
 
+    monkeypatch.setattr(cli_io_module, "raf_to_telemetry_records", _capture_records)
     monkeypatch.setattr(cli_module, "raf_to_telemetry_records", _capture_records)
 
     class _StubThresholds:
         phase_weights: Mapping[str, float] = {}
         robustness: Mapping[str, float] | None = None
 
-    monkeypatch.setattr(
-        cli_module,
-        "_compute_insights",
-        lambda *args, **kwargs: ([], [], _StubThresholds(), None),
-    )
+    from tnfr_lfs.processing import InsightsResult
+
+    stub_insights = lambda *args, **kwargs: InsightsResult([], [], _StubThresholds(), None, {})
+
+    monkeypatch.setattr(workflows_module, "compute_insights", stub_insights)
+    monkeypatch.setattr(cli_module, "compute_insights", stub_insights)
 
     monkeypatch.setattr(
-        cli_module,
+        workflows_module,
         "orchestrate_delta_metrics",
         lambda *args, **kwargs: {
             "delta_nfr": 0.0,
@@ -294,21 +297,26 @@ def test_cli_analyze_accepts_raf_sample(
             "lap_sequence": [],
         },
     )
+    monkeypatch.setattr(cli_module, "orchestrate_delta_metrics", workflows_module.orchestrate_delta_metrics)
 
     monkeypatch.setattr(
-        cli_module,
+        workflows_module,
         "_generate_out_reports",
         lambda *args, **kwargs: {},
     )
+    monkeypatch.setattr(cli_module, "_generate_out_reports", workflows_module._generate_out_reports)
 
     monkeypatch.setattr(
-        cli_module,
+        workflows_module,
         "_phase_deviation_messages",
         lambda *args, **kwargs: [],
     )
+    monkeypatch.setattr(cli_module, "_phase_deviation_messages", workflows_module._phase_deviation_messages)
+
+    import tnfr_lfs.processing as processing_module
 
     monkeypatch.setattr(
-        cli_module,
+        processing_module,
         "compute_session_robustness",
         lambda *args, **kwargs: {},
     )

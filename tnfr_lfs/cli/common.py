@@ -332,6 +332,38 @@ def resolve_exports(namespace: argparse.Namespace) -> List[str]:
     raise CliError("No exporter configured for this command.")
 
 
+_MARKDOWN_LOCALISATIONS: Mapping[str, Tuple[Tuple[str, str], ...]] = {
+    "es": (
+        ("| Change | Adjustment | Rationale | Expected effect |", "| Cambio | Ajuste | Justificación | Efecto esperado |"),
+        ("**Rationales**", "**Justificaciones**"),
+        ("**Expected effects**", "**Efectos esperados**"),
+        ("**A/B comparison**", "**Comparación A/B**"),
+        ("| Statistic | Baseline | Variant | Δ / details |", "| Estadístico | Base | Variante | Δ / detalles |"),
+        ("Baseline laps:", "Vueltas base:"),
+        ("Variant laps:", "Vueltas variante:"),
+        ("**Aerodynamic indicators**", "**Indicadores aerodinámicos**"),
+        ("**Aggregated sensitivities**", "**Sensibilidades agregadas**"),
+        ("| Metric | Parameter | Derivative |", "| Métrica | Parámetro | Derivada |"),
+        ("**SCI contribution**", "**Contribución SCI**"),
+        ("| Term | Contribution |", "| Término | Contribución |"),
+        ("**Priority phase suggestions**", "**Sugerencias prioritarias por fase**"),
+        ("**Session profile**", "**Perfil de sesión**"),
+    ),
+}
+
+
+def _localise_markdown(rendered: str, locale: str | None) -> str:
+    if not locale:
+        return rendered
+    replacements = _MARKDOWN_LOCALISATIONS.get(locale)
+    if not replacements:
+        return rendered
+    localised = rendered
+    for source, target in replacements:
+        localised = localised.replace(source, target)
+    return localised
+
+
 def render_payload(payload: Mapping[str, Any], exporters: Sequence[str] | str) -> str:
     """Render ``payload`` using the exporters specified in ``exporters``."""
 
@@ -340,10 +372,23 @@ def render_payload(payload: Mapping[str, Any], exporters: Sequence[str] | str) -
     else:
         selected = _unique_export_list(exporters)
 
+    markdown_locale: str | None = None
+    if isinstance(payload, Mapping):
+        raw_locale = payload.get("_markdown_locale")
+        if isinstance(raw_locale, str) and raw_locale:
+            markdown_locale = raw_locale
+
     rendered_outputs: List[str] = []
     for exporter_name in selected:
         exporter = exporters_registry[exporter_name]
-        rendered = exporter(dict(payload))
+        if isinstance(payload, Mapping):
+            export_payload = dict(payload)
+            export_payload.pop("_markdown_locale", None)
+        else:
+            export_payload = payload
+        rendered = exporter(export_payload)
+        if exporter_name == "markdown":
+            rendered = _localise_markdown(rendered, markdown_locale)
         print(rendered)
         rendered_outputs.append(rendered)
 

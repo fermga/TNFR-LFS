@@ -59,6 +59,7 @@ from ..core.segmentation import (
     segment_microsectors,
 )
 from ..analysis import compute_session_robustness
+from ..processing import InsightsResult, compute_insights
 
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,30 @@ def _default_track_name(config: Mapping[str, Any]) -> str:
     """Return the default track name resolved from the CLI configuration."""
 
     return default_track_name(config)
+
+
+def _load_pack_cars(pack_root: Path | None) -> Mapping[str, Any]:
+    """Compatibility wrapper returning pack car definitions."""
+
+    return load_pack_cars(pack_root)
+
+
+def _load_pack_profiles(pack_root: Path | None) -> Mapping[str, Any]:
+    """Compatibility wrapper returning pack profile definitions."""
+
+    return load_pack_profiles(pack_root)
+
+
+def _load_pack_track_profiles(pack_root: Path | None) -> Mapping[str, Any]:
+    """Compatibility wrapper returning pack track profile definitions."""
+
+    return load_pack_track_profiles(pack_root)
+
+
+def _load_pack_modifiers(pack_root: Path | None) -> Mapping[str, Any]:
+    """Compatibility wrapper returning pack modifier definitions."""
+
+    return load_pack_modifiers(pack_root)
 
 
 def _load_playbook_rules() -> Mapping[str, tuple[str, ...]]:
@@ -385,13 +410,17 @@ def compute_setup_plan(
     )
     if session_payload is not None:
         engine.session = session_payload
-    bundles, microsectors, thresholds, snapshot = _compute_insights(
+    insights: InsightsResult = compute_insights(
         records,
         car_model=namespace.car_model,
         track_name=track_name,
         engine=engine,
         profile_manager=profile_manager,
     )
+    bundles = insights.bundles
+    microsectors = insights.microsectors
+    thresholds = insights.thresholds
+    snapshot = insights.snapshot
     objectives = snapshot.objectives if snapshot else ProfileObjectives()
     if snapshot is None and pack_delta is not None:
         objectives = ProfileObjectives(
@@ -2505,13 +2534,17 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
                 "has_payload": session_payload is not None,
             },
         )
-    bundles, microsectors, thresholds, snapshot = _compute_insights(
+    insights = compute_insights(
         records,
         car_model=car_model,
         track_name=track_name,
         engine=engine,
         profile_manager=profile_manager,
     )
+    bundles = insights.bundles
+    microsectors = insights.microsectors
+    thresholds = insights.thresholds
+    snapshot = insights.snapshot
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
             "Computed insights",
@@ -2626,13 +2659,14 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         reception_stage.get("lap_indices") if isinstance(reception_stage, Mapping) else None
     )
     lap_metadata = metrics.get("lap_sequence") if isinstance(metrics, Mapping) else None
-    robustness_metrics = compute_session_robustness(
-        metrics.get("bundles") or bundles,
+    insights = insights.with_robustness(
+        bundles=metrics.get("bundles") or bundles,
         lap_indices=lap_indices,
         lap_metadata=lap_metadata,
         microsectors=microsectors,
         thresholds=robustness_thresholds,
     )
+    robustness_metrics = insights.robustness
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
             "Computed session robustness",
@@ -2737,13 +2771,17 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     )
     if session_payload is not None:
         engine.session = session_payload
-    bundles, microsectors, thresholds, snapshot = _compute_insights(
+    insights = compute_insights(
         records,
         car_model=namespace.car_model,
         track_name=track_name,
         engine=engine,
         profile_manager=profile_manager,
     )
+    bundles = insights.bundles
+    microsectors = insights.microsectors
+    thresholds = insights.thresholds
+    snapshot = insights.snapshot
     lap_segments = group_records_by_lap(records)
     suggest_cfg = dict(config.get("suggest", {}))
     objectives = snapshot.objectives if snapshot else ProfileObjectives()
@@ -2866,13 +2904,17 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
     )
     if session_payload is not None:
         engine.session = session_payload
-    bundles, microsectors, thresholds, snapshot = _compute_insights(
+    insights = compute_insights(
         records,
         car_model=car_model,
         track_name=track_name,
         engine=engine,
         profile_manager=profile_manager,
     )
+    bundles = insights.bundles
+    microsectors = insights.microsectors
+    thresholds = insights.thresholds
+    snapshot = insights.snapshot
     report_cfg = dict(config.get("report", {}))
     default_target_delta = float(report_cfg.get("target_delta", 0.0))
     default_target_si = float(report_cfg.get("target_si", 0.75))
@@ -2955,6 +2997,8 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
         namespace.set_output = normalise_set_output_name(namespace.set_output, namespace.car_model)
     context = compute_setup_plan(namespace, config=config)
     payload = build_setup_plan_payload(context, namespace)
+    if isinstance(payload, dict):
+        payload.setdefault("_markdown_locale", "es")
     return render_payload(payload, resolve_exports(namespace))
 
 
@@ -2972,75 +3016,21 @@ def _compute_insights(
     engine: Optional[RecommendationEngine] = None,
     profile_manager: Optional[ProfileManager] = None,
 ) -> Tuple[Bundles, Sequence[Microsector], ThresholdProfile, Optional[ProfileSnapshot]]:
-    started = monotonic()
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(
-            "Computing insights",
-            extra={
-                "car_model": car_model,
-                "track_name": track_name,
-                "record_count": len(records),
-            },
-        )
-    engine = engine or RecommendationEngine(
+    """Compatibility wrapper delegating to :func:`tnfr_lfs.processing.compute_insights`."""
+
+    insights = compute_insights(
+        records,
         car_model=car_model,
         track_name=track_name,
+        engine=engine,
         profile_manager=profile_manager,
     )
-    base_profile = engine._lookup_profile(car_model, track_name)
-    snapshot: Optional[ProfileSnapshot] = None
-    if profile_manager is not None:
-        session_payload = getattr(engine, "session", None)
-        snapshot = profile_manager.resolve(
-            car_model, track_name, base_profile, session=session_payload
-        )
-        profile = snapshot.thresholds
-    else:
-        profile = base_profile
-    if not records:
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "No records provided; returning empty insights",
-                extra={
-                    "car_model": car_model,
-                    "track_name": track_name,
-                    "duration": monotonic() - started,
-                },
-            )
-        return [], [], profile, snapshot
-    extractor = EPIExtractor()
-    bundles = extractor.extract(records)
-    if not bundles:
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "EPI extraction returned no bundles",
-                extra={
-                    "car_model": car_model,
-                    "track_name": track_name,
-                    "duration": monotonic() - started,
-                },
-            )
-        return bundles, [], profile, snapshot
-    overrides = (
-        snapshot.phase_weights if snapshot is not None else profile.phase_weights
+    return (
+        insights.bundles,
+        insights.microsectors,
+        insights.thresholds,
+        insights.snapshot,
     )
-    microsectors = segment_microsectors(
-        records,
-        bundles,
-        phase_weight_overrides=overrides if overrides else None,
-    )
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(
-            "Insight computation complete",
-            extra={
-                "car_model": car_model,
-                "track_name": track_name,
-                "bundle_count": len(bundles),
-                "microsector_count": len(microsectors),
-                "duration": monotonic() - started,
-            },
-        )
-    return bundles, microsectors, profile, snapshot
 
 
 def _capture_udp_samples(
