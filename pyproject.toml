@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tnfr-lfs"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Fractal-Resonant Telemetry Analytics for Live for Speed toolkit"
 readme = "docs/index.md"
 authors = [{ name = "TNFR Team" }]
@@ -26,6 +26,7 @@ dev = [
     "ruff>=0.6.0",
     "mypy>=1.11.0",
     "black>=24.4.0",
+    "python-semantic-release>=9.8.5",
 ]
 benchmark = [
     "pytest-benchmark>=4.0.0",
@@ -70,3 +71,12 @@ warn_unused_configs = true
 "tnfr_lfs_pack/data" = ["data/lfs_class_overrides.toml"]
 "tnfr_lfs_pack/config" = ["config/global.toml"]
 "tnfr_lfs_pack/modifiers/combos" = ["modifiers/combos/*.toml"]
+
+[tool.semantic_release]
+branch = "main"
+version_source = "tag"
+commit_parser = "angular"
+changelog_file = "CHANGELOG.md"
+build_command = "python -m pip install --upgrade build && python -m build"
+tag_format = "v{version}"
+upload_to_pypi = true
