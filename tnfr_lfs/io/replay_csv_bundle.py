@@ -169,6 +169,7 @@ class ReplayCSVBundleReader:
     """Reader for CSV bundles exported by the LFS replay analyser."""
 
     source: Path | str
+    cache_size: int = 1
     _path: Path = field(init=False)
     _frame_cache: Any | None = field(init=False, default=None)
     _records_cache: tuple[int, list[TelemetryRecord]] | None = field(
@@ -180,6 +181,8 @@ class ReplayCSVBundleReader:
             self._path = self.source
         else:
             self._path = Path(self.source)
+        if self.cache_size < 0:
+            raise ValueError("cache_size must be non-negative")
 
     def clear_cache(self) -> None:
         """Invalidate cached dataframe and record representations."""
@@ -199,7 +202,7 @@ class ReplayCSVBundleReader:
             overhead of duplicating the underlying data.
         """
 
-        if self._frame_cache is not None:
+        if self.cache_size > 0 and self._frame_cache is not None:
             return self._frame_cache.copy() if copy else self._frame_cache
 
         # Rebuilding the dataframe invalidates any cached representations.
@@ -261,7 +264,8 @@ class ReplayCSVBundleReader:
         }
         _coerce_numeric_columns(sorted(telemetry_columns))
 
-        self._frame_cache = merged
+        if self.cache_size > 0:
+            self._frame_cache = merged
         return merged.copy() if copy else merged
 
     def to_records(self, copy: bool = True) -> list[TelemetryRecord]:
@@ -281,12 +285,14 @@ class ReplayCSVBundleReader:
         fingerprint = id(cached_frame) if cached_frame is not None else id(frame)
 
         cache = self._records_cache
-        if copy and cache is not None:
+        if self.cache_size > 0 and copy and cache is not None:
             cached_fingerprint, cached_records = cache
             if cached_fingerprint == fingerprint:
                 return list(cached_records)
 
-        if not copy:
+        if self.cache_size <= 0:
+            self._records_cache = None
+        elif not copy:
             # Discard any cached list to avoid exposing shared mutable state.
             self._records_cache = None
 
@@ -297,7 +303,8 @@ class ReplayCSVBundleReader:
             for row in frame.itertuples(index=False, name=None)
         ]
 
-        self._records_cache = (fingerprint, records)
+        if self.cache_size > 0:
+            self._records_cache = (fingerprint, records)
 
         return list(records) if copy else records
 

@@ -94,14 +94,15 @@ def _persist_records(records: Records, destination: Path, fmt: str) -> None:
     )
 
 
-def _load_replay_bundle(source: Path) -> Records:
+def _load_replay_bundle(source: Path, *, cache_size: int | None = None) -> Records:
     if not source.exists():
         raise CliError(
             f"Replay CSV bundle {source} does not exist",
             category="not_found",
             context={"path": str(source), "kind": "replay_csv_bundle"},
         )
-    reader = ReplayCSVBundleReader(source)
+    size = 1 if cache_size is None else int(cache_size)
+    reader = ReplayCSVBundleReader(source, cache_size=size)
     return reader.to_records()
 
 

@@ -410,12 +410,28 @@ pack_root = "~/tnfr-pack"
 entry = 0.5
 apex = 0.4
 exit = 0.6
+
+[cache]
+enable_delta_cache = true
+nu_f_cache_size = 256
+
+[cache.telemetry]
+telemetry_cache_size = 1
 ```
 
 This configuration adjusts the default UDP ports used by ``baseline``,
 selects the exporter for analytics/reporting, sets the default
 car/track for ``suggest`` and overrides the tolerance used when
 highlighting ΔNFR↓ deviations in ``phase_messages``.
+
+The optional ``[cache]`` block tunes the memoisation used by delta and
+natural-frequency helpers.  ``enable_delta_cache = false`` recomputes the
+ΔNFR-by-node maps for every sample instead of keeping a per-record LRU,
+while ``nu_f_cache_size`` sets the maximum history snapshots stored for
+dynamic ν_f smoothing (set it to ``0`` to disable caching entirely).
+``[cache.telemetry]`` applies the same semantics to replay bundles via
+``telemetry_cache_size`` so large CSV archives can be streamed without
+retaining cached dataframes or record lists.
 
 When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config/global.toml`` together with ``data/cars`` and ``data/profiles``) the CLI resolves car metadata and TNFR objectives from that bundle. The ``--pack-root`` flag overrides the configured value for a single invocation.
 

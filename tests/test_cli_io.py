@@ -12,6 +12,7 @@ import pytest
 
 pytest.importorskip("numpy")
 
+from tnfr_lfs.cache_settings import CacheOptions
 from tnfr_lfs.cli import common as cli_common
 from tnfr_lfs.cli import io as cli_io
 from tnfr_lfs.cli.common import CliError
@@ -21,7 +22,9 @@ def test_load_records_from_namespace_prefers_replay(monkeypatch: pytest.MonkeyPa
     bundle_path = tmp_path / "bundle.zip"
     bundle_path.write_bytes(b"dummy")
     expected = [object()]
-    monkeypatch.setattr(cli_common, "_load_replay_bundle", lambda path: expected)
+    monkeypatch.setattr(
+        cli_common, "_load_replay_bundle", lambda path, **_: expected
+    )
     namespace = argparse.Namespace(replay_csv_bundle=bundle_path, telemetry=None)
 
     records, resolved = cli_common._load_records_from_namespace(namespace)
@@ -29,6 +32,28 @@ def test_load_records_from_namespace_prefers_replay(monkeypatch: pytest.MonkeyPa
     assert records is expected
     assert resolved == bundle_path
     assert namespace.telemetry == bundle_path
+
+
+def test_load_records_from_namespace_threads_cache_size(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    bundle_path = tmp_path / "bundle.zip"
+    bundle_path.write_bytes(b"dummy")
+    captured: dict[str, int | None] = {}
+
+    def _fake_loader(path: Path, *, cache_size: int | None = None):
+        captured["path"] = path
+        captured["cache_size"] = cache_size
+        return []
+
+    monkeypatch.setattr(cli_common, "_load_replay_bundle", _fake_loader)
+    namespace = argparse.Namespace(replay_csv_bundle=bundle_path, telemetry=None)
+    namespace.cache_options = CacheOptions(
+        enable_delta_cache=True, nu_f_cache_size=128, telemetry_cache_size=0
+    )
+
+    cli_common._load_records_from_namespace(namespace)
+
+    assert captured["path"] == bundle_path
+    assert captured["cache_size"] == 0
 
 
 def test_load_records_from_namespace_requires_path() -> None:

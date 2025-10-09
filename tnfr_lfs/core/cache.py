@@ -43,18 +43,27 @@ class _LRUCache(Generic[_K, _V]):
         self._data.clear()
 
 
-_DELTA_NFR_CACHE: _LRUCache[Tuple[int, int | None], Mapping[str, float]] = _LRUCache(maxsize=1024)
+_DEFAULT_DELTA_CACHE_SIZE = 1024
+
+_ENABLE_DELTA_CACHE = True
+_DELTA_NFR_CACHE: _LRUCache[Tuple[int, int | None], Mapping[str, float]] | None = _LRUCache(
+    maxsize=_DEFAULT_DELTA_CACHE_SIZE
+)
 _DYNAMIC_MULTIPLIER_CACHE: _LRUCache[
     Tuple[str | None, int, float | None], Tuple[Mapping[str, float], float]
-] = _LRUCache(maxsize=256)
+] | None = _LRUCache(maxsize=256)
 
 
 def cached_delta_nfr_map(record: _T, factory: Callable[[], Mapping[str, float]]) -> Mapping[str, float]:
     """Return a cached ΔNFR-by-node map for *record*."""
 
+    if not delta_cache_enabled():
+        return dict(factory())
+
     reference = getattr(record, "reference", None)
     reference_id: int | None = id(reference) if reference is not None else None
     key = (id(record), reference_id)
+    assert _DELTA_NFR_CACHE is not None
     value = _DELTA_NFR_CACHE.get_or_create(key, lambda: dict(factory()))
     return dict(value)
 
@@ -62,6 +71,8 @@ def cached_delta_nfr_map(record: _T, factory: Callable[[], Mapping[str, float]])
 def invalidate_delta_record(record: _T) -> None:
     """Invalidate cached ΔNFR entries that reference *record*."""
 
+    if _DELTA_NFR_CACHE is None:
+        return
     record_id = id(record)
 
     def _should_remove(key: Tuple[int, int | None]) -> bool:
@@ -74,7 +85,8 @@ def invalidate_delta_record(record: _T) -> None:
 def clear_delta_cache() -> None:
     """Clear all cached ΔNFR entries."""
 
-    _DELTA_NFR_CACHE.clear()
+    if _DELTA_NFR_CACHE is not None:
+        _DELTA_NFR_CACHE.clear()
 
 
 def cached_dynamic_multipliers(
@@ -86,7 +98,10 @@ def cached_dynamic_multipliers(
 
     timestamp = getattr(history[-1], "timestamp", None) if history else None
     key = (car_model, len(history), timestamp)
-    value = _DYNAMIC_MULTIPLIER_CACHE.get_or_create(
+    cache = _DYNAMIC_MULTIPLIER_CACHE
+    if cache is None:
+        return _prepare_dynamic_entry(factory)
+    value = cache.get_or_create(
         key,
         lambda: _prepare_dynamic_entry(factory),
     )
@@ -104,6 +119,8 @@ def _prepare_dynamic_entry(
 def invalidate_dynamic_record(record: _T) -> None:
     """Drop cached ν_f multipliers that are older than *record*."""
 
+    if _DYNAMIC_MULTIPLIER_CACHE is None:
+        return
     threshold = getattr(record, "timestamp", None)
 
     def _should_remove(key: Tuple[str | None, int, float | None]) -> bool:
@@ -118,7 +135,43 @@ def invalidate_dynamic_record(record: _T) -> None:
 def clear_dynamic_cache() -> None:
     """Clear the dynamic ν_f multiplier cache."""
 
-    _DYNAMIC_MULTIPLIER_CACHE.clear()
+    if _DYNAMIC_MULTIPLIER_CACHE is not None:
+        _DYNAMIC_MULTIPLIER_CACHE.clear()
+
+
+def configure_cache(*, enable_delta_cache: bool | None = None, nu_f_cache_size: int | None = None) -> None:
+    """Configure cache toggles and capacities used by EPI helpers."""
+
+    global _ENABLE_DELTA_CACHE, _DELTA_NFR_CACHE, _DYNAMIC_MULTIPLIER_CACHE
+
+    if enable_delta_cache is not None:
+        enable = bool(enable_delta_cache)
+        if not enable:
+            clear_delta_cache()
+            _DELTA_NFR_CACHE = None
+        elif _DELTA_NFR_CACHE is None:
+            _DELTA_NFR_CACHE = _LRUCache(maxsize=_DEFAULT_DELTA_CACHE_SIZE)
+        _ENABLE_DELTA_CACHE = enable
+
+    if nu_f_cache_size is not None:
+        size = int(nu_f_cache_size)
+        if size <= 0:
+            clear_dynamic_cache()
+            _DYNAMIC_MULTIPLIER_CACHE = None
+        else:
+            _DYNAMIC_MULTIPLIER_CACHE = _LRUCache(maxsize=size)
+
+
+def delta_cache_enabled() -> bool:
+    """Return ``True`` when ΔNFR caching is active."""
+
+    return _ENABLE_DELTA_CACHE and _DELTA_NFR_CACHE is not None
+
+
+def dynamic_cache_enabled() -> bool:
+    """Return ``True`` when ν_f multipliers caching is active."""
+
+    return _DYNAMIC_MULTIPLIER_CACHE is not None
 
 
 __all__ = [
@@ -128,4 +181,7 @@ __all__ = [
     "cached_dynamic_multipliers",
     "invalidate_dynamic_record",
     "clear_dynamic_cache",
+    "configure_cache",
+    "delta_cache_enabled",
+    "dynamic_cache_enabled",
 ]

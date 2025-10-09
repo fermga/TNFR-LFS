@@ -8,10 +8,12 @@ import pytest
 
 from tnfr_lfs.config_loader import (
     Car,
+    CacheOptions,
     example_pipeline,
     load_cars,
     load_lfs_class_overrides,
     load_profiles,
+    parse_cache_options,
     resolve_targets,
     _deep_merge,
 )
@@ -179,6 +181,28 @@ def test_example_pipeline_accepts_custom_data_root(config_pack: Path) -> None:
     resolved = example_pipeline("ABC", data_root=config_pack)
 
     assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
+
+
+def test_parse_cache_options_defaults() -> None:
+    options = parse_cache_options({})
+    assert isinstance(options, CacheOptions)
+    assert options.enable_delta_cache is True
+    assert options.nu_f_cache_size == 256
+    assert options.telemetry_cache_size == 1
+
+
+def test_parse_cache_options_overrides() -> None:
+    raw = {
+        "cache": {
+            "enable_delta_cache": False,
+            "nu_f_cache_size": 16,
+            "telemetry": {"telemetry_cache_size": 0},
+        }
+    }
+    options = parse_cache_options(raw)
+    assert options.enable_delta_cache is False
+    assert options.nu_f_cache_size == 16
+    assert options.telemetry_cache_size == 0
 
 
 def test_load_cars_uses_packaged_resources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
