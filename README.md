@@ -27,7 +27,8 @@ reports under `examples/out/`.
 | Resource | Description |
 | --- | --- |
 | [Documentation index](docs/index.md) | MkDocs entry point for the full manual. |
-| [Tutorials](docs/tutorials.md) | Step-by-step walkthroughs for common workflows. |
+| [Beginner quickstart](docs/tutorials.md) | Step-by-step guide for installation and the sample dataset. |
+| [Advanced workflows](docs/advanced_workflows.md) | Robustness checks, Pareto sweeps and A/B comparisons. |
 | [API reference](docs/api_reference.md) | Python API surface with module details. |
 | [Examples gallery](docs/examples_gallery.md) | Overview of the automation scripts under `examples/`. |
 
@@ -81,7 +82,8 @@ numbers and tuning tips.
 ## CLI deep dives
 
 Looking for configuration templates, Pareto sweeps or the live HUD walkthrough?
-Refer to the [CLI deep dive](docs/cli_deep_dive.md) alongside the primary
+Start with the [advanced workflows](docs/advanced_workflows.md) and pair them
+with the [CLI deep dive](docs/cli_deep_dive.md) alongside the primary
 [CLI guide](docs/cli.md).
 
 ## Documentation

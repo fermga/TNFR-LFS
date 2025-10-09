@@ -1,204 +1,87 @@
-# Tutorials
+# Beginner quickstart
 
-This section walks through the full TNFR × LFS workflow, from capturing a
-baseline to producing an explainable setup report.  The examples assume
-you installed the project in editable mode using ``pip install -e .`` and
-that Live for Speed has been prepared with the recommended telemetry
-configuration.
+Kick off the TNFR × LFS workflow with the bundled quickstart scenario. The
+steps below cover installation, running the sample dataset and validating the
+artefacts that the CLI generates. When you are ready to expand towards Pareto
+sweeps or lap-by-lap comparisons, jump to the
+[advanced workflows](advanced_workflows.md).
 
-## 0. Enable telemetry in ``cfg.txt``
+## 1. Install the toolkit
 
-Locate the simulator ``cfg.txt`` file and adjust the streaming blocks:
+The quickstart requires Python 3.9+ and the base dependencies listed in
+`requirements.txt`.
+
+```bash
+python -m pip install -r requirements.txt
+# Optional: edit the code locally and keep the CLI in sync
+python -m pip install -e .
+```
+
+You can also use the Makefile shorthands (`make install` or `make dev-install`).
+If a command fails with `ModuleNotFoundError`, double-check that the virtual
+environment is active before continuing.
+
+!!! tip "Live for Speed telemetry"
+    You do **not** need a running simulator for the quickstart. The script
+    replays `data/BL1_XFG_baseline.csv` through the CLI so you can explore the
+    reports offline.
+
+## 2. Run the quickstart scenario
+
+From the repository root run:
+
+```bash
+make quickstart
+```
+
+The helper script calls `examples/quickstart.sh`. A successful run prints the
+baseline capture confirmation before exiting:
 
 ```text
-OutSim Mode 1
-OutSim IP 127.0.0.1
-OutSim Port 4123
-
-OutGauge Mode 1
-OutGauge IP 127.0.0.1
-OutGauge Port 3000
-
-InSim IP 127.0.0.1
-InSim Port 29999
+{"timestamp": "2025-10-09T07:59:12.199199Z", "level": "INFO", "logger": "tnfr_lfs.cli.workflows", "message": "Baseline saved 17 samples to /workspace/TNFR-LFS/examples/out/baseline.jsonl (jsonl).", "extra": {"taskName": null, "event": "baseline.saved", "samples": 17, "destination": "/workspace/TNFR-LFS/examples/out/baseline.jsonl", "format": "jsonl", "simulate": true, "capture_metrics": {"attempts": 17, "samples": 17, "dropped_pairs": 0, "duration": 0.0, "outsim_timeouts": 0, "outgauge_timeouts": 0, "outsim_ignored_hosts": 0, "outgauge_ignored_hosts": 0}}}
+Baseline saved 17 samples to /workspace/TNFR-LFS/examples/out/baseline.jsonl (jsonl).
 ```
 
-You can mirror the same values from the in-game console using ``/outsim 1 127.0.0.1 4123``,
-``/outgauge 1 127.0.0.1 3000`` and ``/insim 29999``.  Afterwards execute
+!!! warning "Common pitfalls"
+    * `Sample dataset not found` – make sure `data/BL1_XFG_baseline.csv` exists.
+      Regenerate the repository data bundle if needed.
+    * `ModuleNotFoundError: No module named 'tnfr_lfs'` – install the project
+      into the active environment with `pip install -e .`.
+    * Artefacts missing under `examples/out/` – check write permissions or
+      delete stale files before re-running the script.
 
-```bash
-tnfr-lfs diagnose /path/to/LFS/cfg.txt
+## 3. Inspect the generated artefacts
+
+The quickstart populates `examples/out/` with JSONL, JSON and Markdown payloads:
+
+```text
+$ ls examples/out
+analyze.json  baseline.jsonl  report.json  setup_plan.md  suggest.json
 ```
 
-to validate that OutSim/OutGauge are enabled and that the UDP ports are available before
-capturing telemetry.
+`baseline.jsonl` stores the replayed telemetry. Use `head` or your favourite
+viewer to check the first sample:
 
-## 0 bis. Visualise the live HUD
-
-With the telemetry broadcasters active you can display the ΔNFR HUD directly
-inside Live for Speed:
-
-```bash
-tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
+```json
+{"brake_pressure": 0.0, "gear": 2, "lateral_accel": 0.3, "mu_eff_front": 0.07281199941750399, "nfr": 500.0, "si": 0.88, "speed": 18.24, "steer": 0.06, "throttle": 0.95, "timestamp": 0.0, "vertical_load": 5000.0, "yaw_rate": 0.21}
 ```
 
-Click on the overlay button to rotate through the three pages: (A) active
-corner and dissonance breakdown with the ΔNFR gauge, ``ν_f~`` waveform and
-coherence bar, (B) nodal |ΔNFR↓| contributions and modal resonance enriched with
-the same coherence widgets, (C) setup hints aligned with the current phase and
-the ``Si plan`` trace.  Use the ``--layout-*`` overrides if you need to move the
-40×16 button to a different area of the HUD.
+`analyze.json` aggregates the ΔNFR and Sense Index series. The report and
+suggestion files summarise the recommended setup changes, while
+`setup_plan.md` distils the plan in table form:
 
-Consult the [setup equivalence guide](setup_equivalences.md) to interpret how
-the HUD surfaces the nodal projections `∇NFR∥`/`∇NFR⊥` together with `ν_f` and
-`C(t)` for each subsystem before tweaking the setup.  The guide highlights when
-to inspect the original `Fz`/`ΔFz` channels if the change hinges on absolute
-loads.
-
-## 1. Capture a baseline
-
-```bash
-tnfr-lfs baseline stint.jsonl --duration 45 --outsim-port 4123 --outgauge-port 3000
-```
-
-The command records live telemetry for 45 seconds, combining the OutSim
-and OutGauge streams exposed by the simulator.  Use ``--simulate`` to
-ingest a prerecorded CSV file when live capture is not available.
-
-## 2. Analyse the telemetry
-
-```bash
-tnfr-lfs analyze stint.jsonl --export json > analyze.json
-```
-
-This step computes the ΔNFR/Sense Index series using the core operators
-and stores the payload as a JSON document.  Switch the exporter to ``csv``
-to obtain a flat table with timestamped values.
-
-## 3. Generate suggestions
-
-```bash
-tnfr-lfs suggest stint.jsonl --car-model FZR --track AS5 --export json > suggestions.json
-```
-
-The recommendation engine evaluates the telemetry against the thresholds
-defined for the selected car model and track.  The resulting payload
-contains rule identifiers, rationales, and expected effects.
-
-Cross-check those insights with the [equivalence tables](setup_equivalences.md)
-to translate each metric (the `∇NFR∥`/`∇NFR⊥` projections, `ν_f`, `C(t)`) into
-actionable setup changes aligned with the TNFR plan.  The tables also remind you
-to validate any `∇NFR⊥` recommendation against the `Fz`/`ΔFz` loads whenever the
-adjustment depends on the absolute support available.
-
-## 4. Build a report
-
-```bash
-tnfr-lfs report stint.jsonl --target-delta 0.5 --target-si 0.8 --export markdown > report.md
-```
-
-Reports orchestrate the operators, highlight ΔNFR gaps relative to the
-requested objectives, and produce a Markdown summary ready for sharing.
-The command also writes the coherence map, operator trajectories and ΔNFR
-bifurcation artefacts under ``out/<baseline>/``.  Select the preferred
-representation with ``--report-format``: ``json`` for machine processing,
-``markdown`` for notebooks, or ``visual`` to generate compact ASCII
-sketches that can be pasted into chat tools.
-
-## 5. Create a setup plan (optional)
-
-```bash
-tnfr-lfs write-set stint.jsonl --car-model FZR --session FP1 --export markdown > setup.md
-```
-
-The planner runs the optimisation-aware search module to propose setup
-deltas while embedding the explanations generated by the recommendation
-engine.  The Markdown exporter merges duplicated rationales so the final
-document can be handed directly to race engineers.
-
-## Metric ↔ structural operator ↔ lever
-
-| TNFR metric | Structural operator | Primary lever | Playbook & guides |
+```markdown
+| Change | Adjustment | Rationale | Expected effect |
 | --- | --- | --- | --- |
-| `∇NFR⊥` (lateral nodal projection) | `recursivity_operator` retains the thermal/style memory per microsector and filters ΔNFR contributions to spot persistent spikes before closing a stint.【F:tnfr_lfs/core/operators.py†L475-L646】 | The tyre-balance controller translates those relative deviations into ΔP/Δcamber adjustments and per-wheel biases.  When the correction requires absolute load context, cross-check the recommendation with the `Fz`/`ΔFz` channels before changing bars, bias, or pressures.【F:tnfr_lfs/core/operators.py†L733-L831】【F:docs/setup_equivalences.md†L61-L152】 | Consult the [TNFR playbook](../tnfr_lfs/data/playbooks/tnfr_playbook.toml) to prioritise actions whenever the report raises load alerts.【F:tnfr_lfs/io/playbook.py†L35-L64】 |
-| `ν_f` | `mutation_operator` monitors structural entropy and style drift to mutate the archetype and recover the target natural frequency per phase.【F:tnfr_lfs/core/operators.py†L834-L940】 | Adjust springs, bars, and geometry according to the `ν_f` recommendations in the equivalence table (stiffness, toe) whenever the HUD/CLI shows "very low"/"very high" bands.【F:docs/setup_equivalences.md†L87-L152】 | The playbook reinforces these actions with reminders per microsector and phase.【F:tnfr_lfs/io/playbook.py†L35-L64】 |
-| `C(t)` | The same recursive memory exposes the coherence trace and feeds the robustness metrics; exporters use it to rebuild nodal couplings and highlight coherence loss.【F:tnfr_lfs/core/operators.py†L475-L646】【F:tnfr_lfs/exporters/report_extended.py†L156-L179】 | Modulate dampers, camber, and electronic aids to recover coherence when reports highlight decoherence or aggressive ABS behaviour.【F:docs/setup_equivalences.md†L91-L140】 | Cross-reference the playbook flags to pick the subsystem to address first.【F:tnfr_lfs/io/playbook.py†L35-L64】 |
-
-## 6. Validate setup robustness
-
-After obtaining `report.md`, generate a navigable report with the extended exporter to review variability and structural couplings:
-
-```bash
-tnfr-lfs report stint.jsonl --target-delta 0.5 --target-si 0.8 --export html_ext > report.html
+| caster_deg | -0.250 | Braking operator aplicado sobre la fase de entry en microsector 0... | -0.2° caster |
 ```
 
-The resulting HTML includes robustness sections with per-microsector variability, recursive traces, and nodal couplings that help uncover fragile configurations before iterating on the setup.【F:tnfr_lfs/exporters/report_extended.py†L156-L179】【F:tnfr_lfs/exporters/report_extended.py†L290-L324】 When those tables point to unstable microsectors, consult the operator table above and deploy the levers recommended in the TNFR playbook to reinforce the weak area.【F:tnfr_lfs/io/playbook.py†L35-L64】
+Use the Markdown output to brief engineers or paste the JSON artefacts into
+notebooks for further processing.
 
-## 7. Explore the Pareto front
+## Next steps
 
-To visualise how the plan’s levers react to small variations, run the `pareto` subcommand and open the generated HTML report:
-
-```bash
-tnfr-lfs pareto stint.jsonl --car-model FZR --radius 2 --export html_ext > pareto.html
-```
-
-The command sweeps the decision space around the current vector and produces a Pareto front with per-metric scores and breakdowns; the `html_ext` exporter embeds the tables directly in the report.【F:tnfr_lfs/cli/pareto.py†L23-L117】【F:tnfr_lfs/exporters/report_extended.py†L188-L220】【F:tnfr_lfs/exporters/report_extended.py†L290-L324】 Use these rows to compare the relative impact of each parameter before approving major changes, and document the selection with the playbook notes.【F:tnfr_lfs/io/playbook.py†L35-L64】
-
-## 8. Run A/B testing
-
-When you have two comparable stints, execute a lap-by-lap A/B analysis to quantify which variant improves the target metric:
-
-```bash
-tnfr-lfs compare baseline.jsonl variant.jsonl --metric sense_index --export html_ext > abtest.html
-```
-
-The HTML output summarises stint averages, lap distributions, and session-aware messages.  This makes it easy to see whether the variant delivers higher `Si` or lower ΔNFR before committing the change to the playbook.【F:tnfr_lfs/cli/compare.py†L28-L135】【F:tnfr_lfs/exporters/report_extended.py†L260-L315】【F:tnfr_lfs/exporters/report_extended.py†L290-L324】 Complement the review with the prioritised recommendations for each metric in the operator table and in the TNFR playbook.【F:tnfr_lfs/io/playbook.py†L35-L64】
-
-## Python API quick start
-
-Each step of the CLI flow is also exposed through the Python API:
-
-```python
-from tnfr_lfs.acquisition import OutSimClient
-from tnfr_lfs.core.epi import EPIExtractor
-from tnfr_lfs.core.segmentation import segment_microsectors
-from tnfr_lfs.recommender import RecommendationEngine, SetupPlanner
-from tnfr_lfs.exporters.setup_plan import SetupPlan, SetupChange
-
-records = OutSimClient().ingest("stint.csv")
-extractor = EPIExtractor()
-bundles = extractor.extract(records)
-microsectors = segment_microsectors(records, bundles)
-
-engine = RecommendationEngine()
-recommendations = engine.generate(bundles)
-
-planner = SetupPlanner()
-plan = planner.plan(bundles, microsectors=microsectors, car_model="FZR")
-
-setup_payload = {
-    "setup_plan": SetupPlan(
-        car_model="FZR",
-        session="FP1",
-        changes=[
-            SetupChange(
-                parameter="rear_wing_angle",
-                delta=-1.0,
-                rationale=recommendations[0].rationale,
-                expected_effect=recommendations[0].expected_effect,
-            )
-        ],
-        rationales=[rec.rationale for rec in recommendations],
-        expected_effects=[rec.expected_effect for rec in recommendations],
-        sensitivities=plan.sensitivities,
-        phase_sensitivities=plan.phase_sensitivities,
-    )
-}
-```
-
-The snippet captures telemetry from a CSV file, extracts EPI bundles,
-derives microsectors, and combines optimisation with explainable
-recommendations to build a setup plan ready for export.  The
-``sensitivities`` and ``phase_sensitivities`` mappings expose the
-empirical Jacobian gathered during the optimisation, enabling
-downstream tooling to reuse the ΔSi/Δp and Δ∫|ΔNFR|/Δp gradients.
+Continue with the [advanced workflows](advanced_workflows.md) to learn how to
+run robustness checks, sweep the Pareto front and compare laps between two
+stints. Pair those guides with the [CLI reference](cli.md) for complete
+command options.
