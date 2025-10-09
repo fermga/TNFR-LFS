@@ -26,6 +26,13 @@ environment is active before continuing.
     replays `data/BL1_XFG_baseline.csv` through the CLI so you can explore the
     reports offline.
 
+!!! info "Capturing your own telemetry"
+    When you're ready to ingest live UDP streams, follow the
+    [`TelemetryFusion` walkthrough](api_reference.md#tnfr_lfsacquisitionfusiontelemetryfusion)
+    to wire the OutSim and OutGauge broadcasters straight into the EPI
+    extractor. The same calibration hooks and pack overrides apply to both the
+    CLI and your own scripts.
+
 ## 2. Run the quickstart scenario
 
 From the repository root run:

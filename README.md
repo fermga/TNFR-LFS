@@ -71,7 +71,10 @@ This invokes `examples/quickstart.sh` to generate artefacts in `examples/out/`.
 TNFR × LFS reads exclusively from native Live for Speed broadcasters. Enable
 OutSim/OutGauge/Insim in the simulator and consult the
 [telemetry guide](docs/telemetry.md) for the complete signal breakdown and brake
-thermal proxy details.
+thermal proxy details. Developers wiring direct UDP ingest pipelines can jump to
+the [`TelemetryFusion` API reference](docs/api_reference.md#tnfr_lfsacquisitionfusiontelemetryfusion)
+to see how OutSim/OutGauge packets are combined and how calibration packs slot
+into the workflow.
 
 ## Benchmarks
 

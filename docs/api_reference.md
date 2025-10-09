@@ -74,6 +74,62 @@ records = client.ingest("stint.csv")
 isnan(records[0].tyre_temp_fl)
 ```
 
+### `tnfr_lfs.acquisition.fusion.TelemetryFusion`
+
+Combine OutSim and OutGauge datagrams into enriched
+:class:`~tnfr_lfs.core.epi.TelemetryRecord` samples or full
+:class:`~tnfr_lfs.core.epi.EPIBundle` payloads.  The fusion layer loads the
+default calibration table from ``tnfr_lfs/data/fusion_calibration.toml`` and
+merges car/track specific overrides before scaling slip ratios, steering
+geometry, μ estimators and suspension weighting for every packet.【F:tnfr_lfs/acquisition/fusion.py†L71-L206】【F:tnfr_lfs/data/fusion_calibration.toml†L1-L52】
+
+Calibration hooks are designed for teams that maintain their own pack
+overlays.  ``TelemetryFusion`` searches for a pack root by checking the
+``TNFR_LFS_PACK_ROOT`` environment variable, the current working tree and
+the installed resource bundle.  When it finds ``config/global.toml`` or a
+``data/cars/*.toml`` manifest the fusion logic applies the ``[thermal.brakes]``
+entries to seed the brake temperature estimator, allowing per-car defaults
+and per-track overrides to live alongside other configuration artefacts.【F:tnfr_lfs/acquisition/fusion.py†L582-L709】
+Set ``TNFR_LFS_BRAKE_THERMAL=off`` (or ``auto``/``force``) to coerce the
+thermals into the desired mode without editing the pack.【F:tnfr_lfs/acquisition/fusion.py†L675-L709】
+
+Instantiate the fuser once per session, then stream UDP packets into it.
+``fuse`` returns the latest ``TelemetryRecord`` while ``fuse_to_bundle`` feeds
+the bundled EPI extractor so downstream tooling can immediately reuse the
+examples from the :mod:`tnfr_lfs.core.epi` documentation.【F:tnfr_lfs/acquisition/fusion.py†L130-L320】
+
+```python
+from tnfr_lfs.acquisition import (
+    OutGaugeUDPClient,
+    OutSimUDPClient,
+    TelemetryFusion,
+)
+from tnfr_lfs.core.epi import TelemetryRecord
+
+fusion = TelemetryFusion()
+records: list[TelemetryRecord] = []
+
+with OutSimUDPClient(port=4123) as outsim, OutGaugeUDPClient(port=3000) as outgauge:
+    while True:
+        outsim_packet = outsim.recv()
+        outgauge_packet = outgauge.recv()
+        if not outsim_packet or not outgauge_packet:
+            continue  # wait until both broadcasters emit their next datagram
+
+        record = fusion.fuse(outsim_packet, outgauge_packet)
+        records.append(record)
+
+        # Bridge straight into the EPI workflows used by the examples.
+        bundle = fusion.fuse_to_bundle(outsim_packet, outgauge_packet)
+        print(bundle.delta_nfr, bundle.sense_index)
+```
+
+The example above illustrates the minimal glue required to bridge raw UDP
+telemetry with the existing EPI tutorials: reuse the same ``TelemetryFusion``
+instance, buffer each ``TelemetryRecord`` if you need time-series access,
+and call ``fuse_to_bundle`` (or ``fusion.extractor.update``) whenever you
+need the aggregated ΔNFR/SI metrics.
+
 ## Core Analytics
 
 ### `tnfr_lfs.core.epi.EPIExtractor`
