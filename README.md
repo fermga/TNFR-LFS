@@ -107,8 +107,9 @@ The complete documentation lives under `docs/` and is published with MkDocs.
   defines the EPI, the ΔNFR/ΔSi metrics and the resonant principles.
 - **TNFR × LFS** identifies the software toolkit that implements and automates
   those principles.
-- The CLI (`tnfr-lfs`), Python modules (`tnfr_lfs`) and configuration paths
-  (`tnfr-lfs.toml`) retain the hyphen for backward compatibility.
+- The CLI (`tnfr_lfs`), Python modules (`tnfr_lfs`) and configuration paths
+  (`tnfr-lfs.toml`) retain their respective naming conventions for
+  compatibility.
 
 ## Development
 

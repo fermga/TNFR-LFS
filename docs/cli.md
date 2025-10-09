@@ -4,14 +4,14 @@ Install the project in editable mode and run:
 
 ```
 pip install -e .
-tnfr-lfs baseline runs/test1.jsonl data/test1.raf --format jsonl
+tnfr_lfs baseline runs/test1.jsonl data/test1.raf --format jsonl
 ```
 
 The example converts the bundled RAF capture (`data/test1.raf`) into a
 JSONL baseline. The CLI inspects the suffix of every telemetry source
 (`.raf`, `.csv`, `.jsonl`, `.parquet`…) and automatically routes it
 through the appropriate parser. CSV inputs continue to use the
-`--simulate` flag (`tnfr-lfs baseline runs/demo.jsonl --simulate "$(python -c 'from tnfr_lfs.examples.quickstart_dataset import dataset_path; print(dataset_path())')"`),
+`--simulate` flag (`tnfr_lfs baseline runs/demo.jsonl --simulate "$(python -c 'from tnfr_lfs.examples.quickstart_dataset import dataset_path; print(dataset_path())')"`),
 while RAF captures are parsed natively through `tnfr_lfs.io.read_raf`
 and `tnfr_lfs.io.raf_to_telemetry_records`. All TNFR indicators (`ΔNFR`, the
 nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)` and nodal derivatives)
@@ -25,7 +25,7 @@ absolute loads, cross-check the recommendations with the direct
 Replay Analyzer exports can be ingested with `--replay-csv-bundle`:
 
 ```bash
-tnfr-lfs baseline runs/test1.jsonl --replay-csv-bundle data/test1.zip --format jsonl
+tnfr_lfs baseline runs/test1.jsonl --replay-csv-bundle data/test1.zip --format jsonl
 ```
 
 The bundle flag accepts either a directory or a ZIP produced by Replay Analyzer and
@@ -68,7 +68,7 @@ CLI filter. For example, to forward the metrics to `jq` before shipping
 them to an aggregator:
 
 ```bash
-tnfr-lfs baseline runs/baseline.jsonl \
+tnfr_lfs baseline runs/baseline.jsonl \
   --log-format json \
   --log-output stdout \
   | jq 'select(.event == "capture.completed")'
@@ -81,7 +81,7 @@ loss or misconfigured endpoints.
 
 ## Subcommands
 
-The ``tnfr-lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into eight subcommands:
+The ``tnfr_lfs`` executable (part of the TNFR × LFS toolkit) organises the workflow into eight subcommands:
 
 ### ``template``
 
@@ -91,8 +91,8 @@ by the recommendation engine (backed by ``data/threshold_profiles.toml``)
 and emits a TOML snippet that can be dropped into ``tnfr-lfs.toml``.
 
 ```bash
-tnfr-lfs template --car FZR --track AS5 > presets/fzr_as5.toml
-tnfr-lfs --config presets/fzr_as5.toml analyze stint.jsonl
+tnfr_lfs template --car FZR --track AS5 > presets/fzr_as5.toml
+tnfr_lfs --config presets/fzr_as5.toml analyze stint.jsonl
 ```
 
 The generated file contains ``[analyze.phase_templates]`` and
@@ -186,7 +186,7 @@ when to back those projections with the `Fz`/`ΔFz` channels if you need
 absolute load adjustments.
 
 ```bash
-tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
+tnfr_lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
 ```
 
 ``--update-rate`` controls the HUD refresh (5–10 Hz recommended) while
@@ -216,7 +216,7 @@ setups share a consistent vocabulary when reviewing telemetry.
 ### ``diagnose``
 
 Verifies that the Live for Speed ``cfg.txt`` file exposes OutSim/OutGauge data streams and that the UDP
-ports are reachable.  Run ``tnfr-lfs diagnose /path/to/LFS/cfg.txt`` before a session to receive:
+ports are reachable.  Run ``tnfr_lfs diagnose /path/to/LFS/cfg.txt`` before a session to receive:
 
 * Warnings when ``OutSim Mode`` or ``OutGauge Mode`` are not set to ``1``.
 * Details about the configured ``InSim`` port (e.g. ``29999``) so you can launch ``/insim 29999``
@@ -256,9 +256,9 @@ continue to be honoured, while ``--force`` skips collision checks when a
 file already exists.
 
 ```bash
-tnfr-lfs baseline --simulate stint.csv
-tnfr-lfs baseline runs/session-a --simulate stint.csv
-tnfr-lfs baseline custom.parquet --simulate stint.csv --format parquet
+tnfr_lfs baseline --simulate stint.csv
+tnfr_lfs baseline runs/session-a --simulate stint.csv
+tnfr_lfs baseline custom.parquet --simulate stint.csv --format parquet
 ```
 
 #### Overlay best practices
@@ -455,7 +455,7 @@ Before running the CLI against Live for Speed you must enable the telemetry broa
 ``cfg.txt`` (located in the simulator root directory):
 
 1. Edit the ``OutSim`` block to contain ``Mode 1``, ``Port 4123`` and ``IP 127.0.0.1``. These values
-   match the defaults used by ``tnfr-lfs baseline`` and can be enabled on the fly with
+   match the defaults used by ``tnfr_lfs baseline`` and can be enabled on the fly with
    ``/outsim 1 127.0.0.1 4123`` from the simulator chat.
 2. Add ``OutSim Opts ff`` to include the player ID, driver inputs, and the wheel packet
    (forces, Fz loads, deflection) required to compute ΔNFR and ν_f.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
@@ -465,7 +465,7 @@ Before running the CLI against Live for Speed you must enable the telemetry broa
    running TNFR × LFS. Launch ``/insim 29999`` when starting a session to perform the handshake required by
    some Live for Speed mods.
 
-Save the changes and run ``tnfr-lfs diagnose /path/to/cfg.txt`` to confirm the values are consistent and that no service is blocking the UDP ports.
+Save the changes and run ``tnfr_lfs diagnose /path/to/cfg.txt`` to confirm the values are consistent and that no service is blocking the UDP ports.
 
 ### Telemetry field checklist
 
@@ -485,7 +485,7 @@ Use ``--config`` to point to an alternative file on a per-invocation
 basis:
 
 ```bash
-tnfr-lfs --config configs/tnfr-lfs.stint.toml analyze stint.jsonl
+tnfr_lfs --config configs/tnfr-lfs.stint.toml analyze stint.jsonl
 ```
 
 ## Quickstart script
@@ -499,5 +499,5 @@ plot of the Sense Index series to visualise the lap at a glance.  The
 dataset mirrors a short 17-sample stint captured at BL1/XFG pace so that
 the quickstart replicates realistic ΔNFR and Sense Index oscillations.
 If you prefer to rehearse with real RAF telemetry, swap the dataset in the
-script (or call ``tnfr-lfs baseline`` manually) and point it to
+script (or call ``tnfr_lfs baseline`` manually) and point it to
 ``data/test1.raf``; the CLI will pick the right parser automatically.

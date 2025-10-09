@@ -17,8 +17,8 @@ selected pack metadata in every JSON export.
 
 | Subcommand | Purpose | Recommended exporters | Example |
 | --- | --- | --- | --- |
-| `pareto` | Explore the decision space around a generated plan and export the Pareto front. | `markdown` for quick inspection or `html_ext` for interactive reports. | `tnfr-lfs pareto stint.jsonl --car-model FZR --radius 2 --export html_ext > pareto.html` |
-| `compare` | Aggregate lap metrics from two stints/configurations and highlight the winning variant. | `markdown` for engineering notes or `html_ext` for dashboards. | `tnfr-lfs compare baseline.jsonl variant.jsonl --metric sense_index --export html_ext > abtest.html` |
+| `pareto` | Explore the decision space around a generated plan and export the Pareto front. | `markdown` for quick inspection or `html_ext` for interactive reports. | `tnfr_lfs pareto stint.jsonl --car-model FZR --radius 2 --export html_ext > pareto.html` |
+| `compare` | Aggregate lap metrics from two stints/configurations and highlight the winning variant. | `markdown` for engineering notes or `html_ext` for dashboards. | `tnfr_lfs compare baseline.jsonl variant.jsonl --metric sense_index --export html_ext > abtest.html` |
 
 Both commands support `--export html_ext`, bundling tables, histograms and
 playbook suggestions into a single portable HTML document.
@@ -29,7 +29,7 @@ Run the ΔNFR HUD inside Live for Speed by enabling the simulator broadcasters
 and executing:
 
 ```bash
-tnfr-lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
+tnfr_lfs osd --host 127.0.0.1 --outsim-port 4123 --outgauge-port 3000 --insim-port 29999
 ```
 
 The overlay cycles through phase status, nodal contributions and setup plan

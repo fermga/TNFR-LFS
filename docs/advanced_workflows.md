@@ -2,7 +2,7 @@
 
 Build on the quickstart by stress-testing the setup, exploring nearby
 configurations and comparing alternative stints. All of the commands below assume
-that you already generated a baseline with `tnfr-lfs baseline` (for example via
+that you already generated a baseline with `tnfr_lfs baseline` (for example via
 `examples/quickstart.sh`) and that the resulting JSONL file is available under
 `examples/out/baseline.jsonl`.
 
@@ -12,7 +12,7 @@ The extended HTML report exposes the ΔNFR variability, coherence map and nodal
 couplings per microsector.
 
 ```bash
-tnfr-lfs report examples/out/baseline.jsonl \
+tnfr_lfs report examples/out/baseline.jsonl \
   --target-delta 0.5 --target-si 0.8 \
   --export html_ext > examples/out/report.html
 ```
@@ -28,7 +28,7 @@ When a candidate setup looks promising, sweep the surrounding decision space to
 visualise trade-offs across ΔNFR, Sense Index and coherence.
 
 ```bash
-tnfr-lfs pareto examples/out/baseline.jsonl \
+tnfr_lfs pareto examples/out/baseline.jsonl \
   --car-model XFG --radius 2 \
   --export html_ext > examples/out/pareto.html
 ```
@@ -42,7 +42,7 @@ rationales in the TNFR playbook or append them to the setup plan.
 Compare two recorded stints to see which variant achieves the target metric.
 
 ```bash
-tnfr-lfs compare baseline.jsonl variant.jsonl \
+tnfr_lfs compare baseline.jsonl variant.jsonl \
   --metric sense_index --export html_ext > examples/out/abtest.html
 ```
 
