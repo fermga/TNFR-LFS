@@ -65,7 +65,7 @@ Reads OutSim-style telemetry from CSV sources and returns a list of
 client validates the column order, converts values to floats, and keeps
 any optional column that is missing in the source as ``math.nan`` instead
 of fabricating estimates.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
-This allows downstream exporters to surface "sin datos" ("no data") when Live for
+This allows downstream exporters to surface "no data" when Live for
 Speed does not broadcast the extra wheel block.
 
 ```
@@ -76,7 +76,7 @@ from tnfr_lfs.ingestion.live import OutSimClient
 client = OutSimClient()
 records = client.ingest("stint.csv")
 # Optional columns remain math.nan when the CSV omits them, so
-# downstream metrics can flag "sin datos" (“no data”).
+# downstream metrics can flag "no data".
 isnan(records[0].tyre_temp_fl)
 ```
 
@@ -195,7 +195,7 @@ structural axis of the analysed window.  The steering budgets
 ``ackermann_parallel_index`` and ``slide_catch_budget`` are derived exclusively
 from the ``slip_angle_*`` channels and the ``yaw_rate`` emitted by OutSim; when
 that Live for Speed telemetry is missing the output reports the literal
-``"sin datos"`` (“no data”) marker.  The ``aero_balance_drift`` entry groups the average
+``"no data"`` marker.  The ``aero_balance_drift`` entry groups the average
 rake (pitch plus per-axle travel) and the ``μ_front - μ_rear`` delta for low,
 medium, and high speed bands.  Rake relies solely on the ``pitch`` and
 suspension-travel channels provided by OutSim, ensuring the aerodynamic drift
@@ -224,7 +224,7 @@ orchestrator adds the ``network_memory`` field and a mirror in
 (``car_model``/``track_name``/``tyre_compound``), including stint histories and
 each microsector’s active state.  If OutGauge does not transmit the extended
 per-wheel temperature/pressure block, HUD surfaces and exporters show the
-literal ``"sin datos"`` (“no data”) token in those fields to make it clear that LFS telemetry
+literal ``"no data"`` token in those fields to make it clear that LFS telemetry
 was unavailable.
 
 ### `tnfr_lfs.core.segmentation`

@@ -743,7 +743,7 @@ def test_render_page_a_displays_brake_meter_on_severe_events():
         brake_headroom=BrakeHeadroom(),
     )
     page = osd_module._render_page_a(active, bundles[0], 0.2, window_metrics, bundles)
-    assert "ΔNFR frenada" in page
+    assert "ΔNFR braking" in page
     assert "low_grip" in page
     assert canonical_operator_label("OZ") in page
 
@@ -755,15 +755,15 @@ def test_brake_headroom_line_renders_summary() -> None:
         fade_slope=0.55,
         temperature_peak=660.0,
         temperature_mean=640.0,
-        ventilation_alert="atencion",
+        ventilation_alert="attention",
         ventilation_index=0.6,
     )
     line = osd_module._brake_headroom_line(headroom)
     assert line is not None
-    assert line.startswith("Freno")
+    assert line.startswith("Brake")
     assert "HR 0.35" in line
     assert "fade" in line
-    assert "vent atencion" in line
+    assert "vent attention" in line
 
 
 def test_brake_headroom_line_with_missing_temperature_data() -> None:
@@ -779,15 +779,15 @@ def test_brake_headroom_line_with_missing_temperature_data() -> None:
     )
     line = osd_module._brake_headroom_line(headroom)
     assert line is not None
-    assert "sin datos" in line
+    assert "no data" in line
 
 
 def test_thermal_dispersion_lines_render_fallback_without_telemetry() -> None:
     microsector = SimpleNamespace(filtered_measures={})
     lines = osd_module._thermal_dispersion_lines(microsector)
-    assert "T° sin datos" in lines
+    assert "T° no data" in lines
     assert any(
-        line.startswith("Pbar") and "sin datos" in line for line in lines
+        line.startswith("Pbar") and "no data" in line for line in lines
     )
 
 
@@ -821,7 +821,7 @@ def test_thermal_dispersion_lines_render_values_when_available() -> None:
     microsector = SimpleNamespace(filtered_measures=measures)
     lines = osd_module._thermal_dispersion_lines(microsector)
     assert lines
-    assert all("sin datos" not in line for line in lines)
+    assert all("no data" not in line for line in lines)
     assert any("T° FL" in line for line in lines)
 
 

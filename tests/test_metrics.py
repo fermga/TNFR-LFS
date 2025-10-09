@@ -1053,7 +1053,7 @@ def test_compute_window_metrics_brake_fade_and_ventilation() -> None:
     assert headroom.fade_ratio == pytest.approx(expected_ratio, rel=1e-6)
     assert headroom.temperature_peak == pytest.approx(expected_peak, rel=1e-6)
     assert headroom.temperature_mean == pytest.approx(expected_mean, rel=1e-6)
-    assert headroom.ventilation_alert == "critica"
+    assert headroom.ventilation_alert == "critical"
     assert headroom.ventilation_index == pytest.approx(1.0, rel=1e-6)
     assert headroom.value < 0.5
 

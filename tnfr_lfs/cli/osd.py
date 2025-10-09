@@ -1094,7 +1094,7 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     if temp_line:
         lines.append(temp_line)
     else:
-        lines.append(_truncate_line("T° sin datos"))
+        lines.append(_truncate_line("T° no data"))
     brake_temp_line = _format_dispersion_line(
         measures,
         BRAKE_TEMPERATURE_MEAN_KEYS,
@@ -1106,7 +1106,7 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     if brake_temp_line:
         lines.append(brake_temp_line)
     else:
-        lines.append(_truncate_line("T° freno sin datos"))
+        lines.append(_truncate_line("Brake T° no data"))
     pressure_line = _format_dispersion_line(
         measures,
         PRESSURE_MEAN_KEYS,
@@ -1118,7 +1118,7 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
     if pressure_line:
         lines.append(pressure_line)
     else:
-        lines.append(_truncate_line("Pbar sin datos"))
+        lines.append(_truncate_line("Pbar no data"))
     return tuple(lines)
 
 
@@ -1164,20 +1164,20 @@ def _brake_headroom_line(headroom: Optional[BrakeHeadroom]) -> Optional[str]:
             fade_segment += f"/{headroom.fade_slope:.2f}m/s³"
         segments.append(fade_segment)
     elif not fade_available:
-        segments.append("fade sin datos")
+        segments.append("fade no data")
     if temp_peak_has_value:
         segments.append(f"T°max {headroom.temperature_peak:.0f}°C")
     elif temp_mean_has_value:
         segments.append(f"T°μ {headroom.temperature_mean:.0f}°C")
     elif not temperature_available:
-        segments.append("T° sin datos")
+        segments.append("T° no data")
     if headroom.ventilation_alert:
         segments.append(f"vent {headroom.ventilation_alert}")
     elif ventilation_has_value:
         segments.append(f"vent {headroom.ventilation_index:.2f}")
     elif not temperature_available:
-        segments.append("vent sin datos")
-    return _truncate_line("Freno " + " · ".join(segments))
+        segments.append("vent no data")
+    return _truncate_line("Brake " + " · ".join(segments))
 
 
 def _phase_sparkline(
@@ -1357,7 +1357,7 @@ def _brake_event_meter(microsector: Microsector) -> Optional[str]:
                     "ratio": ratio,
                     "peak": peak,
                     "threshold": threshold,
-                    "surface": surface_label or "superficie",
+                    "surface": surface_label or "surface",
                 }
             )
     if not payloads:
@@ -1373,7 +1373,7 @@ def _brake_event_meter(microsector: Microsector) -> Optional[str]:
     remaining = len(payloads) - len(segments)
     if remaining > 0:
         segments.append(f"+{remaining}")
-    return _ensure_limit("ΔNFR frenada ⚠️ " + " · ".join(segments))
+    return _ensure_limit("ΔNFR braking ⚠️ " + " · ".join(segments))
 
 
 def _silence_event_meter(microsector: Microsector) -> Optional[str]:
@@ -1877,9 +1877,9 @@ def _render_page_c(
         phase_label = HUD_PHASE_LABELS.get(active.phase, active.phase)
         lines.append(
             _truncate_line(
-                f"Hint objetivo {phase_label}: {active.goal.target_delta_nfr:+.2f} ±{tolerance:.2f}"
+                f"{phase_label} target hint: {active.goal.target_delta_nfr:+.2f} ±{tolerance:.2f}"
                 if active.goal
-                else f"Perfil {phase_label} ±{tolerance:.2f}"
+                else f"{phase_label} profile ±{tolerance:.2f}"
             )
         )
     summary_lines: Sequence[str] = ()
