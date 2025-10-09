@@ -27,7 +27,7 @@ from .epi import (
     resolve_nu_f_by_node,
 )
 from .epi_models import EPIBundle
-from .phases import expand_phase_alias, phase_family
+from .phases import expand_phase_alias
 from .archetypes import ARCHETYPE_MEDIUM
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
@@ -282,7 +282,7 @@ def pairwise_coupling_operator(
     *,
     pairs: Sequence[tuple[str, str]] | None = None,
 ) -> Dict[str, float]:
-    """Compute coupling metrics for each node pair using ``acoplamiento``."""
+    """Compute coupling metrics for each node pair using the ``acoplamiento_operator`` coupling helper."""
 
     if pairs is None:
         ordered_nodes = list(series_by_node.keys())
