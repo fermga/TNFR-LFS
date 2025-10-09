@@ -9,6 +9,7 @@ nav:
   - Home: index.md
   - Getting started:
       - Beginner quickstart: tutorials.md
+      - Examples gallery: examples.md
       - Advanced workflows: advanced_workflows.md
       - Command line interface: cli.md
   - Reference:
@@ -39,6 +40,7 @@ plugins:
           "Beginner quickstart": "Guía inicial"
           "Advanced workflows": "Flujos avanzados"
           "Command line interface": "Interfaz de línea de comandos"
+          "Examples gallery": "Galería de ejemplos"
           Reference: Referencia
           "API Reference": "Referencia de API"
           "Design manual": "Manual de diseño"
