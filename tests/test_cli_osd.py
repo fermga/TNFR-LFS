@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from tnfr_lfs.acquisition import ButtonEvent, ButtonLayout, MacroQueue, OverlayManager
 from tnfr_lfs.cli import osd as osd_module
-from tnfr_lfs.cli import tnfr_lfs_cli
+from tnfr_lfs.cli import app as cli_app
 from tnfr_lfs.cli.osd import HUDPager, MacroStatus, OSDController, TelemetryHUD
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
 from tnfr_lfs.core.metrics import (
@@ -1057,7 +1057,7 @@ def test_generate_out_reports_includes_phase_aliases(
     synthetic_bundles,
     synthetic_microsectors,
 ) -> None:
-    reports = tnfr_lfs_cli._generate_out_reports(
+    reports = cli_app._generate_out_reports(
         synthetic_records,
         synthetic_bundles,
         synthetic_microsectors,
@@ -1112,7 +1112,7 @@ def test_sense_index_map_filters_sample_metrics() -> None:
 
     bundles = [SimpleNamespace(sense_index=0.76)]
     microsector = DummyMicrosector()
-    results = tnfr_lfs_cli._sense_index_map(bundles, [microsector])
+    results = cli_app._sense_index_map(bundles, [microsector])
     assert results
     entry = results[0]
     filtered = entry["filtered_measures"]

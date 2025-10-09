@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tnfr_lfs.cli.tnfr_lfs_cli import run_cli
+from tnfr_lfs.cli import run_cli
 
 
 def test_quickstart_dataset_available(quickstart_dataset_path: Path) -> None:
