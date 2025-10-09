@@ -3,7 +3,13 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   merge_group:
 
 concurrency:
@@ -11,7 +17,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  detect-changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      examples: ${{ steps.filter.outputs.examples }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            core:
+              - '.github/**'
+              - 'benchmarks/**'
+              - 'config/**'
+              - 'examples/**'
+              - 'Makefile'
+              - 'mkdocs.yml'
+              - 'modifiers/**'
+              - 'pyproject.toml'
+              - 'requirements*.txt'
+              - 'tests/**'
+              - 'tnfr-lfs.toml'
+              - 'tnfr_lfs/**'
+              - 'tnfr_lfs_pack/**'
+              - 'typing_targets/**'
+            examples:
+              - 'examples/**'
+
   test:
+    needs: detect-changes
+    if: >-
+      needs.detect-changes.outputs.core == 'true' ||
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,5 +75,25 @@ jobs:
         run: mypy --strict
       - name: Pytest
         run: pytest
+  quickstart:
+    needs:
+      - detect-changes
+      - test
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      needs.detect-changes.outputs.examples == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          # Install project + dev extras (brings in numpy/pandas before pytest)
+          pip install .[dev]
       - name: Quickstart (simulated pipeline)
         run: make quickstart
