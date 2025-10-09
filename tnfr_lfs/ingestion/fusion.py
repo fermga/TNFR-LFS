@@ -330,17 +330,7 @@ class TelemetryFusion:
         wheel_longitudinal_forces = tuple(wheel_longitudinal_forces)
         wheel_loads = tuple(wheel_loads)
         wheel_deflections = tuple(wheel_deflections)
-        data_present = any(
-            math.isfinite(value)
-            for value in (
-                *wheel_slip_ratios,
-                *wheel_slip_angles,
-                *wheel_lateral_forces,
-                *wheel_longitudinal_forces,
-                *wheel_loads,
-                *wheel_deflections,
-            )
-        )
+        data_present = any(math.isfinite(deflection) for deflection in wheel_deflections)
 
         return _WheelTelemetry(
             wheels=wheels,
