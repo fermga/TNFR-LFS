@@ -30,27 +30,6 @@ plugins:
       languages:
         en:
           name: English
-        es:
-          name: Español
-          site_name: "TNFR × LFS Toolkit (ES)"
-      nav_translations:
-        es:
-          Home: Inicio
-          Getting started: Puesta en marcha
-          "Beginner quickstart": "Guía inicial"
-          "Advanced workflows": "Flujos avanzados"
-          "Command line interface": "Interfaz de línea de comandos"
-          "Examples gallery": "Galería de ejemplos"
-          Reference: Referencia
-          "API Reference": "Referencia de API"
-          "Design manual": "Manual de diseño"
-          "Development workflow": "Flujo de desarrollo"
-          "Setup equivalences": "Equivalencias de setup"
-          "Preset workflow": "Flujo de presets"
-          "Brake thermal proxy": "Proxy térmico de frenos"
-          Glossaries: Glosarios
-          "TNFR glossary": "Glosario TNFR"
-          "Spanish translation inventory": "Inventario de traducciones"
 markdown_extensions:
   - admonition
   - codehilite
