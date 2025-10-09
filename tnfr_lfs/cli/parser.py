@@ -578,8 +578,8 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         "--set-output",
         default=None,
         help=(
-            "Nombre base del archivo .set que se guardará bajo LFS/data/setups. "
-            "Debe comenzar por el prefijo del coche."
+            "Base name for the .set file saved under LFS/data/setups/. "
+            "Must start with the car prefix."
         ),
     )
     write_set_parser.set_defaults(handler=_handle_write_set)
