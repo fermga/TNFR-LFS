@@ -7,19 +7,19 @@ recommendation flow and the live HUD. All TNFR readings come from the
 Live for Speed OutSim/OutGauge telemetry, so both broadcasters must be
 enabled and `OutSim Opts ff` configured to transmit the extended wheel packet
 (Fz loads, forces, and deflections) required by the telemetry fusion
-module.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】 Enable the extended
+module.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】 Enable the extended
 OutGauge payload (`OutGauge Opts …`) as well so the pipeline includes the
 layer temperatures and actual pressures: enable at least the
 `OG_EXT_TYRE_TEMP`, `OG_EXT_TYRE_PRESS`, and `OG_EXT_BRAKE_TEMP` flags to have
 the broadcaster send the 20 floats in the extended block (inner/middle/outer
 profiles, pressures, and caliper temperatures). Otherwise TNFR × LFS keeps the
-last sample or reports “no data”.【F:tnfr_lfs/acquisition/fusion.py†L594-L657】 The
+last sample or reports “no data”.【F:tnfr_lfs/ingestion/fusion.py†L594-L657】 The
 global `slip_ratio` and `slip_angle` metrics are derived directly from the
 load-weighted average of the per-wheel channels within the OutSim packet and
-fall back to the kinematic estimate only when the signal arrives incomplete.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】【F:tnfr_lfs/acquisition/fusion.py†L242-L291】
+fall back to the kinematic estimate only when the signal arrives incomplete.【F:tnfr_lfs/ingestion/fusion.py†L111-L175】【F:tnfr_lfs/ingestion/fusion.py†L242-L291】
 When the capture comes from CSV, the reader preserves missing columns as
 `math.nan` so the indicators render as “no data” instead of fabricating
-values.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
+values.【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】
 
 > **Note on ∇NFR:** the `∇NFR∥` and `∇NFR⊥` metrics represent the projection of
 > the ΔNFR nodal gradient onto the longitudinal and lateral axes. They
@@ -34,17 +34,17 @@ values.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
   together with the engine regime, pedal inputs, and ABS/TC lights provided by
   OutGauge to evaluate the longitudinal/lateral gradient distribution. Use the
   `Fz`/`ΔFz` channels directly whenever you need absolute forces before adjusting
-  the setup.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+  the setup.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
 - **ν_f (natural frequency)** – leverages the Fz load distribution,
   `slip_ratio`/`slip_angle`, speed, and `yaw_rate` emitted by OutSim combined with
   the driving-style signals (`throttle`, `gear`) from OutGauge to classify nodes
-  and target bands.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】 The `slip_ratio` and `slip_angle`
+  and target bands.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】 The `slip_ratio` and `slip_angle`
   used here correspond to the four-wheel average transmitted by OutSim, ensuring
   the frequency labels react to the actual axle grip and only falling back to the
-  kinematic estimate when no valid readings are available.【F:tnfr_lfs/acquisition/fusion.py†L111-L175】
+  kinematic estimate when no valid readings are available.【F:tnfr_lfs/ingestion/fusion.py†L111-L175】
 - **C(t) (structural coherence)** – built from the nodal ΔNFR distribution, the
   `mu_eff_*` coefficients derived from OutSim accelerations, and the ABS/TC
-  activity reported by OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+  activity reported by OutGauge.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
 - **Ackermann budgets / Slide Catch** – depend exclusively on the `slip_angle_*`
   channels and the `yaw_rate` that OutSim transmits for each wheel; if the source
   omits those fields TNFR × LFS will display `"no data"` for the related

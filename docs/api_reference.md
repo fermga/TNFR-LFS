@@ -54,9 +54,9 @@ session = assemble_session_weights(
 
 !!! note
     The ingestion utilities previously exposed as
-    `tnfr_lfs.acquisition` and `tnfr_lfs.io` now live under
-    `tnfr_lfs.ingestion`. The legacy packages re-export these symbols and
-    emit `DeprecationWarning`s to ease migrations.
+    `tnfr_lfs.acquisition` now live exclusively under
+    `tnfr_lfs.ingestion`. Update downstream imports to reference
+    the ingestion namespace directly.
 
 ### `tnfr_lfs.ingestion.live.OutSimClient`
 
@@ -64,7 +64,7 @@ Reads OutSim-style telemetry from CSV sources and returns a list of
 :class:`tnfr_lfs.core.epi.TelemetryRecord` objects.  By default the
 client validates the column order, converts values to floats, and keeps
 any optional column that is missing in the source as ``math.nan`` instead
-of fabricating estimates.【F:tnfr_lfs/acquisition/outsim_client.py†L87-L155】
+of fabricating estimates.【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】
 This allows downstream exporters to surface "no data" when Live for
 Speed does not broadcast the extra wheel block.
 
@@ -87,7 +87,7 @@ Combine OutSim and OutGauge datagrams into enriched
 :class:`~tnfr_lfs.core.epi.EPIBundle` payloads.  The fusion layer loads the
 default calibration table from ``tnfr_lfs/data/fusion_calibration.toml`` and
 merges car/track specific overrides before scaling slip ratios, steering
-geometry, μ estimators and suspension weighting for every packet.【F:tnfr_lfs/acquisition/fusion.py†L71-L206】【F:tnfr_lfs/data/fusion_calibration.toml†L1-L52】
+geometry, μ estimators and suspension weighting for every packet.【F:tnfr_lfs/ingestion/fusion.py†L71-L206】【F:tnfr_lfs/data/fusion_calibration.toml†L1-L52】
 
 Calibration hooks are designed for teams that maintain their own pack
 overlays.  ``TelemetryFusion`` searches for a pack root by checking the
@@ -95,14 +95,14 @@ overlays.  ``TelemetryFusion`` searches for a pack root by checking the
 the installed resource bundle.  When it finds ``config/global.toml`` or a
 ``data/cars/*.toml`` manifest the fusion logic applies the ``[thermal.brakes]``
 entries to seed the brake temperature estimator, allowing per-car defaults
-and per-track overrides to live alongside other configuration artefacts.【F:tnfr_lfs/acquisition/fusion.py†L582-L709】
+and per-track overrides to live alongside other configuration artefacts.【F:tnfr_lfs/ingestion/fusion.py†L582-L709】
 Set ``TNFR_LFS_BRAKE_THERMAL=off`` (or ``auto``/``force``) to coerce the
-thermals into the desired mode without editing the pack.【F:tnfr_lfs/acquisition/fusion.py†L675-L709】
+thermals into the desired mode without editing the pack.【F:tnfr_lfs/ingestion/fusion.py†L675-L709】
 
 Instantiate the fuser once per session, then stream UDP packets into it.
 ``fuse`` returns the latest ``TelemetryRecord`` while ``fuse_to_bundle`` feeds
 the bundled EPI extractor so downstream tooling can immediately reuse the
-examples from the :mod:`tnfr_lfs.core.epi` documentation.【F:tnfr_lfs/acquisition/fusion.py†L130-L320】
+examples from the :mod:`tnfr_lfs.core.epi` documentation.【F:tnfr_lfs/ingestion/fusion.py†L130-L320】
 
 ```python
 from tnfr_lfs.ingestion.live import OutGaugeUDPClient, OutSimUDPClient, TelemetryFusion

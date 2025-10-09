@@ -15,7 +15,14 @@ SUGGEST_JSON="${OUT_DIR}/suggest.json"
 REPORT_JSON="${OUT_DIR}/report.json"
 PLOT_TXT="${OUT_DIR}/sense_index_plot.txt"
 
-CLI_BIN="${CLI_BIN:-tnfr_lfs}"
+if [[ -n "${CLI_BIN:-}" ]]; then
+    # shellcheck disable=SC2206
+    CLI_CMD=(${CLI_BIN})
+elif command -v tnfr_lfs >/dev/null 2>&1; then
+    CLI_CMD=(tnfr_lfs)
+else
+    CLI_CMD=(python -m tnfr_lfs)
+fi
 
 if [[ ! -f "${DATA_FILE}" ]]; then
     echo "Sample dataset not found: ${DATA_FILE}" >&2
@@ -24,11 +31,11 @@ fi
 
 mkdir -p "${OUT_DIR}"
 
-"${CLI_BIN}" baseline "${BASELINE}" --simulate "${DATA_FILE}" --force
-"${CLI_BIN}" analyze "${BASELINE}" --export json > "${ANALYZE_JSON}"
-"${CLI_BIN}" suggest "${BASELINE}" --car-model XFG --track BL1 --export json > "${SUGGEST_JSON}"
-"${CLI_BIN}" report "${BASELINE}" --export json > "${REPORT_JSON}"
-"${CLI_BIN}" write-set "${BASELINE}" --car-model XFG --export markdown > "${OUT_DIR}/setup_plan.md"
+"${CLI_CMD[@]}" baseline "${BASELINE}" --simulate "${DATA_FILE}" --force
+"${CLI_CMD[@]}" analyze "${BASELINE}" --export json > "${ANALYZE_JSON}"
+"${CLI_CMD[@]}" suggest "${BASELINE}" --car-model XFG --track BL1 --export json > "${SUGGEST_JSON}"
+"${CLI_CMD[@]}" report "${BASELINE}" --export json > "${REPORT_JSON}"
+"${CLI_CMD[@]}" write-set "${BASELINE}" --car-model XFG --export markdown > "${OUT_DIR}/setup_plan.md"
 
 python <<'PY'
 import json

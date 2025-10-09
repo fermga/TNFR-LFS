@@ -1130,6 +1130,13 @@ class EPIExtractor:
         self._prev_integrated_epi: Optional[float] = None
         self._prev_timestamp: float | None = None
         self._prev_structural: float | None = None
+        self._batching_calibration: bool = False
+        self._batched_calibration: tuple[
+            "CoherenceCalibrationStore",
+            str,
+            str,
+        ] | None = None
+        self._pending_baseline: TelemetryRecord | None = None
 
     def reset(self) -> None:
         """Clear the incremental state."""
@@ -1140,6 +1147,9 @@ class EPIExtractor:
         self._prev_integrated_epi = None
         self._prev_timestamp = None
         self._prev_structural = None
+        self._batched_calibration = None
+        self._pending_baseline = None
+        self._batching_calibration = False
 
     def update(
         self,
@@ -1217,16 +1227,32 @@ class EPIExtractor:
             return []
         self.reset()
         bundles: List[EPIBundle] = []
-        for record in records:
-            bundle = self.update(
-                record,
-                calibration=calibration,
-                player_name=player_name,
-                car_model=car_model or record.car_model,
-                track_name=record.track_name,
-                tyre_compound=record.tyre_compound,
-            )
-            bundles.append(bundle)
+        batching = calibration is not None and player_name is not None
+        if batching:
+            self._batching_calibration = True
+            self._batched_calibration = None
+            self._pending_baseline = None
+        try:
+            for record in records:
+                bundle = self.update(
+                    record,
+                    calibration=calibration,
+                    player_name=player_name,
+                    car_model=car_model or record.car_model,
+                    track_name=record.track_name,
+                    tyre_compound=record.tyre_compound,
+                )
+                bundles.append(bundle)
+        finally:
+            if batching and self._batched_calibration and self._pending_baseline:
+                calibration.observe_baseline(
+                    self._batched_calibration[1],
+                    self._batched_calibration[2],
+                    self._pending_baseline,
+                )
+            self._batching_calibration = False
+            self._batched_calibration = None
+            self._pending_baseline = None
         return bundles
 
     def _compute_epi(self, record: TelemetryRecord) -> float:
@@ -1250,7 +1276,11 @@ class EPIExtractor:
         resolved_car = car_model or raw_baseline.car_model
         assert resolved_car is not None  # for type checkers
         resolved = calibration.baseline_for(player_name, resolved_car, raw_baseline)
-        calibration.observe_baseline(player_name, resolved_car, raw_baseline)
+        if self._batching_calibration:
+            self._batched_calibration = (calibration, player_name, resolved_car)
+            self._pending_baseline = raw_baseline
+        else:
+            calibration.observe_baseline(player_name, resolved_car, raw_baseline)
         self._baseline_record = resolved
         return resolved
 

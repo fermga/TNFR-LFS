@@ -1113,10 +1113,10 @@ def _copy_to_clipboard(commands: Iterable[str]) -> bool:
     return False
 
 
-def _share_disabled_commands(commands: Iterable[str]) -> None:
+def _share_disabled_commands(commands: Iterable[str]) -> str | None:
     command_list = [command for command in commands if command]
     if not command_list:
-        return
+        return None
     logger.info(
         "Recommended commands to enable telemetry.",
         extra={"event": "telemetry.commands", "commands": command_list},
@@ -1127,15 +1127,19 @@ def _share_disabled_commands(commands: Iterable[str]) -> None:
             extra={"event": "telemetry.command", "command": command},
         )
     if _copy_to_clipboard(command_list):
+        message = "Commands copied to the clipboard."
         logger.info(
-            "Commands copied to the clipboard.",
+            message,
             extra={"event": "telemetry.clipboard", "copied": True},
         )
+        return message
     else:
+        message = "Manual copy required: clipboard access was not available."
         logger.warning(
-            "Manual copy required: clipboard access was not available.",
+            message,
             extra={"event": "telemetry.clipboard", "copied": False},
         )
+        return message
 
 
 def _check_setups_directory(cfg_path: Path) -> Tuple[bool, str]:
@@ -2332,12 +2336,14 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
     header = f"cfg.txt diagnostics for {cfg_path}"
     if errors:
-        _share_disabled_commands(commands)
         summary = [header, "Status: issues detected"]
         summary.extend(f"- {error}" for error in errors)
         if successes:
             summary.append("Additional details:")
             summary.extend(f"  * {success}" for success in successes)
+        clipboard_message = _share_disabled_commands(commands)
+        if clipboard_message:
+            summary.append(clipboard_message)
         message = "\n".join(summary)
         raise CliError.from_context(
             message,
@@ -2352,7 +2358,9 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
 
     summary = [header, "Status: ok"]
     summary.extend(f"- {success}" for success in successes)
-    _share_disabled_commands(commands)
+    clipboard_message = _share_disabled_commands(commands)
+    if clipboard_message:
+        summary.append(clipboard_message)
     message = "\n".join(summary)
     logger.info(
         "cfg.txt diagnostics succeeded.",

@@ -2,27 +2,27 @@
 
 from __future__ import annotations
 
-from tnfr_lfs.acquisition.fusion import (
+from tnfr_lfs.ingestion.fusion import (
     FusionCalibration,
     TelemetryFusion,
     _WheelTelemetry,
 )
-from tnfr_lfs.acquisition.insim import (
+from tnfr_lfs.ingestion.insim import (
     ButtonEvent,
     ButtonLayout,
     InSimClient,
     MacroQueue,
     OverlayManager,
 )
-from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket, OutGaugeUDPClient
-from tnfr_lfs.acquisition.outsim_client import (
+from tnfr_lfs.ingestion.outgauge_udp import OutGaugePacket, OutGaugeUDPClient
+from tnfr_lfs.ingestion.outsim_client import (
     DEFAULT_SCHEMA,
     LEGACY_COLUMNS,
     OPTIONAL_SCHEMA_COLUMNS,
     OutSimClient,
     TelemetryFormatError,
 )
-from tnfr_lfs.acquisition.outsim_udp import (
+from tnfr_lfs.ingestion.outsim_udp import (
     OUTSIM_MAX_PACKET_SIZE,
     OutSimDriverInputs,
     OutSimPacket,

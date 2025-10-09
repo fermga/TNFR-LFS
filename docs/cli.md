@@ -26,7 +26,7 @@ so make sure the simulator exposes both feeds before running any
 subcommand. Remember that the `∇NFR∥`/`∇NFR⊥` components capture the
 projection of the nodal gradient; whenever you need to interpret
 absolute loads, cross-check the recommendations with the direct
-`Fz`/`ΔFz` channels from OutSim.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+`Fz`/`ΔFz` channels from OutSim.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】
 
 Replay Analyzer exports can be ingested with `--replay-csv-bundle`:
 
@@ -449,11 +449,11 @@ When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config
 
 ### Brake thermal proxy modes
 
-The brake thermal proxy honours the ``mode`` declared in ``[thermal.brakes]`` and can be overridden per session with the ``TNFR_LFS_BRAKE_THERMAL`` environment variable. The accepted values are ``auto`` (default), ``off`` and ``force``.【F:tnfr_lfs/acquisition/fusion.py†L616-L733】【F:tnfr_lfs/acquisition/fusion.py†L1064-L1126】
+The brake thermal proxy honours the ``mode`` declared in ``[thermal.brakes]`` and can be overridden per session with the ``TNFR_LFS_BRAKE_THERMAL`` environment variable. The accepted values are ``auto`` (default), ``off`` and ``force``.【F:tnfr_lfs/ingestion/fusion.py†L616-L733】【F:tnfr_lfs/ingestion/fusion.py†L1064-L1126】
 
-- ``auto`` – consumes OutGauge brake temperatures whenever Live for Speed broadcasts plausible values, seeding the estimator with them. When the stream is disabled or sends the ``0 °C`` marker, the proxy keeps integrating brake energy so fade indicators remain continuous.【F:tnfr_lfs/acquisition/fusion.py†L1078-L1107】
-- ``off`` – bypasses the proxy and returns the raw OutGauge values (or their last valid samples) even if the feed drops; useful when validating cars with hardware sensors or external thermal models.【F:tnfr_lfs/acquisition/fusion.py†L1107-L1117】
-- ``force`` – ignores OutGauge entirely and relies on the estimator for all wheels, ideal for legacy cars without brake sensors or synthetic runs where only OutSim loads are present.【F:tnfr_lfs/acquisition/fusion.py†L1117-L1126】
+- ``auto`` – consumes OutGauge brake temperatures whenever Live for Speed broadcasts plausible values, seeding the estimator with them. When the stream is disabled or sends the ``0 °C`` marker, the proxy keeps integrating brake energy so fade indicators remain continuous.【F:tnfr_lfs/ingestion/fusion.py†L1078-L1107】
+- ``off`` – bypasses the proxy and returns the raw OutGauge values (or their last valid samples) even if the feed drops; useful when validating cars with hardware sensors or external thermal models.【F:tnfr_lfs/ingestion/fusion.py†L1107-L1117】
+- ``force`` – ignores OutGauge entirely and relies on the estimator for all wheels, ideal for legacy cars without brake sensors or synthetic runs where only OutSim loads are present.【F:tnfr_lfs/ingestion/fusion.py†L1117-L1126】
 
 ### Preparing ``cfg.txt``
 
@@ -464,7 +464,7 @@ Before running the CLI against Live for Speed you must enable the telemetry broa
    match the defaults used by ``tnfr_lfs baseline`` and can be enabled on the fly with
    ``/outsim 1 127.0.0.1 4123`` from the simulator chat.
 2. Add ``OutSim Opts ff`` to include the player ID, driver inputs, and the wheel packet
-   (forces, Fz loads, deflection) required to compute ΔNFR and ν_f.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】
+   (forces, Fz loads, deflection) required to compute ΔNFR and ν_f.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】
 3. Update the ``OutGauge`` block with ``Mode 1``, ``Port 3000`` and ``IP 127.0.0.1``; Live for Speed accepts
    ``/outgauge 1 127.0.0.1 3000`` as a shortcut for the same configuration.
 4. Reserve an ``InSim`` port by setting ``InSim Port 29999`` (or your preferred value) and the IP of the machine
@@ -479,13 +479,13 @@ Save the changes and run ``tnfr_lfs diagnose /path/to/cfg.txt`` to confirm the v
   expose Fz loads, accelerations, forces, and wheel deflection together with
   OutGauge to obtain `rpm`, pedal positions, and ABS/TC lights. These signals feed
   the nodal gradient; consult the `Fz`/`ΔFz` channels if you need to quantify
-  absolute loads before applying an adjustment.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+  absolute loads before applying an adjustment.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
 - **ν_f (natural frequency)** – depends on the distribution of Fz loads,
   `slip_ratio`/`slip_angle`, speed, and `yaw_rate` computed from OutSim, along
-  with style signals (`throttle`, `gear`) emitted by OutGauge.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+  with style signals (`throttle`, `gear`) emitted by OutGauge.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
 - **C(t) (structural coherence)** – consumes the same blend of OutSim signals
   used for ΔNFR together with the `mu_eff_*` coefficients and the ABS/TC flags
-  from OutGauge that the fusion module translates into lockup events.【F:tnfr_lfs/acquisition/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+  from OutGauge that the fusion module translates into lockup events.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
 
 Use ``--config`` to point to an alternative file on a per-invocation
 basis:

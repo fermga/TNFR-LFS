@@ -117,6 +117,7 @@ class TelemetryFusion:
         self._last_record = None
         if self._brake_thermal_estimator is not None:
             self._brake_thermal_estimator.reset()
+        self.__dict__.pop("_records", None)
 
     def fuse(self, outsim: OutSimPacket, outgauge: OutGaugePacket) -> TelemetryRecord:
         """Return a :class:`TelemetryRecord` derived from both UDP sources."""
@@ -257,18 +258,22 @@ class TelemetryFusion:
             line_deviation=line_deviation,
         )
         self._last_record = record
+        self.__dict__["_records"] = [record]
         return record
 
     def fuse_to_bundle(self, outsim: OutSimPacket, outgauge: OutGaugePacket) -> EPIBundle:
         """Return an :class:`EPIBundle` for the latest fused sample."""
 
         record = self.fuse(outsim, outgauge)
-        return self.extractor.update(
-            record,
-            car_model=getattr(record, "car_model", None) or outgauge.car,
-            track_name=getattr(record, "track_name", None) or outgauge.track,
-            player_name=outgauge.player_name,
-        )
+        try:
+            return self.extractor.update(
+                record,
+                car_model=getattr(record, "car_model", None) or outgauge.car,
+                track_name=getattr(record, "track_name", None) or outgauge.track,
+                player_name=outgauge.player_name,
+            )
+        finally:
+            self.__dict__.pop("_records", None)
 
     # ------------------------------------------------------------------
     # Fusion orchestration helpers
@@ -556,8 +561,11 @@ class TelemetryFusion:
             suspension_deflection_fr=wheel_data.deflections[1],
             suspension_deflection_rl=wheel_data.deflections[2],
             suspension_deflection_rr=wheel_data.deflections[3],
-            car_model=outgauge.car,
-            track_name=outgauge.track or outgauge.layout,
+            car_model=getattr(outgauge, "car", getattr(outgauge, "car_model", "")),
+            track_name=(
+                getattr(outgauge, "track", None)
+                or getattr(outgauge, "layout", "")
+            ),
         )
 
     # ------------------------------------------------------------------

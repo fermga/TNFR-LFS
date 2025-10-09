@@ -12,8 +12,8 @@
 
 ### Documentation
 
-* docs: document `tnfr_lfs.ingestion` namespace and transition for
-  legacy `tnfr_lfs.acquisition`/`tnfr_lfs.io` imports.
+* docs: complete the `tnfr_lfs.ingestion` migration and document the
+  removal of the legacy `tnfr_lfs.acquisition` package.
 * docs: clarify test fixture datasets ([`d7cd109`](https://github.com/fermga/TNFR-LFS/commit/d7cd109fd3f8928d5ab67f4edef8e117e43d7ae8))
 
 * docs: inventory spanish localisation targets ([`f1dbce0`](https://github.com/fermga/TNFR-LFS/commit/f1dbce0b4ef444047f53c72c4a7be4a02e07b267))
