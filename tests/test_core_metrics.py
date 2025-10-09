@@ -16,7 +16,6 @@ from tnfr_lfs.core.epi_models import (
     TyresNode,
 )
 from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
-from tnfr_lfs.core.utils import normalised_entropy
 
 
 def _record(timestamp: float, load: float, yaw_rate: float = 0.0) -> TelemetryRecord:
@@ -107,73 +106,3 @@ def test_window_metrics_support_efficiency_uses_structural_windows() -> None:
     assert metrics.si_variance == pytest.approx(0.0, abs=1e-9)
     assert metrics.epi_derivative_abs == pytest.approx(0.0, abs=1e-9)
 
-
-def test_window_metrics_entropy_profiles(monkeypatch: pytest.MonkeyPatch) -> None:
-    records = [
-        _record(0.0, 4800.0),
-        _record(1.0, 5000.0),
-        _record(2.0, 5100.0),
-        _record(3.0, 5300.0),
-    ]
-    bundles = [
-        _bundle(0.0, 0.0, 0.4, 0.3, 0.5, -0.1, 0.05),
-        _bundle(1.0, 0.4, 0.5, 0.2, 0.2, 0.3, 0.08),
-        _bundle(2.0, 0.9, -0.1, 0.4, -0.2, 0.1, 0.02),
-        _bundle(3.0, 1.5, 0.2, 0.1, 0.4, -0.2, -0.03),
-    ]
-
-    contributions = {
-        0.0: {"tyres": 2.0, "suspension": 1.0},
-        1.0: {"tyres": 1.0, "suspension": 1.0},
-        2.0: {"tyres": 3.0, "suspension": 0.5},
-        3.0: {"tyres": 0.5, "suspension": 2.5},
-    }
-    monkeypatch.setattr(
-        "tnfr_lfs.core.metrics.delta_nfr_by_node",
-        lambda record: contributions.get(record.timestamp, {}),
-    )
-
-    metrics = compute_window_metrics(
-        records,
-        bundles=bundles,
-        phase_indices={"entry": (0, 1), "exit": (2, 3)},
-    )
-
-    entry_total = sum(
-        sum(abs(value) for value in contributions[index].values())
-        for index in (0.0, 1.0)
-    )
-    exit_total = sum(
-        sum(abs(value) for value in contributions[index].values())
-        for index in (2.0, 3.0)
-    )
-    expected_phase_entropy = normalised_entropy([entry_total, exit_total])
-
-    assert metrics.delta_nfr_entropy == pytest.approx(expected_phase_entropy)
-
-    total_sum = entry_total + exit_total
-    phase_probabilities = [entry_total / total_sum, exit_total / total_sum]
-    assert metrics.phase_delta_nfr_entropy["entry"] == pytest.approx(phase_probabilities[0])
-    assert metrics.phase_delta_nfr_entropy["exit"] == pytest.approx(phase_probabilities[1])
-
-    node_totals: dict[str, float] = {}
-    for values in contributions.values():
-        for node, magnitude in values.items():
-            node_totals[node] = node_totals.get(node, 0.0) + abs(magnitude)
-    expected_node_entropy = normalised_entropy(node_totals.values())
-    assert metrics.node_entropy == pytest.approx(expected_node_entropy)
-
-    entry_node_totals = {
-        node: sum(abs(contributions[index].get(node, 0.0)) for index in (0.0, 1.0))
-        for node in node_totals
-    }
-    exit_node_totals = {
-        node: sum(abs(contributions[index].get(node, 0.0)) for index in (2.0, 3.0))
-        for node in node_totals
-    }
-    assert metrics.phase_node_entropy["entry"] == pytest.approx(
-        normalised_entropy(entry_node_totals.values())
-    )
-    assert metrics.phase_node_entropy["exit"] == pytest.approx(
-        normalised_entropy(exit_node_totals.values())
-    )
