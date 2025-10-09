@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tnfr_lfs.acquisition.insim import InSimClient
+from tnfr_lfs.ingestion.live import InSimClient
 
 
 class _DummySocket:

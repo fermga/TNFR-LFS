@@ -16,7 +16,7 @@ from .core.epi import (
 )
 from .core.epi_models import EPIBundle
 from .core.segmentation import Goal, Microsector, segment_microsectors
-from .acquisition.outsim_client import OutSimClient
+from .ingestion.live import OutSimClient
 from .recommender.rules import Recommendation, RecommendationEngine
 from .exporters import exporters_registry
 from .config_loader import (

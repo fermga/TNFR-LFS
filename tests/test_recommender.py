@@ -21,7 +21,7 @@ from collections.abc import Mapping
 
 from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.core.operator_detection import canonical_operator_label
-from tnfr_lfs.io.profiles import AeroProfile, ProfileManager
+from tnfr_lfs.ingestion.offline import AeroProfile, ProfileManager
 from tnfr_lfs.core.metrics import compute_window_metrics
 from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
 from tnfr_lfs.recommender.rules import (

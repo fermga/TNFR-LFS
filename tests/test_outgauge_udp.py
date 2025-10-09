@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import struct
 
-from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket
+from tnfr_lfs.ingestion.live import OutGaugePacket
 
 
 def _pad(value: str, size: int) -> bytes:

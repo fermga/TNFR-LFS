@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from tnfr_lfs.io.profiles import ProfileManager
+from tnfr_lfs.ingestion.offline import ProfileManager
 
 
 def test_profile_manager_persists_jacobian_history(tmp_path: Path) -> None:

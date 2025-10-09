@@ -11,18 +11,17 @@ import time
 
 import pytest
 
-from tnfr_lfs.acquisition.fusion import TelemetryFusion
-from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket, OutGaugeUDPClient
-from tnfr_lfs.acquisition.outsim_client import (
+from tnfr_lfs.ingestion.live import (
     DEFAULT_SCHEMA,
     LEGACY_COLUMNS,
     OPTIONAL_SCHEMA_COLUMNS,
+    OutGaugePacket,
+    OutGaugeUDPClient,
     OutSimClient,
-)
-from tnfr_lfs.acquisition.outsim_udp import (
     OutSimPacket,
     OutSimUDPClient,
     OutSimWheelState,
+    TelemetryFusion,
 )
 
 

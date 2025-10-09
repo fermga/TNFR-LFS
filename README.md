@@ -69,13 +69,19 @@ This invokes `examples/quickstart.sh` to generate artefacts in `examples/out/`.
 Explore the [Examples gallery](docs/examples.md) for additional runnable
 scripts that demonstrate ingestion, exporting and recommendation workflows.
 
+> **API note:** Live (`OutSim`/`OutGauge`/`InSim`) and offline (RAF, Replay
+> Analyzer, profiles) ingestion helpers now live under
+> `tnfr_lfs.ingestion`. Legacy imports from `tnfr_lfs.acquisition` and
+> `tnfr_lfs.io` continue to work during a transition period but emit
+> `DeprecationWarning`s so downstream tools can migrate gradually.
+
 ## Telemetry overview
 
 TNFR × LFS reads exclusively from native Live for Speed broadcasters. Enable
 OutSim/OutGauge/Insim in the simulator and consult the
 [telemetry guide](docs/telemetry.md) for the complete signal breakdown and brake
 thermal proxy details. Developers wiring direct UDP ingest pipelines can jump to
-the [`TelemetryFusion` API reference](docs/api_reference.md#tnfr_lfsacquisitionfusiontelemetryfusion)
+the [`TelemetryFusion` API reference](docs/api_reference.md#tnfr_lfsingestionlivetelemetryfusion)
 to see how OutSim/OutGauge packets are combined and how calibration packs slot
 into the workflow.
 

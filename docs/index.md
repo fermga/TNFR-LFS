@@ -8,8 +8,8 @@ how to reason about Event Performance Indicators (EPI), ΔFz/ΔSi deltas
 and Sense Index signals; the toolkit provides production-ready layers to
 apply those ideas in racing telemetry pipelines:
 
-1. **Acquisition** – ingest telemetry samples from OutSim-compatible
-   streams via :class:`tnfr_lfs.acquisition.outsim_client.OutSimClient`.
+1. **Ingest** – capture telemetry samples from OutSim-compatible
+   streams via :class:`tnfr_lfs.ingestion.live.OutSimClient`.
 2. **Core analytics** – extract Event Performance Indicators (EPI) and
    compute ΔFz/ΔSi deltas through :class:`tnfr_lfs.core.epi.EPIExtractor`.
 3. **Recommendation engine** – map metrics to actionable setup advice

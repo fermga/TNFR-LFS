@@ -1,26 +1,11 @@
-"""IO utilities for TNFR × LFS."""
+"""IO utilities for TNFR × LFS (deprecated; use :mod:`tnfr_lfs.ingestion.offline`)."""
 
-from .logs import DeterministicReplayer, iter_run, write_run
-from .playbook import load_playbook
-from .replay_csv_bundle import ReplayCSVBundleReader
-from .raf import (
-    RafCarStatic,
-    RafFile,
-    RafFrame,
-    RafHeader,
-    RafWheelFrame,
-    RafWheelStatic,
-    raf_to_telemetry_records,
-    read_raf,
-)
-from .profiles import (
-    AeroProfile,
-    ProfileManager,
-    ProfileObjectives,
-    ProfileSnapshot,
-    ProfileTolerances,
-    StintMetrics,
-)
+from __future__ import annotations
+
+import warnings
+from typing import Any
+
+_WARNED_NAMES: set[str] = set()
 
 __all__ = [
     "write_run",
@@ -43,3 +28,26 @@ __all__ = [
     "RafFrame",
     "RafFile",
 ]
+
+def __getattr__(name: str) -> Any:
+    from tnfr_lfs.ingestion import offline as _offline
+
+    if hasattr(_offline, name):
+        if name not in _WARNED_NAMES:
+            warnings.warn(
+                "'tnfr_lfs.io' is deprecated and will be removed in a future release; "
+                "import from 'tnfr_lfs.ingestion.offline' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            _WARNED_NAMES.add(name)
+        value = getattr(_offline, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module 'tnfr_lfs.io' has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    from tnfr_lfs.ingestion import offline as _offline
+
+    return sorted(set(__all__) | set(dir(_offline)))

@@ -17,7 +17,7 @@ from tnfr_lfs.cli import app as cli_module
 from tnfr_lfs.cli import workflows as workflows_module
 from tnfr_lfs.cli import run_cli
 from tnfr_lfs.cli.common import CliError
-from tnfr_lfs.io.profiles import ProfileManager
+from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 
 try:  # Python 3.11+

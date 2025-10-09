@@ -4,6 +4,7 @@ import csv
 from collections.abc import Callable, Mapping
 import math
 import time
+import importlib
 import tracemalloc
 import zipfile
 from pathlib import Path
@@ -13,9 +14,11 @@ import pandas as pd
 import pytest
 
 from tnfr_lfs.core.epi import TelemetryRecord
-from tnfr_lfs.io import ReplayCSVBundleReader
-import tnfr_lfs.io.replay_csv_bundle as replay_csv_bundle
+from tnfr_lfs.ingestion.offline import ReplayCSVBundleReader
 from tnfr_lfs._pack_resources import data_root
+
+
+replay_csv_bundle = importlib.import_module(ReplayCSVBundleReader.__module__)
 
 
 DATA_DIR = data_root()

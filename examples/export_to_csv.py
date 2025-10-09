@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from io import StringIO
 
-from tnfr_lfs.acquisition import OutSimClient
+from tnfr_lfs.ingestion.live import OutSimClient
 from tnfr_lfs.core import EPIExtractor
 from tnfr_lfs.exporters import csv_exporter
 

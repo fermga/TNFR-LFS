@@ -1,19 +1,16 @@
-"""Telemetry acquisition backends."""
+"""Telemetry acquisition backends (deprecated; use :mod:`tnfr_lfs.ingestion.live`)."""
 
-from .insim import ButtonEvent, ButtonLayout, InSimClient, MacroQueue, OverlayManager
-from .outsim_client import OutSimClient, TelemetryFormatError
-from .outsim_udp import OUTSIM_MAX_PACKET_SIZE, OutSimPacket, OutSimUDPClient
-from .outgauge_udp import OutGaugePacket, OutGaugeUDPClient
-from .fusion import TelemetryFusion
+from __future__ import annotations
 
-DEFAULT_TIMEOUT = 0.05
-DEFAULT_RETRIES = 5
+import warnings
+from typing import Any
 
 __all__ = [
     "DEFAULT_RETRIES",
     "DEFAULT_TIMEOUT",
     "ButtonEvent",
     "ButtonLayout",
+    "FusionCalibration",
     "InSimClient",
     "MacroQueue",
     "OverlayManager",
@@ -21,8 +18,37 @@ __all__ = [
     "OutGaugeUDPClient",
     "OUTSIM_MAX_PACKET_SIZE",
     "OutSimClient",
+    "OutSimDriverInputs",
     "OutSimPacket",
     "OutSimUDPClient",
+    "OutSimWheelState",
     "TelemetryFormatError",
     "TelemetryFusion",
+    "_WheelTelemetry",
 ]
+
+_WARNED_NAMES: set[str] = set()
+
+
+def __getattr__(name: str) -> Any:
+    from tnfr_lfs.ingestion import live as _live
+
+    if hasattr(_live, name):
+        if name not in _WARNED_NAMES:
+            warnings.warn(
+                "'tnfr_lfs.acquisition' is deprecated and will be removed in a future release; "
+                "import from 'tnfr_lfs.ingestion.live' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            _WARNED_NAMES.add(name)
+        value = getattr(_live, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module 'tnfr_lfs.acquisition' has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    from tnfr_lfs.ingestion import live as _live
+
+    return sorted(set(__all__) | set(dir(_live)))

@@ -50,9 +50,15 @@ session = assemble_session_weights(
   applying any matching modifier scales to produce a ``{"weights", "hints"}``
   payload suitable for the CLI and HUD pipelines. 【F:tnfr_lfs/track_loader.py†L213-L247】
 
-## Acquisition
+## Ingestion
 
-### `tnfr_lfs.acquisition.outsim_client.OutSimClient`
+!!! note
+    The ingestion utilities previously exposed as
+    `tnfr_lfs.acquisition` and `tnfr_lfs.io` now live under
+    `tnfr_lfs.ingestion`. The legacy packages re-export these symbols and
+    emit `DeprecationWarning`s to ease migrations.
+
+### `tnfr_lfs.ingestion.live.OutSimClient`
 
 Reads OutSim-style telemetry from CSV sources and returns a list of
 :class:`tnfr_lfs.core.epi.TelemetryRecord` objects.  By default the
@@ -65,7 +71,7 @@ Speed does not broadcast the extra wheel block.
 ```
 from math import isnan
 
-from tnfr_lfs.acquisition import OutSimClient
+from tnfr_lfs.ingestion.live import OutSimClient
 
 client = OutSimClient()
 records = client.ingest("stint.csv")
@@ -74,7 +80,7 @@ records = client.ingest("stint.csv")
 isnan(records[0].tyre_temp_fl)
 ```
 
-### `tnfr_lfs.acquisition.fusion.TelemetryFusion`
+### `tnfr_lfs.ingestion.live.TelemetryFusion`
 
 Combine OutSim and OutGauge datagrams into enriched
 :class:`~tnfr_lfs.core.epi.TelemetryRecord` samples or full
@@ -99,11 +105,7 @@ the bundled EPI extractor so downstream tooling can immediately reuse the
 examples from the :mod:`tnfr_lfs.core.epi` documentation.【F:tnfr_lfs/acquisition/fusion.py†L130-L320】
 
 ```python
-from tnfr_lfs.acquisition import (
-    OutGaugeUDPClient,
-    OutSimUDPClient,
-    TelemetryFusion,
-)
+from tnfr_lfs.ingestion.live import OutGaugeUDPClient, OutSimUDPClient, TelemetryFusion
 from tnfr_lfs.core.epi import TelemetryRecord
 
 fusion = TelemetryFusion()

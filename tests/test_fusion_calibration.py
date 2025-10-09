@@ -3,9 +3,7 @@ from dataclasses import replace
 
 import pytest
 
-from tnfr_lfs.acquisition.fusion import TelemetryFusion
-from tnfr_lfs.acquisition.outsim_udp import OutSimPacket
-from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket
+from tnfr_lfs.ingestion.live import OutGaugePacket, OutSimPacket, TelemetryFusion
 from tnfr_lfs.core.epi import delta_nfr_by_node, resolve_nu_f_by_node
 
 

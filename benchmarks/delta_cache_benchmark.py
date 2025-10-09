@@ -23,7 +23,7 @@ from tnfr_lfs.core.epi import (
     resolve_nu_f_by_node,
 )
 from tnfr_lfs._pack_resources import data_root
-from tnfr_lfs.io import ReplayCSVBundleReader
+from tnfr_lfs.ingestion.offline import ReplayCSVBundleReader
 
 _DEFAULT_BUNDLE = data_root() / "test1.zip"
 

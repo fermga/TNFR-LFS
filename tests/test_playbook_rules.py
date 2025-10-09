@@ -11,6 +11,10 @@ from tnfr_lfs.cli.workflows import (
     _augment_session_with_playbook,
     _resolve_playbook_suggestions,
 )
+from tnfr_lfs.ingestion.offline import load_playbook
+
+
+_PLAYBOOK_RESOURCE_TARGET = f"{load_playbook.__module__}.resources.open_binary"
 
 
 def _playbook() -> Mapping[str, tuple[str, ...]]:
@@ -96,7 +100,7 @@ def test_cli_workflows_ignore_missing_playbook(monkeypatch: pytest.MonkeyPatch) 
     def _raise_missing(*_args, **_kwargs):
         raise FileNotFoundError
 
-    monkeypatch.setattr("tnfr_lfs.io.playbook.resources.open_binary", _raise_missing)
+    monkeypatch.setattr(_PLAYBOOK_RESOURCE_TARGET, _raise_missing)
 
     try:
         metrics = _rich_metrics()
@@ -116,7 +120,7 @@ def test_cli_workflows_loads_playbook_when_available(monkeypatch: pytest.MonkeyP
         payload = b"[rules]\ndelta_surplus = [\"Reinforce delta\"]\n"
         return _MemoryBuffer(payload)
 
-    monkeypatch.setattr("tnfr_lfs.io.playbook.resources.open_binary", _open_playbook)
+    monkeypatch.setattr(_PLAYBOOK_RESOURCE_TARGET, _open_playbook)
 
     try:
         metrics = _rich_metrics()
@@ -133,7 +137,7 @@ def test_cli_workflows_ignores_invalid_playbook(monkeypatch: pytest.MonkeyPatch)
     def _open_invalid(*_args, **_kwargs):
         return _MemoryBuffer(b"not toml =")
 
-    monkeypatch.setattr("tnfr_lfs.io.playbook.resources.open_binary", _open_invalid)
+    monkeypatch.setattr(_PLAYBOOK_RESOURCE_TARGET, _open_invalid)
 
     try:
         metrics = _rich_metrics()
