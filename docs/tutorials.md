@@ -23,8 +23,9 @@ environment is active before continuing.
 
 !!! tip "Live for Speed telemetry"
     You do **not** need a running simulator for the quickstart. The script
-    replays `data/BL1_XFG_baseline.csv` through the CLI so you can explore the
-    reports offline.
+    replays the dataset exposed by
+    `tnfr_lfs.examples.quickstart_dataset.dataset_path()` through the CLI so you
+    can explore the reports offline.
 
 !!! info "Capturing your own telemetry"
     When you're ready to ingest live UDP streams, follow the
@@ -50,8 +51,9 @@ Baseline saved 17 samples to /workspace/TNFR-LFS/examples/out/baseline.jsonl (js
 ```
 
 !!! warning "Common pitfalls"
-    * `Sample dataset not found` – make sure `data/BL1_XFG_baseline.csv` exists.
-      Regenerate the repository data bundle if needed.
+    * `Sample dataset not found` – double-check
+      `python -c "from tnfr_lfs.examples.quickstart_dataset import dataset_path; print(dataset_path())"`
+      and regenerate the repository data bundle if needed.
     * `ModuleNotFoundError: No module named 'tnfr_lfs'` – install the project
       into the active environment with `pip install -e .`.
     * Artefacts missing under `examples/out/` – check write permissions or

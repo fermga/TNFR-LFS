@@ -1,6 +1,10 @@
+"""Helpers that expose the bundled quickstart dataset."""
+
 from __future__ import annotations
 
 from pathlib import Path
+
+from tnfr_lfs._pack_resources import data_root
 
 _DATASET_NAME = "BL1_XFG_baseline.csv"
 
@@ -8,8 +12,8 @@ _DATASET_NAME = "BL1_XFG_baseline.csv"
 def dataset_path(root: Path | None = None) -> Path:
     """Return the path to the bundled quickstart dataset."""
 
-    base = root if root is not None else Path(__file__).resolve().parents[1]
-    dataset = base / "data" / _DATASET_NAME
+    base = root if root is not None else data_root()
+    dataset = base / _DATASET_NAME
     if not dataset.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset}")
     return dataset

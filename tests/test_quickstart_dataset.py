@@ -7,6 +7,11 @@ from pathlib import Path
 import pytest
 
 from tnfr_lfs.cli import run_cli
+from tnfr_lfs.examples.quickstart_dataset import (
+    dataset_columns,
+    dataset_path,
+    dataset_sample_count,
+)
 
 
 def test_quickstart_dataset_available(quickstart_dataset_path: Path) -> None:
@@ -15,13 +20,14 @@ def test_quickstart_dataset_available(quickstart_dataset_path: Path) -> None:
     assert quickstart_dataset_path.exists()
     header = quickstart_dataset_path.read_text(encoding="utf8").splitlines()[0]
     columns = header.split(",")
-    assert columns[:5] == [
-        "timestamp",
-        "vertical_load",
-        "slip_ratio",
-        "lateral_accel",
-        "longitudinal_accel",
-    ]
+    assert columns[: len(dataset_columns())] == list(dataset_columns())
+
+
+def test_quickstart_helper_matches_fixture(quickstart_dataset_path: Path) -> None:
+    """Library helper resolves the same dataset used by the fixtures."""
+
+    assert dataset_path() == quickstart_dataset_path
+    assert dataset_sample_count() > 0
 
 
 def test_quickstart_script_points_to_dataset(quickstart_dataset_path: Path) -> None:
@@ -29,8 +35,8 @@ def test_quickstart_script_points_to_dataset(quickstart_dataset_path: Path) -> N
 
     script_path = Path(__file__).resolve().parents[1] / "examples" / "quickstart.sh"
     content = script_path.read_text(encoding="utf8")
-    assert "tnfr_lfs._pack_resources import data_root" in content
-    assert quickstart_dataset_path.name in content
+    assert "tnfr_lfs.examples.quickstart_dataset import dataset_path" in content
+    assert "dataset_path()" in content
 
 
 @pytest.mark.parametrize("command", ["baseline", "analyze", "suggest"])

@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tnfr_lfs._pack_resources import data_root
+from tnfr_lfs.examples import quickstart_dataset
 
 from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
 from tnfr_lfs.core.epi_models import (
@@ -36,10 +37,7 @@ from tnfr_lfs.recommender.rules import ThresholdProfile
 def quickstart_dataset_path() -> Path:
     """Baseline dataset referenced by the quickstart flow."""
 
-    dataset = data_root() / "BL1_XFG_baseline.csv"
-    if not dataset.exists():  # pragma: no cover - defensive guard for local runs
-        raise FileNotFoundError(dataset)
-    return dataset
+    return quickstart_dataset.dataset_path()
 
 
 @pytest.fixture(scope="session")

@@ -11,10 +11,10 @@ future.
   suite.
 * Mirrors the 17-sample synthetic stint under `tests/data` and stores the
   canonical copy inside the packaged resources so user-facing workflows can
-  locate it via `tnfr_lfs._pack_resources.data_root()`.
+  locate it via `tnfr_lfs.examples.quickstart_dataset.dataset_path()`.
 * Keep the header row in sync with the expectations in
   `examples/quickstart.sh` and in
-  `typing_targets.quickstart_dataset.dataset_columns()`; update the three
+  `tnfr_lfs.examples.quickstart_dataset.dataset_columns()`; update the three
   sources together if the telemetry schema changes.
 * For tutorials or manual checks you can also fall back to the RAF capture
   `tnfr_lfs/pack/data/test1.raf`; the CLI auto-detects it through the native RAF
