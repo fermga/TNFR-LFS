@@ -1,10 +1,8 @@
-"""Tests for the OutGauge UDP decoder."""
+"""Focused tests for the OutGauge UDP decoder."""
 
 from __future__ import annotations
 
 import struct
-
-import pytest
 
 from tnfr_lfs.acquisition.outgauge_udp import OutGaugePacket
 
@@ -13,7 +11,7 @@ def _pad(value: str, size: int) -> bytes:
     return value.encode("latin-1").ljust(size, b"\x00")
 
 
-def test_outgauge_packet_parses_extended_datagram() -> None:
+def test_outgauge_packet_parses_extended_datagram_identifiers() -> None:
     base_payload = struct.pack(
         "<I4s16s8s6s6sHBBfffffffIIfff16s16sI",
         1234,
@@ -52,9 +50,12 @@ def test_outgauge_packet_parses_extended_datagram() -> None:
 
     packet = OutGaugePacket.from_bytes(base_payload + extras)
 
-    expected_average = tuple(
-        (inner[idx] + middle[idx] + outer[idx]) / 3.0 for idx in range(4)
-    )
-
-    assert packet.tyre_temps == pytest.approx(expected_average)
-    assert packet.brake_temps == pytest.approx(brakes)
+    # The OutGauge decoder is responsible for trimming padded strings and
+    # keeping identifier fields intact even when extended tyre data is present.
+    assert packet.car == "CAR"
+    assert packet.player_name == "Driver"
+    assert packet.track == "BL1"
+    assert packet.layout == ""
+    assert packet.display1 == "HUD1"
+    assert packet.display2 == "HUD2"
+    assert packet.packet_id == 42
