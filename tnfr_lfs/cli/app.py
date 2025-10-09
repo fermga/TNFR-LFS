@@ -1,4 +1,4 @@
-"""Command line entry point for TNFR × LFS."""
+"""Command line application entry point for TNFR × LFS."""
 
 from __future__ import annotations
 

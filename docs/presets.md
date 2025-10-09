@@ -19,4 +19,4 @@ To create a bespoke preset:
 
 The CLI/HUD automatically uses the resolved `phase_weights` when
 segmenting microsectors, so presets immediately influence the
-recommendation flow. 【F:tnfr_lfs/cli/tnfr_lfs_cli.py†L1754-L1767】
+recommendation flow. 【F:tnfr_lfs/cli/app.py†L1754-L1767】
