@@ -594,7 +594,7 @@ def test_render_page_a_includes_wave_when_active_phase():
     assert "ν_f" in output
     assert "[" in output  # ΔNFR gauge
     assert "C(t) 0.40" in output
-    assert "∇Acop" in output
+    assert "∇Coupl" in output
     aero_line = osd_module._truncate_line(
         "Δaero high "
         f"{window_metrics.aero_coherence.high_speed_imbalance:+.2f}"
@@ -910,7 +910,7 @@ def test_render_page_a_includes_no_tocar_notice():
         bundles,
         quiet_sequences=((0, 1, 2),),
     )
-    assert "no tocar" in page.lower()
+    assert "leave untouched" in page.lower()
 
 
 def test_silence_event_meter_renders_when_present() -> None:
@@ -932,7 +932,7 @@ def test_silence_event_meter_renders_when_present() -> None:
     )
     line = osd_module._silence_event_meter(microsector)
     assert line is not None
-    assert "Silencio" in line
+    assert "Silence" in line
 
 
 def test_brake_meter_skips_when_silence_dominates() -> None:
