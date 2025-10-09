@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import math
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+
+from ..utils.numeric import _safe_float
 
 
 _PHASE_SUMMARY_ORDER: Tuple[str, ...] = ("entry", "apex", "exit")
@@ -15,17 +16,6 @@ _PHASE_SUMMARY_LABELS: Dict[str, str] = {
 }
 _AXIS_ORDER: Tuple[str, ...] = ("longitudinal", "lateral")
 _AXIS_SYMBOLS: Dict[str, str] = {"longitudinal": "∥", "lateral": "⊥"}
-
-
-def _safe_float(value: object) -> float:
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return 0.0
-    if math.isnan(numeric):
-        return 0.0
-    return numeric
-
 
 def _format_phase_axis_cell(target: float, weight: float) -> str:
     emphasis = max(0.0, min(1.0, weight))

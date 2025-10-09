@@ -43,6 +43,7 @@ from ..core.epi_models import EPIBundle
 from ..core.operators import TyreBalanceControlOutput, tyre_balance_controller
 from ..core.operator_detection import canonical_operator_label
 from ..core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
+from ..utils.numeric import _safe_float
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..io.profiles import AeroProfile, ProfileManager
@@ -1947,23 +1948,6 @@ def _axis_focus_descriptor(phase: str, axis: str) -> tuple[str, str, Tuple[str, 
         return _AXIS_FOCUS_MAP[key]
     direct = (phase, axis)
     return _AXIS_FOCUS_MAP.get(direct)
-
-
-def _safe_float(
-    value: SupportsFloat | SupportsInt | str | bytes | bytearray | memoryview | None,
-    default: float = 0.0,
-) -> float:
-    if value is None:
-        return default
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return default
-    if math.isnan(numeric):
-        return default
-    return numeric
-
-
 def _format_quiet_sequence(sequence: Sequence[int]) -> str:
     if not sequence:
         return ""
@@ -2815,12 +2799,6 @@ class TyreBalanceRule:
     ) -> Iterable[Recommendation]:
         if not microsectors or context is None:
             return []
-
-        def _safe_float(value: object) -> float:
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                return 0.0
 
         def _average(values: Sequence[float]) -> float:
             return mean(values) if values else 0.0
