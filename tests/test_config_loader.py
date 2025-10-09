@@ -22,6 +22,7 @@ from tnfr_lfs.config_loader import (
     resolve_targets,
     _deep_merge,
 )
+from tnfr_lfs._pack_resources import data_root
 
 
 @pytest.fixture()
@@ -191,8 +192,8 @@ def test_example_pipeline_accepts_custom_data_root(config_pack: Path) -> None:
 def test_parse_cache_options_defaults() -> None:
     options = parse_cache_options({})
     assert isinstance(options, CacheOptions)
-    repo_root = Path(__file__).resolve().parents[1]
-    with repo_root.joinpath("config", "global.toml").open("rb") as buffer:
+    pack_root = data_root().parent
+    with pack_root.joinpath("config", "global.toml").open("rb") as buffer:
         payload = tomllib.load(buffer)
 
     cache_defaults = payload.get("cache", {}) if isinstance(payload, dict) else {}

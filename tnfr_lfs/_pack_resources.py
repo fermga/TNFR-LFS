@@ -8,8 +8,8 @@ from typing import Iterable
 
 __all__ = ["pack_root", "data_root", "modifiers_root", "set_pack_root_override"]
 
-_FALLBACK_REPO_ROOT = Path(__file__).resolve().parent.parent
-_PACKAGES: tuple[str, ...] = ("tnfr_lfs_pack",)
+_FALLBACK_PACK_ROOT = Path(__file__).resolve().parent / "pack"
+_PACKAGES: tuple[str, ...] = ("tnfr_lfs.pack",)
 
 _PACK_ROOT: Path | None = None
 _DATA_ROOT: Path | None = None
@@ -29,7 +29,7 @@ def _iter_candidate_roots() -> Iterable[Path]:
             continue
         yield package_path
 
-    yield _FALLBACK_REPO_ROOT
+    yield _FALLBACK_PACK_ROOT
 
 
 def set_pack_root_override(path: Path | None) -> None:
@@ -53,7 +53,7 @@ def pack_root() -> Path:
                 _PACK_ROOT = candidate
                 break
         else:  # pragma: no cover - defensive fallback
-            _PACK_ROOT = _FALLBACK_REPO_ROOT
+            _PACK_ROOT = _FALLBACK_PACK_ROOT
     return _PACK_ROOT
 
 
@@ -67,7 +67,7 @@ def data_root() -> Path:
         if candidate.exists():
             _DATA_ROOT = candidate
         else:
-            _DATA_ROOT = _FALLBACK_REPO_ROOT / "data"
+            _DATA_ROOT = _FALLBACK_PACK_ROOT / "data"
     return _DATA_ROOT
 
 
@@ -81,5 +81,5 @@ def modifiers_root() -> Path:
         if candidate.exists():
             _MODIFIERS_ROOT = candidate
         else:
-            _MODIFIERS_ROOT = _FALLBACK_REPO_ROOT / "modifiers" / "combos"
+            _MODIFIERS_ROOT = _FALLBACK_PACK_ROOT / "modifiers" / "combos"
     return _MODIFIERS_ROOT

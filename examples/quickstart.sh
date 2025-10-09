@@ -2,7 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DATA_FILE="${ROOT_DIR}/data/BL1_XFG_baseline.csv"
+DATA_FILE="$(python - <<'PY'
+from tnfr_lfs._pack_resources import data_root
+
+print(data_root() / "BL1_XFG_baseline.csv")
+PY
+)"
 OUT_DIR="${ROOT_DIR}/examples/out"
 BASELINE="${OUT_DIR}/baseline.jsonl"
 ANALYZE_JSON="${OUT_DIR}/analyze.json"

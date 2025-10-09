@@ -22,10 +22,10 @@ from tnfr_lfs.core.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
+from tnfr_lfs._pack_resources import data_root
 from tnfr_lfs.io import ReplayCSVBundleReader
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_DEFAULT_BUNDLE = _REPO_ROOT / "data" / "test1.zip"
+_DEFAULT_BUNDLE = data_root() / "test1.zip"
 
 
 @dataclass(slots=True)

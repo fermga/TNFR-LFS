@@ -20,7 +20,7 @@ pytest
 
 - `ruff` enforces the code-style and cleanliness rules defined in `pyproject.toml`.
 - `mypy --strict` analyses `tnfr_lfs` and the rest of the declared typing targets (for example `typing_targets`). If you need to pass the paths explicitly run `mypy --strict tnfr_lfs typing_targets`; note that strict analysis across the whole package takes longer than the reduced subset.
-- `pytest` runs the unit and integration test suite, including verification for the example datasets `data/test1.raf` and `data/test1.zip`.
+- `pytest` runs the unit and integration test suite, including verification for the example datasets `tnfr_lfs/pack/data/test1.raf` and `tnfr_lfs/pack/data/test1.zip`.
 
 ### CI triggering rules
 
@@ -32,7 +32,7 @@ purely editorial branches.
 
 ## Reference dataset
 
-The quickstart flow and the integration tests depend on the capture `data/test1.raf` and on the bundle `data/test1.zip` exported from Replay Analyzer. Both artefacts contain real Live for Speed telemetry and serve as reference datasets for the binary ingestion flows, regression tests, and CLI tutorials.
+The quickstart flow and the integration tests depend on the capture `tnfr_lfs/pack/data/test1.raf` and on the bundle `tnfr_lfs/pack/data/test1.zip` exported from Replay Analyzer. Both artefacts live inside the packaged resources (`tnfr_lfs._pack_resources.data_root()`) and contain real Live for Speed telemetry, serving as reference datasets for the binary ingestion flows, regression tests, and CLI tutorials.
 
 ## Performance regression benchmark
 
@@ -47,7 +47,7 @@ python -m benchmarks.delta_cache_benchmark
 make benchmark-delta-cache
 ```
 
-The script loads `data/test1.zip` through `ReplayCSVBundleReader`, iterates over the telemetry,
+The script loads `tnfr_lfs/pack/data/test1.zip` through `ReplayCSVBundleReader`, iterates over the telemetry,
 and times ΔNFR and ν_f computations with the caches disabled versus the same workload with the
 LRU layers warm.【F:benchmarks/delta_cache_benchmark.py†L1-L174】 The default configuration processes
 128 samples twice per run (three measured repeats) and currently reports ≈0.0106 s per uncached pass
