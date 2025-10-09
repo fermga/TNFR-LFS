@@ -17,6 +17,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 from ..acquisition import OutSimClient
 from ..io import ReplayCSVBundleReader, logs, raf_to_telemetry_records, read_raf
 from ..core.epi import TelemetryRecord
+from .errors import CliError
 
 CONFIG_ENV_VAR = "TNFR_LFS_CONFIG"
 DEFAULT_CONFIG_FILENAME = "tnfr-lfs.toml"
@@ -74,16 +75,32 @@ def _persist_records(records: Records, destination: Path, fmt: str) -> None:
             frame.to_parquet(destination, index=False)
             return
         except ModuleNotFoundError as exc:
-            raise RuntimeError(_PARQUET_DEPENDENCY_MESSAGE) from exc
+            raise CliError(
+                _PARQUET_DEPENDENCY_MESSAGE,
+                category="usage",
+                context={"format": fmt, "destination": str(destination)},
+            ) from exc
         except (ImportError, ValueError) as exc:
-            raise RuntimeError(_PARQUET_DEPENDENCY_MESSAGE) from exc
+            raise CliError(
+                _PARQUET_DEPENDENCY_MESSAGE,
+                category="usage",
+                context={"format": fmt, "destination": str(destination)},
+            ) from exc
 
-    raise ValueError(f"Unsupported format '{fmt}'.")
+    raise CliError(
+        f"Unsupported format '{fmt}'.",
+        category="usage",
+        context={"format": fmt, "destination": str(destination)},
+    )
 
 
 def _load_replay_bundle(source: Path) -> Records:
     if not source.exists():
-        raise FileNotFoundError(f"Replay CSV bundle {source} does not exist")
+        raise CliError(
+            f"Replay CSV bundle {source} does not exist",
+            category="not_found",
+            context={"path": str(source), "kind": "replay_csv_bundle"},
+        )
     reader = ReplayCSVBundleReader(source)
     return reader.to_records()
 
@@ -98,7 +115,11 @@ def _coerce_payload(payload: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def _load_records(source: Path) -> Records:
     if not source.exists():
-        raise FileNotFoundError(f"Telemetry source {source} does not exist")
+        raise CliError(
+            f"Telemetry source {source} does not exist",
+            category="not_found",
+            context={"path": str(source)},
+        )
     suffix = source.suffix.lower()
     name = source.name.lower()
     if suffix == ".csv":
@@ -114,7 +135,11 @@ def _load_records(source: Path) -> Records:
         data = _load_json_records(source)
         return [TelemetryRecord(**_coerce_payload(item)) for item in data]
 
-    raise ValueError(f"Unsupported telemetry format: {source}")
+    raise CliError(
+        f"Unsupported telemetry format: {source}",
+        category="usage",
+        context={"path": str(source), "suffix": suffix, "name": name},
+    )
 
 
 def _load_parquet_records(source: Path) -> List[Mapping[str, Any]]:
@@ -123,14 +148,22 @@ def _load_parquet_records(source: Path) -> List[Mapping[str, Any]]:
     except ModuleNotFoundError as exc:
         if _is_probably_json_document(source):
             return _load_json_records(source)
-        raise RuntimeError(_PARQUET_DEPENDENCY_MESSAGE) from exc
+        raise CliError(
+            _PARQUET_DEPENDENCY_MESSAGE,
+            category="usage",
+            context={"path": str(source), "format": "parquet"},
+        ) from exc
 
     try:
         frame = pd.read_parquet(source)
     except (ImportError, ModuleNotFoundError, ValueError) as exc:
         if _is_probably_json_document(source):
             return _load_json_records(source)
-        raise RuntimeError(_PARQUET_DEPENDENCY_MESSAGE) from exc
+        raise CliError(
+            _PARQUET_DEPENDENCY_MESSAGE,
+            category="usage",
+            context={"path": str(source), "format": "parquet"},
+        ) from exc
 
     return frame.to_dict(orient="records")
 
@@ -140,7 +173,11 @@ def _load_json_records(source: Path) -> List[Mapping[str, Any]]:
         data = json.load(handle)
     if isinstance(data, list):
         return data
-    raise ValueError(f"JSON telemetry source {source} must contain a list of samples")
+    raise CliError(
+        f"JSON telemetry source {source} must contain a list of samples",
+        category="usage",
+        context={"path": str(source)},
+    )
 
 
 def _is_probably_json_document(source: Path) -> bool:

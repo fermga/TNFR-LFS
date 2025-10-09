@@ -69,10 +69,11 @@ def test_run_cli_requires_telemetry_when_missing(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(SystemExit) as excinfo:
         run_cli(["analyze"])
 
-    assert str(excinfo.value) == (
+    assert excinfo.value.code == 1
+    assert isinstance(excinfo.value.__cause__, CliError)
+    assert str(excinfo.value.__cause__) == (
         "A telemetry baseline path is required unless --replay-csv-bundle is provided."
     )
-    assert isinstance(excinfo.value.__cause__, CliError)
 
 
 def test_cli_exports_helper_attributes() -> None:
@@ -1189,7 +1190,7 @@ OutGauge Port 3000
     assert "/outgauge 1 127.0.0.1 3000" in captured.out
     assert "Commands copied to the clipboard." in captured.out
     assert copied and "/outsim 1 127.0.0.1 4123" in copied[0]
-    assert "OutSim Mode" in str(excinfo.value)
+    assert "OutSim Mode" in str(excinfo.value.__cause__)
 
 
 def test_profiles_persist_and_adjust(
@@ -1378,8 +1379,8 @@ InSim Port 29999
         run_cli(["diagnose", str(cfg_path)])
 
     captured = capsys.readouterr()
-    assert "No response from OutSim" in captured.out
-    assert "No response from OutSim" in str(excinfo.value)
+    assert "No response from OutSim" in captured.err
+    assert "No response from OutSim" in str(excinfo.value.__cause__)
 
 
 def test_diagnose_reports_permission_error(
@@ -1429,5 +1430,5 @@ InSim Port 29999
         run_cli(["diagnose", str(cfg_path)])
 
     captured = capsys.readouterr()
-    assert "No write permissions" in captured.out
-    assert "No write permissions" in str(excinfo.value)
+    assert "No write permissions" in captured.err
+    assert "No write permissions" in str(excinfo.value.__cause__)

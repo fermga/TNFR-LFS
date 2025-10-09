@@ -13,6 +13,7 @@ from . import common as _common_module
 from . import io as _cli_io_module
 from . import workflows as _workflows_module
 from .common import CliError
+from .errors import log_cli_error
 from .io import load_cli_config
 from .parser import build_parser
 from .workflows import (
@@ -143,12 +144,19 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
 
     handler = getattr(namespace, "handler", None)
     if handler is None:
-        raise CliError(f"Unknown command '{getattr(namespace, 'command', None)}'.")
+        raise CliError(
+            f"Unknown command '{getattr(namespace, 'command', None)}'.",
+            category="usage",
+            context={"command": getattr(namespace, "command", None)},
+        )
 
     try:
         return handler(namespace, config=config)
     except CliError as exc:
-        raise SystemExit(str(exc)) from exc
+        if not exc.logged:
+            log_cli_error(exc.payload, exc_info=exc)
+            exc.logged = True
+        raise SystemExit(exc.status_code) from exc
 
 
 def main() -> None:  # pragma: no cover - thin wrapper
