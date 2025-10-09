@@ -8,9 +8,10 @@ from tnfr_lfs.acquisition import OutSimClient
 from tnfr_lfs.core import EPIExtractor
 from tnfr_lfs.exporters import csv_exporter
 
-DATA = """timestamp,vertical_load,slip_ratio,lateral_accel,longitudinal_accel,nfr,si
-0.0,7000,0.01,1.1,0.5,550,0.82
-0.1,7100,0.03,1.0,0.6,555,0.80
+DATA = """timestamp,vertical_load,slip_ratio,lateral_accel,longitudinal_accel,yaw,pitch,roll,brake_pressure,locking,nfr,si
+0.0,7000,0.01,1.1,0.5,0.01,0.0,0.0,0.18,0.0,550,0.82
+0.1,7100,0.03,1.0,0.6,0.02,0.0,0.0,0.17,0.0,555,0.80
+0.2,7150,0.04,1.2,0.7,0.03,0.0,0.0,0.19,0.0,560,0.78
 """
 
 

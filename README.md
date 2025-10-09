@@ -30,7 +30,7 @@ reports under `examples/out/`.
 | [Beginner quickstart](docs/tutorials.md) | Step-by-step guide for installation and the sample dataset. |
 | [Advanced workflows](docs/advanced_workflows.md) | Robustness checks, Pareto sweeps and A/B comparisons. |
 | [API reference](docs/api_reference.md) | Python API surface with module details. |
-| [Examples gallery](docs/examples_gallery.md) | Overview of the automation scripts under `examples/`. |
+| [Examples gallery](docs/examples.md) | Overview of the automation scripts under `examples/`. |
 
 ## Quickstart
 
@@ -65,6 +65,9 @@ make quickstart
 ```
 
 This invokes `examples/quickstart.sh` to generate artefacts in `examples/out/`.
+
+Explore the [Examples gallery](docs/examples.md) for additional runnable
+scripts that demonstrate ingestion, exporting and recommendation workflows.
 
 ## Telemetry overview
 
