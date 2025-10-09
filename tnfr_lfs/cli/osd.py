@@ -564,8 +564,8 @@ def _render_page_a(
                 lines.append(entropy_line)
         gradient_entry = _truncate_line(
             (
-                f"Si {window_metrics.si:.2f}"
-                f" · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
+                f"Stability {window_metrics.si:.2f}"
+                f" · ∇Coupl {window_metrics.d_nfr_couple:+.2f}"
                 f" · C(t) {coherence_value:.2f}"
                 f" · τmot {window_metrics.motor_latency_ms:.0f}ms"
             ),
@@ -730,7 +730,7 @@ def _render_page_a(
     ):
         damper_segments.append(f"ΔA/R {ar_gap:.2f}")
     if damper_segments:
-        damper_line = _truncate_line(f"Amortig: {' · '.join(damper_segments)}")
+        damper_line = _truncate_line(f"Dampers: {' · '.join(damper_segments)}")
         candidate = "\n".join((*lines, damper_line))
         if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
             lines.append(damper_line)
@@ -917,7 +917,7 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
     )
     balance_block = "".join(f" · {segment}" for segment in balance_segments)
     return (
-        f"Si {window_metrics.si:.2f} · ∇Acop {window_metrics.d_nfr_couple:+.2f}"
+        f"Stability {window_metrics.si:.2f} · ∇Coupl {window_metrics.d_nfr_couple:+.2f}"
         f" · ∇Res {window_metrics.d_nfr_res:+.2f} · ∇Flat {window_metrics.d_nfr_flat:+.2f}"
         f" · C(t) {window_metrics.coherence_index:.2f}"
         f" · τmot {window_metrics.motor_latency_ms:.0f}ms"
@@ -926,8 +926,8 @@ def _gradient_line(window_metrics: WindowMetrics) -> str:
         f" · Siφ {window_metrics.phase_alignment:+.2f}"
         f" · Φsync {window_metrics.phase_synchrony_index:.2f}"
         f" · UDR {window_metrics.useful_dissonance_ratio:.2f}"
-        f" · Soporte {window_metrics.support_effective:+.2f}"
-        f" · Carga {window_metrics.load_support_ratio:.4f}"
+        f" · Support {window_metrics.support_effective:+.2f}"
+        f" · Load {window_metrics.load_support_ratio:.4f}"
         f" · μF {window_metrics.mu_usage_front_ratio:.2f}"
         f" · μR {window_metrics.mu_usage_rear_ratio:.2f}"
         f"{balance_block}"
@@ -959,9 +959,9 @@ def _coupling_alert_line(
     low_segments: List[str] = []
     correlation_threshold = 0.35
     if brake_corr < correlation_threshold:
-        low_segments.append(f"freno {brake_corr:.2f}")
+        low_segments.append(f"brake {brake_corr:.2f}")
     if throttle_corr < correlation_threshold:
-        low_segments.append(f"acel {throttle_corr:.2f}")
+        low_segments.append(f"throttle {throttle_corr:.2f}")
     if not low_segments:
         return None
     try:
@@ -979,7 +979,7 @@ def _coupling_alert_line(
     longitudinal_threshold = max(0.3, tolerance_value * 0.75)
     if longitudinal_value <= longitudinal_threshold:
         return None
-    payload = "⚠️ Acop proy ∇NFR∥ " + " · ".join(
+    payload = "⚠️ Coupl proj ∇NFR∥ " + " · ".join(
         (*low_segments, f"|∇∥| {longitudinal_value:.2f}")
     )
     return _truncate_line(payload)
@@ -1401,7 +1401,7 @@ def _silence_event_meter(microsector: Microsector) -> Optional[str]:
     load_span = max((_safe_float(payload.get("load_span")) for payload in payloads), default=0.0)
     slack = max((_safe_float(payload.get("slack")) for payload in payloads), default=0.0)
     return _ensure_limit(
-        "Silencio {:.0f}% ρ̄ {:.2f} carga±{:.0f}N σ {:.2f}".format(
+        "Silence {:.0f}% ρ̄ {:.2f} load±{:.0f}N σ {:.2f}".format(
             coverage * 100.0,
             density,
             load_span,
@@ -1430,7 +1430,7 @@ def _quiet_notice_line(
         descriptor = _format_quiet_descriptor(sequence)
         coverage, slack, si_variance, epi_abs = microsector_stability_metrics(microsector)
         return _truncate_line(
-            f"{descriptor} estables · no tocar · silencio {coverage * 100.0:.0f}%"
+            f"{descriptor} stable · Leave untouched · silence {coverage * 100.0:.0f}%"
             f" · Siσ {si_variance:.4f} · |dEPI| {epi_abs:.3f} · slack {slack:.2f}"
         )
     return None
@@ -1458,13 +1458,13 @@ def _quiet_summary_line(
             epi_values.append(epi_abs)
     if not descriptors:
         return None
-    summary = f"No tocar: {', '.join(descriptors)}"
+    summary = f"Leave untouched: {', '.join(descriptors)}"
     if coverage_values:
         coverage_avg = sum(coverage_values) / len(coverage_values)
         si_avg = sum(si_values) / len(si_values) if si_values else 0.0
         epi_avg = sum(epi_values) / len(epi_values) if epi_values else 0.0
         summary = (
-            f"{summary} · silencio μ {coverage_avg * 100.0:.0f}%"
+            f"{summary} · silence μ {coverage_avg * 100.0:.0f}%"
             f" · Siσ μ {si_avg:.4f} · |dEPI| μ {epi_avg:.3f}"
         )
     return _truncate_line(summary)

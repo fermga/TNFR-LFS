@@ -29,10 +29,10 @@ __all__ = [
 
 
 STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
-    "AL": "Apoyo",
-    "OZ": "Disonancia",
-    "IL": "Coherencia",
-    "SILENCIO": "Silencio estructural",
+    "AL": "Support",
+    "OZ": "Dissonance",
+    "IL": "Coherence",
+    "SILENCIO": "Structural silence",
 }
 
 
