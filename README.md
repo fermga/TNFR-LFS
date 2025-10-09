@@ -42,6 +42,24 @@ make quickstart
 
 The target invokes `examples/quickstart.sh`, which writes artefacts in `examples/out/` from the dataset and produces JSON and Markdown reports ready to inspect.
 
+### Benchmarks
+
+Developers can profile the ΔNFR/ν_f caches with the optional benchmark extra:
+
+```bash
+python -m pip install -e .[benchmark]
+# or rely on the Makefile helper
+make benchmark-delta-cache
+```
+
+The entry point `python -m benchmarks.delta_cache_benchmark` loads the replay bundle from
+`data/test1.zip` and measures ΔNFR/ν_f runs with caching disabled and enabled so you can
+validate performance changes locally.【F:benchmarks/delta_cache_benchmark.py†L1-L174】 With the
+default settings (128 samples, two measured passes per repeat) the current baseline is roughly
+0.0106 s per uncached pass versus 0.0089 s with the caches warm (≈×1.2 speed-up).【af1ae4†L1-L4】
+Increase `--sample-limit` when you need to stress-test longer stints—each additional sample adds
+per-record spectral analysis work, so expect runtimes to grow linearly with the chosen limit.【F:benchmarks/delta_cache_benchmark.py†L84-L113】
+
 The CLI accepts CSV, RAF, or Replay Analyzer bundles interchangeably. When working with CSV use the simulated mode (`tnfr-lfs baseline output.jsonl --simulate data/BL1_XFG_baseline.csv`); for RAF simply point the subcommand at the file (`tnfr-lfs baseline output.jsonl data/test1.raf --format jsonl`); and Replay Analyzer bundles (directory or ZIP, such as `data/test1.zip`) are ingested via `--replay-csv-bundle`. All options generate the same baseline and the remainder of the flow (`analyze`, `suggest`, `report`, `write-set`) auto-detects the format through the corresponding parser.
 
 ### Live HUD
