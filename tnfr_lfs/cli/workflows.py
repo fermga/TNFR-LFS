@@ -1506,7 +1506,9 @@ def _generate_out_reports(
     if format_key not in REPORT_ARTIFACT_FORMATS:
         raise CliError(
             f"Unknown report artifact format '{artifact_format}'. "
-            f"Supported formats: {', '.join(REPORT_ARTIFACT_FORMATS)}"
+            f"Supported formats: {', '.join(REPORT_ARTIFACT_FORMATS)}",
+            category="usage",
+            context={"format": artifact_format, "supported": sorted(REPORT_ARTIFACT_FORMATS)},
         )
     extension_map = {"json": "json", "markdown": "md", "visual": "viz"}
     artifact_extension = extension_map[format_key]
@@ -2213,7 +2215,11 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
 def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     cfg_path: Path = namespace.cfg.expanduser().resolve()
     if not cfg_path.exists():
-        raise CliError(f"cfg.txt file not found at {cfg_path}")
+        raise CliError(
+            f"cfg.txt file not found at {cfg_path}",
+            category="not_found",
+            context={"path": str(cfg_path)},
+        )
 
     sections = _parse_lfs_cfg(cfg_path)
     timeout = float(namespace.timeout)
@@ -2299,9 +2305,9 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
             summary.append("Additional details:")
             summary.extend(f"  * {success}" for success in successes)
         message = "\n".join(summary)
-        logger.error(
-            "cfg.txt diagnostics detected issues.",
-            extra={
+        raise CliError.from_context(
+            message,
+            context={
                 "event": "diagnostics.failed",
                 "path": str(cfg_path),
                 "errors": errors,
@@ -2309,7 +2315,6 @@ def _handle_diagnose(namespace: argparse.Namespace, *, config: Mapping[str, Any]
                 "commands": commands,
             },
         )
-        raise CliError(message)
 
     summary = [header, "Status: ok"]
     summary.extend(f"- {success}" for success in successes)
@@ -2334,7 +2339,11 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
     capture_result: Optional[CaptureResult] = None
     records: Records = []
     if namespace.overlay and namespace.simulate is not None:
-        raise CliError("--overlay is only available for live capture (omit --simulate).")
+        raise CliError(
+            "--overlay is only available for live capture (omit --simulate).",
+            category="usage",
+            context={"overlay": namespace.overlay, "simulate": namespace.simulate},
+        )
 
     try:
         if namespace.overlay:
@@ -2932,7 +2941,11 @@ def _handle_report(namespace: argparse.Namespace, *, config: Mapping[str, Any]) 
 def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
     namespace.car_model = str(namespace.car_model or default_car_model(config)).strip()
     if not namespace.car_model:
-        raise CliError("You must provide a valid --car-model to generate the setup plan.")
+        raise CliError(
+            "You must provide a valid --car-model to generate the setup plan.",
+            category="usage",
+            context={"car_model": namespace.car_model},
+        )
     if namespace.set_output:
         namespace.set_output = normalise_set_output_name(namespace.set_output, namespace.car_model)
     context = compute_setup_plan(namespace, config=config)

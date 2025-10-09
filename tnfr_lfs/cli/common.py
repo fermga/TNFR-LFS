@@ -23,6 +23,7 @@ from ..config_loader import (
     load_cars as _load_pack_cars_dataset,
     load_profiles as _load_pack_profiles_dataset,
 )
+from .errors import CliError
 from .io import Records, _load_records as _io_load_records, _load_replay_bundle
 
 __all__ = [
@@ -45,10 +46,6 @@ __all__ = [
     "render_payload",
     "resolve_exports",
 ]
-
-
-class CliError(RuntimeError):
-    """Consistent error type raised by CLI helpers."""
 
 
 _LAYOUT_PATTERN = re.compile(r"^([A-Z]{2,})([0-9]{1,2}[A-Z]?)$")
