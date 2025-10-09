@@ -27,16 +27,7 @@ from tnfr_lfs.core.metrics import (
 from tnfr_lfs.core.operator_detection import canonical_operator_label
 from tnfr_lfs.recommender.rules import RuleProfileObjectives
 from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
-from tnfr_lfs.core.epi_models import (
-    BrakesNode,
-    ChassisNode,
-    DriverNode,
-    EPIBundle,
-    SuspensionNode,
-    TrackNode,
-    TransmissionNode,
-    TyresNode,
-)
+from tests.helpers.steering import build_steering_bundle, build_steering_record
 
 
 def _populate_hud(records) -> TelemetryHUD:
@@ -74,111 +65,25 @@ class DummyHUD:
         )
 
 
-def _steering_record(
-    timestamp: float,
-    *,
-    yaw_rate: float,
-    steer: float,
-    slip_angle_fl: float,
-    slip_angle_fr: float,
-    nfr: float,
-) -> TelemetryRecord:
-    return TelemetryRecord(
-        timestamp=timestamp,
-        vertical_load=4800.0,
-        slip_ratio=0.0,
-        lateral_accel=0.0,
-        longitudinal_accel=0.0,
-        yaw=0.0,
-        pitch=0.0,
-        roll=0.0,
-        brake_pressure=0.0,
-        locking=0.0,
-        nfr=nfr,
-        si=0.78,
-        speed=50.0,
-        yaw_rate=yaw_rate,
-        slip_angle=0.0,
-        steer=steer,
-        throttle=0.45,
-        gear=3,
-        vertical_load_front=2400.0,
-        vertical_load_rear=2400.0,
-        mu_eff_front=1.0,
-        mu_eff_rear=1.0,
-        mu_eff_front_lateral=1.0,
-        mu_eff_front_longitudinal=0.96,
-        mu_eff_rear_lateral=1.0,
-        mu_eff_rear_longitudinal=0.94,
-        suspension_travel_front=0.0,
-        suspension_travel_rear=0.0,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
-        slip_angle_fl=slip_angle_fl,
-        slip_angle_fr=slip_angle_fr,
-    )
-
-
-def _steering_bundle(record: TelemetryRecord, ackermann_delta: float) -> EPIBundle:
-    share = record.nfr / 7.0
-    return EPIBundle(
-        timestamp=record.timestamp,
-        epi=0.0,
-        delta_nfr=record.nfr,
-        sense_index=record.si,
-        tyres=TyresNode(delta_nfr=share, sense_index=record.si),
-        suspension=SuspensionNode(delta_nfr=share, sense_index=record.si),
-        chassis=ChassisNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            yaw=record.yaw,
-            pitch=record.pitch,
-            roll=record.roll,
-            yaw_rate=record.yaw_rate,
-            lateral_accel=record.lateral_accel,
-            longitudinal_accel=record.longitudinal_accel,
-        ),
-        brakes=BrakesNode(delta_nfr=share, sense_index=record.si),
-        transmission=TransmissionNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            throttle=record.throttle,
-            gear=record.gear,
-            speed=record.speed,
-            longitudinal_accel=record.longitudinal_accel,
-            rpm=record.rpm,
-            line_deviation=record.line_deviation,
-        ),
-        track=TrackNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            axle_load_balance=0.0,
-            axle_velocity_balance=0.0,
-            yaw=record.yaw,
-            lateral_accel=record.lateral_accel,
-        ),
-        driver=DriverNode(
-            delta_nfr=share,
-            sense_index=record.si,
-            steer=record.steer,
-            throttle=record.throttle,
-            style_index=record.si,
-        ),
-        ackermann_parallel_index=ackermann_delta,
-    )
-
-
 def _window_metrics_from_parallel_turn(
     slip_angles: tuple[tuple[float, float], ...]
 ) -> WindowMetrics:
     records = [
-        _steering_record(
+        build_steering_record(
             float(index) * 0.5,
             yaw_rate=0.52 + 0.04 * index,
             steer=0.2 + 0.05 * index,
             slip_angle_fl=fl,
             slip_angle_fr=fr,
             nfr=105.0 + index,
+            si=0.78,
+            speed=50.0,
+            throttle=0.45,
+            vertical_load=4800.0,
+            vertical_load_front=2400.0,
+            vertical_load_rear=2400.0,
+            mu_eff_front_longitudinal=0.96,
+            mu_eff_rear_longitudinal=0.94,
         )
         for index, (fl, fr) in enumerate(slip_angles)
     ]
@@ -187,7 +92,7 @@ def _window_metrics_from_parallel_turn(
         _ackermann_parallel_delta(record, baseline) for record in records
     ]
     bundles = [
-        _steering_bundle(record, value)
+        build_steering_bundle(record, value)
         for record, value in zip(records, ackermann_values)
     ]
     return compute_window_metrics(records, bundles=bundles)
