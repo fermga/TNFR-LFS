@@ -12,6 +12,11 @@ from typing import Deque, Dict, List, Mapping, Optional, Sequence, Tuple, TYPE_C
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
     from .coherence_calibration import CoherenceCalibrationStore
 
+from .cache import (
+    cached_delta_nfr_map,
+    cached_dynamic_multipliers,
+    invalidate_dynamic_record,
+)
 from .coherence import compute_node_delta_nfr, sense_index
 from .epi_models import (
     BrakesNode,
@@ -42,6 +47,9 @@ DEFAULT_PHASE_WEIGHTS: Mapping[str, float] = {"__default__": 1.0}
 
 _AVERAGE_NU_F = sum(NU_F_NODE_DEFAULTS.values()) / float(len(NU_F_NODE_DEFAULTS))
 _MISSING_FLOAT = float("nan")
+
+
+CACHE_EPI_RESULTS = True
 
 
 @dataclass(frozen=True)
@@ -124,6 +132,9 @@ class NaturalFrequencyAnalyzer:
         self._last_snapshot: NaturalFrequencySnapshot | None = None
 
     def reset(self) -> None:
+        if CACHE_EPI_RESULTS:
+            for sample in list(self._history):
+                invalidate_dynamic_record(sample)
         self._history.clear()
         self._smoothed.clear()
         self._last_car = None
@@ -148,6 +159,9 @@ class NaturalFrequencyAnalyzer:
         record: TelemetryRecord | None = None,
         car_model: str | None = None,
     ) -> NaturalFrequencySnapshot:
+        if CACHE_EPI_RESULTS:
+            for sample in list(self._history):
+                invalidate_dynamic_record(sample)
         self._history.clear()
         for sample in history:
             self._append_record(sample)
@@ -163,7 +177,9 @@ class NaturalFrequencyAnalyzer:
             len(self._history) >= 2
             and (self._history[-1].timestamp - self._history[0].timestamp) > max_window
         ):
-            self._history.popleft()
+            removed = self._history.popleft()
+            if CACHE_EPI_RESULTS:
+                invalidate_dynamic_record(removed)
 
     def _resolve(
         self, base_map: Mapping[str, float], car_model: str | None
@@ -188,7 +204,23 @@ class NaturalFrequencyAnalyzer:
     def _dynamic_multipliers(
         self, car_model: str | None
     ) -> Tuple[Dict[str, float], float]:
-        history = list(self._history)
+        history = tuple(self._history)
+        if len(history) < 2:
+            return {}, 0.0
+        if not CACHE_EPI_RESULTS:
+            return self._compute_dynamic_multipliers_raw(history, car_model)
+        return cached_dynamic_multipliers(
+            car_model,
+            history,
+            lambda: self._compute_dynamic_multipliers_raw(history, car_model),
+        )
+
+    def _compute_dynamic_multipliers_raw(
+        self,
+        history: Sequence[TelemetryRecord],
+        car_model: str | None,
+    ) -> Tuple[Dict[str, float], float]:
+        history = list(history)
         if len(history) < 2:
             return {}, 0.0
 
@@ -765,6 +797,16 @@ def _distribute_node_delta(
     }
 
 
+def _delta_nfr_by_node_uncached(record: TelemetryRecord) -> Dict[str, float]:
+    baseline = record.reference or record
+    delta_nfr = record.nfr - baseline.nfr
+    feature_contributions = _node_feature_contributions(record, baseline)
+    node_signals = {
+        node: sum(values.values()) for node, values in feature_contributions.items()
+    }
+    return _distribute_node_delta(delta_nfr, node_signals)
+
+
 def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
     """Compute ΔNFR contributions for each subsystem.
 
@@ -775,13 +817,9 @@ def delta_nfr_by_node(record: TelemetryRecord) -> Mapping[str, float]:
     uniform distribution.
     """
 
-    baseline = record.reference or record
-    delta_nfr = record.nfr - baseline.nfr
-    feature_contributions = _node_feature_contributions(record, baseline)
-    node_signals = {
-        node: sum(values.values()) for node, values in feature_contributions.items()
-    }
-    return _distribute_node_delta(delta_nfr, node_signals)
+    if not CACHE_EPI_RESULTS:
+        return _delta_nfr_by_node_uncached(record)
+    return cached_delta_nfr_map(record, lambda: _delta_nfr_by_node_uncached(record))
 
 
 def _phase_weight(
