@@ -332,24 +332,7 @@ def resolve_exports(namespace: argparse.Namespace) -> List[str]:
     raise CliError("No exporter configured for this command.")
 
 
-_MARKDOWN_LOCALISATIONS: Mapping[str, Tuple[Tuple[str, str], ...]] = {
-    "es": (
-        ("| Change | Adjustment | Rationale | Expected effect |", "| Cambio | Ajuste | Justificación | Efecto esperado |"),
-        ("**Rationales**", "**Justificaciones**"),
-        ("**Expected effects**", "**Efectos esperados**"),
-        ("**A/B comparison**", "**Comparación A/B**"),
-        ("| Statistic | Baseline | Variant | Δ / details |", "| Estadístico | Base | Variante | Δ / detalles |"),
-        ("Baseline laps:", "Vueltas base:"),
-        ("Variant laps:", "Vueltas variante:"),
-        ("**Aerodynamic indicators**", "**Indicadores aerodinámicos**"),
-        ("**Aggregated sensitivities**", "**Sensibilidades agregadas**"),
-        ("| Metric | Parameter | Derivative |", "| Métrica | Parámetro | Derivada |"),
-        ("**SCI contribution**", "**Contribución SCI**"),
-        ("| Term | Contribution |", "| Término | Contribución |"),
-        ("**Priority phase suggestions**", "**Sugerencias prioritarias por fase**"),
-        ("**Session profile**", "**Perfil de sesión**"),
-    ),
-}
+_MARKDOWN_LOCALISATIONS: Mapping[str, Tuple[Tuple[str, str], ...]] = {}
 
 
 def _localise_markdown(rendered: str, locale: str | None) -> str:

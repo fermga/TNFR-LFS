@@ -883,7 +883,7 @@ def test_write_set_markdown_export(
         "stint-1",
     ])
 
-    assert "| Cambio |" in output
+    assert "| Change |" in output
 
 
 def test_write_set_lfs_export(
