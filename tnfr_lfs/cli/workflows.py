@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import json
 import logging
 import math
@@ -19,7 +20,7 @@ from pathlib import Path
 from statistics import mean, fmean
 from time import monotonic, sleep
 from types import MappingProxyType
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Deque, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -33,8 +34,10 @@ from ..ingestion.live import (
     InSimClient,
     OverlayManager,
     OUTSIM_MAX_PACKET_SIZE,
+    OutGaugePacket,
     OutGaugeUDPClient,
     OutSimClient,
+    OutSimPacket,
     OutSimUDPClient,
     TelemetryFusion,
 )
@@ -120,6 +123,10 @@ class CaptureMetrics:
     outgauge_timeouts: int
     outsim_ignored_hosts: int
     outgauge_ignored_hosts: int
+    outsim_loss_events: int
+    outgauge_loss_events: int
+    outsim_recovered_packets: int
+    outgauge_recovered_packets: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -2422,6 +2429,10 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
                     outgauge_timeouts=0,
                     outsim_ignored_hosts=0,
                     outgauge_ignored_hosts=0,
+                    outsim_loss_events=0,
+                    outgauge_loss_events=0,
+                    outsim_recovered_packets=0,
+                    outgauge_recovered_packets=0,
                 ),
             )
         else:
@@ -3059,6 +3070,13 @@ def _capture_udp_samples(
     attempts = 0
     dropped_pairs = 0
 
+    outsim_backlog: Deque[OutSimPacket] = deque()
+    outgauge_backlog: Deque[OutGaugePacket] = deque()
+    outsim_loss_events = 0
+    outgauge_loss_events = 0
+    outsim_recovered_packets = 0
+    outgauge_recovered_packets = 0
+
     with OutSimUDPClient(
         host=host, port=outsim_port, timeout=timeout, retries=retries
     ) as outsim, OutGaugeUDPClient(
@@ -3068,16 +3086,75 @@ def _capture_udp_samples(
             attempts += 1
             if heartbeat is not None:
                 heartbeat()
-            outsim_packet = outsim.recv()
-            outgauge_packet = outgauge.recv()
-            if outsim_packet is None or outgauge_packet is None:
+            outsim_backlog.extend(outsim.drain_ready())
+            if not outsim_backlog:
+                packet = outsim.recv()
+                if packet is not None:
+                    outsim_backlog.append(packet)
+                    outsim_backlog.extend(outsim.drain_ready())
+
+            outgauge_backlog.extend(outgauge.drain_ready())
+            if not outgauge_backlog:
+                packet = outgauge.recv()
+                if packet is not None:
+                    outgauge_backlog.append(packet)
+                    outgauge_backlog.extend(outgauge.drain_ready())
+
+            fused_pairs = 0
+            while (
+                outsim_backlog
+                and outgauge_backlog
+                and len(records) < max_samples
+            ):
+                outsim_packet = outsim_backlog.popleft()
+                outgauge_packet = outgauge_backlog.popleft()
+                record = fusion.fuse(outsim_packet, outgauge_packet)
+                records.append(record)
+                fused_pairs += 1
+
+            outsim_stats = outsim.statistics
+            outgauge_stats = outgauge.statistics
+
+            current_outsim_losses = outsim_stats.get("loss_events", outsim_loss_events)
+            if current_outsim_losses > outsim_loss_events:
+                logger.warning(
+                    "OutSim packet loss detected during capture.",
+                    extra={
+                        "event": "capture.outsim_loss",
+                        "loss_events": current_outsim_losses,
+                        "host": host,
+                        "port": outsim_port,
+                    },
+                )
+            outsim_loss_events = max(outsim_loss_events, current_outsim_losses)
+            outsim_recovered_packets = max(
+                outsim_recovered_packets,
+                outsim_stats.get("late_recovered", outsim_recovered_packets),
+            )
+
+            current_outgauge_losses = outgauge_stats.get("loss_events", outgauge_loss_events)
+            if current_outgauge_losses > outgauge_loss_events:
+                logger.warning(
+                    "OutGauge packet loss detected during capture.",
+                    extra={
+                        "event": "capture.outgauge_loss",
+                        "loss_events": current_outgauge_losses,
+                        "host": host,
+                        "port": outgauge_port,
+                    },
+                )
+            outgauge_loss_events = max(outgauge_loss_events, current_outgauge_losses)
+            outgauge_recovered_packets = max(
+                outgauge_recovered_packets,
+                outgauge_stats.get("recovered", outgauge_recovered_packets),
+            )
+
+            if fused_pairs == 0:
                 dropped_pairs += 1
                 if heartbeat is not None:
                     heartbeat()
                 sleep(timeout)
                 continue
-            record = fusion.fuse(outsim_packet, outgauge_packet)
-            records.append(record)
 
         metrics = CaptureMetrics(
             attempts=attempts,
@@ -3088,6 +3165,10 @@ def _capture_udp_samples(
             outgauge_timeouts=outgauge.timeouts,
             outsim_ignored_hosts=outsim.ignored_hosts,
             outgauge_ignored_hosts=outgauge.ignored_hosts,
+            outsim_loss_events=outsim_loss_events,
+            outgauge_loss_events=outgauge_loss_events,
+            outsim_recovered_packets=outsim_recovered_packets,
+            outgauge_recovered_packets=outgauge_recovered_packets,
         )
 
     logger.info(

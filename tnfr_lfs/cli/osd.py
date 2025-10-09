@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import deque
 from dataclasses import dataclass
@@ -25,7 +26,9 @@ from ..ingestion import (
     InSimClient,
     MacroQueue,
     OverlayManager,
+    OutGaugePacket,
     OutGaugeUDPClient,
+    OutSimPacket,
     OutSimUDPClient,
     TelemetryFusion,
 )
@@ -70,6 +73,9 @@ from ..recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObject
 from ..session import format_session_messages
 from ..utils.numeric import _safe_float
 from ..utils.sparkline import DEFAULT_SPARKLINE_BLOCKS, render_sparkline
+
+
+logger = logging.getLogger(__name__)
 
 PAYLOAD_LIMIT = OverlayManager.MAX_BUTTON_TEXT - 1
 DEFAULT_UPDATE_RATE = 6.0
@@ -2093,6 +2099,10 @@ class OSDController:
         insim: Optional[InSimClient] = None
         overlay: Optional[OverlayManager] = None
         last_render = 0.0
+        outsim_backlog: Deque[OutSimPacket] = deque()
+        outgauge_backlog: Deque[OutGaugePacket] = deque()
+        outsim_loss_events = 0
+        outgauge_loss_events = 0
         try:
             outsim = OutSimUDPClient(host=self.host, port=self.outsim_port)
             outgauge = OutGaugeUDPClient(host=self.host, port=self.outgauge_port)
@@ -2110,17 +2120,58 @@ class OSDController:
             last_render = monotonic()
             try:
                 while True:
-                    outsim_packet = outsim.recv()
-                    outgauge_packet = outgauge.recv()
-                    if outsim_packet and outgauge_packet:
+                    outsim_backlog.extend(outsim.drain_ready())
+                    if not outsim_backlog:
+                        packet = outsim.recv()
+                        if packet is not None:
+                            outsim_backlog.append(packet)
+                            outsim_backlog.extend(outsim.drain_ready())
+
+                    outgauge_backlog.extend(outgauge.drain_ready())
+                    if not outgauge_backlog:
+                        packet = outgauge.recv()
+                        if packet is not None:
+                            outgauge_backlog.append(packet)
+                            outgauge_backlog.extend(outgauge.drain_ready())
+
+                    processed = False
+                    while outsim_backlog and outgauge_backlog:
+                        processed = True
+                        outsim_packet = outsim_backlog.popleft()
+                        outgauge_packet = outgauge_backlog.popleft()
                         record = self.fusion.fuse(outsim_packet, outgauge_packet)
                         self.hud.append(record)
                         self._update_vehicle_state(record)
                         self._infer_menu_state(outgauge_packet)
                         self._pager.update(self.hud.pages())
                         self._refresh_macro_status()
-                    else:
+                    if not processed:
                         sleep(self._idle_backoff)
+
+                    new_outsim_losses = outsim.statistics.get("loss_events", 0)
+                    if new_outsim_losses > outsim_loss_events:
+                        outsim_loss_events = new_outsim_losses
+                        logger.warning(
+                            "Packet loss detected on OutSim stream.",
+                            extra={
+                                "event": "osd.outsim_loss",
+                                "loss_events": outsim_loss_events,
+                                "host": self.host,
+                                "port": self.outsim_port,
+                            },
+                        )
+                    new_outgauge_losses = outgauge.statistics.get("loss_events", 0)
+                    if new_outgauge_losses > outgauge_loss_events:
+                        outgauge_loss_events = new_outgauge_losses
+                        logger.warning(
+                            "Packet loss detected on OutGauge stream.",
+                            extra={
+                                "event": "osd.outgauge_loss",
+                                "loss_events": outgauge_loss_events,
+                                "host": self.host,
+                                "port": self.outgauge_port,
+                            },
+                        )
 
                     event = overlay.poll_button(0.0)
                     self._handle_button_event(event)

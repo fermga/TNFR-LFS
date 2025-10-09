@@ -6,17 +6,25 @@ UDP and contain orientation, acceleration and position data.  This
 module provides a small client capable of decoding the official packet
 layout while operating in non-blocking mode so that it can be safely
 polled from high-frequency loops.
+
+``OutSimUDPClient`` keeps a short reordering buffer keyed by the
+``OutSimPacket.time`` field, automatically deduplicating, re-sequencing
+and tracking suspected gaps.  Applications may call
+:meth:`OutSimUDPClient.drain_ready` to extract the current buffer without
+blocking and inspect :attr:`OutSimUDPClient.statistics` to monitor
+packet loss or recovery counters emitted while the client operates.
 """
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 import logging
 from types import TracebackType
 import socket
 import struct
 import time
-from typing import Optional, Tuple
+from typing import Deque, Optional, Tuple
 
 __all__ = [
     "OUTSIM_MAX_PACKET_SIZE",
@@ -174,6 +182,8 @@ class OutSimUDPClient:
         *,
         timeout: float = 0.05,
         retries: int = 5,
+        reorder_grace: float | None = None,
+        jump_tolerance: int = 200,
     ) -> None:
         """Create a UDP client bound to the local host.
 
@@ -186,6 +196,18 @@ class OutSimUDPClient:
             from that host are processed.
         port:
             UDP port for both binding locally and filtering remote packets.
+        timeout:
+            Sleep interval between retry attempts when no packet is available.
+        retries:
+            Maximum number of non-blocking reads issued per :meth:`recv`
+            invocation before considering the call a timeout.
+        reorder_grace:
+            Optional number of seconds to retain a lone packet inside the
+            internal buffer so late datagrams with smaller timestamps can be
+            slotted ahead of it.  ``None`` defaults to ``timeout``.
+        jump_tolerance:
+            Maximum tolerated gap (in milliseconds) between successive packet
+            timestamps before the client flags a suspected loss event.
         """
 
         self._remote_host = host
@@ -199,6 +221,18 @@ class OutSimUDPClient:
         self._address: Tuple[str, int] = (local_host, local_port)
         self._timeouts = 0
         self._ignored_hosts = 0
+        self._buffer: Deque[tuple[float, OutSimPacket]] = deque()
+        self._buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
+        self._received_packets = 0
+        self._delivered_packets = 0
+        self._duplicate_packets = 0
+        self._out_of_order_packets = 0
+        self._late_reordered_packets = 0
+        self._loss_events = 0
+        self._last_emitted_time: Optional[int] = None
+        self._last_seen_time: Optional[int] = None
+        self._jump_tolerance = max(int(jump_tolerance), 0)
+        self._reordered_times: set[int] = set()
 
     @property
     def address(self) -> Tuple[str, int]:
@@ -218,14 +252,35 @@ class OutSimUDPClient:
 
         return self._ignored_hosts
 
+    @property
+    def statistics(self) -> dict[str, int]:
+        """Return packet accounting metrics collected by the client."""
+
+        return {
+            "received": self._received_packets,
+            "delivered": self._delivered_packets,
+            "duplicates": self._duplicate_packets,
+            "reordered": self._out_of_order_packets,
+            "late_recovered": self._late_reordered_packets,
+            "loss_events": self._loss_events,
+        }
+
     def recv(self) -> Optional[OutSimPacket]:
         """Attempt to receive a packet, returning ``None`` on timeout."""
+
+        ready = self._pop_ready_packet(time.monotonic(), allow_grace=False)
+        if ready is not None:
+            return ready
 
         for _ in range(self._retries):
             try:
                 payload, source = self._socket.recvfrom(OUTSIM_MAX_PACKET_SIZE)
             except BlockingIOError:
-                time.sleep(self._timeout)
+                if self._timeout > 0.0:
+                    time.sleep(self._timeout)
+                ready = self._pop_ready_packet(time.monotonic(), allow_grace=False)
+                if ready is not None:
+                    return ready
                 continue
             if not payload:
                 continue
@@ -241,7 +296,14 @@ class OutSimUDPClient:
                     },
                 )
                 continue
-            return OutSimPacket.from_bytes(payload)
+            packet = OutSimPacket.from_bytes(payload)
+            self._record_packet(packet)
+            ready = self._pop_ready_packet(time.monotonic(), allow_grace=False)
+            if ready is not None:
+                return ready
+        ready = self._pop_ready_packet(time.monotonic(), allow_grace=True)
+        if ready is not None:
+            return ready
         self._timeouts += 1
         logger.warning(
             "OutSim recv retries exhausted without receiving a packet.",
@@ -254,6 +316,22 @@ class OutSimUDPClient:
             },
         )
         return None
+
+    def drain_ready(self) -> list[OutSimPacket]:
+        """Return all packets ready for immediate consumption.
+
+        The method never blocks; it simply flushes the buffered packets whose
+        arrival timestamps have aged beyond ``reorder_grace`` or which are
+        already followed by newer datagrams.
+        """
+
+        ready: list[OutSimPacket] = []
+        while True:
+            packet = self._pop_ready_packet(time.monotonic(), allow_grace=False)
+            if packet is None:
+                break
+            ready.append(packet)
+        return ready
 
     @staticmethod
     def _resolve_remote_addresses(host: str) -> set[str]:
@@ -281,3 +359,92 @@ class OutSimUDPClient:
         tb: TracebackType | None,
     ) -> None:
         self.close()
+
+    def _pop_ready_packet(
+        self, now: float, *, allow_grace: bool
+    ) -> Optional[OutSimPacket]:
+        while self._buffer:
+            arrival, packet = self._buffer[0]
+            if not allow_grace and len(self._buffer) == 1 and (now - arrival) < self._buffer_grace:
+                break
+            self._buffer.popleft()
+            if (
+                self._last_emitted_time is not None
+                and packet.time <= self._last_emitted_time
+            ):
+                # Drop stale packets that somehow slipped through.
+                continue
+            if self._jump_tolerance and self._last_emitted_time is not None:
+                delta = packet.time - self._last_emitted_time
+                if delta > self._jump_tolerance:
+                    self._loss_events += 1
+                    logger.warning(
+                        "OutSim time jump detected (possible packet loss).",
+                        extra={
+                            "event": "outsim.packet_gap",
+                            "delta": delta,
+                            "last_time": self._last_emitted_time,
+                            "current_time": packet.time,
+                            "port": self._address[1],
+                            "remote_host": self._remote_host,
+                        },
+                    )
+            if packet.time in self._reordered_times:
+                self._reordered_times.discard(packet.time)
+                self._late_reordered_packets += 1
+            self._delivered_packets += 1
+            self._last_emitted_time = packet.time
+            return packet
+        return None
+
+    def _record_packet(self, packet: OutSimPacket) -> None:
+        self._received_packets += 1
+        arrival = time.monotonic()
+
+        if self._last_seen_time is not None and packet.time < self._last_seen_time:
+            self._out_of_order_packets += 1
+            self._reordered_times.add(packet.time)
+            logger.warning(
+                "OutSim out-of-order packet received.",
+                extra={
+                    "event": "outsim.out_of_order",
+                    "last_time": self._last_seen_time,
+                    "current_time": packet.time,
+                    "port": self._address[1],
+                    "remote_host": self._remote_host,
+                },
+            )
+        self._last_seen_time = (
+            packet.time
+            if self._last_seen_time is None
+            else max(self._last_seen_time, packet.time)
+        )
+
+        if self._is_duplicate(packet.time):
+            self._duplicate_packets += 1
+            logger.warning(
+                "OutSim duplicate packet dropped.",
+                extra={
+                    "event": "outsim.duplicate",
+                    "time": packet.time,
+                    "port": self._address[1],
+                    "remote_host": self._remote_host,
+                },
+            )
+            return
+
+        inserted = False
+        for index, (_, existing) in enumerate(self._buffer):
+            if packet.time < existing.time:
+                self._buffer.insert(index, (arrival, packet))
+                inserted = True
+                if packet.time not in self._reordered_times:
+                    self._reordered_times.add(packet.time)
+                break
+        if not inserted:
+            self._buffer.append((arrival, packet))
+
+    def _is_duplicate(self, timestamp: int) -> bool:
+        if self._last_emitted_time is not None and timestamp == self._last_emitted_time:
+            return True
+        return any(existing.time == timestamp for _, existing in self._buffer)

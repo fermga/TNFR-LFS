@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import replace
 from io import StringIO
+import logging
 import math
 import socket
 import struct
@@ -11,6 +13,8 @@ import time
 
 import pytest
 
+from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
+from tnfr_lfs.ingestion import outsim_udp as outsim_module
 from tnfr_lfs.ingestion.live import (
     DEFAULT_SCHEMA,
     LEGACY_COLUMNS,
@@ -690,3 +694,145 @@ def test_fusion_marks_missing_wheel_block_as_nan(
     assert math.isnan(record.suspension_travel_rear)
     assert math.isnan(record.suspension_velocity_front)
     assert math.isnan(record.suspension_velocity_rear)
+
+
+class _DummySocket:
+    def __init__(self, payloads: deque[tuple[bytes, tuple[str, int]]]):
+        self._payloads = payloads
+        self._address = ("127.0.0.1", 0)
+
+    def setblocking(self, flag: bool) -> None:  # pragma: no cover - compatibility shim
+        pass
+
+    def bind(self, address: tuple[str, int]) -> None:
+        self._address = (address[0] or "127.0.0.1", address[1])
+
+    def getsockname(self) -> tuple[str, int]:
+        return self._address
+
+    def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
+        if not self._payloads:
+            raise BlockingIOError
+        return self._payloads.popleft()
+
+    def close(self) -> None:  # pragma: no cover - compatibility shim
+        pass
+
+
+def _build_outsim_payload(time_ms: int) -> bytes:
+    base = [0.0] * 15
+    return outsim_module._BASE_STRUCT.pack(time_ms, *base)
+
+
+def _build_outgauge_payload(packet_id: int, time_value: int) -> bytes:
+    return outgauge_module._PACK_STRUCT.pack(
+        time_value,
+        b"XFG\x00",
+        b"Driver\x00" + b"\x00" * 9,
+        b"\x00" * 8,
+        b"BL1\x00\x00",
+        b"GP\x00\x00\x00",
+        0,
+        3,
+        0,
+        50.0,
+        4000.0,
+        0.0,
+        80.0,
+        30.0,
+        0.0,
+        90.0,
+        0,
+        0,
+        0.5,
+        0.1,
+        0.0,
+        b"\x00" * 16,
+        b"\x00" * 16,
+        packet_id,
+    )
+
+
+def test_outsim_udp_client_reorders_and_tracks_losses(monkeypatch, caplog) -> None:
+    payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
+        [
+            (_build_outsim_payload(100), ("127.0.0.1", 4123)),
+            (_build_outsim_payload(160), ("127.0.0.1", 4123)),
+            (_build_outsim_payload(130), ("127.0.0.1", 4123)),
+            (_build_outsim_payload(290), ("127.0.0.1", 4123)),
+            (_build_outsim_payload(290), ("127.0.0.1", 4123)),
+        ]
+    )
+    dummy_socket = _DummySocket(payloads)
+    monkeypatch.setattr(outsim_module.socket, "socket", lambda *_, **__: dummy_socket)
+    client = outsim_module.OutSimUDPClient(
+        host="127.0.0.1",
+        port=0,
+        timeout=0.0,
+        retries=2,
+        reorder_grace=0.01,
+        jump_tolerance=100,
+    )
+    caplog.set_level(logging.WARNING, logger=outsim_module.__name__)
+
+    delivered: list[int] = []
+    for _ in range(4):
+        packet = client.recv()
+        assert packet is not None
+        delivered.append(packet.time)
+
+    assert delivered == [100, 130, 160, 290]
+    stats = client.statistics
+    assert stats["duplicates"] == 1
+    assert stats["reordered"] >= 1
+    assert stats["late_recovered"] >= 1
+    assert stats["loss_events"] == 1
+    assert any("out-of-order" in record.message for record in caplog.records)
+    assert any("time jump" in record.message for record in caplog.records)
+    client.close()
+
+
+def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
+    payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
+        [
+            (_build_outgauge_payload(0, 0), ("127.0.0.1", 3000)),
+            (_build_outgauge_payload(1, 10), ("127.0.0.1", 3000)),
+            (_build_outgauge_payload(3, 30), ("127.0.0.1", 3000)),
+            (_build_outgauge_payload(2, 20), ("127.0.0.1", 3000)),
+        ]
+    )
+    dummy_socket = _DummySocket(payloads)
+    monkeypatch.setattr(outgauge_module.socket, "socket", lambda *_, **__: dummy_socket)
+    client = outgauge_module.OutGaugeUDPClient(
+        host="127.0.0.1",
+        port=0,
+        timeout=0.0,
+        retries=2,
+        reorder_grace=0.01,
+        jump_tolerance=50,
+    )
+    caplog.set_level(logging.WARNING, logger=outgauge_module.__name__)
+
+    delivered_ids: list[int] = []
+    packet = client.recv()
+    assert packet is not None
+    delivered_ids.append(packet.packet_id)
+    packet = client.recv()
+    assert packet is not None
+    delivered_ids.append(packet.packet_id)
+    packet = client.recv()
+    assert packet is not None
+    delivered_ids.append(packet.packet_id)
+    time.sleep(0.02)
+    packet = client.recv()
+    assert packet is not None
+    delivered_ids.append(packet.packet_id)
+
+    assert delivered_ids == [0, 1, 2, 3]
+    stats = client.statistics
+    assert stats["loss_events"] == 1
+    assert stats["recovered"] == 1
+    assert stats["reordered"] >= 1
+    assert any("packet gap" in record.message for record in caplog.records)
+    assert any("out-of-order" in record.message for record in caplog.records)
+    client.close()
