@@ -40,6 +40,33 @@ def test_preprocess_wheels_handles_partial_payload() -> None:
     assert data.data_present is True
 
 
+def test_preprocess_wheels_propagates_nan_payloads() -> None:
+    fusion = TelemetryFusion()
+    wheel = OutSimWheelState(
+        slip_ratio=float("nan"),
+        slip_angle=float("nan"),
+        lateral_force=float("nan"),
+        longitudinal_force=float("nan"),
+        load=float("nan"),
+        suspension_deflection=float("nan"),
+        decoded=True,
+    )
+
+    data = fusion._preprocess_wheels(_simple_outsim(wheel))
+
+    assert math.isnan(data.slip_ratios[0])
+    assert math.isnan(data.slip_angles[0])
+    assert math.isnan(data.lateral_forces[0])
+    assert math.isnan(data.longitudinal_forces[0])
+    assert math.isnan(data.loads[0])
+    assert math.isnan(data.deflections[0])
+
+    ratio, angle = fusion._aggregate_wheel_slip(data)
+
+    assert math.isnan(ratio)
+    assert math.isnan(angle)
+
+
 def test_aggregate_wheel_slip_weights_by_load() -> None:
     fusion = TelemetryFusion()
     wheels = (

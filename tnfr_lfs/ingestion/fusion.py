@@ -286,29 +286,50 @@ class TelemetryFusion:
             )
         wheels = wheels_raw[:4]
 
-        wheel_slip_ratios = tuple(
-            _clamp(_safe_float(wheel.slip_ratio), -1.0, 1.0)
-            if wheel.decoded
-            else math.nan
-            for wheel in wheels
-        )
-        wheel_slip_angles = tuple(
-            _safe_float(wheel.slip_angle) if wheel.decoded else math.nan for wheel in wheels
-        )
-        wheel_lateral_forces = tuple(
-            _safe_float(wheel.lateral_force) if wheel.decoded else math.nan for wheel in wheels
-        )
-        wheel_longitudinal_forces = tuple(
-            _safe_float(wheel.longitudinal_force) if wheel.decoded else math.nan
-            for wheel in wheels
-        )
-        wheel_loads = tuple(
-            max(0.0, _safe_float(wheel.load)) if wheel.decoded else math.nan for wheel in wheels
-        )
-        wheel_deflections = tuple(
-            _safe_float(wheel.suspension_deflection) if wheel.decoded else math.nan
-            for wheel in wheels
-        )
+        wheel_slip_ratios = []
+        wheel_slip_angles = []
+        wheel_lateral_forces = []
+        wheel_longitudinal_forces = []
+        wheel_loads = []
+        wheel_deflections = []
+
+        for wheel in wheels:
+            if wheel.decoded:
+                slip_ratio = _safe_float(wheel.slip_ratio, default=math.nan)
+                if math.isfinite(slip_ratio):
+                    slip_ratio = _clamp(slip_ratio, -1.0, 1.0)
+                slip_angle = _safe_float(wheel.slip_angle, default=math.nan)
+                lateral_force = _safe_float(wheel.lateral_force, default=math.nan)
+                longitudinal_force = _safe_float(
+                    wheel.longitudinal_force, default=math.nan
+                )
+                load = _safe_float(wheel.load, default=math.nan)
+                if math.isfinite(load):
+                    load = max(0.0, load)
+                deflection = _safe_float(
+                    wheel.suspension_deflection, default=math.nan
+                )
+            else:
+                slip_ratio = math.nan
+                slip_angle = math.nan
+                lateral_force = math.nan
+                longitudinal_force = math.nan
+                load = math.nan
+                deflection = math.nan
+
+            wheel_slip_ratios.append(slip_ratio)
+            wheel_slip_angles.append(slip_angle)
+            wheel_lateral_forces.append(lateral_force)
+            wheel_longitudinal_forces.append(longitudinal_force)
+            wheel_loads.append(load)
+            wheel_deflections.append(deflection)
+
+        wheel_slip_ratios = tuple(wheel_slip_ratios)
+        wheel_slip_angles = tuple(wheel_slip_angles)
+        wheel_lateral_forces = tuple(wheel_lateral_forces)
+        wheel_longitudinal_forces = tuple(wheel_longitudinal_forces)
+        wheel_loads = tuple(wheel_loads)
+        wheel_deflections = tuple(wheel_deflections)
         data_present = any(wheel.decoded for wheel in wheels)
 
         return _WheelTelemetry(
