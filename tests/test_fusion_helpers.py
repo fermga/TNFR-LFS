@@ -60,6 +60,7 @@ def test_preprocess_wheels_propagates_nan_payloads() -> None:
     assert math.isnan(data.longitudinal_forces[0])
     assert math.isnan(data.loads[0])
     assert math.isnan(data.deflections[0])
+    assert data.data_present is False
 
     ratio, angle = fusion._aggregate_wheel_slip(data)
 
