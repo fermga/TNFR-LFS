@@ -113,7 +113,7 @@ class ActivePhase:
 
 @dataclass(frozen=True)
 class MacroStatus:
-    """State exposed in the “Aplicar” HUD page."""
+    """State exposed in the “Apply” HUD page."""
 
     next_change: Optional[SetupChange] = None
     warnings: Tuple[str, ...] = ()
