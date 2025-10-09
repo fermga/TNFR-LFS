@@ -1099,7 +1099,7 @@ def _thermal_dispersion_lines(microsector: Microsector) -> Tuple[str, ...]:
         measures,
         BRAKE_TEMPERATURE_MEAN_KEYS,
         BRAKE_TEMPERATURE_STD_KEYS,
-        prefix="T° freno",
+        prefix="Brake T°",
         mean_format="{:.1f}",
         std_format="{:.1f}",
     )
