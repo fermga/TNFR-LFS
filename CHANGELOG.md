@@ -1,12 +1,264 @@
 # CHANGELOG
 
-## Unreleased
+## v0.2.0 (2025-10-10)
 
-### Performance
+### Documentation
 
-* refactor: replace manual DFT loops with FFT-based spectrum analysis, reducing
-  power spectrum complexity and introducing an FFT dependency in spectral
-  helpers.
+* docs: sync CLI config defaults with template ([`ca9a471`](https://github.com/fermga/TNFR-LFS/commit/ca9a4714bf25f9a12389b85712bfe310236031a1))
+
+* docs: translate release process to English ([`434080c`](https://github.com/fermga/TNFR-LFS/commit/434080c3ae902c237409915c6a9ea9d25f2f9b5c))
+
+* docs: note tnfr_lfs CLI naming ([`aaf0e65`](https://github.com/fermga/TNFR-LFS/commit/aaf0e65540b871e910da34a81a888cab51e14bd1))
+
+### Feature
+
+* feat: add Goertzel dominant frequency path ([`47f6415`](https://github.com/fermga/TNFR-LFS/commit/47f6415826afe1fb3114b3b780ef483d44d59735))
+
+### Refactor
+
+* refactor: accelerate power spectrum with FFT ([`b8ad2dc`](https://github.com/fermga/TNFR-LFS/commit/b8ad2dca98bf64866b6d622f2a06f67e3f60b19a))
+
+* refactor: consolidate telemetry ingestion namespace ([`797f52b`](https://github.com/fermga/TNFR-LFS/commit/797f52b1385458dda3c03ead057f7f362572f47e))
+
+* refactor: unify ingestion entry points ([`90978b5`](https://github.com/fermga/TNFR-LFS/commit/90978b5ef848a9662276fe86a21e7b33c560e41c))
+
+### Unknown
+
+* Merge pull request #320 from fermga/codex/add-optional-scipy-dependency-and-goertzel-support
+
+Add Goertzel dominant frequency path with optional SciPy extra ([`3148c44`](https://github.com/fermga/TNFR-LFS/commit/3148c44fed341aa819354a6b40c6cfe38deee08c))
+
+* Merge pull request #319 from fermga/codex/refactor-cross_spectrum-using-rfft
+
+Accelerate cross-spectrum computation with FFT ([`4ceb33e`](https://github.com/fermga/TNFR-LFS/commit/4ceb33e4d2d47abd06c2694c5d8bd4fc8906d77a))
+
+* Accelerate cross-spectrum computation with FFT ([`0da0f21`](https://github.com/fermga/TNFR-LFS/commit/0da0f21783c4505df6b3b3c9c13f5dd5306de9e7))
+
+* Merge pull request #318 from fermga/codex/refactor-spectrum.py-to-use-fft
+
+refactor: accelerate power spectrum with FFT ([`0111f1e`](https://github.com/fermga/TNFR-LFS/commit/0111f1ea95d85127967f52c629c23192421bd5b6))
+
+* Merge pull request #317 from fermga/codex/refactor-udp-recv-loop-and-add-tests
+
+Refactor OutGauge/OutSim UDP polling and add idle recv tests ([`f29c1ae`](https://github.com/fermga/TNFR-LFS/commit/f29c1aedfd64ad7a427f1206a7a0b094c24366d5))
+
+* Refactor UDP polling and add idle recv tests ([`8512201`](https://github.com/fermga/TNFR-LFS/commit/85122012ccb7981f9c3a29ce53dd510156dd8b1e))
+
+* Merge pull request #316 from fermga/codex/implement-lru-cache-with-configuration
+
+Add configurable LRU caching to recommender search workflow ([`6647e73`](https://github.com/fermga/TNFR-LFS/commit/6647e73978fa40663bbf3981b10c244af2e44276))
+
+* Add configurable LRU cache for recommender workflows ([`aae55b6`](https://github.com/fermga/TNFR-LFS/commit/aae55b64eddf5309e6c8844b664b26fc56dfd1e9))
+
+* Merge pull request #315 from fermga/codex/refactor-deltacalculator.derive_baseline
+
+Vectorise baseline calculation for telemetry averages ([`6e58fb3`](https://github.com/fermga/TNFR-LFS/commit/6e58fb302669528e8cb7b65314dc5c94704dda6e))
+
+* Vectorise baseline derivation and add compatibility test ([`d90f330`](https://github.com/fermga/TNFR-LFS/commit/d90f33085d49baa55db02ed3309abb0558b66b59))
+
+* Merge pull request #314 from fermga/codex/refactor-naturalfrequencyanalyzer-for-numpy-usage
+
+Vectorise dynamic multiplier analysis ([`785de4d`](https://github.com/fermga/TNFR-LFS/commit/785de4d5768680d4729017ccc1cd47a72dc0583a))
+
+* Vectorise dynamic multiplier analysis ([`23ba460`](https://github.com/fermga/TNFR-LFS/commit/23ba460668b156d2893578ef3c55706b31c37f0c))
+
+* Merge pull request #313 from fermga/codex/update-spanish-translations-for-exporters-and-tests
+
+Restore English report messaging ([`f8665a6`](https://github.com/fermga/TNFR-LFS/commit/f8665a6a669efc16d924d980dc9ef26209c3ee39))
+
+* Restore English report messaging ([`9e5aba0`](https://github.com/fermga/TNFR-LFS/commit/9e5aba0db9c162dd4882e9211d7e935eaa32bab3))
+
+* Merge pull request #312 from fermga/codex/refactor-weighted-distribution-logic-to-helper
+
+Refactor ΔNFR distribution to shared helper ([`1b5b188`](https://github.com/fermga/TNFR-LFS/commit/1b5b18821b14c6ab4539e87d429215c9cc2ad97a))
+
+* Refactor ΔNFR distribution into shared helper ([`8136fa5`](https://github.com/fermga/TNFR-LFS/commit/8136fa5a1ba9b48a4ece07b96a22450c588f9056))
+
+* Merge pull request #311 from fermga/codex/confirm-hud-thresholds-fallback-to-defaults
+
+Clarify HUD defaults and remove redundant override ([`70d4c9a`](https://github.com/fermga/TNFR-LFS/commit/70d4c9a4e0a8a138b6d451ae42a9ad547ff2a431))
+
+* Clarify HUD defaults and remove redundant override ([`85e40fe`](https://github.com/fermga/TNFR-LFS/commit/85e40fe5d604ecc0f716ac7bd8a3db548fd44cfc))
+
+* Merge pull request #310 from fermga/codex/add-alias-support-for-track-layouts
+
+Add alias support for track layouts and simplify reverse manifests ([`ecfbcef`](https://github.com/fermga/TNFR-LFS/commit/ecfbcefaf64884c55095584025bd064bc0c14d6e))
+
+* Add track layout alias support ([`9085cdb`](https://github.com/fermga/TNFR-LFS/commit/9085cdb10863317f39b75e94e0a53ef597954bc4))
+
+* Merge pull request #309 from fermga/codex/update-cli.md-with-default-toml-values
+
+Sync CLI docs with default configuration template ([`5fa1264`](https://github.com/fermga/TNFR-LFS/commit/5fa12644434e23abd68d7cb987e830e8f916f8b7))
+
+* Merge pull request #308 from fermga/codex/update-_preprocess_wheels-for-nan-handling
+
+Handle NaN wheel telemetry values in fusion preprocessing ([`52abe1c`](https://github.com/fermga/TNFR-LFS/commit/52abe1ca7e4a97a776b5296f1a1b99941a650788))
+
+* Tighten wheel deflection gating ([`c0c3c43`](https://github.com/fermga/TNFR-LFS/commit/c0c3c43792599b2d8a767051b0a80c6c9910df13))
+
+* Refine wheel telemetry gating for NaN payloads ([`2630d93`](https://github.com/fermga/TNFR-LFS/commit/2630d93c0b3991dcf53c05513078626433af403f))
+
+* Propagate NaNs through wheel preprocessing ([`c9eaa83`](https://github.com/fermga/TNFR-LFS/commit/c9eaa83ca588f5bdd2afdf2f4ee8426d64af5769))
+
+* Merge pull request #307 from fermga/codex/enhance-outsimudpclient-and-outgaugeudpclient
+
+Add buffered OutSim/OutGauge UDP reordering with loss metrics ([`16e8db8`](https://github.com/fermga/TNFR-LFS/commit/16e8db8f7d70b83a80d1eee98ddfb358f0af3af7))
+
+* Add UDP buffer reordering and packet loss tracking ([`3b33c48`](https://github.com/fermga/TNFR-LFS/commit/3b33c488ad5f82a872b0f1f05828c59c61bdd74c))
+
+* Merge pull request #306 from fermga/codex/add-threading-support-to-_lrucache
+
+Ensure core cache operations are thread-safe ([`bdcdc15`](https://github.com/fermga/TNFR-LFS/commit/bdcdc15ae5a24c7f1f8df29dbc6995020cbca3d0))
+
+* Guard cache operations with reentrant locks ([`08075ab`](https://github.com/fermga/TNFR-LFS/commit/08075ab75f06b2c83f97397dea272cde2cbabe16))
+
+* Merge pull request #305 from fermga/codex/refactor-telemetry-implementations-and-package-exports
+
+Refactor ingestion modules into unified namespace ([`7256b61`](https://github.com/fermga/TNFR-LFS/commit/7256b61a92e72fc4f757ada3959a84f1d134d8b1))
+
+* Merge pull request #304 from fermga/codex/refactor-sparkline-logic-into-helper
+
+Refactor sparkline rendering into shared helper ([`a0ddcde`](https://github.com/fermga/TNFR-LFS/commit/a0ddcdeca0ef61ef30d38c92d5c2b299420bf8e8))
+
+* Refactor sparkline rendering into shared helper ([`9ee7034`](https://github.com/fermga/TNFR-LFS/commit/9ee7034b2ec7db68684413ab5260636023c90d88))
+
+* Merge pull request #303 from fermga/codex/add-shared-_safe_float-utility
+
+Refactor shared safe float helper ([`b6ebec3`](https://github.com/fermga/TNFR-LFS/commit/b6ebec3216ba483b6314f465ed3ecc7d567e873b))
+
+* Refactor shared safe float helper ([`5895e70`](https://github.com/fermga/TNFR-LFS/commit/5895e70ffa2d48f9d29593b9f99a9012ddcf4101))
+
+* Merge pull request #302 from fermga/codex/replace-archetype-string-in-tests
+
+Update recommender tests to use braking archetype ([`9d523c8`](https://github.com/fermga/TNFR-LFS/commit/9d523c8a777bdcfa1cd542346273752f69d71f01))
+
+* Update recommender tests to use braking archetype ([`4c85af5`](https://github.com/fermga/TNFR-LFS/commit/4c85af5524474d0ef16aa61e0fc3c5c4a05be982))
+
+* Merge pull request #301 from fermga/codex/replace-spanish-prefix-in-osd.py
+
+Update brake temperature label in OSD HUD ([`ee4b445`](https://github.com/fermga/TNFR-LFS/commit/ee4b44573a888e477e167832455b1b2157f589e5))
+
+* Update brake temperature label in OSD HUD ([`cb682c7`](https://github.com/fermga/TNFR-LFS/commit/cb682c717cca06c10da4dc3cccb4ac2af1f14b84))
+
+* Merge pull request #300 from fermga/codex/update-docstring-for-pairwise_coupling_operator
+
+Clarify pairwise coupling operator docstring ([`c9ea61e`](https://github.com/fermga/TNFR-LFS/commit/c9ea61e90ecd230f10ebce3997b213dced723c06))
+
+* Update pairwise coupling docstring ([`e9d98ed`](https://github.com/fermga/TNFR-LFS/commit/e9d98ed2739a005c3e8e121d789ce3b49d85a663))
+
+* Merge pull request #299 from fermga/codex/update-macrostatus-docstring-to-english
+
+Update MacroStatus docstring language ([`e74a180`](https://github.com/fermga/TNFR-LFS/commit/e74a1808fe3e6110c4c72e3c4bc9d055ade67d46))
+
+* Update MacroStatus docstring language ([`61d7759`](https://github.com/fermga/TNFR-LFS/commit/61d7759ac5a6cd99bf062e9223ea2a12c96ae54f))
+
+* Merge pull request #298 from fermga/codex/update-translation-glossary-to-english
+
+Convert TNFR glossary to English-only terminology ([`60f4447`](https://github.com/fermga/TNFR-LFS/commit/60f444722cbc351ea482054edfe7c93551a1c22e))
+
+* Convert glossary to English-only terminology ([`3402a36`](https://github.com/fermga/TNFR-LFS/commit/3402a36d4e91371d2a32c406292f16828c3e907e))
+
+* Merge pull request #297 from fermga/codex/update-spanish-localisations-to-english
+
+Remove Spanish markdown localisation fallback ([`aae509e`](https://github.com/fermga/TNFR-LFS/commit/aae509eb3c892bfb9fd0bc62cbc9f36cbc48fc56))
+
+* Remove Spanish markdown localisation fallback ([`6bce4c7`](https://github.com/fermga/TNFR-LFS/commit/6bce4c7b468bf0312b5ec1abf0e1568df33f615f))
+
+* Merge pull request #296 from fermga/codex/translate-spanish-text-to-english-in-exporters
+
+Translate exporter text to English ([`3a2b86e`](https://github.com/fermga/TNFR-LFS/commit/3a2b86edd4398c41ee9355c09db210b089047ecb))
+
+* Translate exporter text to English ([`fb76b81`](https://github.com/fermga/TNFR-LFS/commit/fb76b812226b56f92cdf5410f807947bfb88bdbe))
+
+* Merge pull request #295 from fermga/codex/update-english-labels-and-translations
+
+Translate OSD structural labels to English ([`c0e97be`](https://github.com/fermga/TNFR-LFS/commit/c0e97be4de1294c80baa0c147b0ba412c868f66f))
+
+* Translate OSD structural labels to English ([`9c74bdb`](https://github.com/fermga/TNFR-LFS/commit/9c74bdb4cf908194f81d87612ec321c13d89b008))
+
+* Merge pull request #294 from fermga/codex/standardize-documentation-language-to-english
+
+Translate HUD and guidance text to English ([`1076cad`](https://github.com/fermga/TNFR-LFS/commit/1076cad32fe03034fd8c2ec7941cda69535cf2e2))
+
+* Translate HUD and guidance text to English ([`c9427a4`](https://github.com/fermga/TNFR-LFS/commit/c9427a44b03ed9971f356df871eca911546db3f1))
+
+* Merge pull request #293 from fermga/codex/update-set-output-help-message-to-english
+
+Translate write-set output help text ([`a8ae13e`](https://github.com/fermga/TNFR-LFS/commit/a8ae13e0c643468b403097691ccfcbcab2437a89))
+
+* Translate set output help to English ([`9eb7a1f`](https://github.com/fermga/TNFR-LFS/commit/9eb7a1f58dcca891b68e23acb3623841ea6b4470))
+
+* Merge pull request #292 from fermga/codex/translate-and-proofread-release-process-documentation
+
+Translate release process documentation to English ([`b285938`](https://github.com/fermga/TNFR-LFS/commit/b2859388cb3d2caab2b1f3aaac90343d52fa80a6))
+
+* Merge pull request #291 from fermga/codex/create-compute_insights-module-and-tests
+
+Localise markdown CLI exports for write-set outputs ([`f12e9dc`](https://github.com/fermga/TNFR-LFS/commit/f12e9dc7081d2531f9755a7355a348851a3f4db5))
+
+* Localise CLI markdown exports ([`df549ce`](https://github.com/fermga/TNFR-LFS/commit/df549ceb433bb1bbfad138c78a0883c2aed4e029))
+
+* Merge pull request #289 from fermga/codex/create-tnfr_lfs-ingestion-package
+
+refactor: unify ingestion entry points ([`686d7e8`](https://github.com/fermga/TNFR-LFS/commit/686d7e8604f0a75dae5549f5a7fa39cbc913f06c))
+
+* Merge pull request #288 from fermga/codex/replace-tnfr-lfs-with-tnfr_lfs
+
+docs: clarify tnfr_lfs CLI naming ([`ca51457`](https://github.com/fermga/TNFR-LFS/commit/ca51457f41f75011145fe988adbfc64a31ea2b00))
+
+* Merge pull request #287 from fermga/codex/update-config-filename-to-tnfr_lfs.toml
+
+Rename CLI config template to tnfr_lfs.toml ([`99e2433`](https://github.com/fermga/TNFR-LFS/commit/99e24334c5be427a4cd208f2f1c186f2c5c4c5f0))
+
+* Rename default CLI config template to tnfr_lfs.toml ([`267cb31`](https://github.com/fermga/TNFR-LFS/commit/267cb31e370133f0c619bebc9d2ad7b1b1ef41f0))
+
+* Merge pull request #286 from fermga/codex/update-project-name-to-tnfr_lfs
+
+Rename CLI entry point to tnfr_lfs ([`dbe1b92`](https://github.com/fermga/TNFR-LFS/commit/dbe1b92125c3285ef05c84d6e38cf0fc1e65a98c))
+
+* Rename CLI entry point to tnfr_lfs ([`a42c5bb`](https://github.com/fermga/TNFR-LFS/commit/a42c5bb53bca7338d8ea2e1080648a61096e40ae))
+
+* Merge pull request #285 from fermga/codex/add-parameterized-test-for-cli_io-functions
+
+Parametrize CLI IO pandas dependency tests ([`22ed1d5`](https://github.com/fermga/TNFR-LFS/commit/22ed1d544ae93e89ce795c040553d2fc356d77f9))
+
+* Parametrize pandas dependency tests for CLI IO ([`b0b8b13`](https://github.com/fermga/TNFR-LFS/commit/b0b8b13b047ce52c388b00f8d1e1249daf1f5c53))
+
+* Merge pull request #284 from fermga/codex/refactor-tests-in-test_outgauge_udp.py
+
+Refine OutGauge UDP decoder identifier test ([`36a6b37`](https://github.com/fermga/TNFR-LFS/commit/36a6b37ffb543fbb292e91973b5de5a10eb5ba82))
+
+* Refine OutGauge UDP decoder test coverage ([`fb889c7`](https://github.com/fermga/TNFR-LFS/commit/fb889c7e0fc5371d8984be1a591a90c0047601ea))
+
+* Merge pull request #283 from fermga/codex/create-shared-module-for-steering-tests
+
+Refactor steering test helpers ([`04214a9`](https://github.com/fermga/TNFR-LFS/commit/04214a97227fdc3411b80cb3fa6a8be9ecb2b59a))
+
+* Refactor steering test helpers ([`4b078ee`](https://github.com/fermga/TNFR-LFS/commit/4b078ee3c52a6ff461fc67b4f79250655abd0290))
+
+* Merge pull request #282 from fermga/codex/refactorizar-pruebas-de-perfil-y-planificador
+
+Update planner test to use shared profile manager helper ([`656181a`](https://github.com/fermga/TNFR-LFS/commit/656181a8819015794b479acee984e8f3733a3fba))
+
+* Refine profile manager usage in planner test ([`d7c0840`](https://github.com/fermga/TNFR-LFS/commit/d7c0840908cff4200ab490935d6e6eb6f49d25ae))
+
+* Merge pull request #281 from fermga/codex/refactor-tests-for-combined-assertions
+
+Consolidate AB test coverage ([`723e19f`](https://github.com/fermga/TNFR-LFS/commit/723e19fbf947d0fb97cc36aba9e0de048e5b24f1))
+
+* Consolidate AB test coverage ([`d483b47`](https://github.com/fermga/TNFR-LFS/commit/d483b47fb182045457f697cadf2cd24adc8841bb))
+
+* Merge pull request #280 from fermga/codex/refactor-entropia-pruebas-y-eliminar-duplicados
+
+Consolidate entropy window metric tests ([`3301caa`](https://github.com/fermga/TNFR-LFS/commit/3301caad73e737a337ca099f6c5b9233f8951e96))
+
+* Consolidate window entropy metric tests ([`57e1e83`](https://github.com/fermga/TNFR-LFS/commit/57e1e83cba5afda47e1b6279a075cab3ab3c5714))
+
+* Merge pull request #279 from fermga/codex/refactor-tests-for-html-exporter
+
+Consolidate HTML exporter test coverage ([`614d2be`](https://github.com/fermga/TNFR-LFS/commit/614d2be95ddc90ad4b1b751f7f1173af04a412f1))
+
+* Consolidate HTML exporter tests ([`29afb5e`](https://github.com/fermga/TNFR-LFS/commit/29afb5ecc42d1fc409094957eee51477cbf36276))
 
 ## v0.1.0 (2025-10-09)
 
@@ -20,8 +272,6 @@
 
 ### Documentation
 
-* docs: complete the `tnfr_lfs.ingestion` migration and document the
-  removal of the legacy `tnfr_lfs.acquisition` package.
 * docs: clarify test fixture datasets ([`d7cd109`](https://github.com/fermga/TNFR-LFS/commit/d7cd109fd3f8928d5ab67f4edef8e117e43d7ae8))
 
 * docs: inventory spanish localisation targets ([`f1dbce0`](https://github.com/fermga/TNFR-LFS/commit/f1dbce0b4ef444047f53c72c4a7be4a02e07b267))
@@ -230,7 +480,7 @@ Update CLI help text to English ([`83b0d5b`](https://github.com/fermga/TNFR-LFS/
 
 * Update CLI help text to English ([`3f2d846`](https://github.com/fermga/TNFR-LFS/commit/3f2d84661c74fab8f4d6f33d479ea11ef6dae56b))
 
-* Merge pull request #250 from fermga/codex/update-tnfr_lfs-spanish-glossary-title
+* Merge pull request #250 from fermga/codex/update-tnfr-lfs-spanish-glossary-title
 
 Update TNFR × LFS glossary heading ([`f4d710c`](https://github.com/fermga/TNFR-LFS/commit/f4d710c353b1cc1f1401f136d36cfee4426c877d))
 
@@ -1664,11 +1914,11 @@ Add compressed telemetry log helpers and deterministic replayer ([`32f9df7`](htt
 
 * Add telemetry log utilities with compression support ([`0eb4ccd`](https://github.com/fermga/TNFR-LFS/commit/0eb4ccda03309be6a0cac4009e4016b9e72faea6))
 
-* Merge pull request #27 from fermga/codex/create-tnfr_lfs.toml-configuration-file
+* Merge pull request #27 from fermga/codex/create-tnfr-lfs.toml-configuration-file
 
-Add configurable tnfr_lfs.toml template to repository ([`ba81d20`](https://github.com/fermga/TNFR-LFS/commit/ba81d20275513b666d8cd1e500206402437dd580))
+Add configurable tnfr-lfs.toml template to repository ([`ba81d20`](https://github.com/fermga/TNFR-LFS/commit/ba81d20275513b666d8cd1e500206402437dd580))
 
-* Add default tnfr_lfs configuration template ([`8b09cab`](https://github.com/fermga/TNFR-LFS/commit/8b09cab93cf6a0c041a21245a4471824641bdd74))
+* Add default tnfr-lfs configuration template ([`8b09cab`](https://github.com/fermga/TNFR-LFS/commit/8b09cab93cf6a0c041a21245a4471824641bdd74))
 
 * Merge pull request #26 from fermga/codex/add-threshold-profiles-resource
 
