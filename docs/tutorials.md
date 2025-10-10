@@ -12,12 +12,14 @@ The quickstart requires Python 3.9+ and the base dependencies declared in
 `pyproject.toml`.
 
 ```bash
-python -m pip install .
+pip install .
 # Optional: edit the code locally and keep the CLI in sync
-python -m pip install -e .
+pip install -e .
 ```
 
-You can also use the Makefile shorthands (`make install` or `make dev-install`).
+Need the development extras? Replace the base install with
+`pip install .[dev]` (or `pip install -e .[dev]` for editable workflows). You
+can also use the Makefile shorthands (`make install` or `make dev-install`).
 If a command fails with `ModuleNotFoundError`, double-check that the virtual
 environment is active before continuing.
 
@@ -55,7 +57,8 @@ Baseline saved 17 samples to /workspace/TNFR-LFS/examples/out/baseline.jsonl (js
       `python -c "from tnfr_lfs.examples.quickstart_dataset import dataset_path; print(dataset_path())"`
       and regenerate the repository data bundle if needed.
     * `ModuleNotFoundError: No module named 'tnfr_lfs'` – install the project
-      into the active environment with `pip install -e .`.
+      into the active environment with `pip install -e .` (or include extras
+      like `pip install -e .[dev]`).
     * Artefacts missing under `examples/out/` – check write permissions or
       delete stale files before re-running the script.
 

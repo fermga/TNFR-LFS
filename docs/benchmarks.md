@@ -10,9 +10,9 @@ extra when you want to exercise the Goertzel backend shipped with the dominant
 frequency utilities:
 
 ```bash
-python -m pip install -e .[benchmark]
+pip install -e .[benchmark]
 # Dominant frequency acceleration (SciPy Goertzel helper)
-python -m pip install -e .[benchmark,spectral]
+pip install -e .[benchmark,spectral]
 # or
 make benchmark-delta-cache
 ```
