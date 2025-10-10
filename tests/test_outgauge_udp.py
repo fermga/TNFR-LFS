@@ -12,22 +12,24 @@ import pytest
 from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
 from tnfr_lfs.ingestion.live import OutGaugePacket
 from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
-from tests.helpers import QueueUDPSocket, make_select_stub, make_wait_stub
-
-
-def _pad(value: str, size: int) -> bytes:
-    return value.encode("latin-1").ljust(size, b"\x00")
+from tests.helpers import (
+    QueueUDPSocket,
+    build_outgauge_payload,
+    make_select_stub,
+    make_wait_stub,
+    pad_outgauge_field,
+)
 
 
 def test_outgauge_packet_parses_extended_datagram_identifiers() -> None:
     base_payload = struct.pack(
         "<I4s16s8s6s6sHBBfffffffIIfff16s16sI",
         1234,
-        _pad("CAR", 4),
-        _pad("Driver", 16),
-        _pad("PLATE", 8),
-        _pad("BL1", 6),
-        _pad("", 6),
+        pad_outgauge_field("CAR", 4),
+        pad_outgauge_field("Driver", 16),
+        pad_outgauge_field("PLATE", 8),
+        pad_outgauge_field("BL1", 6),
+        pad_outgauge_field("", 6),
         0,
         3,
         0,
@@ -43,8 +45,8 @@ def test_outgauge_packet_parses_extended_datagram_identifiers() -> None:
         0.8,
         0.2,
         0.05,
-        _pad("HUD1", 16),
-        _pad("HUD2", 16),
+        pad_outgauge_field("HUD1", 16),
+        pad_outgauge_field("HUD2", 16),
         42,
     )
 
@@ -91,35 +93,6 @@ def test_outgauge_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
     assert call_args[0] == pytest.approx(client._timeout, rel=0.1)
 
 
-def _outgauge_payload(packet_id: int, time_value: int) -> bytes:
-    return outgauge_module._PACK_STRUCT.pack(
-        time_value,
-        b"XFG\x00",
-        b"Driver\x00" + b"\x00" * 9,
-        b"\x00" * 8,
-        b"BL1\x00\x00",
-        b"LYT\x00\x00",
-        0,
-        3,
-        0,
-        50.0,
-        4000.0,
-        0.0,
-        80.0,
-        30.0,
-        0.0,
-        90.0,
-        0,
-        0,
-        0.5,
-        0.1,
-        0.0,
-        b"\x00" * 16,
-        b"\x00" * 16,
-        packet_id,
-    )
-
-
 def test_outgauge_host_resolution_failure_disables_filtering(monkeypatch) -> None:
     def raise_gaierror(*_args: object, **_kwargs: object) -> list[object]:
         raise socket.gaierror()
@@ -130,7 +103,10 @@ def test_outgauge_host_resolution_failure_disables_filtering(monkeypatch) -> Non
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     packet = None
     try:
-        sender.sendto(_outgauge_payload(7, 70), client.address)
+        sender.sendto(
+            build_outgauge_payload(7, 70, layout="LYT"),
+            client.address,
+        )
         packet = client.recv()
         assert packet is not None
         assert packet.packet_id == 7
@@ -153,7 +129,7 @@ def test_outgauge_recv_drains_batch_after_wait(monkeypatch) -> None:
     def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         if not fake_socket.queue:
             fake_socket.extend(
-                _outgauge_payload(packet_id, time_value)
+                build_outgauge_payload(packet_id, time_value, layout="LYT")
                 for packet_id, time_value in ((5, 50), (6, 60), (7, 70))
             )
 
@@ -181,19 +157,19 @@ def test_outgauge_pending_packet_flushes_when_successor_arrives(monkeypatch) -> 
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
 
-    fake_socket.queue.append(_outgauge_payload(5, 50))
+    fake_socket.queue.append(build_outgauge_payload(5, 50, layout="LYT"))
     packet = client.recv()
     assert packet is not None
     assert packet.packet_id == 5
     packet.release()
 
-    fake_socket.queue.append(_outgauge_payload(6, 60))
+    fake_socket.queue.append(build_outgauge_payload(6, 60, layout="LYT"))
     appended = False
 
     def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         nonlocal appended
         if not appended:
-            fake_socket.queue.append(_outgauge_payload(7, 70))
+            fake_socket.queue.append(build_outgauge_payload(7, 70, layout="LYT"))
             appended = True
 
     fake_wait, wait_calls = make_wait_stub(hook=on_wait)
@@ -225,13 +201,13 @@ def test_outgauge_isolated_packet_flushes_under_10ms_by_default(monkeypatch) -> 
     fake_wait, wait_calls = make_wait_stub(return_value=False)
     monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
 
-    fake_socket.queue.append(_outgauge_payload(7, 70))
+    fake_socket.queue.append(build_outgauge_payload(7, 70, layout="LYT"))
     first = client.recv()
     assert first is not None
     assert first.packet_id == 7
     first.release()
 
-    fake_socket.queue.append(_outgauge_payload(8, 90))
+    fake_socket.queue.append(build_outgauge_payload(8, 90, layout="LYT"))
     start = time.perf_counter()
     second = client.recv()
     elapsed_ms = (time.perf_counter() - start) * 1_000
@@ -257,9 +233,9 @@ def test_async_outgauge_client_recovers_out_of_order_packets() -> None:
             _, port = client.address
             target = ("127.0.0.1", port)
             await asyncio.sleep(0)
-            sender.sendto(_outgauge_payload(5, 50), target)
-            sender.sendto(_outgauge_payload(7, 70), target)
-            sender.sendto(_outgauge_payload(6, 60), target)
+            sender.sendto(build_outgauge_payload(5, 50, layout="LYT"), target)
+            sender.sendto(build_outgauge_payload(7, 70, layout="LYT"), target)
+            sender.sendto(build_outgauge_payload(6, 60, layout="LYT"), target)
             results = []
             for _ in range(3):
                 packet = await client.recv()
