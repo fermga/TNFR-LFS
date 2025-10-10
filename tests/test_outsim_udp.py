@@ -49,6 +49,28 @@ def _outsim_payload(time_ms: int) -> bytes:
     return outsim_module._BASE_STRUCT.pack(time_ms, *([0.0] * 15))
 
 
+def test_outsim_host_resolution_failure_disables_filtering(monkeypatch) -> None:
+    def raise_gaierror(*_args: object, **_kwargs: object) -> list[object]:
+        raise socket.gaierror()
+
+    monkeypatch.setattr(outsim_module.socket, "getaddrinfo", raise_gaierror)
+
+    client = OutSimUDPClient(host="unresolvable", port=0, timeout=0.05, retries=1)
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    packet = None
+    try:
+        sender.sendto(_outsim_payload(200), client.address)
+        packet = client.recv()
+        assert packet is not None
+        assert packet.time == 200
+        assert client.ignored_hosts == 0
+    finally:
+        if packet is not None:
+            packet.release()
+        sender.close()
+        client.close()
+
+
 def test_outsim_recv_drains_batch_after_wait(monkeypatch) -> None:
     client = OutSimUDPClient(timeout=0.05, retries=5)
 

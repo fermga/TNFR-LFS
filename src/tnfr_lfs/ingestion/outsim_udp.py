@@ -943,9 +943,25 @@ class OutSimUDPClient:
         try:
             info = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_DGRAM)
         except socket.gaierror:
-            return {host}
+            logger.warning(
+                "Failed to resolve OutSim remote host; disabling host filtering.",
+                extra={
+                    "event": "outsim.resolve_failed",
+                    "remote_host": host,
+                },
+            )
+            return set()
         addresses = {record[4][0] for record in info if record[0] == socket.AF_INET}
-        return addresses or {host}
+        if not addresses:
+            logger.warning(
+                "OutSim remote host resolved without IPv4 addresses; disabling host filtering.",
+                extra={
+                    "event": "outsim.resolve_failed",
+                    "remote_host": host,
+                },
+            )
+            return set()
+        return addresses
 
     def close(self) -> None:
         """Close the underlying socket."""

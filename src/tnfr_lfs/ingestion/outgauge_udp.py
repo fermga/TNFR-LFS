@@ -873,9 +873,25 @@ class OutGaugeUDPClient:
         try:
             info = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_DGRAM)
         except socket.gaierror:
-            return {host}
+            logger.warning(
+                "Failed to resolve OutGauge remote host; disabling host filtering.",
+                extra={
+                    "event": "outgauge.resolve_failed",
+                    "remote_host": host,
+                },
+            )
+            return set()
         addresses = {record[4][0] for record in info if record[0] == socket.AF_INET}
-        return addresses or {host}
+        if not addresses:
+            logger.warning(
+                "OutGauge remote host resolved without IPv4 addresses; disabling host filtering.",
+                extra={
+                    "event": "outgauge.resolve_failed",
+                    "remote_host": host,
+                },
+            )
+            return set()
+        return addresses
 
     def drain_ready(self) -> list[OutGaugePacket]:
         return self._processor.drain_ready(time.monotonic())
