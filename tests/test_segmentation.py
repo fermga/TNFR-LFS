@@ -5,6 +5,8 @@ from dataclasses import replace
 from statistics import mean, pstdev
 from typing import Mapping, Tuple
 
+from tests.helpers import build_dynamic_record
+
 from tnfr_lfs.core.archetypes import archetype_phase_targets
 from tnfr_lfs.core import segmentation as segmentation_module
 from tnfr_lfs.core.contextual_delta import (
@@ -308,23 +310,15 @@ def test_segment_microsectors_returns_contextual_factors(
 
 def test_segment_microsectors_returns_empty_when_no_curvature():
     records = [
-        TelemetryRecord(
-            timestamp=i * 0.1,
-            vertical_load=5200,
-            slip_ratio=0.02,
-            lateral_accel=0.2,
-            longitudinal_accel=0.1,
-            yaw=0.0,
-            pitch=0.0,
-            roll=0.0,
-            brake_pressure=0.0,
-            locking=0.0,
-            nfr=500,
-            si=0.9,
+        build_dynamic_record(
+            i * 0.1,
+            5200.0,
+            0.02,
+            0.2,
+            0.1,
+            500.0,
+            0.9,
             speed=15.0,
-            yaw_rate=0.0,
-            slip_angle=0.0,
-            steer=0.0,
             throttle=0.5,
             gear=3,
             vertical_load_front=2600.0,
@@ -337,50 +331,11 @@ def test_segment_microsectors_returns_empty_when_no_curvature():
             mu_eff_rear_longitudinal=0.3,
             suspension_travel_front=0.5,
             suspension_travel_rear=0.5,
-            suspension_velocity_front=0.0,
-            suspension_velocity_rear=0.0,
         )
         for i in range(5)
     ]
     bundles = EPIExtractor().extract(records)
     assert segment_microsectors(records, bundles) == []
-
-
-def _dynamic_record(timestamp: float, lateral: float, speed: float) -> TelemetryRecord:
-    return TelemetryRecord(
-        timestamp=timestamp,
-        vertical_load=5200.0,
-        slip_ratio=0.03,
-        lateral_accel=lateral,
-        longitudinal_accel=-0.2,
-        yaw=0.0,
-        pitch=0.0,
-        roll=0.0,
-        brake_pressure=0.5,
-        locking=0.0,
-        nfr=480.0,
-        si=0.82,
-        speed=speed,
-        yaw_rate=0.0,
-        slip_angle=0.02,
-        steer=0.1,
-        throttle=0.6,
-        gear=3,
-        vertical_load_front=2600.0,
-        vertical_load_rear=2600.0,
-        mu_eff_front=0.82,
-        mu_eff_rear=0.78,
-        mu_eff_front_lateral=0.84,
-        mu_eff_front_longitudinal=0.74,
-        mu_eff_rear_lateral=0.82,
-        mu_eff_rear_longitudinal=0.72,
-        suspension_travel_front=0.02,
-        suspension_travel_rear=0.02,
-        suspension_velocity_front=0.1,
-        suspension_velocity_rear=0.1,
-    )
-
-
 @pytest.fixture
 def bottoming_segments(monkeypatch):
     high_lateral = 1.35
@@ -399,7 +354,33 @@ def bottoming_segments(monkeypatch):
     ]
     records = [
         replace(
-            _dynamic_record(index * 0.2, lat, 40.0 - index),
+            build_dynamic_record(
+                index * 0.2,
+                5200.0,
+                0.03,
+                lat,
+                -0.2,
+                480.0,
+                0.82,
+                brake_pressure=0.5,
+                speed=40.0 - index,
+                slip_angle=0.02,
+                steer=0.1,
+                throttle=0.6,
+                gear=3,
+                vertical_load_front=2600.0,
+                vertical_load_rear=2600.0,
+                mu_eff_front=0.82,
+                mu_eff_rear=0.78,
+                mu_eff_front_lateral=0.84,
+                mu_eff_front_longitudinal=0.74,
+                mu_eff_rear_lateral=0.82,
+                mu_eff_rear_longitudinal=0.72,
+                suspension_travel_front=0.02,
+                suspension_travel_rear=0.02,
+                suspension_velocity_front=0.1,
+                suspension_velocity_rear=0.1,
+            ),
             suspension_travel_front=front,
             suspension_travel_rear=rear,
         )
@@ -550,7 +531,36 @@ def bottoming_segments(monkeypatch):
 
 
 def _classify_from_series(lateral: list[float], speeds: list[float], dt: float) -> str:
-    records = [_dynamic_record(index * dt, lat, speeds[index]) for index, lat in enumerate(lateral)]
+    records = [
+        build_dynamic_record(
+            index * dt,
+            5200.0,
+            0.03,
+            lat,
+            -0.2,
+            480.0,
+            0.82,
+            brake_pressure=0.5,
+            speed=speeds[index],
+            slip_angle=0.02,
+            steer=0.1,
+            throttle=0.6,
+            gear=3,
+            vertical_load_front=2600.0,
+            vertical_load_rear=2600.0,
+            mu_eff_front=0.82,
+            mu_eff_rear=0.78,
+            mu_eff_front_lateral=0.84,
+            mu_eff_front_longitudinal=0.74,
+            mu_eff_rear_lateral=0.82,
+            mu_eff_rear_longitudinal=0.72,
+            suspension_travel_front=0.02,
+            suspension_travel_rear=0.02,
+            suspension_velocity_front=0.1,
+            suspension_velocity_rear=0.1,
+        )
+        for index, lat in enumerate(lateral)
+    ]
     bundles = EPIExtractor().extract(records)
     microsectors = segment_microsectors(records, bundles)
     assert microsectors
@@ -576,19 +586,15 @@ def test_archetype_detection_uses_dynamic_thresholds() -> None:
 
 def test_segment_microsectors_emits_structural_silence_events() -> None:
     records = [
-        TelemetryRecord(
-            timestamp=index * 0.1,
-            vertical_load=4800.0,
-            slip_ratio=0.01,
-            lateral_accel=1.25,
-            longitudinal_accel=0.05,
-            yaw=0.0,
-            pitch=0.0,
-            roll=0.0,
+        build_dynamic_record(
+            index * 0.1,
+            4800.0,
+            0.01,
+            1.25,
+            0.05,
+            102.0,
+            0.9,
             brake_pressure=0.04,
-            locking=0.0,
-            nfr=102.0,
-            si=0.9,
             speed=32.0,
             yaw_rate=0.02,
             slip_angle=0.02,
@@ -605,8 +611,6 @@ def test_segment_microsectors_emits_structural_silence_events() -> None:
             mu_eff_rear_longitudinal=0.4,
             suspension_travel_front=0.01,
             suspension_travel_rear=0.01,
-            suspension_velocity_front=0.0,
-            suspension_velocity_rear=0.0,
         )
         for index in range(14)
     ]
