@@ -29,7 +29,14 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_lfs.core.spectrum import cross_spectrum, estimate_sample_rate, power_spectrum
+from tnfr_lfs.core.spectrum import (
+    apply_window,
+    cross_spectrum,
+    detrend,
+    estimate_sample_rate,
+    hann_window,
+    power_spectrum,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -137,6 +144,65 @@ def test_power_spectrum_identifies_peak_frequency():
     peak_frequency = float(frequencies[np.argmax(energy)])
 
     assert math.isclose(peak_frequency, dominant_frequency, rel_tol=1e-2, abs_tol=1e-2)
+
+
+def _legacy_cross_spectrum(
+    input_series: Sequence[float], response_series: Sequence[float], sample_rate: float
+) -> list[tuple[float, float, float]]:
+    input_values = np.asarray(input_series, dtype=float)
+    response_values = np.asarray(response_series, dtype=float)
+    length = min(len(input_values), len(response_values))
+    if length < 2 or sample_rate <= 0.0:
+        return []
+
+    input_values = np.asarray(detrend(input_values)[-length:], dtype=float)
+    response_values = np.asarray(detrend(response_values)[-length:], dtype=float)
+    window = np.asarray(hann_window(length), dtype=float)
+    input_windowed = np.asarray(apply_window(input_values, window), dtype=float)
+    response_windowed = np.asarray(apply_window(response_values, window), dtype=float)
+
+    indices = np.arange(length, dtype=float)
+    spectrum: list[tuple[float, float, float]] = []
+    for harmonic in range(1, length // 2 + 1):
+        angle_factor = -2.0 * math.pi * harmonic / length
+        angles = angle_factor * indices
+        cos_values = np.cos(angles)
+        sin_values = np.sin(angles)
+        x_real = float(np.dot(input_windowed, cos_values))
+        x_imag = float(np.dot(input_windowed, sin_values))
+        y_real = float(np.dot(response_windowed, cos_values))
+        y_imag = float(np.dot(response_windowed, sin_values))
+        cross_real = x_real * y_real + x_imag * y_imag
+        cross_imag = x_imag * y_real - x_real * y_imag
+        frequency = harmonic * sample_rate / length
+        spectrum.append((frequency, cross_real, cross_imag))
+    return spectrum
+
+
+def test_cross_spectrum_matches_legacy_reference():
+    sample_rate = 120.0
+    duration = 2.0
+    primary_frequency = 7.0
+    secondary_frequency = 14.0
+    time = np.arange(int(sample_rate * duration), dtype=float) / sample_rate
+
+    input_series = 0.8 * np.sin(2.0 * math.pi * primary_frequency * time)
+    input_series += 0.35 * np.sin(2.0 * math.pi * secondary_frequency * time + math.pi / 5.0)
+
+    response_series = 1.2 * np.sin(2.0 * math.pi * primary_frequency * time + math.pi / 3.0)
+    response_series += 0.1 * np.sin(2.0 * math.pi * secondary_frequency * time - math.pi / 6.0)
+
+    reference = _legacy_cross_spectrum(input_series, response_series, sample_rate)
+    spectrum = cross_spectrum(input_series, response_series, sample_rate)
+
+    filtered = [entry for entry in spectrum if entry[0] > 1e-9]
+    assert filtered
+    assert len(filtered) == len(reference)
+
+    for (frequency, real, imag), (ref_frequency, ref_real, ref_imag) in zip(filtered, reference):
+        assert math.isclose(frequency, ref_frequency, rel_tol=1e-12, abs_tol=1e-12)
+        assert math.isclose(real, ref_real, rel_tol=1e-9, abs_tol=1e-6)
+        assert math.isclose(imag, ref_imag, rel_tol=1e-9, abs_tol=1e-6)
 
 
 def _legacy_dynamic_multipliers(
