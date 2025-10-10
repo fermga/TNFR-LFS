@@ -48,7 +48,7 @@ tnfr_lfs compare baseline.jsonl variant.jsonl \
 
 Review the stint averages and lap distributions to confirm whether the new
 configuration improves the Sense Index. Reconcile the findings with the
-recommendations surfaced in the [setup plan](setup_plan.md) to keep the
+recommendations surfaced in the [setup plan workflow](setup_plan.md) to keep the
 documentation consistent.
 
 ## Related resources

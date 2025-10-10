@@ -18,6 +18,7 @@ nav:
       - Development workflow: DEVELOPMENT.md
       - Release process: release_process.md
       - Setup equivalences: setup_equivalences.md
+      - Setup plan workflow: setup_plan.md
       - Preset workflow: presets.md
       - Brake thermal proxy: brake_thermal_proxy.md
   - Glossaries:
