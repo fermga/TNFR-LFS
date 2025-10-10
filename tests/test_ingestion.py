@@ -30,7 +30,12 @@ from tnfr_lfs.ingestion.outsim_udp import (
     FrozenOutSimWheelState,
     OutSimPacket,
 )
-from tests.helpers import QueueUDPSocket, make_wait_stub
+from tests.helpers import (
+    QueueUDPSocket,
+    build_outgauge_payload,
+    build_outsim_payload,
+    make_wait_stub,
+)
 
 
 def _build_extended_outsim_payload() -> bytes:
@@ -708,48 +713,14 @@ def test_fusion_marks_missing_wheel_block_as_nan(
     packet.release()
 
 
-def _build_outsim_payload(time_ms: int) -> bytes:
-    base = [0.0] * 15
-    return outsim_module._BASE_STRUCT.pack(time_ms, *base)
-
-
-def _build_outgauge_payload(packet_id: int, time_value: int) -> bytes:
-    return outgauge_module._PACK_STRUCT.pack(
-        time_value,
-        b"XFG\x00",
-        b"Driver\x00" + b"\x00" * 9,
-        b"\x00" * 8,
-        b"BL1\x00\x00",
-        b"GP\x00\x00\x00",
-        0,
-        3,
-        0,
-        50.0,
-        4000.0,
-        0.0,
-        80.0,
-        30.0,
-        0.0,
-        90.0,
-        0,
-        0,
-        0.5,
-        0.1,
-        0.0,
-        b"\x00" * 16,
-        b"\x00" * 16,
-        packet_id,
-    )
-
-
 def test_outsim_udp_client_reorders_and_tracks_losses(monkeypatch, caplog) -> None:
     payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
         [
-            (_build_outsim_payload(100), ("127.0.0.1", 4123)),
-            (_build_outsim_payload(160), ("127.0.0.1", 4123)),
-            (_build_outsim_payload(130), ("127.0.0.1", 4123)),
-            (_build_outsim_payload(290), ("127.0.0.1", 4123)),
-            (_build_outsim_payload(290), ("127.0.0.1", 4123)),
+            (build_outsim_payload(100), ("127.0.0.1", 4123)),
+            (build_outsim_payload(160), ("127.0.0.1", 4123)),
+            (build_outsim_payload(130), ("127.0.0.1", 4123)),
+            (build_outsim_payload(290), ("127.0.0.1", 4123)),
+            (build_outsim_payload(290), ("127.0.0.1", 4123)),
         ]
     )
     dummy_socket = QueueUDPSocket(queue=payloads)
@@ -786,8 +757,8 @@ def test_outsim_udp_client_reorders_and_tracks_losses(monkeypatch, caplog) -> No
 def test_outsim_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -> None:
     payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
         [
-            (_build_outsim_payload(100), ("127.0.0.1", 4123)),
-            (_build_outsim_payload(120), ("127.0.0.1", 4123)),
+            (build_outsim_payload(100), ("127.0.0.1", 4123)),
+            (build_outsim_payload(120), ("127.0.0.1", 4123)),
         ]
     )
     dummy_socket = QueueUDPSocket(queue=payloads)
@@ -809,7 +780,7 @@ def test_outsim_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -
     def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         nonlocal appended
         if not appended:
-            payloads.append((_build_outsim_payload(140), ("127.0.0.1", 4123)))
+            payloads.append((build_outsim_payload(140), ("127.0.0.1", 4123)))
             appended = True
 
     fake_wait, wait_calls = make_wait_stub(hook=on_wait)
@@ -833,10 +804,22 @@ def test_outsim_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -
 def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
     payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
         [
-            (_build_outgauge_payload(0, 0), ("127.0.0.1", 3000)),
-            (_build_outgauge_payload(1, 10), ("127.0.0.1", 3000)),
-            (_build_outgauge_payload(3, 30), ("127.0.0.1", 3000)),
-            (_build_outgauge_payload(2, 20), ("127.0.0.1", 3000)),
+            (
+                build_outgauge_payload(0, 0, layout="GP"),
+                ("127.0.0.1", 3000),
+            ),
+            (
+                build_outgauge_payload(1, 10, layout="GP"),
+                ("127.0.0.1", 3000),
+            ),
+            (
+                build_outgauge_payload(3, 30, layout="GP"),
+                ("127.0.0.1", 3000),
+            ),
+            (
+                build_outgauge_payload(2, 20, layout="GP"),
+                ("127.0.0.1", 3000),
+            ),
         ]
     )
     dummy_socket = QueueUDPSocket(queue=payloads)
@@ -884,8 +867,8 @@ def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
 def test_outgauge_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -> None:
     payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
         [
-            (_build_outgauge_payload(5, 50), ("127.0.0.1", 3000)),
-            (_build_outgauge_payload(6, 60), ("127.0.0.1", 3000)),
+            (build_outgauge_payload(5, 50, layout="GP"), ("127.0.0.1", 3000)),
+            (build_outgauge_payload(6, 60, layout="GP"), ("127.0.0.1", 3000)),
         ]
     )
     dummy_socket = QueueUDPSocket(queue=payloads)
@@ -907,7 +890,7 @@ def test_outgauge_udp_client_flushes_pending_when_successor_arrives(monkeypatch)
     def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         nonlocal appended
         if not appended:
-            payloads.append((_build_outgauge_payload(7, 70), ("127.0.0.1", 3000)))
+            payloads.append((build_outgauge_payload(7, 70, layout="GP"), ("127.0.0.1", 3000)))
             appended = True
 
     fake_wait, wait_calls = make_wait_stub(hook=on_wait)

@@ -10,7 +10,12 @@ import pytest
 
 from tnfr_lfs.ingestion import outsim_udp as outsim_module
 from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
-from tests.helpers import QueueUDPSocket, make_select_stub, make_wait_stub
+from tests.helpers import (
+    QueueUDPSocket,
+    build_outsim_payload,
+    make_select_stub,
+    make_wait_stub,
+)
 
 
 def test_outsim_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
@@ -35,10 +40,6 @@ def test_outsim_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
     assert call_args[0] == pytest.approx(client._timeout, rel=0.1)
 
 
-def _outsim_payload(time_ms: int) -> bytes:
-    return outsim_module._BASE_STRUCT.pack(time_ms, *([0.0] * 15))
-
-
 def test_outsim_host_resolution_failure_disables_filtering(monkeypatch) -> None:
     def raise_gaierror(*_args: object, **_kwargs: object) -> list[object]:
         raise socket.gaierror()
@@ -49,7 +50,7 @@ def test_outsim_host_resolution_failure_disables_filtering(monkeypatch) -> None:
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     packet = None
     try:
-        sender.sendto(_outsim_payload(200), client.address)
+        sender.sendto(build_outsim_payload(200), client.address)
         packet = client.recv()
         assert packet is not None
         assert packet.time == 200
@@ -71,7 +72,7 @@ def test_outsim_recv_drains_batch_after_wait(monkeypatch) -> None:
 
     def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         if not fake_socket.queue:
-            fake_socket.extend(_outsim_payload(time_value) for time_value in (100, 120, 140))
+            fake_socket.extend(build_outsim_payload(time_value) for time_value in (100, 120, 140))
 
     fake_wait, wait_calls = make_wait_stub(hook=on_wait)
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
@@ -94,20 +95,20 @@ def test_outsim_pending_packet_flushes_when_successor_arrives(monkeypatch) -> No
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
 
-    fake_socket.queue.append(_outsim_payload(100))
+    fake_socket.queue.append(build_outsim_payload(100))
     packet = client.recv()
     assert packet is not None
     assert packet.time == 100
     packet.release()
 
-    fake_socket.queue.append(_outsim_payload(120))
+    fake_socket.queue.append(build_outsim_payload(120))
     wait_calls: list[float] = []
     appended = False
 
     def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         nonlocal appended
         if not appended:
-            fake_socket.queue.append(_outsim_payload(140))
+            fake_socket.queue.append(build_outsim_payload(140))
             appended = True
 
     fake_wait, wait_calls = make_wait_stub(hook=on_wait)
@@ -141,13 +142,13 @@ def test_outsim_isolated_packet_flushes_under_10ms_by_default(monkeypatch) -> No
     fake_wait, wait_calls = make_wait_stub(return_value=False)
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
 
-    fake_socket.queue.append(_outsim_payload(100))
+    fake_socket.queue.append(build_outsim_payload(100))
     first = client.recv()
     assert first is not None
     assert first.time == 100
     first.release()
 
-    fake_socket.queue.append(_outsim_payload(120))
+    fake_socket.queue.append(build_outsim_payload(120))
     start = time.perf_counter()
     second = client.recv()
     elapsed_ms = (time.perf_counter() - start) * 1_000
@@ -173,9 +174,9 @@ def test_async_outsim_client_handles_concurrent_receivers() -> None:
             _, port = client.address
             target = ("127.0.0.1", port)
             await asyncio.sleep(0)
-            sender.sendto(_outsim_payload(100), target)
-            sender.sendto(_outsim_payload(140), target)
-            sender.sendto(_outsim_payload(120), target)
+            sender.sendto(build_outsim_payload(100), target)
+            sender.sendto(build_outsim_payload(140), target)
+            sender.sendto(build_outsim_payload(120), target)
             results = []
             for _ in range(3):
                 packet = await client.recv()

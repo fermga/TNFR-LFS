@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections import deque
 from typing import Callable, Deque, Iterable, List
 
+from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
+from tnfr_lfs.ingestion import outsim_udp as outsim_module
+
 UDPPayload = bytes | tuple[bytes, tuple[str, int]]
 
 
@@ -103,3 +106,77 @@ def make_wait_stub(
         return return_value
 
     return fake_wait, timeouts
+
+
+def pad_outgauge_field(value: str, size: int, *, encoding: str = "latin-1") -> bytes:
+    """Pad an OutGauge string field to the expected byte length."""
+
+    return value.encode(encoding).ljust(size, b"\x00")
+
+
+def build_outgauge_payload(
+    packet_id: int,
+    time_value: int,
+    *,
+    car: str = "XFG",
+    player_name: str = "Driver",
+    plate: str = "",
+    track: str = "BL1",
+    layout: str = "",
+    flags: int = 0,
+    gear: int = 3,
+    plid: int = 0,
+    speed: float = 50.0,
+    rpm: float = 4_000.0,
+    turbo: float = 0.0,
+    eng_temp: float = 80.0,
+    fuel: float = 30.0,
+    oil_pressure: float = 0.0,
+    oil_temp: float = 90.0,
+    dash_lights: int = 0,
+    show_lights: int = 0,
+    throttle: float = 0.5,
+    brake: float = 0.1,
+    clutch: float = 0.0,
+    display1: str = "",
+    display2: str = "",
+) -> bytes:
+    """Construct a minimal OutGauge datagram for the requested packet id/time."""
+
+    return outgauge_module._PACK_STRUCT.pack(
+        time_value,
+        pad_outgauge_field(car, 4),
+        pad_outgauge_field(player_name, 16),
+        pad_outgauge_field(plate, 8),
+        pad_outgauge_field(track, 6),
+        pad_outgauge_field(layout, 6),
+        flags,
+        gear,
+        plid,
+        speed,
+        rpm,
+        turbo,
+        eng_temp,
+        fuel,
+        oil_pressure,
+        oil_temp,
+        dash_lights,
+        show_lights,
+        throttle,
+        brake,
+        clutch,
+        pad_outgauge_field(display1, 16),
+        pad_outgauge_field(display2, 16),
+        packet_id,
+    )
+
+
+def build_outsim_payload(
+    time_ms: int,
+    *,
+    base_values: Iterable[float] | None = None,
+) -> bytes:
+    """Construct a minimal OutSim datagram for the requested timestamp."""
+
+    values = list(base_values) if base_values is not None else [0.0] * 15
+    return outsim_module._BASE_STRUCT.pack(time_ms, *values)

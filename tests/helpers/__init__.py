@@ -13,7 +13,14 @@ from .telemetry import (
     build_resonance_record,
     build_telemetry_record,
 )
-from .udp import QueueUDPSocket, make_select_stub, make_wait_stub
+from .udp import (
+    QueueUDPSocket,
+    build_outgauge_payload,
+    build_outsim_payload,
+    make_select_stub,
+    make_wait_stub,
+    pad_outgauge_field,
+)
 
 __all__ = [
     "preloaded_profile_manager",
@@ -34,6 +41,9 @@ __all__ = [
     "build_native_export_plan",
     "build_minimal_setup_plan",
     "QueueUDPSocket",
+    "pad_outgauge_field",
+    "build_outgauge_payload",
+    "build_outsim_payload",
     "make_select_stub",
     "make_wait_stub",
 ]
