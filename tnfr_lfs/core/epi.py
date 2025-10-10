@@ -9,6 +9,8 @@ from statistics import mean
 from collections.abc import Mapping as MappingABC
 from typing import Deque, Dict, List, Mapping, Optional, Sequence, Tuple, TYPE_CHECKING
 
+import numpy as np
+
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
     from .coherence_calibration import CoherenceCalibrationStore
     from ..cache_settings import CacheOptions
@@ -231,7 +233,7 @@ class NaturalFrequencyAnalyzer:
         history: Sequence[TelemetryRecord],
         car_model: str | None,
     ) -> Tuple[Dict[str, float], float]:
-        history = list(history)
+        history = tuple(history)
         if len(history) < 2:
             return {}, 0.0
 
@@ -249,40 +251,73 @@ class NaturalFrequencyAnalyzer:
         if len(history) < min_samples:
             return {}, 0.0
 
-        steer_series = [float(record.steer) for record in history]
-        throttle_series = [float(record.throttle) for record in history]
-        brake_series = [float(record.brake_pressure) for record in history]
-        suspension_front = [float(record.suspension_velocity_front) for record in history]
-        suspension_rear = [float(record.suspension_velocity_rear) for record in history]
-        suspension_combined = [
-            (front + rear) * 0.5 for front, rear in zip(suspension_front, suspension_rear)
-        ]
+        sample_count = len(history)
+        channel_count = 5
+        channel_matrix = np.fromiter(
+            (
+                float(value)
+                for record in history
+                for value in (
+                    record.steer,
+                    record.throttle,
+                    record.brake_pressure,
+                    record.suspension_velocity_front,
+                    record.suspension_velocity_rear,
+                )
+            ),
+            dtype=float,
+            count=sample_count * channel_count,
+        ).reshape(sample_count, channel_count)
+
+        steer_series = channel_matrix[:, 0]
+        throttle_series = channel_matrix[:, 1]
+        brake_series = channel_matrix[:, 2]
+        suspension_combined = np.mean(channel_matrix[:, 3:5], axis=1)
 
         low = max(0.0, self.settings.bandpass_low_hz)
         high = max(low, self.settings.bandpass_high_hz)
 
-        def _dominant_frequency(series: Sequence[float]) -> float:
+        def _dominant_frequency(series: np.ndarray) -> float:
+            if series.size == 0:
+                return 0.0
             spectrum = power_spectrum(series, sample_rate)
-            band = [entry for entry in spectrum if low <= entry[0] <= high]
-            if not band:
+            if not spectrum:
                 return 0.0
-            frequency, energy = max(band, key=lambda entry: entry[1])
-            if energy <= 1e-9:
+            spectrum_array = np.asarray(spectrum, dtype=float)
+            frequencies = spectrum_array[:, 0]
+            energies = spectrum_array[:, 1]
+            mask = (frequencies >= low) & (frequencies <= high)
+            if not np.any(mask):
                 return 0.0
-            return frequency
+            masked_energies = energies[mask]
+            peak_index = int(np.argmax(masked_energies))
+            peak_energy = masked_energies[peak_index]
+            if peak_energy <= 1e-9:
+                return 0.0
+            masked_frequencies = frequencies[mask]
+            return float(masked_frequencies[peak_index])
 
-        def _dominant_cross(x_series: Sequence[float], y_series: Sequence[float]) -> float:
+        def _dominant_cross(x_series: np.ndarray, y_series: np.ndarray) -> float:
+            if x_series.size == 0 or y_series.size == 0:
+                return 0.0
             spectrum = cross_spectrum(x_series, y_series, sample_rate)
-            band = [entry for entry in spectrum if low <= entry[0] <= high]
-            if not band:
+            if not spectrum:
                 return 0.0
-            frequency, real, imag = max(
-                band, key=lambda entry: math.hypot(entry[1], entry[2])
-            )
-            magnitude = math.hypot(real, imag)
-            if magnitude <= 1e-9:
+            spectrum_array = np.asarray(spectrum, dtype=float)
+            frequencies = spectrum_array[:, 0]
+            reals = spectrum_array[:, 1]
+            imags = spectrum_array[:, 2]
+            mask = (frequencies >= low) & (frequencies <= high)
+            if not np.any(mask):
                 return 0.0
-            return frequency
+            masked_reals = reals[mask]
+            masked_imags = imags[mask]
+            magnitudes = np.hypot(masked_reals, masked_imags)
+            peak_index = int(np.argmax(magnitudes))
+            if magnitudes[peak_index] <= 1e-9:
+                return 0.0
+            masked_frequencies = frequencies[mask]
+            return float(masked_frequencies[peak_index])
 
         steer_freq = _dominant_frequency(steer_series)
         throttle_freq = _dominant_frequency(throttle_series)

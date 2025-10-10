@@ -1,7 +1,7 @@
 import math
 
 from dataclasses import replace
-from typing import Dict
+from typing import Dict, Sequence
 
 import pytest
 
@@ -27,6 +27,7 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
+from tnfr_lfs.core.spectrum import cross_spectrum, estimate_sample_rate, power_spectrum
 
 
 @pytest.fixture(autouse=True)
@@ -119,6 +120,111 @@ def _synthetic_frequency_series(
     return records
 
 
+def _legacy_dynamic_multipliers(
+    history: Sequence[TelemetryRecord],
+    settings: NaturalFrequencySettings,
+    car_model: str | None,
+) -> tuple[dict[str, float], float]:
+    history = list(history)
+    if len(history) < 2:
+        return {}, 0.0
+
+    duration = history[-1].timestamp - history[0].timestamp
+    if duration < max(0.0, settings.min_window_seconds - 1e-6):
+        return {}, 0.0
+
+    sample_rate = estimate_sample_rate(history)
+    if sample_rate <= 0.0:
+        return {}, 0.0
+
+    min_samples = max(4, int(settings.min_window_seconds * sample_rate))
+    if len(history) < min_samples:
+        return {}, 0.0
+
+    steer_series = [float(record.steer) for record in history]
+    throttle_series = [float(record.throttle) for record in history]
+    brake_series = [float(record.brake_pressure) for record in history]
+    suspension_front = [float(record.suspension_velocity_front) for record in history]
+    suspension_rear = [float(record.suspension_velocity_rear) for record in history]
+    suspension_combined = [
+        (front + rear) * 0.5 for front, rear in zip(suspension_front, suspension_rear)
+    ]
+
+    low = max(0.0, settings.bandpass_low_hz)
+    high = max(low, settings.bandpass_high_hz)
+
+    def _legacy_dominant_frequency(series: Sequence[float]) -> float:
+        spectrum = power_spectrum(series, sample_rate)
+        band = [entry for entry in spectrum if low <= entry[0] <= high]
+        if not band:
+            return 0.0
+        frequency, energy = max(band, key=lambda entry: entry[1])
+        if energy <= 1e-9:
+            return 0.0
+        return frequency
+
+    def _legacy_dominant_cross(
+        x_series: Sequence[float], y_series: Sequence[float]
+    ) -> float:
+        spectrum = cross_spectrum(x_series, y_series, sample_rate)
+        band = [entry for entry in spectrum if low <= entry[0] <= high]
+        if not band:
+            return 0.0
+        frequency, real, imag = max(
+            band, key=lambda entry: math.hypot(entry[1], entry[2])
+        )
+        magnitude = math.hypot(real, imag)
+        if magnitude <= 1e-9:
+            return 0.0
+        return frequency
+
+    steer_freq = _legacy_dominant_frequency(steer_series)
+    throttle_freq = _legacy_dominant_frequency(throttle_series)
+    brake_freq = _legacy_dominant_frequency(brake_series)
+    suspension_freq = _legacy_dominant_frequency(suspension_combined)
+    tyre_freq = _legacy_dominant_cross(steer_series, suspension_combined)
+
+    vehicle_frequency = settings.resolve_vehicle_frequency(car_model)
+
+    def _normalise(frequency: float) -> float:
+        if frequency <= 0.0:
+            return 1.0
+        ratio = frequency / vehicle_frequency
+        ratio = max(settings.min_multiplier, min(settings.max_multiplier, ratio))
+        return ratio
+
+    dominant_frequency = 0.0
+    multipliers: dict[str, float] = {}
+    if steer_freq > 0.0:
+        multipliers["driver"] = _normalise(steer_freq)
+        dominant_frequency = steer_freq
+    if throttle_freq > 0.0:
+        multipliers["transmission"] = _normalise(throttle_freq)
+        if throttle_freq > dominant_frequency:
+            dominant_frequency = throttle_freq
+    if brake_freq > 0.0:
+        multipliers["brakes"] = _normalise(brake_freq)
+        if brake_freq > dominant_frequency:
+            dominant_frequency = brake_freq
+    if suspension_freq > 0.0:
+        value = _normalise(suspension_freq)
+        multipliers["suspension"] = value
+        multipliers.setdefault("chassis", value)
+        if suspension_freq > dominant_frequency:
+            dominant_frequency = suspension_freq
+    if tyre_freq > 0.0:
+        value = _normalise(tyre_freq)
+        multipliers["tyres"] = value
+        multipliers["chassis"] = value
+        if tyre_freq > dominant_frequency:
+            dominant_frequency = tyre_freq
+    elif suspension_freq > 0.0 and steer_freq > 0.0:
+        blended = (multipliers["suspension"] + multipliers["driver"]) * 0.5
+        multipliers["tyres"] = blended
+
+    return multipliers, dominant_frequency
+
+
 def test_delta_calculation_against_baseline(synthetic_records):
     baseline = DeltaCalculator.derive_baseline(synthetic_records)
     sample = synthetic_records[0]
@@ -182,6 +288,23 @@ def test_delta_calculation_against_baseline(synthetic_records):
     assert bundle.driver.steer == pytest.approx(sample.steer)
     assert bundle.driver.throttle == pytest.approx(sample.throttle)
     assert bundle.driver.style_index == pytest.approx(sample.si)
+
+
+def test_dynamic_multipliers_vectorisation_matches_legacy(synthetic_records):
+    analyzer = NaturalFrequencyAnalyzer()
+    history = synthetic_records[:128]
+
+    legacy_multipliers, legacy_frequency = _legacy_dynamic_multipliers(
+        history, analyzer.settings, None
+    )
+    vectorised_multipliers, vectorised_frequency = analyzer._compute_dynamic_multipliers_raw(
+        history, None
+    )
+
+    assert vectorised_frequency == pytest.approx(legacy_frequency)
+    assert vectorised_multipliers.keys() == legacy_multipliers.keys()
+    for node, expected in legacy_multipliers.items():
+        assert vectorised_multipliers[node] == pytest.approx(expected)
 
 
 def test_delta_nfr_by_node_emphasises_braking_signals():
