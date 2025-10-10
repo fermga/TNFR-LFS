@@ -17,7 +17,7 @@ from .setup_plan import (
     serialise_setup_plan,
 )
 from .report_extended import html_exporter
-from ..session import format_session_messages
+from ..cli.session import format_session_messages
 from ..utils.sparkline import render_sparkline
 
 

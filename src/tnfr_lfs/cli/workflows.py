@@ -86,7 +86,7 @@ from ..ingestion.offline import (
 from ..io import logs
 from ..recommender import Plan, RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
-from ..session import format_session_messages
+from .session import format_session_messages
 from ..ingestion.track_loader import assemble_session_weights
 from ..ingestion.config_loader import (
     Car as PackCar,
