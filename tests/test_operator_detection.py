@@ -217,7 +217,7 @@ def test_detect_silence_flags_quiet_structural_intervals() -> None:
     )
     assert events
     event = events[0]
-    assert event["name"] == canonical_operator_label("SILENCE")
+    assert event["name"] == "Structural silence"
     assert event["duration"] >= 0.4
     assert event["structural_duration"] >= event["duration"]
     assert event["load_span"] <= 150.0

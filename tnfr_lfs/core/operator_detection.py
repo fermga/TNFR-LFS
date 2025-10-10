@@ -60,6 +60,14 @@ def normalize_structural_operator_identifier(identifier: str) -> str:
     return identifier.upper()
 
 
+def normalize_structural_operator_identifier(identifier: str) -> str:
+    """Return the canonical structural identifier for ``identifier``."""
+
+    if not isinstance(identifier, str):
+        return str(identifier)
+    return identifier.upper()
+
+
 def canonical_operator_label(identifier: str) -> str:
     """Return the canonical structural label for an operator identifier."""
 
