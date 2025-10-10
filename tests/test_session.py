@@ -1,6 +1,6 @@
 """Tests for session summary helpers."""
 
-from tnfr_lfs.session import format_session_messages
+from tnfr_lfs.cli import format_session_messages
 
 
 def test_format_session_messages_uses_english_defaults() -> None:

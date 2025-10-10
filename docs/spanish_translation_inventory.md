@@ -93,7 +93,7 @@ messages and rationales that are still in English:
   【F:tnfr_lfs/exporters/report_extended.py†L250-L319】
 - `format_session_messages` generates phrases `"Session profile weights → …"`
   and `"Session profile hints → …"`.
-  【F:tnfr_lfs/session.py†L70-L87】
+  【F:tnfr_lfs/cli/session.py†L70-L87】
 - **Production ↔ tests checklist (localization pending):**
   - [ ] `<h2>A/B comparison</h2>` → `<h2>Comparación A/B</h2>`
   - [ ] `<h2>Session profile</h2>` → `<h2>Perfil de sesión</h2>`

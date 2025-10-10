@@ -9,6 +9,7 @@ modern layout adopted by the project.
 """
 
 from ._version import __version__
+from .cli import format_session_messages
 from .core.coherence import compute_node_delta_nfr, sense_index
 from .core.epi import (
     DeltaCalculator,
@@ -72,5 +73,6 @@ __all__ = [
     "load_track_profiles",
     "load_modifiers",
     "assemble_session_weights",
+    "format_session_messages",
     "__version__",
 ]

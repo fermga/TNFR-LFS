@@ -8,7 +8,7 @@ from typing import Any, Dict, Mapping
 
 from ..analysis import SUPPORTED_LAP_METRICS, ab_compare_by_lap
 from ..core.operators import orchestrate_delta_metrics
-from ..session import format_session_messages
+from .session import format_session_messages
 
 from .common import (
     CliError,
