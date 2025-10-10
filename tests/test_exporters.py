@@ -315,6 +315,7 @@ def test_html_exporter_renders_extended_sections() -> None:
         "<h2>Session profile</h2>",
         "Prioritise mid-apex",
         "Session affected by crosswinds",
+        "<h2>Data sources and estimates</h2>",
     ]
     for fragment in expected_fragments:
         assert fragment in html
