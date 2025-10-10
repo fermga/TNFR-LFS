@@ -21,6 +21,7 @@ nav:
       - Setup plan workflow: setup_plan.md
       - Preset workflow: presets.md
       - Brake thermal proxy: brake_thermal_proxy.md
+      - Plugin architecture: plugins.md
   - Glossaries:
       - TNFR glossary: tnfr_translation_glossary.md
       - Spanish translation inventory: spanish_translation_inventory.md

@@ -35,6 +35,7 @@ from .operator_detection import (
     normalize_structural_operator_identifier,
     silence_event_payloads,
 )
+from ..plugins import TNFRPlugin
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
     from .segmentation import Microsector
@@ -128,6 +129,16 @@ def coherence_operator(series: Sequence[float], window: int = 3) -> List[float]:
     if abs(bias) < 1e-12:
         return smoothed
     return [value + bias for value in smoothed]
+
+
+def plugin_coherence_operator(
+    plugin: TNFRPlugin, series: Sequence[float], window: int = 3
+) -> List[float]:
+    """Run :func:`coherence_operator` and push the result into ``plugin``."""
+
+    smoothed = coherence_operator(series, window=window)
+    plugin.apply_coherence_series(smoothed)
+    return smoothed
 
 
 def dissonance_operator(series: Sequence[float], target: float) -> float:
