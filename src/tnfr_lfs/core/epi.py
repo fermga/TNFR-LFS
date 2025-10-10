@@ -19,8 +19,8 @@ from .cache import (
     cached_delta_nfr_map,
     cached_dynamic_multipliers,
     invalidate_dynamic_record,
-    delta_cache_enabled,
-    dynamic_cache_enabled,
+    should_use_delta_cache,
+    should_use_dynamic_cache,
 )
 from .coherence import compute_node_delta_nfr, sense_index
 from .delta_utils import distribute_weighted_delta
@@ -153,9 +153,7 @@ class NaturalFrequencyAnalyzer:
         self._cache_options = cache_options
 
     def _dynamic_cache_active(self) -> bool:
-        if self._cache_options is not None:
-            return self._cache_options.nu_f_cache_size > 0
-        return dynamic_cache_enabled()
+        return should_use_dynamic_cache(self._cache_options)
 
     def reset(self) -> None:
         if self._dynamic_cache_active():
@@ -867,11 +865,7 @@ def delta_nfr_by_node(
     uniform distribution.
     """
 
-    if cache_options is not None:
-        use_cache = cache_options.enable_delta_cache
-    else:
-        use_cache = delta_cache_enabled()
-    if not use_cache:
+    if not should_use_delta_cache(cache_options):
         return _delta_nfr_by_node_uncached(record)
     return cached_delta_nfr_map(record, lambda: _delta_nfr_by_node_uncached(record))
 
