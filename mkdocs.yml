@@ -26,6 +26,9 @@ nav:
 
 plugins:
   - search
+  - macros:
+      modules:
+        - docs.macros
   - i18n:
       default_language: en
       languages:
