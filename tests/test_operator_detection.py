@@ -252,12 +252,12 @@ def test_detect_silence_flags_quiet_structural_intervals() -> None:
     )
 
 
-def test_normalize_structural_operator_identifier_handles_legacy_alias() -> None:
-    assert normalize_structural_operator_identifier("silencio") == "SILENCE"
+def test_normalize_structural_operator_identifier_is_case_insensitive() -> None:
+    assert normalize_structural_operator_identifier("silence") == "SILENCE"
 
 
-def test_silence_event_payloads_accepts_legacy_identifier() -> None:
+def test_silence_event_payloads_accepts_case_insensitive_identifier() -> None:
     payload = {"duration": 1.2}
-    events = {"SILENCIO": (payload,)}
+    events = {"silence": (payload,)}
     result = silence_event_payloads(events)
     assert result == (payload,)

@@ -52,6 +52,14 @@ def normalize_structural_operator_identifier(identifier: str) -> str:
     return STRUCTURAL_OPERATOR_ALIASES.get(key, key)
 
 
+def normalize_structural_operator_identifier(identifier: str) -> str:
+    """Return the canonical structural identifier for ``identifier``."""
+
+    if not isinstance(identifier, str):
+        return str(identifier)
+    return identifier.upper()
+
+
 def canonical_operator_label(identifier: str) -> str:
     """Return the canonical structural label for an operator identifier."""
 
@@ -64,7 +72,7 @@ def canonical_operator_label(identifier: str) -> str:
 def silence_event_payloads(
     events: Mapping[str, Sequence[Mapping[str, object]] | None] | None,
 ) -> Tuple[Mapping[str, object], ...]:
-    """Return all silence payloads, accepting legacy ``SILENCIO`` keys."""
+    """Return all silence payloads, accepting case-insensitive identifiers."""
 
     if not events:
         return ()
