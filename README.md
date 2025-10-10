@@ -50,6 +50,9 @@ python -m pip install -r requirements.txt
 # Full development environment (linters, mypy, pytest)
 python -m pip install -r requirements-dev.txt
 
+# Optional dominant-frequency acceleration (SciPy Goertzel helper)
+python -m pip install -e .[spectral]
+
 # Makefile shortcuts
 make install      # base dependencies only
 make dev-install  # base + development tooling
@@ -87,8 +90,9 @@ into the workflow.
 ## Benchmarks
 
 Profile ΔNFR/ν_f caches with the optional benchmark extra or the Makefile helper.
-See the [benchmark guide](docs/benchmarks.md) for installation steps, baseline
-numbers and tuning tips.
+Pair it with the new ``spectral`` extra when you want to exercise the Goertzel
+accelerator for dominant frequency lookups. See the [benchmark guide](docs/benchmarks.md)
+for installation steps, baseline numbers and tuning tips.
 
 ## CLI deep dives
 

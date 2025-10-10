@@ -5,10 +5,14 @@ caches before shipping changes.
 
 ## Installation
 
-Install the optional extras or use the Makefile helper:
+Install the optional extras or use the Makefile helper. Include the ``spectral``
+extra when you want to exercise the Goertzel backend shipped with the dominant
+frequency utilities:
 
 ```bash
 python -m pip install -e .[benchmark]
+# Dominant frequency acceleration (SciPy Goertzel helper)
+python -m pip install -e .[benchmark,spectral]
 # or
 make benchmark-delta-cache
 ```
@@ -26,6 +30,21 @@ Use `--sample-limit` to stretch the test—each additional sample now feeds an
 scaling even as the window grows. The CLI accepts CSV, RAF or Replay Analyzer
 bundles, mirroring the behaviour of the standard commands, so you can validate
 optimisations against your own telemetry recordings.
+
+## Dominant frequency accelerator
+
+The ``benchmarks/spectrum_goertzel_benchmark.py`` module compares the dense FFT
+cross-spectrum against the sparse Goertzel helper introduced in
+``tnfr_lfs.core.spectrum``. When the analysis only needs the dominant bin, the
+Goertzel path evaluates a fixed list of candidate frequencies in ``O(n·k)``
+operations. With ``k`` constant, this becomes linear in the number of samples,
+which translates into faster feedback for high-resolution stints. Install the
+``spectral`` extra before running the benchmark so SciPy's implementation is
+available:
+
+```bash
+python -m pytest benchmarks/spectrum_goertzel_benchmark.py -k goertzel
+```
 
 ## More performance tools
 
