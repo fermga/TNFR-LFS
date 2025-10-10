@@ -543,8 +543,20 @@ class _OutGaugePacketProcessor:
             return False
 
         _, evicted = self._buffer.insert(arrival, packet, packet.packet_id)
-        if evicted is not None and hasattr(evicted.packet, "release"):
-            evicted.packet.release()
+        if evicted is not None:
+            self._loss_events += 1
+            logger.warning(
+                "OutGauge reorder buffer overflow; evicting oldest packet.",
+                extra={
+                    "event": "outgauge.buffer_overflow",
+                    "evicted_packet_id": evicted.key,
+                    "evicted_arrival": evicted.arrival,
+                    "port": self._port,
+                    "remote_host": self._remote_host,
+                },
+            )
+            if hasattr(evicted.packet, "release"):
+                evicted.packet.release()
         if self._pending_buffered:
             self._pending_buffered = min(self._pending_buffered, len(self._buffer))
             if self._pending_buffered == 0:
