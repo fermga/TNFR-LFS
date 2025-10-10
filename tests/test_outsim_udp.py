@@ -88,7 +88,64 @@ def test_outsim_recv_drains_batch_after_wait(monkeypatch) -> None:
         client.close()
 
     assert [packet.time for packet in packets if packet] == [100, 120, 140]
-    assert len(wait_calls) == 1
+    assert wait_calls
+    assert wait_calls[0] == pytest.approx(client._timeout, rel=0.1)
+
+
+def test_outsim_pending_packet_flushes_when_successor_arrives(monkeypatch) -> None:
+    client = OutSimUDPClient(timeout=0.2, retries=2, reorder_grace=0.5)
+
+    class FakeSocket:
+        def __init__(self) -> None:
+            self.queue: Deque[bytes] = deque()
+
+        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
+            if not self.queue:
+                raise BlockingIOError()
+            payload = self.queue.popleft()
+            return payload, ("127.0.0.1", 4123)
+
+        def close(self) -> None:
+            self.queue.clear()
+
+    fake_socket = FakeSocket()
+    original_socket = client._socket
+    monkeypatch.setattr(client, "_socket", fake_socket)
+    original_socket.close()
+
+    fake_socket.queue.append(_outsim_payload(100))
+    packet = client.recv()
+    assert packet is not None
+    assert packet.time == 100
+    packet.release()
+
+    fake_socket.queue.append(_outsim_payload(120))
+    wait_calls: list[float] = []
+    appended = False
+
+    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+        nonlocal appended
+        wait_calls.append(timeout)
+        if not appended:
+            fake_socket.queue.append(_outsim_payload(140))
+            appended = True
+        return True
+
+    monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
+
+    start = time.perf_counter()
+    next_packet = client.recv()
+    elapsed = time.perf_counter() - start
+
+    try:
+        assert next_packet is not None
+        assert next_packet.time == 120
+        assert elapsed < 0.2
+        assert wait_calls, "wait_for_read_ready should be invoked during pending flush"
+    finally:
+        if next_packet is not None:
+            next_packet.release()
+        client.close()
 
 
 def test_async_outsim_client_handles_concurrent_receivers() -> None:

@@ -850,10 +850,29 @@ class OutSimUDPClient:
                 break
         if self._processor.pending_buffered:
             deadline = self._processor.pending_deadline()
-            if deadline is not None:
-                remaining = deadline - time.monotonic()
-                if remaining > 0:
-                    time.sleep(min(remaining, self._timeout if self._timeout > 0 else remaining))
+            while deadline is not None:
+                now = time.monotonic()
+                remaining = deadline - now
+                if remaining <= 0:
+                    break
+                wait_slice = remaining if self._timeout <= 0 else min(self._timeout, remaining)
+                if wait_slice <= 0:
+                    break
+                if not wait_for_read_ready(
+                    self._socket,
+                    timeout=wait_slice,
+                    deadline=deadline,
+                ):
+                    break
+                if self._drain_datagrams():
+                    ready = self._processor.pop_ready_packet(
+                        time.monotonic(), allow_grace=False
+                    )
+                    if ready is not None:
+                        return ready
+                    if not self._processor.pending_buffered:
+                        break
+                deadline = self._processor.pending_deadline()
         ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=True)
         if ready is not None:
             return ready

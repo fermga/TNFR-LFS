@@ -173,7 +173,64 @@ def test_outgauge_recv_drains_batch_after_wait(monkeypatch) -> None:
     for packet in packets:
         if packet is not None:
             packet.release()
-    assert len(wait_calls) == 1
+    assert wait_calls
+    assert wait_calls[0] == pytest.approx(client._timeout, rel=0.1)
+
+
+def test_outgauge_pending_packet_flushes_when_successor_arrives(monkeypatch) -> None:
+    client = OutGaugeUDPClient(timeout=0.2, retries=2, reorder_grace=0.5)
+
+    class FakeSocket:
+        def __init__(self) -> None:
+            self.queue: Deque[bytes] = deque()
+
+        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
+            if not self.queue:
+                raise BlockingIOError()
+            payload = self.queue.popleft()
+            return payload, ("127.0.0.1", 3000)
+
+        def close(self) -> None:
+            self.queue.clear()
+
+    fake_socket = FakeSocket()
+    original_socket = client._socket
+    monkeypatch.setattr(client, "_socket", fake_socket)
+    original_socket.close()
+
+    fake_socket.queue.append(_outgauge_payload(5, 50))
+    packet = client.recv()
+    assert packet is not None
+    assert packet.packet_id == 5
+    packet.release()
+
+    fake_socket.queue.append(_outgauge_payload(6, 60))
+    wait_calls: list[float] = []
+    appended = False
+
+    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+        nonlocal appended
+        wait_calls.append(timeout)
+        if not appended:
+            fake_socket.queue.append(_outgauge_payload(7, 70))
+            appended = True
+        return True
+
+    monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
+
+    start = time.perf_counter()
+    next_packet = client.recv()
+    elapsed = time.perf_counter() - start
+
+    try:
+        assert next_packet is not None
+        assert next_packet.packet_id == 6
+        assert elapsed < 0.2
+        assert wait_calls
+    finally:
+        if next_packet is not None:
+            next_packet.release()
+        client.close()
 
 
 def test_async_outgauge_client_recovers_out_of_order_packets() -> None:

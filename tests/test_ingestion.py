@@ -776,6 +776,7 @@ def test_outsim_udp_client_reorders_and_tracks_losses(monkeypatch, caplog) -> No
     )
     dummy_socket = _DummySocket(payloads)
     monkeypatch.setattr(outsim_module.socket, "socket", lambda *_, **__: dummy_socket)
+    monkeypatch.setattr(outsim_module, "wait_for_read_ready", lambda *_, **__: True)
     client = outsim_module.OutSimUDPClient(
         host="127.0.0.1",
         port=0,
@@ -804,6 +805,55 @@ def test_outsim_udp_client_reorders_and_tracks_losses(monkeypatch, caplog) -> No
     client.close()
 
 
+def test_outsim_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -> None:
+    payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
+        [
+            (_build_outsim_payload(100), ("127.0.0.1", 4123)),
+            (_build_outsim_payload(120), ("127.0.0.1", 4123)),
+        ]
+    )
+    dummy_socket = _DummySocket(payloads)
+    monkeypatch.setattr(outsim_module.socket, "socket", lambda *_, **__: dummy_socket)
+    client = outsim_module.OutSimUDPClient(
+        host="127.0.0.1",
+        port=0,
+        timeout=0.2,
+        retries=2,
+        reorder_grace=0.5,
+    )
+
+    packet = client.recv()
+    assert packet is not None
+    packet.release()
+
+    wait_calls: list[float] = []
+    appended = False
+
+    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+        nonlocal appended
+        wait_calls.append(timeout)
+        if not appended:
+            payloads.append((_build_outsim_payload(140), ("127.0.0.1", 4123)))
+            appended = True
+        return True
+
+    monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
+
+    start = time.perf_counter()
+    next_packet = client.recv()
+    elapsed = time.perf_counter() - start
+
+    try:
+        assert next_packet is not None
+        assert next_packet.time == 120
+        assert elapsed < 0.2
+        assert wait_calls
+    finally:
+        if next_packet is not None:
+            next_packet.release()
+        client.close()
+
+
 def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
     payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
         [
@@ -815,6 +865,7 @@ def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
     )
     dummy_socket = _DummySocket(payloads)
     monkeypatch.setattr(outgauge_module.socket, "socket", lambda *_, **__: dummy_socket)
+    monkeypatch.setattr(outgauge_module, "wait_for_read_ready", lambda *_, **__: True)
     client = outgauge_module.OutGaugeUDPClient(
         host="127.0.0.1",
         port=0,
@@ -852,3 +903,52 @@ def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
     assert any("packet gap" in record.message for record in caplog.records)
     assert any("out-of-order" in record.message for record in caplog.records)
     client.close()
+
+
+def test_outgauge_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -> None:
+    payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
+        [
+            (_build_outgauge_payload(5, 50), ("127.0.0.1", 3000)),
+            (_build_outgauge_payload(6, 60), ("127.0.0.1", 3000)),
+        ]
+    )
+    dummy_socket = _DummySocket(payloads)
+    monkeypatch.setattr(outgauge_module.socket, "socket", lambda *_, **__: dummy_socket)
+    client = outgauge_module.OutGaugeUDPClient(
+        host="127.0.0.1",
+        port=0,
+        timeout=0.2,
+        retries=2,
+        reorder_grace=0.5,
+    )
+
+    packet = client.recv()
+    assert packet is not None
+    packet.release()
+
+    wait_calls: list[float] = []
+    appended = False
+
+    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+        nonlocal appended
+        wait_calls.append(timeout)
+        if not appended:
+            payloads.append((_build_outgauge_payload(7, 70), ("127.0.0.1", 3000)))
+            appended = True
+        return True
+
+    monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
+
+    start = time.perf_counter()
+    next_packet = client.recv()
+    elapsed = time.perf_counter() - start
+
+    try:
+        assert next_packet is not None
+        assert next_packet.packet_id == 6
+        assert elapsed < 0.2
+        assert wait_calls
+    finally:
+        if next_packet is not None:
+            next_packet.release()
+        client.close()
