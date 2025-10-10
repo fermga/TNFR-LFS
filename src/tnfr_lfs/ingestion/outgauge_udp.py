@@ -39,6 +39,23 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
+_SINGLE_PACKET_RELEASE_LIMIT = 0.01
+
+
+def _resolve_buffer_grace(timeout: float, reorder_grace: float | None) -> float:
+    """Return the grace period capped to ensure single packets emit quickly."""
+
+    if reorder_grace is None:
+        candidate = float(timeout)
+    else:
+        candidate = float(reorder_grace)
+    if not math.isfinite(candidate):
+        return _SINGLE_PACKET_RELEASE_LIMIT
+    if candidate <= 0.0:
+        return 0.0
+    return min(candidate, _SINGLE_PACKET_RELEASE_LIMIT)
+
+
 _PACK_STRUCT = struct.Struct("<I4s16s8s6s6sHBBfffffffIIfff16s16sI")
 _FLOAT_STRUCT = struct.Struct("<f")
 _EXTENDED_BLOCKS = 5
@@ -698,7 +715,8 @@ class OutGaugeUDPClient:
         reorder_grace:
             Optional number of seconds to retain a lone packet inside the
             reordering buffer to allow late datagrams to be inserted ahead of
-            it.  ``None`` defaults to ``timeout``.
+            it.  ``None`` defaults to ``min(timeout, 0.01)`` so single packets
+            never wait more than 10 ms before emission.
         jump_tolerance:
             Maximum tolerated gap (in milliseconds) between successive packet
             timestamps before the client flags a suspected loss event.
@@ -737,7 +755,7 @@ class OutGaugeUDPClient:
         local_host, local_port = self._socket.getsockname()
         self._address: Tuple[str, int] = (local_host, local_port)
         self._max_batch = batch_limit
-        buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
+        buffer_grace = _resolve_buffer_grace(timeout, reorder_grace)
         self._processor = _OutGaugePacketProcessor(
             remote_host=self._remote_host,
             port=self._address[1],
@@ -958,7 +976,7 @@ class AsyncOutGaugeUDPClient:
         self._remote_addresses = OutGaugeUDPClient._resolve_remote_addresses(host)
         self._timeout = timeout
         self._requested_port = port
-        self._buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
+        self._buffer_grace = _resolve_buffer_grace(timeout, reorder_grace)
         self._jump_tolerance = max(int(jump_tolerance), 0)
         self._buffer_capacity = buffer_capacity
         self._loop = loop

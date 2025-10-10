@@ -411,6 +411,12 @@ JSON, default ``suggest`` to the FZR/AS5 pairing and store outputs under
 ``out`` at the repository root.  Override any of them with explicit CLI
 flags or by editing the configuration file to match your deployment.
 
+``core.udp_timeout`` now defaults to ``0.01`` seconds and the ingestion
+clients clamp their reordering grace period to the same 10 ms window so a
+solitary packet is released immediately even when a larger timeout is
+configured.  Keep overrides at or below this threshold to respect the new
+latency requirement.
+
 Performance-sensitive toggles now live in the ``[performance]`` table so
 you can control telemetry buffering and cache usage without editing pack
 files:

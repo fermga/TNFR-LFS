@@ -1145,7 +1145,7 @@ def test_repository_template_configures_default_ports_and_profiles() -> None:
     assert core["outsim_port"] == 4123
     assert core["outgauge_port"] == 3000
     assert core["insim_port"] == 29999
-    assert core["udp_timeout"] == pytest.approx(2.0)
+    assert core["udp_timeout"] == pytest.approx(0.01)
     assert core["udp_retries"] == 3
 
     performance = data["performance"]

@@ -104,9 +104,9 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
     else:
         osd_cfg = {}
     try:
-        udp_timeout_default = float(core_cfg.get("udp_timeout", 2.0))
+        udp_timeout_default = float(core_cfg.get("udp_timeout", 0.01))
     except (TypeError, ValueError):
-        udp_timeout_default = 2.0
+        udp_timeout_default = 0.01
     try:
         udp_retries_default = int(core_cfg.get("udp_retries", core_cfg.get("retries", 3)))
     except (TypeError, ValueError):
