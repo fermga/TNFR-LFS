@@ -128,17 +128,8 @@ The complete documentation lives under `docs/` and is published with MkDocs.
 See `pyproject.toml` for requirements and `docs/DEVELOPMENT.md` for the full
 verification flow (`ruff`, `mypy --strict`, `pytest`).
 
-## Merge queue support
+## Continuous integration
 
-To take advantage of the `merge_group` trigger in the CI workflow, enable the
-GitHub merge queue for the repository:
-
-1. Open **Settings → General → Pull Requests** and tick **Enable merge queue**.
-2. Create or edit a branch protection rule for `main` so that required status
-   checks (for example the "CI" workflow) must pass before merging.
-3. (Optional) Enable **Require approval** if reviews are mandatory for queued
-   merges.
-
-With the queue enabled, GitHub will batch commits into temporary merge group
-branches that execute the workflow serially per branch before landing on
-`main`.
+The CI workflow runs automatically for pushes to `main` and for all pull
+requests. Required status checks can be configured in the repository settings
+to ensure the workflow succeeds before merging.
