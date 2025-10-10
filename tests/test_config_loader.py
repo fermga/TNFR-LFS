@@ -11,6 +11,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
+from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
 from tnfr_lfs.ingestion.config_loader import (
     Car,
     CacheOptions,
@@ -193,9 +194,9 @@ def test_parse_cache_options_defaults() -> None:
     options = parse_cache_options({})
     assert isinstance(options, CacheOptions)
     assert options.enable_delta_cache is True
-    assert options.nu_f_cache_size == 256
-    assert options.recommender_cache_size == 256
-    assert options.telemetry_cache_size == 256
+    assert options.nu_f_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
+    assert options.recommender_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
+    assert options.telemetry_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
 
 
 def test_parse_cache_options_overrides() -> None:
@@ -221,9 +222,9 @@ def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
         config_loader = importlib.reload(config_loader_module)
         options = config_loader.parse_cache_options({})
         assert options.enable_delta_cache is True
-        assert options.nu_f_cache_size == 256
-        assert options.recommender_cache_size == 256
-        assert options.telemetry_cache_size == 256
+        assert options.nu_f_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
+        assert options.recommender_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
+        assert options.telemetry_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
     finally:
         _pack_resources.set_pack_root_override(None)
         importlib.reload(config_loader_module)

@@ -6,6 +6,8 @@ from collections import OrderedDict
 import threading
 from typing import Callable, Generic, Hashable, Mapping, Sequence, Tuple, TypeVar
 
+from .cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
+
 _T = TypeVar("_T")
 _K = TypeVar("_K", bound=Hashable)
 _V = TypeVar("_V")
@@ -101,7 +103,7 @@ _DELTA_NFR_CACHE: _LRUCache[Tuple[int, int | None], Mapping[str, float]] | None 
 )
 _DYNAMIC_MULTIPLIER_CACHE: _LRUCache[
     Tuple[str | None, int, float | None], Tuple[Mapping[str, float], float]
-] | None = _LRUCache(maxsize=256)
+] | None = _LRUCache(maxsize=DEFAULT_DYNAMIC_CACHE_SIZE)
 
 
 def cached_delta_nfr_map(record: _T, factory: Callable[[], Mapping[str, float]]) -> Mapping[str, float]:
@@ -218,6 +220,8 @@ def configure_cache(*, enable_delta_cache: bool | None = None, nu_f_cache_size: 
             cache = _DYNAMIC_MULTIPLIER_CACHE
             if cache is None or cache._maxsize != size:
                 _DYNAMIC_MULTIPLIER_CACHE = _LRUCache(maxsize=size)
+    elif _DYNAMIC_MULTIPLIER_CACHE is None:
+        _DYNAMIC_MULTIPLIER_CACHE = _LRUCache(maxsize=DEFAULT_DYNAMIC_CACHE_SIZE)
 
 
 def delta_cache_enabled() -> bool:

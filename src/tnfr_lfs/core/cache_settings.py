@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 
 DEFAULT_RECOMMENDER_CACHE_SIZE = 32
+DEFAULT_DYNAMIC_CACHE_SIZE = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,7 +14,7 @@ class CacheOptions:
     """Immutable cache configuration parsed from TOML sources."""
 
     enable_delta_cache: bool = True
-    nu_f_cache_size: int = 256
+    nu_f_cache_size: int = DEFAULT_DYNAMIC_CACHE_SIZE
     telemetry_cache_size: int = 1
     recommender_cache_size: int = DEFAULT_RECOMMENDER_CACHE_SIZE
 
@@ -40,4 +41,8 @@ class CacheOptions:
         return max(self.nu_f_cache_size, self.telemetry_cache_size, self.recommender_cache_size)
 
 
-__all__ = ["CacheOptions", "DEFAULT_RECOMMENDER_CACHE_SIZE"]
+__all__ = [
+    "CacheOptions",
+    "DEFAULT_DYNAMIC_CACHE_SIZE",
+    "DEFAULT_RECOMMENDER_CACHE_SIZE",
+]

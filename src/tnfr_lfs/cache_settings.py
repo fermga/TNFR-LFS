@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from warnings import warn
 
-from .core.cache_settings import CacheOptions, DEFAULT_RECOMMENDER_CACHE_SIZE
+from .core.cache_settings import (
+    CacheOptions,
+    DEFAULT_DYNAMIC_CACHE_SIZE,
+    DEFAULT_RECOMMENDER_CACHE_SIZE,
+)
 
 warn(
     "'tnfr_lfs.cache_settings' is deprecated and will be removed in a future "
@@ -18,4 +22,8 @@ warn(
     stacklevel=2,
 )
 
-__all__ = ["CacheOptions", "DEFAULT_RECOMMENDER_CACHE_SIZE"]
+__all__ = [
+    "CacheOptions",
+    "DEFAULT_DYNAMIC_CACHE_SIZE",
+    "DEFAULT_RECOMMENDER_CACHE_SIZE",
+]

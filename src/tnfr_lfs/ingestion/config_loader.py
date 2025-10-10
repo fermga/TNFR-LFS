@@ -15,7 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 from .._pack_resources import data_root
-from ..core.cache_settings import CacheOptions
+from ..core.cache_settings import CacheOptions, DEFAULT_DYNAMIC_CACHE_SIZE
 from ..utils.immutables import _freeze_dict, _freeze_value
 
 
@@ -128,7 +128,11 @@ def parse_cache_options(
             performance_cfg = MappingProxyType({})
 
     cache_enabled = _coerce_bool(performance_cfg.get("cache_enabled"), True)
-    cache_size = _coerce_int(performance_cfg.get("max_cache_size"), 256, minimum=0)
+    cache_size = _coerce_int(
+        performance_cfg.get("max_cache_size"),
+        DEFAULT_DYNAMIC_CACHE_SIZE,
+        minimum=0,
+    )
     if not cache_enabled:
         cache_size = 0
 
