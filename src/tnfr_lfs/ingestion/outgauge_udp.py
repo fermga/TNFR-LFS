@@ -10,7 +10,6 @@ successful recoveries.
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 import logging
 from types import TracebackType
@@ -18,9 +17,13 @@ import math
 import socket
 import struct
 import time
-from typing import Deque, Optional, Tuple, cast
+from typing import Optional, Tuple, cast
 
 from tnfr_lfs.ingestion._socket_poll import wait_for_read_ready
+from tnfr_lfs.ingestion._reorder_buffer import (
+    CircularReorderBuffer,
+    DEFAULT_REORDER_BUFFER_SIZE,
+)
 
 __all__ = ["OutGaugePacket", "OutGaugeUDPClient"]
 
@@ -243,14 +246,14 @@ class OutGaugeUDPClient:
             reordering buffer. ``None`` leaves the buffer unbounded.
         """
 
-        max_buffer: Optional[int] = None
+        buffer_capacity = DEFAULT_REORDER_BUFFER_SIZE
         if buffer_size is not None:
             try:
                 numeric = int(buffer_size)
             except (TypeError, ValueError):
                 numeric = 0
             if numeric > 0:
-                max_buffer = numeric
+                buffer_capacity = numeric
         self._remote_host = host
         self._remote_addresses = self._resolve_remote_addresses(host)
         self._timeout = timeout
@@ -262,7 +265,7 @@ class OutGaugeUDPClient:
         self._address: Tuple[str, int] = (local_host, local_port)
         self._timeouts = 0
         self._ignored_hosts = 0
-        self._buffer: Deque[tuple[float, OutGaugePacket]] = deque(maxlen=max_buffer)
+        self._buffer = CircularReorderBuffer[OutGaugePacket](buffer_capacity)
         self._buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
         self._received_packets = 0
         self._delivered_packets = 0
@@ -449,23 +452,22 @@ class OutGaugeUDPClient:
             )
             return
 
-        inserted = False
-        for index, (_, existing) in enumerate(self._buffer):
-            if packet.packet_id < existing.packet_id:
-                self._buffer.insert(index, (arrival, packet))
-                inserted = True
-                break
-        if not inserted:
-            self._buffer.append((arrival, packet))
+        self._buffer.insert(arrival, packet, packet.packet_id)
 
     def _pop_ready_packet(
         self, now: float, *, allow_grace: bool
     ) -> Optional[OutGaugePacket]:
         while self._buffer:
-            arrival, packet = self._buffer[0]
+            peeked = self._buffer.peek_oldest()
+            if peeked is None:
+                break
+            arrival, packet = peeked
             if not allow_grace and len(self._buffer) == 1 and (now - arrival) < self._buffer_grace:
                 break
-            self._buffer.popleft()
+            popped = self._buffer.pop_oldest()
+            if popped is None:
+                break
+            _, packet = popped
             if (
                 self._last_emitted_id is not None
                 and packet.packet_id <= self._last_emitted_id
@@ -507,4 +509,4 @@ class OutGaugeUDPClient:
     def _is_duplicate(self, packet_id: int) -> bool:
         if self._last_emitted_id is not None and packet_id == self._last_emitted_id:
             return True
-        return any(existing.packet_id == packet_id for _, existing in self._buffer)
+        return self._buffer.contains_key(packet_id)
