@@ -15,36 +15,12 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 from .._pack_resources import data_root
-from ..core.cache_settings import CacheOptions, DEFAULT_DYNAMIC_CACHE_SIZE
+from ..core.cache_settings import CacheOptions
 from ..utils.immutables import _freeze_dict, _freeze_value
 
 
 _DATA_ROOT = data_root()
 _LFS_CLASS_OVERRIDES_CACHE: dict[Path, Mapping[str, Mapping[str, Any]]] = {}
-
-
-def _coerce_bool(value: Any, fallback: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"1", "true", "yes", "on"}:
-            return True
-        if lowered in {"0", "false", "no", "off"}:
-            return False
-    return fallback
-
-
-def _coerce_int(value: Any, fallback: int, *, minimum: int = 0) -> int:
-    try:
-        numeric = int(value)
-    except (TypeError, ValueError):
-        return fallback
-    if numeric < minimum:
-        return minimum
-    return numeric
-
-
 def _deep_merge(
     base: ABCMapping[str, Any], overlay: ABCMapping[str, Any]
 ) -> dict[str, Any]:
@@ -116,33 +92,7 @@ def parse_cache_options(
     pack_root: str | Path | None = None,
 ) -> CacheOptions:
     """Normalise cache configuration from CLI and pack TOML payloads."""
-
-    performance_cfg: Mapping[str, Any]
-    if config is None:
-        performance_cfg = MappingProxyType({})
-    else:
-        candidate = config.get("performance")
-        if isinstance(candidate, ABCMapping):
-            performance_cfg = candidate
-        else:
-            performance_cfg = MappingProxyType({})
-
-    cache_enabled = _coerce_bool(performance_cfg.get("cache_enabled"), True)
-    cache_size = _coerce_int(
-        performance_cfg.get("max_cache_size"),
-        DEFAULT_DYNAMIC_CACHE_SIZE,
-        minimum=0,
-    )
-    if not cache_enabled:
-        cache_size = 0
-
-    options = CacheOptions(
-        enable_delta_cache=cache_enabled,
-        nu_f_cache_size=cache_size,
-        telemetry_cache_size=cache_size,
-        recommender_cache_size=cache_size,
-    )
-    return options.with_defaults()
+    return CacheOptions.from_config(config)
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,6 +14,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
+from ..core.cache_settings import CacheOptions
 from ..ingestion import OutSimClient
 from ..ingestion.offline import (
     ReplayCSVBundleReader,
@@ -64,28 +65,28 @@ def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
             telemetry_cfg = data.get("telemetry")
             if isinstance(telemetry_cfg, Mapping) and "core" not in data:
                 data["core"] = dict(telemetry_cfg)
-            cache_cfg = data.get("cache")
-            if isinstance(cache_cfg, Mapping) and "performance" not in data:
-                performance_cfg: dict[str, Any] = {}
-                if "cache_enabled" in cache_cfg:
-                    performance_cfg["cache_enabled"] = cache_cfg.get("cache_enabled")
-                elif "enable_delta_cache" in cache_cfg:
-                    performance_cfg["cache_enabled"] = cache_cfg.get("enable_delta_cache")
-                if "max_cache_size" in cache_cfg:
-                    performance_cfg["max_cache_size"] = cache_cfg.get("max_cache_size")
+            cache_options = CacheOptions.from_config(data)
+            performance_cfg_raw = data.get("performance")
+            legacy_cache_raw = data.get("cache")
+            should_update_performance = isinstance(performance_cfg_raw, Mapping) or isinstance(
+                legacy_cache_raw, Mapping
+            )
+            if should_update_performance:
+                performance_cfg: dict[str, Any]
+                if isinstance(performance_cfg_raw, Mapping):
+                    performance_cfg = dict(performance_cfg_raw)
                 else:
-                    for legacy_key in ("nu_f_cache_size", "recommender_cache_size"):
-                        if legacy_key in cache_cfg:
-                            performance_cfg["max_cache_size"] = cache_cfg.get(legacy_key)
-                            break
-                    else:
-                        telemetry_section = cache_cfg.get("telemetry")
-                        if isinstance(telemetry_section, Mapping):
-                            size = telemetry_section.get("telemetry_cache_size")
-                            if size is not None:
-                                performance_cfg["max_cache_size"] = size
-                if performance_cfg:
-                    data["performance"] = performance_cfg
+                    performance_cfg = {}
+                performance_cfg.update(
+                    {
+                        "cache_enabled": cache_options.enable_delta_cache,
+                        "max_cache_size": cache_options.max_cache_size,
+                        "nu_f_cache_size": cache_options.nu_f_cache_size,
+                        "telemetry_cache_size": cache_options.telemetry_cache_size,
+                        "recommender_cache_size": cache_options.recommender_cache_size,
+                    }
+                )
+                data["performance"] = performance_cfg
         data["_config_path"] = str(resolved)
         return data
     return {"_config_path": None}
