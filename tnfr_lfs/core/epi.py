@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass, field
-from statistics import mean
 from collections.abc import Mapping as MappingABC
 from typing import Deque, Dict, List, Mapping, Optional, Sequence, Tuple, TYPE_CHECKING
 
@@ -1315,6 +1314,59 @@ class DeltaCalculator:
     def derive_baseline(records: Sequence[TelemetryRecord]) -> TelemetryRecord:
         """Return a synthetic baseline record representing the average state."""
 
+        # Collate the continuous telemetry channels into a single NumPy array so
+        # the baseline statistics can be obtained with a single vectorised
+        # ``np.mean`` call.  ``tests/test_epi.py::test_vectorised_baseline``
+        # asserts these aggregated means remain compatible with the historical
+        # scalar behaviour.
+        float_fields = (
+            "vertical_load",
+            "slip_ratio",
+            "slip_ratio_fl",
+            "slip_ratio_fr",
+            "slip_ratio_rl",
+            "slip_ratio_rr",
+            "lateral_accel",
+            "longitudinal_accel",
+            "yaw",
+            "pitch",
+            "roll",
+            "brake_pressure",
+            "locking",
+            "nfr",
+            "si",
+            "speed",
+            "yaw_rate",
+            "slip_angle",
+            "slip_angle_fl",
+            "slip_angle_fr",
+            "slip_angle_rl",
+            "slip_angle_rr",
+            "steer",
+            "throttle",
+            "vertical_load_front",
+            "vertical_load_rear",
+            "mu_eff_front",
+            "mu_eff_rear",
+            "mu_eff_front_lateral",
+            "mu_eff_front_longitudinal",
+            "mu_eff_rear_lateral",
+            "mu_eff_rear_longitudinal",
+            "suspension_travel_front",
+            "suspension_travel_rear",
+            "suspension_velocity_front",
+            "suspension_velocity_rear",
+        )
+        float_samples = np.array(
+            [[getattr(record, field) for field in float_fields] for record in records],
+            dtype=float,
+        )
+        float_means = np.mean(float_samples, axis=0)
+
+        baseline_kwargs = dict(zip(float_fields, float_means))
+        gear_values = np.fromiter((record.gear for record in records), dtype=float)
+        baseline_kwargs["gear"] = int(np.rint(np.mean(gear_values, axis=0)))
+
         return TelemetryRecord(
             timestamp=records[0].timestamp,
             structural_timestamp=(
@@ -1322,52 +1374,10 @@ class DeltaCalculator:
                 if getattr(records[0], "structural_timestamp", None) is not None
                 else records[0].timestamp
             ),
-            vertical_load=mean(record.vertical_load for record in records),
-            slip_ratio=mean(record.slip_ratio for record in records),
-            slip_ratio_fl=mean(record.slip_ratio_fl for record in records),
-            slip_ratio_fr=mean(record.slip_ratio_fr for record in records),
-            slip_ratio_rl=mean(record.slip_ratio_rl for record in records),
-            slip_ratio_rr=mean(record.slip_ratio_rr for record in records),
-            lateral_accel=mean(record.lateral_accel for record in records),
-            longitudinal_accel=mean(record.longitudinal_accel for record in records),
-            yaw=mean(record.yaw for record in records),
-            pitch=mean(record.pitch for record in records),
-            roll=mean(record.roll for record in records),
-            brake_pressure=mean(record.brake_pressure for record in records),
-            locking=mean(record.locking for record in records),
-            nfr=mean(record.nfr for record in records),
-            si=mean(record.si for record in records),
-            speed=mean(record.speed for record in records),
-            yaw_rate=mean(record.yaw_rate for record in records),
-            slip_angle=mean(record.slip_angle for record in records),
-            slip_angle_fl=mean(record.slip_angle_fl for record in records),
-            slip_angle_fr=mean(record.slip_angle_fr for record in records),
-            slip_angle_rl=mean(record.slip_angle_rl for record in records),
-            slip_angle_rr=mean(record.slip_angle_rr for record in records),
-            steer=mean(record.steer for record in records),
-            throttle=mean(record.throttle for record in records),
-            gear=int(round(mean(record.gear for record in records))),
-            vertical_load_front=mean(record.vertical_load_front for record in records),
-            vertical_load_rear=mean(record.vertical_load_rear for record in records),
-            mu_eff_front=mean(record.mu_eff_front for record in records),
-            mu_eff_rear=mean(record.mu_eff_rear for record in records),
-            mu_eff_front_lateral=mean(
-                record.mu_eff_front_lateral for record in records
-            ),
-            mu_eff_front_longitudinal=mean(
-                record.mu_eff_front_longitudinal for record in records
-            ),
-            mu_eff_rear_lateral=mean(record.mu_eff_rear_lateral for record in records),
-            mu_eff_rear_longitudinal=mean(
-                record.mu_eff_rear_longitudinal for record in records
-            ),
-            suspension_travel_front=mean(record.suspension_travel_front for record in records),
-            suspension_travel_rear=mean(record.suspension_travel_rear for record in records),
-            suspension_velocity_front=mean(record.suspension_velocity_front for record in records),
-            suspension_velocity_rear=mean(record.suspension_velocity_rear for record in records),
             car_model=getattr(records[0], "car_model", None),
             track_name=getattr(records[0], "track_name", None),
             tyre_compound=getattr(records[0], "tyre_compound", None),
+            **baseline_kwargs,
         )
 
     @staticmethod
