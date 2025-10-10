@@ -81,6 +81,9 @@ warn_unused_configs = true
     "modifiers/**/*",
 ]
 
+[tool.setuptools.data-files]
+"share/tnfr_lfs/config" = ["config/plugins.toml"]
+
 [tool.semantic_release]
 branch = "main"
 version_source = "tag"
