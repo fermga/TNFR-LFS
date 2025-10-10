@@ -31,6 +31,22 @@ def test_load_track_parses_configs(mini_track_pack: MiniTrackPack) -> None:
     assert layout.extras["notes"] == ("tight chicane", "long straight")
 
 
+def test_load_track_resolves_alias_layout(mini_track_pack: MiniTrackPack) -> None:
+    track = load_track(mini_track_pack.track_slug, tracks_dir=mini_track_pack.tracks_dir)
+
+    assert "AS3R" in track.configs
+
+    base = track.configs["AS3"]
+    alias = track.configs["AS3R"]
+
+    assert alias.name == "Mini Aston Historic Reverse"
+    assert alias.length_km == base.length_km
+    assert alias.surface == base.surface
+    assert alias.track_profile == base.track_profile
+    assert alias.extras == base.extras
+    assert "alias_of" not in alias.extras
+
+
 def test_load_track_profiles_normalises_weights(mini_track_pack: MiniTrackPack) -> None:
     profiles = load_track_profiles(mini_track_pack.track_profiles_dir)
 

@@ -11,10 +11,8 @@ surface = "asphalt"
 track_profile = "p_fast_medium"
 
 [config.KY2R]
+alias_of = "KY2"
 name = "Kyoto National Reverse"
-length_km = 4.7
-surface = "asphalt"
-track_profile = "p_fast_medium"
 
 [config.KY3]
 name = "Kyoto GP Long"
@@ -23,10 +21,8 @@ surface = "asphalt"
 track_profile = "p_fast_long"
 
 [config.KY3R]
+alias_of = "KY3"
 name = "Kyoto GP Long Reverse"
-length_km = 6.7
-surface = "asphalt"
-track_profile = "p_fast_long"
 
 [config.KY31]
 name = "Kyoto GP Short"
