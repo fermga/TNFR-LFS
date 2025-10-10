@@ -256,8 +256,24 @@ def test_normalize_structural_operator_identifier_is_case_insensitive() -> None:
     assert normalize_structural_operator_identifier("silence") == "SILENCE"
 
 
+def test_normalize_structural_operator_identifier_aliases_spanish_label() -> None:
+    assert normalize_structural_operator_identifier("SILENCIO") == "SILENCE"
+    assert normalize_structural_operator_identifier("silencio") == "SILENCE"
+
+
+def test_canonical_operator_label_maps_spanish_alias_to_english() -> None:
+    assert canonical_operator_label("silencio") == "Structural silence"
+
+
 def test_silence_event_payloads_accepts_case_insensitive_identifier() -> None:
     payload = {"duration": 1.2}
     events = {"silence": (payload,)}
+    result = silence_event_payloads(events)
+    assert result == (payload,)
+
+
+def test_silence_event_payloads_accepts_spanish_alias() -> None:
+    payload = {"duration": 0.6}
+    events = {"SILENCIO": payload}
     result = silence_event_payloads(events)
     assert result == (payload,)
