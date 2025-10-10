@@ -20,6 +20,7 @@ from tnfr_lfs.cli import run_cli
 from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
+from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -1151,7 +1152,7 @@ def test_repository_template_configures_default_ports_and_profiles() -> None:
     performance = data["performance"]
     assert performance["telemetry_buffer_size"] == 64
     assert performance["cache_enabled"] is True
-    assert performance["max_cache_size"] == 256
+    assert performance["max_cache_size"] == DEFAULT_DYNAMIC_CACHE_SIZE
 
     suggestion_defaults = data["suggest"]
     assert suggestion_defaults["car_model"] == "FZR"
