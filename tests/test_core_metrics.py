@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -17,40 +16,7 @@ from tnfr_lfs.core.epi_models import (
 )
 from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
 
-
-def _record(timestamp: float, load: float, yaw_rate: float = 0.0) -> TelemetryRecord:
-    return TelemetryRecord(
-        timestamp=timestamp,
-        vertical_load=load,
-        slip_ratio=0.0,
-        lateral_accel=0.0,
-        longitudinal_accel=0.0,
-        yaw=0.0,
-        pitch=0.0,
-        roll=0.0,
-        brake_pressure=0.0,
-        locking=0.0,
-        nfr=100.0,
-        si=0.8,
-        speed=0.0,
-        yaw_rate=yaw_rate,
-        slip_angle=0.0,
-        steer=0.0,
-        throttle=0.0,
-        gear=3,
-        vertical_load_front=load * 0.52,
-        vertical_load_rear=load * 0.48,
-        mu_eff_front=1.0,
-        mu_eff_rear=1.0,
-        mu_eff_front_lateral=1.0,
-        mu_eff_front_longitudinal=0.95,
-        mu_eff_rear_lateral=1.0,
-        mu_eff_rear_longitudinal=0.95,
-        suspension_travel_front=0.0,
-        suspension_travel_rear=0.0,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
-    )
+from tests.helpers import build_telemetry_record
 
 
 def _bundle(
@@ -82,10 +48,34 @@ def _bundle(
 
 def test_window_metrics_support_efficiency_uses_structural_windows() -> None:
     records = [
-        _record(0.0, 4800.0, yaw_rate=0.05),
-        _record(1.0, 5000.0, yaw_rate=0.08),
-        _record(2.0, 5100.0, yaw_rate=0.02),
-        _record(3.0, 5300.0, yaw_rate=-0.03),
+        build_telemetry_record(
+            0.0,
+            vertical_load=4800.0,
+            vertical_load_front=4800.0 * 0.52,
+            vertical_load_rear=4800.0 * 0.48,
+            yaw_rate=0.05,
+        ),
+        build_telemetry_record(
+            1.0,
+            vertical_load=5000.0,
+            vertical_load_front=5000.0 * 0.52,
+            vertical_load_rear=5000.0 * 0.48,
+            yaw_rate=0.08,
+        ),
+        build_telemetry_record(
+            2.0,
+            vertical_load=5100.0,
+            vertical_load_front=5100.0 * 0.52,
+            vertical_load_rear=5100.0 * 0.48,
+            yaw_rate=0.02,
+        ),
+        build_telemetry_record(
+            3.0,
+            vertical_load=5300.0,
+            vertical_load_front=5300.0 * 0.52,
+            vertical_load_rear=5300.0 * 0.48,
+            yaw_rate=-0.03,
+        ),
     ]
     bundles = [
         _bundle(0.0, 0.0, 0.4, 0.3, 0.5, -0.1, 0.05),

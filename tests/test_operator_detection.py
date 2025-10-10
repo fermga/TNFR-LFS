@@ -15,60 +15,59 @@ from tnfr_lfs.core.operator_detection import (
     silence_event_payloads,
 )
 
+from tests.helpers import build_telemetry_record
 
-def _record(**overrides) -> TelemetryRecord:
-    base = dict(
-        timestamp=0.0,
-        vertical_load=5000.0,
-        slip_ratio=0.0,
-        lateral_accel=0.0,
-        longitudinal_accel=0.0,
-        yaw=0.0,
-        pitch=0.0,
-        roll=0.0,
-        brake_pressure=0.0,
-        locking=0.0,
-        nfr=0.0,
-        si=0.0,
-        speed=30.0,
-        yaw_rate=0.0,
-        slip_angle=0.0,
-        steer=0.0,
-        throttle=0.0,
-        gear=3,
-        vertical_load_front=2500.0,
-        vertical_load_rear=2500.0,
-        mu_eff_front=0.0,
-        mu_eff_rear=0.0,
-        mu_eff_front_lateral=0.0,
-        mu_eff_front_longitudinal=0.0,
-        mu_eff_rear_lateral=0.0,
-        mu_eff_rear_longitudinal=0.0,
-        suspension_travel_front=0.0,
-        suspension_travel_rear=0.0,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
-        tyre_temp_fl=0.0,
-        tyre_temp_fr=0.0,
-        tyre_temp_rl=0.0,
-        tyre_temp_rr=0.0,
-        tyre_pressure_fl=0.0,
-        tyre_pressure_fr=0.0,
-        tyre_pressure_rl=0.0,
-        tyre_pressure_rr=0.0,
-        rpm=5000.0,
-        line_deviation=0.0,
-    )
-    base.update(overrides)
-    return TelemetryRecord(**base)
+
+_BASE_OPERATOR_PAYLOAD = dict(
+    vertical_load=5000.0,
+    slip_ratio=0.0,
+    lateral_accel=0.0,
+    longitudinal_accel=0.0,
+    yaw=0.0,
+    pitch=0.0,
+    roll=0.0,
+    brake_pressure=0.0,
+    locking=0.0,
+    nfr=0.0,
+    si=0.0,
+    speed=30.0,
+    yaw_rate=0.0,
+    slip_angle=0.0,
+    steer=0.0,
+    throttle=0.0,
+    gear=3,
+    vertical_load_front=2500.0,
+    vertical_load_rear=2500.0,
+    mu_eff_front=0.0,
+    mu_eff_rear=0.0,
+    mu_eff_front_lateral=0.0,
+    mu_eff_front_longitudinal=0.0,
+    mu_eff_rear_lateral=0.0,
+    mu_eff_rear_longitudinal=0.0,
+    suspension_travel_front=0.0,
+    suspension_travel_rear=0.0,
+    suspension_velocity_front=0.0,
+    suspension_velocity_rear=0.0,
+    tyre_temp_fl=0.0,
+    tyre_temp_fr=0.0,
+    tyre_temp_rl=0.0,
+    tyre_temp_rr=0.0,
+    tyre_pressure_fl=0.0,
+    tyre_pressure_fr=0.0,
+    tyre_pressure_rl=0.0,
+    tyre_pressure_rr=0.0,
+    rpm=5000.0,
+    line_deviation=0.0,
+)
 
 
 def _build_series(samples: List[dict]) -> List[TelemetryRecord]:
     records: List[TelemetryRecord] = []
     for index, payload in enumerate(samples):
-        entry = dict(payload)
+        entry = dict(_BASE_OPERATOR_PAYLOAD)
+        entry.update(payload)
         entry.setdefault("timestamp", index * 0.1)
-        records.append(_record(**entry))
+        records.append(build_telemetry_record(**entry))
     return records
 
 
