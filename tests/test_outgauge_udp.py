@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 import socket
 import struct
 import time
+from typing import Deque
 from types import SimpleNamespace
 
 import pytest
@@ -126,6 +128,49 @@ def _outgauge_payload(packet_id: int, time_value: int) -> bytes:
         b"\x00" * 16,
         packet_id,
     )
+
+
+def test_outgauge_recv_drains_batch_after_wait(monkeypatch) -> None:
+    client = OutGaugeUDPClient(timeout=0.05, retries=5)
+
+    class FakeSocket:
+        def __init__(self) -> None:
+            self.queue: Deque[bytes] = deque()
+
+        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
+            if not self.queue:
+                raise BlockingIOError()
+            payload = self.queue.popleft()
+            return payload, ("127.0.0.1", 3000)
+
+        def close(self) -> None:
+            self.queue.clear()
+
+    fake_socket = FakeSocket()
+    original_socket = client._socket
+    monkeypatch.setattr(client, "_socket", fake_socket)
+    original_socket.close()
+
+    wait_calls: list[float | None] = []
+
+    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+        wait_calls.append(timeout)
+        if not fake_socket.queue:
+            fake_socket.queue.extend(
+                _outgauge_payload(packet_id, time_value)
+                for packet_id, time_value in ((5, 50), (6, 60), (7, 70))
+            )
+        return True
+
+    monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
+
+    try:
+        packets = [client.recv() for _ in range(3)]
+    finally:
+        client.close()
+
+    assert [packet.packet_id for packet in packets if packet] == [5, 6, 7]
+    assert len(wait_calls) == 1
 
 
 def test_async_outgauge_client_recovers_out_of_order_packets() -> None:
