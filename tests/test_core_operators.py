@@ -38,6 +38,7 @@ from tnfr_lfs.core.constants import WHEEL_SUFFIXES
 from tnfr_lfs.core.operators import (
     DissonanceBreakdown,
     acoplamiento_operator,
+    coupling_operator,
     coherence_operator,
     dissonance_breakdown_operator,
     dissonance_operator,
@@ -49,6 +50,7 @@ from tnfr_lfs.core.operators import (
     pairwise_coupling_operator,
     reception_operator,
     recursivity_operator,
+    recursive_filter_operator,
     recursividad_operator,
     resonance_operator,
     TyreBalanceControlOutput,
@@ -846,9 +848,19 @@ def test_reception_operator_wraps_epi_extractor():
     assert isinstance(bundles[0].epi, float)
 
 
-def test_recursividad_operator_requires_decay_in_range():
+def test_recursive_filter_operator_requires_decay_in_range():
     with pytest.raises(ValueError):
-        recursividad_operator([0.1, 0.2], decay=1.0)
+        recursive_filter_operator([0.1, 0.2], decay=1.0)
+
+
+def test_recursividad_operator_alias_emits_deprecation_warning():
+    series = [0.0, 0.5, 1.0]
+
+    with pytest.deprecated_call():
+        legacy = recursividad_operator(series, decay=0.3)
+
+    expected = recursive_filter_operator(series, decay=0.3)
+    assert legacy == expected
 
 
 def test_recursivity_operator_tracks_state_and_phase_changes():
@@ -1136,7 +1148,7 @@ def test_acoplamiento_and_resonance_behaviour():
     series_a = [0.1, 0.2, 0.3, 0.4]
     series_b = [0.1, 0.15, 0.25, 0.35]
 
-    coupling = acoplamiento_operator(series_a, series_b)
+    coupling = coupling_operator(series_a, series_b)
     resonance = resonance_operator(series_b)
     dissonance = dissonance_operator(series_a, target=0.25)
 
@@ -1144,6 +1156,17 @@ def test_acoplamiento_and_resonance_behaviour():
     expected_resonance = sqrt(mean(value * value for value in series_b))
     assert resonance == pytest.approx(expected_resonance, rel=1e-9)
     assert dissonance == pytest.approx(mean(abs(value - 0.25) for value in series_a))
+
+
+def test_acoplamiento_operator_alias_emits_deprecation_warning():
+    series_a = [0.0, 0.5, 1.0]
+    series_b = [0.0, 0.25, 0.5]
+
+    with pytest.deprecated_call():
+        legacy = acoplamiento_operator(series_a, series_b)
+
+    expected = coupling_operator(series_a, series_b)
+    assert legacy == expected
 
 
 def test_pairwise_coupling_operator_builds_expected_matrix():
@@ -1168,7 +1191,7 @@ def test_pairwise_coupling_operator_allows_unbalanced_lengths():
 
     pairwise = pairwise_coupling_operator(series)
 
-    expected = acoplamiento_operator(series["tyres"], series["suspension"], strict_length=False)
+    expected = coupling_operator(series["tyres"], series["suspension"], strict_length=False)
     assert pairwise["tyres↔suspension"] == pytest.approx(expected, rel=1e-9)
 
 

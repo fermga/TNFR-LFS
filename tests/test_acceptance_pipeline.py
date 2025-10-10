@@ -11,11 +11,11 @@ from tnfr_lfs.core.contextual_delta import (
     resolve_context_from_bundle,
 )
 from tnfr_lfs.core.operators import (
-    acoplamiento_operator,
     coherence_operator,
+    coupling_operator,
     orchestrate_delta_metrics,
     mutation_operator,
-    recursividad_operator,
+    recursive_filter_operator,
     recursivity_operator,
     resonance_operator,
 )
@@ -71,7 +71,7 @@ def test_acceptance_pipeline_monotonicity_and_coupling(
     expected_delta = coherence_operator(adjusted_series, window=3)
     assert smoothed_delta == pytest.approx(expected_delta)
 
-    expected_coupling = acoplamiento_operator(smoothed_delta, smoothed_si)
+    expected_coupling = coupling_operator(smoothed_delta, smoothed_si)
     assert result["coupling"] == pytest.approx(expected_coupling)
 
     expected_resonance = resonance_operator(smoothed_si)
@@ -102,10 +102,10 @@ def test_acceptance_pipeline_monotonicity_and_coupling(
 
     pairwise_delta = nodal_metrics["pairwise_coupling"]["delta_nfr"]
     assert pairwise_delta["tyres↔suspension"] == pytest.approx(
-        acoplamiento_operator(tyres_delta, suspension_delta)
+        coupling_operator(tyres_delta, suspension_delta)
     )
     assert pairwise_delta["tyres↔chassis"] == pytest.approx(
-        acoplamiento_operator(tyres_delta, chassis_delta)
+        coupling_operator(tyres_delta, chassis_delta)
     )
 
     variability = result["microsector_variability"]
@@ -189,7 +189,7 @@ def test_acceptance_memory_and_mutation_converge() -> None:
     assert abs(rec_output["filtered"]["style_index"] - steady["style_index"]) < 1e-2
 
     series = [0.45, 0.55, 0.6, 0.63, 0.63, 0.63]
-    recursive_trace = recursividad_operator(series, seed=0.45, decay=0.45)
+    recursive_trace = recursive_filter_operator(series, seed=0.45, decay=0.45)
     assert recursive_trace[-1] > recursive_trace[-2]
     assert abs(recursive_trace[-1] - 0.63) < 0.02
 

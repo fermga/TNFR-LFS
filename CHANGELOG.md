@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## Unreleased
+
+### Changed
+
+* Rename operator helpers to English (`coupling_operator`, `recursive_filter_operator`) while keeping deprecated Spanish aliases for compatibility.
+
 ## v0.3.0 (2025-10-10)
 
 ### Documentation

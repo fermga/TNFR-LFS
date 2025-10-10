@@ -237,12 +237,14 @@ tnfr_lfs.core.operators.reception_operator(records: Sequence[TelemetryRecord], e
 tnfr_lfs.core.operators.coherence_operator(series: Sequence[float], window: int = 3) -> List[float]
 tnfr_lfs.core.operators.dissonance_operator(series: Sequence[float], target: float) -> float
 tnfr_lfs.core.operators.dissonance_breakdown_operator(series: Sequence[float], target: float, *, microsectors: Optional[Sequence[Microsector]] = None, bundles: Optional[Sequence[EPIBundle]] = None) -> DissonanceBreakdown
-tnfr_lfs.core.operators.acoplamiento_operator(series_a: Sequence[float], series_b: Sequence[float]) -> float
+tnfr_lfs.core.operators.coupling_operator(series_a: Sequence[float], series_b: Sequence[float], *, strict_length: bool = True) -> float
 tnfr_lfs.core.operators.resonance_operator(series: Sequence[float]) -> float
-tnfr_lfs.core.operators.recursividad_operator(series: Sequence[float], *, seed: float = 0.0, decay: float = 0.5) -> List[float]
+tnfr_lfs.core.operators.recursive_filter_operator(series: Sequence[float], *, seed: float = 0.0, decay: float = 0.5) -> List[float]
 tnfr_lfs.core.operators.orchestrate_delta_metrics(telemetry_segments: Sequence[Sequence[TelemetryRecord]], target_delta_nfr: float, target_sense_index: float, *, coherence_window: int = 3, recursion_decay: float = 0.4, microsectors: Optional[Sequence[Microsector]] = None, phase_weights: Optional[Mapping[str, Mapping[str, float] | float]] = None, operator_state: Optional[Mapping[str, Dict[str, object]]] = None) -> Mapping[str, object]
 tnfr_lfs.core.operators.evolve_epi(prev_epi: float, delta_map: Mapping[str, float], dt: float, nu_f_by_node: Mapping[str, float]) -> Tuple[float, float]
 ```
+
+Legacy Spanish operator names remain available as deprecated aliases to ease the migration.
 
 These functions compose an end-to-end ΔNFR/Sense Index pipeline covering
 objective setting (Emission), telemetry reception, smoothing (Coherence),
