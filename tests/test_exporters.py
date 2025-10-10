@@ -31,8 +31,13 @@ from tnfr_lfs.exporters import (
     operator_trajectory_exporter,
 )
 from tnfr_lfs.core.operator_detection import canonical_operator_label
-from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan, serialise_setup_plan
-from tests.helpers import BASE_NU_F, SUPPORTED_CAR_MODELS
+from tnfr_lfs.exporters.setup_plan import serialise_setup_plan
+from tests.helpers import (
+    BASE_NU_F,
+    SUPPORTED_CAR_MODELS,
+    build_native_export_plan,
+    build_setup_plan,
+)
 
 
 def build_payload():
@@ -82,75 +87,6 @@ def test_csv_exporter_renders_rows():
         == "timestamp,epi,delta_nfr,delta_nfr_proj_longitudinal,delta_nfr_proj_lateral,sense_index"
     )
     assert len(lines) == 3
-
-
-def build_setup_plan(car_model: str = "XFG") -> SetupPlan:
-    return SetupPlan(
-        car_model=car_model,
-        session="FP1",
-        sci=0.94,
-        changes=(
-            SetupChange(
-                parameter="brake_bias_pct",
-                delta=2.0,
-                rationale="Rebalance braking support on entry",
-                expected_effect="Shift brake bias forward by 2.0%",
-            ),
-            SetupChange(
-                parameter="front_arb_steps",
-                delta=-1.0,
-                rationale="Tighten rotation through apex",
-                expected_effect="Reduce front anti-roll bar by 1 step",
-            ),
-        ),
-        rationales=("Telemetry indicates oscillations during entry phases",),
-        expected_effects=("Optimised braking and roll balance",),
-        sensitivities={
-            "sense_index": {"brake_bias_pct": -0.0125, "front_arb_steps": 0.0451},
-            "sci": {"brake_bias_pct": 0.0312, "front_arb_steps": -0.0148},
-            "delta_nfr_integral": {
-                "brake_bias_pct": -0.021,
-                "front_arb_steps": 0.084,
-            },
-        },
-        phase_sensitivities={
-            "entry": {"delta_nfr_integral": {"front_arb_steps": -0.062}},
-            "apex": {"delta_nfr_integral": {"front_arb_steps": -0.084}},
-        },
-        clamped_parameters=("front_arb_steps",),
-        tnfr_rationale_by_node={
-            "tyres": ("Adjust pressures to stabilise the grip window",),
-            "suspension": ("Increase lateral support through mid phases",),
-        },
-        tnfr_rationale_by_phase={
-            "entry": ("Reduce load transfer towards the front axle",),
-            "exit": ("Increase traction during extended exits",),
-        },
-        expected_effects_by_node={
-            "tyres": ("Improved thermal stability",),
-        },
-        expected_effects_by_phase={
-            "entry": ("More consistent braking",),
-        },
-        phase_axis_targets={
-            "entry": {"longitudinal": 0.4, "lateral": 0.1},
-            "apex": {"longitudinal": 0.05, "lateral": 0.3},
-        },
-        phase_axis_weights={
-            "entry": {"longitudinal": 0.7, "lateral": 0.3},
-            "apex": {"longitudinal": 0.2, "lateral": 0.8},
-        },
-        aero_mechanical_coherence=0.72,
-        sci_breakdown={
-            "sense": 0.32,
-            "delta": 0.18,
-            "udr": 0.12,
-            "bottoming": 0.1,
-            "aero": 0.09,
-        },
-    )
-
-
 def test_serialise_setup_plan_collects_unique_fields():
     plan = build_setup_plan()
     payload = serialise_setup_plan(plan)
@@ -309,15 +245,14 @@ def test_native_encoder_writes_gearing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TNFR_LFS_NATIVE_EXPORT", "1")
     module = importlib.import_module("tnfr_lfs.exporters.lfs_native")
     importlib.reload(module)
-    plan = SetupPlan(
-        car_model="XFG",
+    plan = build_native_export_plan(
         session="FP2",
-        changes=(
-            SetupChange("final_drive_ratio", 3.85, "", ""),
-            SetupChange("gear_1_ratio", 3.2, "", ""),
-            SetupChange("gear_2_ratio", 2.05, "", ""),
-            SetupChange("gear_6_ratio", 0.92, "", ""),
-        ),
+        change_overrides={
+            "final_drive_ratio": {"delta": 3.85},
+            "gear_1_ratio": {"delta": 3.2},
+            "gear_2_ratio": {"delta": 2.05},
+            "gear_6_ratio": {"delta": 0.92},
+        },
     )
     payload = module.encode_native_setup(plan)
     assert struct.unpack_from("<f", payload, 28)[0] == pytest.approx(3.85)

@@ -7,49 +7,7 @@ import struct
 
 import pytest
 
-from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
-
-
-def _build_plan() -> SetupPlan:
-    return SetupPlan(
-        car_model="XFG",
-        session="practice",
-        changes=(
-            SetupChange("front_camber_deg", -2.5, "", ""),
-            SetupChange("rear_camber_deg", -1.8, "", ""),
-            SetupChange("front_toe_deg", 0.1, "", ""),
-            SetupChange("rear_toe_deg", -0.2, "", ""),
-            SetupChange("caster_deg", 3.4, "", ""),
-            SetupChange("parallel_steer", 0.25, "", ""),
-            SetupChange("steering_lock_deg", 32.0, "", ""),
-            SetupChange("front_ride_height", 55.0, "", ""),
-            SetupChange("rear_ride_height", 60.0, "", ""),
-            SetupChange("front_spring_stiffness", 75.0, "", ""),
-            SetupChange("rear_spring_stiffness", 80.0, "", ""),
-            SetupChange("front_rebound_clicks", 12.0, "", ""),
-            SetupChange("rear_rebound_clicks", 10.0, "", ""),
-            SetupChange("front_compression_clicks", 8.0, "", ""),
-            SetupChange("rear_compression_clicks", 9.0, "", ""),
-            SetupChange("front_arb_steps", 3200.0, "", ""),
-            SetupChange("rear_arb_steps", 2800.0, "", ""),
-            SetupChange("front_tyre_pressure", 190.0, "", ""),
-            SetupChange("rear_tyre_pressure", 195.0, "", ""),
-            SetupChange("brake_bias_pct", 68.5, "", ""),
-            SetupChange("brake_max_per_wheel", 0.12, "", ""),
-            SetupChange("diff_power_lock", 45.0, "", ""),
-            SetupChange("diff_coast_lock", 35.0, "", ""),
-            SetupChange("diff_preload_nm", 80.0, "", ""),
-            SetupChange("final_drive_ratio", 3.72, "", ""),
-            SetupChange("gear_1_ratio", 3.10, "", ""),
-            SetupChange("gear_2_ratio", 2.12, "", ""),
-            SetupChange("gear_3_ratio", 1.55, "", ""),
-            SetupChange("gear_4_ratio", 1.22, "", ""),
-            SetupChange("gear_5_ratio", 1.00, "", ""),
-            SetupChange("gear_6_ratio", 0.88, "", ""),
-            SetupChange("rear_wing_angle", 12.0, "", ""),
-            SetupChange("front_wing_angle", 8.0, "", ""),
-        ),
-    )
+from tests.helpers import build_native_export_plan
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +21,7 @@ def _enable_native_export(monkeypatch: pytest.MonkeyPatch):
 
 def test_encode_native_setup_produces_expected_layout(_enable_native_export):
     module = importlib.import_module("tnfr_lfs.exporters.lfs_native")
-    payload = module.encode_native_setup(_build_plan())
+    payload = module.encode_native_setup(build_native_export_plan())
 
     assert payload[:6] == b"SRSETT"
     assert payload[7] == 252

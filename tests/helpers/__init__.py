@@ -3,6 +3,7 @@
 from .abtest import DummyBundle, build_metrics, scale_samples
 from .constants import BASE_NU_F, SUPPORTED_CAR_MODELS
 from .profile_manager import preloaded_profile_manager
+from .setup import build_minimal_setup_plan, build_native_export_plan, build_setup_plan
 from .steering import build_steering_bundle, build_steering_record
 from .telemetry import (
     build_calibration_record,
@@ -29,6 +30,9 @@ __all__ = [
     "scale_samples",
     "BASE_NU_F",
     "SUPPORTED_CAR_MODELS",
+    "build_setup_plan",
+    "build_native_export_plan",
+    "build_minimal_setup_plan",
     "QueueUDPSocket",
     "make_select_stub",
     "make_wait_stub",
