@@ -10,7 +10,9 @@ from tnfr_lfs.core.operator_detection import (
     detect_al,
     detect_il,
     detect_oz,
-    detect_silencio,
+    detect_silence,
+    normalize_structural_operator_identifier,
+    silence_event_payloads,
 )
 
 
@@ -188,7 +190,7 @@ def test_detect_il_uses_speed_weighted_threshold() -> None:
     assert detect_il(below_threshold, window=3, base_threshold=0.3, speed_gain=0.02) == []
 
 
-def test_detect_silencio_flags_quiet_structural_intervals() -> None:
+def test_detect_silence_flags_quiet_structural_intervals() -> None:
     quiet_series = _build_series(
         [
             {
@@ -204,7 +206,7 @@ def test_detect_silencio_flags_quiet_structural_intervals() -> None:
             for _ in range(16)
         ]
     )
-    events = detect_silencio(
+    events = detect_silence(
         quiet_series,
         window=8,
         load_threshold=150.0,
@@ -215,7 +217,7 @@ def test_detect_silencio_flags_quiet_structural_intervals() -> None:
     )
     assert events
     event = events[0]
-    assert event["name"] == canonical_operator_label("SILENCIO")
+    assert event["name"] == "Structural silence"
     assert event["duration"] >= 0.4
     assert event["structural_duration"] >= event["duration"]
     assert event["load_span"] <= 150.0
@@ -237,7 +239,7 @@ def test_detect_silencio_flags_quiet_structural_intervals() -> None:
         ]
     )
     assert (
-        detect_silencio(
+        detect_silence(
             noisy_series,
             window=8,
             load_threshold=150.0,
@@ -248,3 +250,30 @@ def test_detect_silencio_flags_quiet_structural_intervals() -> None:
         )
         == []
     )
+
+
+def test_normalize_structural_operator_identifier_is_case_insensitive() -> None:
+    assert normalize_structural_operator_identifier("silence") == "SILENCE"
+
+
+def test_normalize_structural_operator_identifier_aliases_spanish_label() -> None:
+    assert normalize_structural_operator_identifier("SILENCIO") == "SILENCE"
+    assert normalize_structural_operator_identifier("silencio") == "SILENCE"
+
+
+def test_canonical_operator_label_maps_spanish_alias_to_english() -> None:
+    assert canonical_operator_label("silencio") == "Structural silence"
+
+
+def test_silence_event_payloads_accepts_case_insensitive_identifier() -> None:
+    payload = {"duration": 1.2}
+    events = {"silence": (payload,)}
+    result = silence_event_payloads(events)
+    assert result == (payload,)
+
+
+def test_silence_event_payloads_accepts_spanish_alias() -> None:
+    payload = {"duration": 0.6}
+    events = {"SILENCIO": payload}
+    result = silence_event_payloads(events)
+    assert result == (payload,)
