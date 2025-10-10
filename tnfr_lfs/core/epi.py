@@ -21,6 +21,7 @@ from .cache import (
     dynamic_cache_enabled,
 )
 from .coherence import compute_node_delta_nfr, sense_index
+from .delta_utils import distribute_weighted_delta
 from .epi_models import (
     BrakesNode,
     ChassisNode,
@@ -791,20 +792,7 @@ def _axis_signal_components(
 def _distribute_node_delta(
     delta_nfr: float, node_signals: Mapping[str, float]
 ) -> Dict[str, float]:
-    total_signal = sum(node_signals.values())
-    if total_signal <= 1e-9 or not math.isfinite(total_signal):
-        node_count = len(node_signals)
-        if node_count == 0:
-            return {}
-        uniform_share = delta_nfr / float(node_count)
-        return {node: uniform_share for node in node_signals}
-
-    magnitude = abs(delta_nfr)
-    sign = 1.0 if delta_nfr >= 0.0 else -1.0
-    return {
-        node: sign * magnitude * (signal / total_signal)
-        for node, signal in node_signals.items()
-    }
+    return distribute_weighted_delta(delta_nfr, node_signals)
 
 
 def _delta_nfr_by_node_uncached(record: TelemetryRecord) -> Dict[str, float]:

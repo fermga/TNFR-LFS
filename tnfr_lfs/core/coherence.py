@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping as MappingABC
 from typing import Dict, Mapping
 
+from .delta_utils import distribute_weighted_delta
 from .phases import expand_phase_alias, phase_family
 from .utils import normalised_entropy
 
@@ -41,23 +42,12 @@ def compute_node_delta_nfr(
         avoid collisions across subsystems.
     """
 
-    if not feature_map:
+    distribution = distribute_weighted_delta(delta_nfr, feature_map)
+    if not distribution:
         return {}
-
-    total = sum(abs(value) for value in feature_map.values())
-    if total == 0:
-        weight = delta_nfr / len(feature_map)
-        return {
-            (f"{node}.{name}" if prefix else name): weight
-            for name in feature_map
-        }
-
-    sign = 1.0 if delta_nfr >= 0 else -1.0
-    magnitude = abs(delta_nfr)
-    return {
-        (f"{node}.{name}" if prefix else name): sign * magnitude * (abs(value) / total)
-        for name, value in feature_map.items()
-    }
+    if prefix:
+        return {f"{node}.{name}": value for name, value in distribution.items()}
+    return distribution
 
 
 def _frequency_gain(nu_f: float) -> float:
