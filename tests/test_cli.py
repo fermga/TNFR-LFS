@@ -322,7 +322,7 @@ def test_cli_analyze_accepts_raf_sample(
         phase_weights: Mapping[str, float] = {}
         robustness: Mapping[str, float] | None = None
 
-    from tnfr_lfs.processing import InsightsResult
+    from tnfr_lfs.analysis.insights import InsightsResult
 
     stub_insights = lambda *args, **kwargs: InsightsResult([], [], _StubThresholds(), None, {})
 
@@ -358,10 +358,10 @@ def test_cli_analyze_accepts_raf_sample(
     )
     monkeypatch.setattr(cli_module, "_phase_deviation_messages", workflows_module._phase_deviation_messages)
 
-    import tnfr_lfs.processing as processing_module
+    import tnfr_lfs.analysis.insights as insights_module
 
     monkeypatch.setattr(
-        processing_module,
+        insights_module,
         "compute_session_robustness",
         lambda *args, **kwargs: {},
     )
