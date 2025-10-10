@@ -41,6 +41,7 @@ __all__ = [
     "resolve_track_argument",
     "resolve_track_selection",
     "load_records",
+    "resolve_cache_size",
     "_load_records_from_namespace",
     "group_records_by_lap",
     "render_payload",
@@ -279,6 +280,15 @@ def load_records(source: Path) -> Records:
         raise CliError(str(exc)) from exc
 
 
+def resolve_cache_size(namespace: argparse.Namespace, attribute: str) -> int | None:
+    """Return the cache size stored on ``namespace.cache_options`` for ``attribute``."""
+
+    cache_options = getattr(namespace, "cache_options", None)
+    if cache_options is None:
+        return None
+    return getattr(cache_options, attribute, None)
+
+
 def _load_records_from_namespace(
     namespace: argparse.Namespace,
 ) -> Tuple[Records, Path]:
@@ -289,10 +299,7 @@ def _load_records_from_namespace(
     if replay_bundle is not None:
         bundle_path = Path(replay_bundle)
         try:
-            cache_options = getattr(namespace, "cache_options", None)
-            cache_size = None
-            if cache_options is not None:
-                cache_size = getattr(cache_options, "telemetry_cache_size", None)
+            cache_size = resolve_cache_size(namespace, "telemetry_cache_size")
             records = _load_replay_bundle(bundle_path, cache_size=cache_size)
         except FileNotFoundError as exc:
             raise CliError(str(exc)) from exc
