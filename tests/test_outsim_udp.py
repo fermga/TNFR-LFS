@@ -170,6 +170,58 @@ def test_outsim_pending_packet_flushes_when_successor_arrives(monkeypatch) -> No
         client.close()
 
 
+def test_outsim_isolated_packet_flushes_under_10ms_by_default(monkeypatch) -> None:
+    client = OutSimUDPClient(timeout=0.2, retries=1)
+
+    class FakeSocket:
+        def __init__(self) -> None:
+            self.queue: Deque[bytes] = deque()
+
+        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
+            if not self.queue:
+                raise BlockingIOError()
+            payload = self.queue.popleft()
+            return payload, ("127.0.0.1", 4123)
+
+        def close(self) -> None:
+            self.queue.clear()
+
+    fake_socket = FakeSocket()
+    original_socket = client._socket
+    monkeypatch.setattr(client, "_socket", fake_socket)
+    original_socket.close()
+
+    wait_calls: list[float] = []
+
+    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+        wait_calls.append(timeout)
+        return False
+
+    monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
+
+    fake_socket.queue.append(_outsim_payload(100))
+    first = client.recv()
+    assert first is not None
+    assert first.time == 100
+    first.release()
+
+    fake_socket.queue.append(_outsim_payload(120))
+    start = time.perf_counter()
+    second = client.recv()
+    elapsed_ms = (time.perf_counter() - start) * 1_000
+
+    try:
+        assert second is not None
+        assert second.time == 120
+        assert elapsed_ms < 10.0
+        assert wait_calls, "wait_for_read_ready should be consulted for pending packet"
+        assert wait_calls[0] <= 0.012
+    finally:
+        if second is not None:
+            second.release()
+        client.close()
+
+
 def test_async_outsim_client_handles_concurrent_receivers() -> None:
     async def runner() -> None:
         client = await AsyncOutSimUDPClient.create(port=0, reorder_grace=0.1, timeout=0.5)
