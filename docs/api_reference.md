@@ -233,7 +233,7 @@ visibility of brake/traction versus balance imbalances while keeping the raw
 
 ```
 tnfr_lfs.core.operators.emission_operator(target_delta_nfr: float, target_sense_index: float) -> Dict[str, float]
-tnfr_lfs.core.operators.recepcion_operator(records: Sequence[TelemetryRecord], extractor: Optional[EPIExtractor] = None) -> List[EPIBundle]
+tnfr_lfs.core.operators.reception_operator(records: Sequence[TelemetryRecord], extractor: Optional[EPIExtractor] = None) -> List[EPIBundle]
 tnfr_lfs.core.operators.coherence_operator(series: Sequence[float], window: int = 3) -> List[float]
 tnfr_lfs.core.operators.dissonance_operator(series: Sequence[float], target: float) -> float
 tnfr_lfs.core.operators.dissonance_breakdown_operator(series: Sequence[float], target: float, *, microsectors: Optional[Sequence[Microsector]] = None, bundles: Optional[Sequence[EPIBundle]] = None) -> DissonanceBreakdown

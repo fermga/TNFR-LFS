@@ -523,7 +523,7 @@ def test_compare_command_attaches_abtest(
                     DummyBundle(0.63),
                 ]
             },
-            "recepcion": {"lap_indices": [0, 0, 1, 1]},
+            "reception": {"lap_indices": [0, 0, 1, 1]},
         }
     }
     metrics_b = {
@@ -536,7 +536,7 @@ def test_compare_command_attaches_abtest(
                     DummyBundle(0.68),
                 ]
             },
-            "recepcion": {"lap_indices": [0, 0, 1, 1]},
+            "reception": {"lap_indices": [0, 0, 1, 1]},
         }
     }
     metrics_iter = itertools.cycle([metrics_a, metrics_b])

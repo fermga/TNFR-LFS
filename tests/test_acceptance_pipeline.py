@@ -36,11 +36,11 @@ def test_acceptance_pipeline_monotonicity_and_coupling(
 
     expected_bundles = list(acceptance_bundle_series)
 
-    def fake_recepcion(records, extractor=None):  # type: ignore[override]
+    def fake_reception(records, extractor=None):  # type: ignore[override]
         assert len(records) == len(expected_bundles)
         return expected_bundles
 
-    monkeypatch.setattr("tnfr_lfs.core.operators.recepcion_operator", fake_recepcion)
+    monkeypatch.setattr("tnfr_lfs.core.operators.reception_operator", fake_reception)
 
     result = orchestrate_delta_metrics(
         [acceptance_records],

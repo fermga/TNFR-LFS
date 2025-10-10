@@ -59,7 +59,7 @@ def _extract_lap_values(metrics: Mapping[str, object], metric: str) -> tuple[flo
     if not isinstance(stages, Mapping):
         return ()
     coherence_stage = stages.get("coherence")
-    reception_stage = stages.get("recepcion")
+    reception_stage = stages.get("reception")
     if not isinstance(coherence_stage, Mapping):
         return ()
     bundles = coherence_stage.get("bundles")

@@ -92,7 +92,7 @@ def emission_operator(target_delta_nfr: float, target_sense_index: float) -> Dic
     return {"delta_nfr": float(target_delta_nfr), "sense_index": target_si}
 
 
-def recepcion_operator(
+def reception_operator(
     records: Sequence[TelemetryRecord], extractor: EPIExtractor | None = None
 ) -> List[EPIBundle]:
     """Convert raw telemetry records into EPI bundles."""
@@ -958,7 +958,7 @@ def recursividad_operator(
     return trace
 
 
-def _stage_recepcion(
+def _stage_reception(
     telemetry_segments: Sequence[Sequence[TelemetryRecord]],
 ) -> tuple[Dict[str, object], List[TelemetryRecord]]:
     bundles: List[EPIBundle] = []
@@ -974,7 +974,7 @@ def _stage_recepcion(
             None,
         )
         explicit = label_value is not None
-        label = str(label_value) if explicit else f"Vuelta {lap_index + 1}"
+        label = str(label_value) if explicit else f"Lap {lap_index + 1}"
         lap_metadata.append(
             {
                 "index": lap_index,
@@ -983,7 +983,7 @@ def _stage_recepcion(
                 "explicit": explicit,
             }
         )
-        segment_bundles = recepcion_operator(segment_records)
+        segment_bundles = reception_operator(segment_records)
         lap_indices.extend([lap_index] * len(segment_bundles))
         bundles.extend(segment_bundles)
 
@@ -1479,7 +1479,7 @@ def orchestrate_delta_metrics(
     """Pipeline orchestration producing aggregated ΔNFR and Si metrics."""
 
     objectives = emission_operator(target_delta_nfr, target_sense_index)
-    reception_stage, flattened_records = _stage_recepcion(telemetry_segments)
+    reception_stage, flattened_records = _stage_reception(telemetry_segments)
     phase_assignments, weight_lookup = _phase_context_from_microsectors(
         microsectors
     )
@@ -1504,7 +1504,7 @@ def orchestrate_delta_metrics(
             useful_dissonance_samples=0,
         )
         stages = {
-            "recepcion": reception_stage,
+            "reception": reception_stage,
             "coherence": {
                 "raw_delta": [],
                 "raw_sense_index": [],
@@ -1589,7 +1589,7 @@ def orchestrate_delta_metrics(
     )
 
     stages = {
-        "recepcion": reception_stage,
+        "reception": reception_stage,
         "coherence": coherence_stage,
         "nodal": nodal_stage,
         "epi": epi_stage,
@@ -1644,7 +1644,7 @@ def orchestrate_delta_metrics(
 
 __all__ = [
     "emission_operator",
-    "recepcion_operator",
+    "reception_operator",
     "coherence_operator",
     "dissonance_operator",
     "dissonance_breakdown_operator",

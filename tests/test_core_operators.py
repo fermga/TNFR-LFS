@@ -47,7 +47,7 @@ from tnfr_lfs.core.operators import (
     mutation_operator,
     orchestrate_delta_metrics,
     pairwise_coupling_operator,
-    recepcion_operator,
+    reception_operator,
     recursivity_operator,
     recursividad_operator,
     resonance_operator,
@@ -439,8 +439,8 @@ def test_orchestrator_pipeline_builds_consistent_metrics():
     assert results["structural_expansion_lateral"] >= 0.0
     assert results["structural_contraction_lateral"] >= 0.0
     stages = results["stages"]
-    assert set(stages) == {"recepcion", "coherence", "nodal", "epi", "sense"}
-    reception_stage = stages["recepcion"]
+    assert set(stages) == {"reception", "coherence", "nodal", "epi", "sense"}
+    reception_stage = stages["reception"]
     assert reception_stage["sample_count"] == 4
     assert len(reception_stage["lap_indices"]) == 4
     coherence_stage = stages["coherence"]
@@ -594,9 +594,9 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
     delta_values = [[0.1, 0.3], [0.2, 0.4]]
     si_values = [[0.8, 0.82], [0.78, 0.76]]
 
-    def _fake_recepcion(segment):
-        index = _fake_recepcion.call_count
-        _fake_recepcion.call_count += 1
+    def _fake_reception(segment):
+        index = _fake_reception.call_count
+        _fake_reception.call_count += 1
         bundles: List[EPIBundle] = []
         timestamp = 0.0
         for delta, si in zip(delta_values[index], si_values[index]):
@@ -618,8 +618,8 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
             timestamp += 1.0
         return bundles
 
-    _fake_recepcion.call_count = 0
-    monkeypatch.setattr("tnfr_lfs.core.operators.recepcion_operator", _fake_recepcion)
+    _fake_reception.call_count = 0
+    monkeypatch.setattr("tnfr_lfs.core.operators.reception_operator", _fake_reception)
 
     phase_sync_a = {
         phase: 0.85 + index * 0.02 for index, phase in enumerate(PHASE_SEQUENCE)
@@ -711,14 +711,14 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
         mean(phase_sync_a.values())
     )
     assert first["overall"]["cphi"]["mean"] == pytest.approx(mean(cphi_a.values()))
-    assert set(first["laps"]) == {"Vuelta 1", "Vuelta 2"}
-    assert first["laps"]["Vuelta 1"]["samples"] == 2
-    lap_metrics = first["laps"]["Vuelta 1"]
+    assert set(first["laps"]) == {"Lap 1", "Lap 2"}
+    assert first["laps"]["Lap 1"]["samples"] == 2
+    lap_metrics = first["laps"]["Lap 1"]
     assert "delta_nfr_integral" in lap_metrics
     assert lap_metrics["cphi"]["mean"] == pytest.approx(
         first["overall"]["cphi"]["mean"]
     )
-    reception_stage = results["stages"]["recepcion"]
+    reception_stage = results["stages"]["reception"]
     lap_indices = reception_stage.get("lap_indices", [])
     lap_sequence = results["lap_sequence"]
     for lap_entry in lap_sequence:
@@ -737,7 +737,7 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
         assert first["laps"][lap_label]["delta_nfr"]["variance"] == pytest.approx(
             expected_variance
         )
-    assert first["laps"]["Vuelta 2"]["samples"] == 1
+        assert first["laps"]["Lap 2"]["samples"] == 1
 
 def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
     bundles = [
@@ -834,13 +834,13 @@ def test_emission_operator_clamps_sense_index():
     assert objectives["sense_index"] == 1.0
 
 
-def test_recepcion_operator_wraps_epi_extractor():
+def test_reception_operator_wraps_epi_extractor():
     records = [
         _build_record(0.0, 5000.0, 0.1, 1.0, 0.5, 0.8, 0.9),
         _build_record(1.0, 5050.0, 0.09, 1.1, 0.6, 0.81, 0.91),
     ]
 
-    bundles = recepcion_operator(records)
+    bundles = reception_operator(records)
 
     assert len(bundles) == 2
     assert isinstance(bundles[0].epi, float)
