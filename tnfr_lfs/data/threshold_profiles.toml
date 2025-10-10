@@ -30,6 +30,7 @@ sense_index = 0.18
 delta_nfr = 0.45
 sense_index = 0.22
 
+# HUD defaults: leave per-track sections empty unless values deviate.
 [generic.generic.hud]
 delta_entropy_green = 0.65
 delta_entropy_amber = 0.45
@@ -77,15 +78,6 @@ chassis = 1.15
 __default__ = 1.0
 tyres = 1.25
 transmission = 1.2
-
-[FZR.AS5.hud]
-delta_entropy_green = 0.65
-delta_entropy_amber = 0.45
-node_entropy_green = 0.60
-node_entropy_amber = 0.40
-integral_cov_green = 0.25
-integral_cov_amber = 0.45
-integral_cov_min_laps = 3
 
 [FO8.KY3]
 entry_delta_tolerance = 0.7

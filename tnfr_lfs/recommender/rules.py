@@ -622,6 +622,13 @@ class ThresholdProfile:
         return table
 
     def hud_threshold(self, key: str, default: float | None = None) -> float | None:
+        """Return a HUD threshold override or fall back to the supplied default.
+
+        Callers are expected to provide the baseline HUD defaults (see
+        :func:`tnfr_lfs.cli.osd._hud_threshold_value`), so leaving a value
+        undefined guarantees we inherit the generic thresholds instead of
+        repeating them for every track.
+        """
         value = self.hud_thresholds.get(key)
         if value is None:
             return default
