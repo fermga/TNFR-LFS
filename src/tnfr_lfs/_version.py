@@ -10,8 +10,17 @@ def _version_from_sources() -> str:
     from pathlib import Path
     import re
 
-    changelog = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
-    if changelog.is_file():
+    candidates = []
+    resolved = Path(__file__).resolve()
+    parents = resolved.parents
+    if len(parents) >= 2:
+        candidates.append(parents[1] / "CHANGELOG.md")
+    if len(parents) >= 3:
+        candidates.append(parents[2] / "CHANGELOG.md")
+
+    for changelog in candidates:
+        if not changelog.is_file():
+            continue
         for line in changelog.read_text(encoding="utf-8").splitlines():
             match = re.match(r"^## v(?P<version>\d+\.\d+\.\d+)\b", line)
             if match:
