@@ -27,6 +27,7 @@ from tnfr_lfs.core.metrics import (
 from tnfr_lfs.core.operator_detection import canonical_operator_label
 from tnfr_lfs.recommender.rules import RuleProfileObjectives
 from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
+from tests.helpers import build_minimal_setup_plan
 from tests.helpers.steering import build_steering_bundle, build_steering_record
 
 
@@ -259,17 +260,12 @@ def test_hud_macro_status_injects_warnings():
 
 
 def test_osd_controller_applies_macro_on_trigger():
-    plan = SetupPlan(
+    plan = build_minimal_setup_plan(
         car_model="FZR",
-        session=None,
-        changes=(
-            SetupChange(parameter="Wing", delta=2.0, rationale="", expected_effect=""),
-            SetupChange(parameter="Damper", delta=-1.0, rationale="", expected_effect=""),
-        ),
-        rationales=(),
-        expected_effects=(),
-        sensitivities={},
-        clamped_parameters=(),
+        changes=[
+            {"parameter": "Wing", "delta": 2.0},
+            {"parameter": "Damper", "delta": -1.0},
+        ],
     )
     hud = DummyHUD(plan)
     controller = OSDController(
@@ -313,16 +309,9 @@ def test_osd_controller_applies_macro_on_trigger():
 
 
 def test_osd_controller_blocks_macro_when_preflight_fails():
-    plan = SetupPlan(
+    plan = build_minimal_setup_plan(
         car_model="FZR",
-        session=None,
-        changes=(
-            SetupChange(parameter="Wing", delta=2.0, rationale="", expected_effect=""),
-        ),
-        rationales=(),
-        expected_effects=(),
-        sensitivities={},
-        clamped_parameters=(),
+        changes=[{"parameter": "Wing", "delta": 2.0}],
     )
     hud = DummyHUD(plan)
     controller = OSDController(
@@ -359,20 +348,16 @@ def test_osd_controller_blocks_macro_when_preflight_fails():
 def test_render_page_c_marks_risks(synthetic_records):
     hud = _populate_hud(synthetic_records[:60])
     thresholds = hud._thresholds
-    plan = SetupPlan(
+    plan = build_minimal_setup_plan(
         car_model="FZR",
-        session=None,
         sci=0.842,
-        changes=(
-            SetupChange(
-                parameter="front_arb_steps",
-                delta=1.0,
-                rationale="",
-                expected_effect="Better support",
-            ),
-        ),
-        rationales=(),
-        expected_effects=(),
+        changes=[
+            {
+                "parameter": "front_arb_steps",
+                "delta": 1.0,
+                "expected_effect": "Better support",
+            }
+        ],
         sensitivities={"sense_index": {"front_arb_steps": 0.12}},
         clamped_parameters=("front_arb_steps",),
         sci_breakdown={
@@ -394,14 +379,9 @@ def test_render_page_c_marks_risks(synthetic_records):
 def test_render_page_c_includes_aero_guidance(synthetic_records):
     hud = _populate_hud(synthetic_records[:60])
     thresholds = hud._thresholds
-    plan = SetupPlan(
+    plan = build_minimal_setup_plan(
         car_model="FZR",
-        session=None,
         sci=0.731,
-        changes=(),
-        rationales=(),
-        expected_effects=(),
-        sensitivities={},
         aero_guidance="High speed → add rear wing",
         aero_metrics={
             "low_speed_imbalance": 0.02,
@@ -418,14 +398,9 @@ def test_render_page_c_includes_aero_guidance(synthetic_records):
 def test_render_page_c_includes_phase_axis_summary_map(synthetic_records):
     hud = _populate_hud(synthetic_records[:60])
     thresholds = hud._thresholds
-    plan = SetupPlan(
+    plan = build_minimal_setup_plan(
         car_model="FZR",
-        session=None,
         sci=0.731,
-        changes=(),
-        rationales=(),
-        expected_effects=(),
-        sensitivities={},
         phase_axis_targets={
             "entry": {"longitudinal": 0.4, "lateral": 0.1},
             "apex": {"longitudinal": 0.05, "lateral": 0.3},
@@ -444,7 +419,7 @@ def test_render_page_c_includes_phase_axis_summary_map(synthetic_records):
 def test_render_page_c_adds_operational_checklist(synthetic_records):
     hud = _populate_hud(synthetic_records[:60])
     thresholds = hud._thresholds
-    plan = SetupPlan(car_model="FZR", session=None)
+    plan = build_minimal_setup_plan(car_model="FZR")
     sense_state = {"average": 0.78}
     window_metrics = SimpleNamespace(
         brake_headroom=SimpleNamespace(value=0.35),
