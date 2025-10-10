@@ -20,6 +20,8 @@ import struct
 import time
 from typing import Deque, Optional, Tuple, cast
 
+from tnfr_lfs.ingestion._socket_poll import wait_for_read_ready
+
 __all__ = ["OutGaugePacket", "OutGaugeUDPClient"]
 
 
@@ -288,16 +290,25 @@ class OutGaugeUDPClient:
         }
 
     def recv(self) -> Optional[OutGaugePacket]:
-        ready = self._pop_ready_packet(time.monotonic(), allow_grace=False)
+        now = time.monotonic()
+        ready = self._pop_ready_packet(now, allow_grace=False)
         if ready is not None:
             return ready
+
+        deadline = None
+        if self._timeout > 0.0:
+            deadline = now + self._timeout
 
         for _ in range(self._retries):
             try:
                 payload, source = self._socket.recvfrom(_MAX_DATAGRAM_SIZE)
             except BlockingIOError:
-                if self._timeout > 0.0:
-                    time.sleep(self._timeout)
+                if not wait_for_read_ready(
+                    self._socket,
+                    timeout=self._timeout,
+                    deadline=deadline,
+                ):
+                    break
                 ready = self._pop_ready_packet(time.monotonic(), allow_grace=False)
                 if ready is not None:
                     return ready
