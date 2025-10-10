@@ -39,7 +39,7 @@ normalises the signal names to the canonical TNFR × LFS layout (`wheel_load_fl`
 `slip_ratio_rr`, `timestamp`, …). During ingestion the reader also converts the
 `distance` index to floats, expands `speed_kmh` into the `speed` channel (m/s) and
 maps the G-based accelerations/drift angle into SI units before generating telemetry
-records.【F:tnfr_lfs/io/replay_csv_bundle.py†L92-L213】
+records.【F:tnfr_lfs/ingestion/offline/replay_csv_bundle.py†L92-L213】
 
 ## Logging
 

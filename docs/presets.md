@@ -15,7 +15,7 @@ To create a bespoke preset:
    base :class:`tnfr_lfs.recommender.rules.ThresholdProfile` for the
    selected car/track combination before applying your overrides. This
    preserves any track-level `phase_weights` and exposes them via the
-   returned :class:`tnfr_lfs.ingestion.offline.ProfileSnapshot`. 【F:tnfr_lfs/io/profiles.py†L140-L176】
+   returned :class:`tnfr_lfs.ingestion.offline.ProfileSnapshot`. 【F:tnfr_lfs/ingestion/offline/profiles.py†L140-L176】
 
 The CLI/HUD automatically uses the resolved `phase_weights` when
 segmenting microsectors, so presets immediately influence the
