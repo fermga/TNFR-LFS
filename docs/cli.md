@@ -393,40 +393,28 @@ current working directory, the path referenced by the
 ``TNFR_LFS_CONFIG`` environment variable, or ``~/.config/tnfr_lfs.toml``
 as a fallback.  Any explicit CLI flag takes precedence, but the file can
 define sensible defaults for ports, exporters, car/track profiles and
-report locations:
+report locations.
 
-```toml
-[telemetry]
-host = "192.168.0.10"
-outsim_port = 4125
-outgauge_port = 3003
+!!! note
+    The snippet below is rendered directly from the bundled
+    ``tnfr_lfs.toml`` so the documentation always matches the canonical
+    defaults.  Additional tables shown later in this section (for
+    example ``[cache]``) illustrate optional overrides rather than
+    values written to the default template.
 
-[analyze]
-export = "json"
+{{ render_config_defaults() }}
 
-[suggest]
-car_model = "FZR"
-track = "AS5"
-
-[paths]
-output_dir = "out"
-pack_root = "~/tnfr-pack"
-
-[limits.delta_nfr]
-entry = 0.5
-apex = 0.4
-exit = 0.6
-```
-
-This configuration adjusts the default UDP ports used by ``baseline``,
-selects the exporter for analytics/reporting, sets the default
-car/track for ``suggest`` and overrides the tolerance used when
-highlighting ΔNFR↓ deviations in ``phase_messages``.
+These defaults emit structured JSON logs to ``stderr`` at the ``info``
+level, bind the capture stack to the local simulator
+(``127.0.0.1:4123``/``3000``/``29999``), export ``analyze`` results as
+JSON, default ``suggest`` to the FZR/AS5 pairing and store outputs under
+``out`` at the repository root.  Override any of them with explicit CLI
+flags or by editing the configuration file to match your deployment.
 
 Cache defaults now live in the pack's ``config/global.toml`` and are
-shared by the CLI and analysis helpers.  The block is omitted from the
-example above, but you can still override individual values by adding a
-``[cache]`` table to ``tnfr_lfs.toml``:
+shared by the CLI and analysis helpers.  The default template omits the
+block, but you can still override individual values by adding a
+``[cache]`` table to ``tnfr_lfs.toml`` (as shown in the example below):
 
 ```toml
 [cache]
