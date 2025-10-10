@@ -26,8 +26,14 @@ from tnfr_lfs.ingestion._reorder_buffer import (
     CircularReorderBuffer,
     DEFAULT_REORDER_BUFFER_SIZE,
 )
+from tnfr_lfs.ingestion.pools import PacketPool, PoolItem
 
-__all__ = ["AsyncOutGaugeUDPClient", "OutGaugePacket", "OutGaugeUDPClient"]
+__all__ = [
+    "AsyncOutGaugeUDPClient",
+    "OutGaugePacket",
+    "OutGaugeUDPClient",
+    "FrozenOutGaugePacket",
+]
 
 
 logger = logging.getLogger(__name__)
@@ -45,9 +51,7 @@ def _decode_string(value: bytes) -> str:
 
 
 @dataclass(frozen=True)
-class OutGaugePacket:
-    """Representation of a decoded OutGauge datagram."""
-
+class FrozenOutGaugePacket:
     time: int
     car: str
     player_name: str
@@ -79,13 +83,162 @@ class OutGaugePacket:
     tyre_temps_outer: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     brake_temps: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
-    @classmethod
-    def from_bytes(cls, payload: bytes) -> "OutGaugePacket":
-        if len(payload) < _PACK_STRUCT.size:
-            raise ValueError(
-                f"OutGauge payload too small: {len(payload)} bytes (expected {_PACK_STRUCT.size})"
-            )
-        unpacked = _PACK_STRUCT.unpack_from(payload)
+
+class OutGaugePacket(PoolItem):
+    """Representation of a decoded OutGauge datagram."""
+
+    __slots__ = (
+        "time",
+        "car",
+        "player_name",
+        "plate",
+        "track",
+        "layout",
+        "flags",
+        "gear",
+        "plid",
+        "speed",
+        "rpm",
+        "turbo",
+        "eng_temp",
+        "fuel",
+        "oil_pressure",
+        "oil_temp",
+        "dash_lights",
+        "show_lights",
+        "throttle",
+        "brake",
+        "clutch",
+        "display1",
+        "display2",
+        "packet_id",
+        "tyre_temps",
+        "tyre_pressures",
+        "tyre_temps_inner",
+        "tyre_temps_middle",
+        "tyre_temps_outer",
+        "brake_temps",
+    )
+
+    def __init__(
+        self,
+        *,
+        time: int = 0,
+        car: str = "",
+        player_name: str = "",
+        plate: str = "",
+        track: str = "",
+        layout: str = "",
+        flags: int = 0,
+        gear: int = 0,
+        plid: int = 0,
+        speed: float = 0.0,
+        rpm: float = 0.0,
+        turbo: float = 0.0,
+        eng_temp: float = 0.0,
+        fuel: float = 0.0,
+        oil_pressure: float = 0.0,
+        oil_temp: float = 0.0,
+        dash_lights: int = 0,
+        show_lights: int = 0,
+        throttle: float = 0.0,
+        brake: float = 0.0,
+        clutch: float = 0.0,
+        display1: str = "",
+        display2: str = "",
+        packet_id: int = 0,
+        tyre_temps: tuple[float, float, float, float] | None = None,
+        tyre_pressures: tuple[float, float, float, float] | None = None,
+        tyre_temps_inner: tuple[float, float, float, float] | None = None,
+        tyre_temps_middle: tuple[float, float, float, float] | None = None,
+        tyre_temps_outer: tuple[float, float, float, float] | None = None,
+        brake_temps: tuple[float, float, float, float] | None = None,
+    ) -> None:
+        super().__init__()
+        self._reset_values()
+        self.time = int(time)
+        self.car = car
+        self.player_name = player_name
+        self.plate = plate
+        self.track = track
+        self.layout = layout
+        self.flags = int(flags)
+        self.gear = int(gear)
+        self.plid = int(plid)
+        self.speed = float(speed)
+        self.rpm = float(rpm)
+        self.turbo = float(turbo)
+        self.eng_temp = float(eng_temp)
+        self.fuel = float(fuel)
+        self.oil_pressure = float(oil_pressure)
+        self.oil_temp = float(oil_temp)
+        self.dash_lights = int(dash_lights)
+        self.show_lights = int(show_lights)
+        self.throttle = float(throttle)
+        self.brake = float(brake)
+        self.clutch = float(clutch)
+        self.display1 = display1
+        self.display2 = display2
+        self.packet_id = int(packet_id)
+        if tyre_temps is not None:
+            self.tyre_temps = tuple(tyre_temps)
+        if tyre_pressures is not None:
+            self.tyre_pressures = tuple(tyre_pressures)
+        if tyre_temps_inner is not None:
+            self.tyre_temps_inner = tuple(tyre_temps_inner)
+        if tyre_temps_middle is not None:
+            self.tyre_temps_middle = tuple(tyre_temps_middle)
+        if tyre_temps_outer is not None:
+            self.tyre_temps_outer = tuple(tyre_temps_outer)
+        if brake_temps is not None:
+            self.brake_temps = tuple(brake_temps)
+
+    def _reset_values(self) -> None:
+        self.time = 0
+        self.car = ""
+        self.player_name = ""
+        self.plate = ""
+        self.track = ""
+        self.layout = ""
+        self.flags = 0
+        self.gear = 0
+        self.plid = 0
+        self.speed = 0.0
+        self.rpm = 0.0
+        self.turbo = 0.0
+        self.eng_temp = 0.0
+        self.fuel = 0.0
+        self.oil_pressure = 0.0
+        self.oil_temp = 0.0
+        self.dash_lights = 0
+        self.show_lights = 0
+        self.throttle = 0.0
+        self.brake = 0.0
+        self.clutch = 0.0
+        self.display1 = ""
+        self.display2 = ""
+        self.packet_id = 0
+        self.tyre_temps = (0.0, 0.0, 0.0, 0.0)
+        self.tyre_pressures = (0.0, 0.0, 0.0, 0.0)
+        self.tyre_temps_inner = (0.0, 0.0, 0.0, 0.0)
+        self.tyre_temps_middle = (0.0, 0.0, 0.0, 0.0)
+        self.tyre_temps_outer = (0.0, 0.0, 0.0, 0.0)
+        self.brake_temps = (0.0, 0.0, 0.0, 0.0)
+
+    def _reset(self) -> None:
+        self._reset_values()
+
+    def _populate(
+        self,
+        values: tuple,
+        *,
+        extra_inner: tuple[float, float, float, float],
+        extra_middle: tuple[float, float, float, float],
+        extra_outer: tuple[float, float, float, float],
+        extra_pressures: tuple[float, float, float, float],
+        extra_brakes: tuple[float, float, float, float],
+        averaged: tuple[float, float, float, float],
+    ) -> None:
         (
             time_value,
             car,
@@ -111,7 +264,82 @@ class OutGaugePacket:
             display1,
             display2,
             packet_id,
-        ) = unpacked
+        ) = values
+
+        self.time = int(time_value)
+        self.car = _decode_string(car)
+        self.player_name = _decode_string(player_name)
+        self.plate = _decode_string(plate)
+        self.track = _decode_string(track)
+        self.layout = _decode_string(layout)
+        self.flags = int(flags)
+        self.gear = int(gear)
+        self.plid = int(plid)
+        self.speed = float(speed)
+        self.rpm = float(rpm)
+        self.turbo = float(turbo)
+        self.eng_temp = float(eng_temp)
+        self.fuel = float(fuel)
+        self.oil_pressure = float(oil_pressure)
+        self.oil_temp = float(oil_temp)
+        self.dash_lights = int(dash_lights)
+        self.show_lights = int(show_lights)
+        self.throttle = float(throttle)
+        self.brake = float(brake)
+        self.clutch = float(clutch)
+        self.display1 = _decode_string(display1)
+        self.display2 = _decode_string(display2)
+        self.packet_id = int(packet_id)
+        self.tyre_temps = averaged
+        self.tyre_pressures = extra_pressures
+        self.tyre_temps_inner = extra_inner
+        self.tyre_temps_middle = extra_middle
+        self.tyre_temps_outer = extra_outer
+        self.brake_temps = extra_brakes
+
+    def freeze(self) -> FrozenOutGaugePacket:
+        return FrozenOutGaugePacket(
+            time=self.time,
+            car=self.car,
+            player_name=self.player_name,
+            plate=self.plate,
+            track=self.track,
+            layout=self.layout,
+            flags=self.flags,
+            gear=self.gear,
+            plid=self.plid,
+            speed=self.speed,
+            rpm=self.rpm,
+            turbo=self.turbo,
+            eng_temp=self.eng_temp,
+            fuel=self.fuel,
+            oil_pressure=self.oil_pressure,
+            oil_temp=self.oil_temp,
+            dash_lights=self.dash_lights,
+            show_lights=self.show_lights,
+            throttle=self.throttle,
+            brake=self.brake,
+            clutch=self.clutch,
+            display1=self.display1,
+            display2=self.display2,
+            packet_id=self.packet_id,
+            tyre_temps=self.tyre_temps,
+            tyre_pressures=self.tyre_pressures,
+            tyre_temps_inner=self.tyre_temps_inner,
+            tyre_temps_middle=self.tyre_temps_middle,
+            tyre_temps_outer=self.tyre_temps_outer,
+            brake_temps=self.brake_temps,
+        )
+
+    @classmethod
+    def from_bytes(
+        cls, payload: bytes, *, freeze: bool = False
+    ) -> "OutGaugePacket | FrozenOutGaugePacket":
+        if len(payload) < _PACK_STRUCT.size:
+            raise ValueError(
+                f"OutGauge payload too small: {len(payload)} bytes (expected {_PACK_STRUCT.size})"
+            )
+        values = _PACK_STRUCT.unpack_from(payload)
 
         extra_inner: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
         extra_middle: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
@@ -130,29 +358,25 @@ class OutGaugePacket:
                 except struct.error:
                     floats = ()
                 if floats:
-                    values = list(floats)
-                    # OutGauge appends the extended tyre payload as five
-                    # consecutive blocks of four floats (inner, middle, outer,
-                    # pressure and brake temperatures) when the corresponding
-                    # OG_EXT_* flags are enabled.
+                    values_list = list(floats)
 
                     def _extract_block(offset: int) -> tuple[float, float, float, float]:
                         block = [0.0, 0.0, 0.0, 0.0]
                         for index in range(4):
                             position = offset + index
-                            if position >= len(values):
+                            if position >= len(values_list):
                                 break
                             try:
-                                numeric = float(values[position])
+                                numeric = float(values_list[position])
                             except (TypeError, ValueError):
                                 continue
                             if not math.isfinite(numeric) or numeric <= 0.0:
                                 continue
                             block[index] = numeric
-                        block_tuple = tuple(block)
-                        if len(block_tuple) < 4:
-                            block_tuple = block_tuple + (0.0,) * (4 - len(block_tuple))
-                        return cast(tuple[float, float, float, float], block_tuple)
+                        return cast(
+                            tuple[float, float, float, float],
+                            tuple(block),
+                        )
 
                     extra_inner = _extract_block(0)
                     extra_middle = _extract_block(4)
@@ -161,8 +385,8 @@ class OutGaugePacket:
                     extra_brakes = _extract_block(16)
 
         def _average_layers(index: int) -> float:
-            values = [extra_inner[index], extra_middle[index], extra_outer[index]]
-            finite = [value for value in values if math.isfinite(value) and value > 0.0]
+            values_list = [extra_inner[index], extra_middle[index], extra_outer[index]]
+            finite = [value for value in values_list if math.isfinite(value) and value > 0.0]
             if not finite:
                 return 0.0
             return float(sum(finite) / len(finite))
@@ -173,38 +397,55 @@ class OutGaugePacket:
             _average_layers(2),
             _average_layers(3),
         )
-        return cls(
-            time=time_value,
-            car=_decode_string(car),
-            player_name=_decode_string(player_name),
-            plate=_decode_string(plate),
-            track=_decode_string(track),
-            layout=_decode_string(layout),
-            flags=flags,
-            gear=gear,
-            plid=plid,
-            speed=speed,
-            rpm=rpm,
-            turbo=turbo,
-            eng_temp=eng_temp,
-            fuel=fuel,
-            oil_pressure=oil_pressure,
-            oil_temp=oil_temp,
-            dash_lights=dash_lights,
-            show_lights=show_lights,
-            throttle=throttle,
-            brake=brake,
-            clutch=clutch,
-            display1=_decode_string(display1),
-            display2=_decode_string(display2),
-            packet_id=packet_id,
-            tyre_temps=averaged,
-            tyre_pressures=extra_pressures,
-            tyre_temps_inner=extra_inner,
-            tyre_temps_middle=extra_middle,
-            tyre_temps_outer=extra_outer,
-            brake_temps=extra_brakes,
+
+        if freeze:
+            return FrozenOutGaugePacket(
+                time=int(values[0]),
+                car=_decode_string(values[1]),
+                player_name=_decode_string(values[2]),
+                plate=_decode_string(values[3]),
+                track=_decode_string(values[4]),
+                layout=_decode_string(values[5]),
+                flags=int(values[6]),
+                gear=int(values[7]),
+                plid=int(values[8]),
+                speed=float(values[9]),
+                rpm=float(values[10]),
+                turbo=float(values[11]),
+                eng_temp=float(values[12]),
+                fuel=float(values[13]),
+                oil_pressure=float(values[14]),
+                oil_temp=float(values[15]),
+                dash_lights=int(values[16]),
+                show_lights=int(values[17]),
+                throttle=float(values[18]),
+                brake=float(values[19]),
+                clutch=float(values[20]),
+                display1=_decode_string(values[21]),
+                display2=_decode_string(values[22]),
+                packet_id=int(values[23]),
+                tyre_temps=averaged,
+                tyre_pressures=extra_pressures,
+                tyre_temps_inner=extra_inner,
+                tyre_temps_middle=extra_middle,
+                tyre_temps_outer=extra_outer,
+                brake_temps=extra_brakes,
+            )
+
+        packet = _OUTGAUGE_POOL.acquire()
+        packet._populate(
+            values,
+            extra_inner=extra_inner,
+            extra_middle=extra_middle,
+            extra_outer=extra_outer,
+            extra_pressures=extra_pressures,
+            extra_brakes=extra_brakes,
+            averaged=averaged,
         )
+        return packet
+
+
+_OUTGAUGE_POOL: PacketPool[OutGaugePacket] = PacketPool(OutGaugePacket)
 
 
 class _OutGaugePacketProcessor:
@@ -234,6 +475,8 @@ class _OutGaugePacketProcessor:
         self._last_emitted_id: Optional[int] = None
         self._last_emitted_time: Optional[int] = None
         self._missing_ids: set[int] = set()
+        self._pending_buffered = 0
+        self._pending_deadline: float | None = None
 
     @property
     def statistics(self) -> dict[str, int]:
@@ -246,7 +489,7 @@ class _OutGaugePacketProcessor:
             "recovered": self._recovered_packets,
         }
 
-    def record_packet(self, packet: OutGaugePacket, arrival: float) -> None:
+    def record_packet(self, packet: OutGaugePacket, arrival: float) -> bool:
         self._received_packets += 1
 
         if self._last_seen_id is not None:
@@ -296,9 +539,17 @@ class _OutGaugePacketProcessor:
                     "remote_host": self._remote_host,
                 },
             )
-            return
+            packet.release()
+            return False
 
-        self._buffer.insert(arrival, packet, packet.packet_id)
+        _, evicted = self._buffer.insert(arrival, packet, packet.packet_id)
+        if evicted is not None and hasattr(evicted.packet, "release"):
+            evicted.packet.release()
+        if self._pending_buffered:
+            self._pending_buffered = min(self._pending_buffered, len(self._buffer))
+            if self._pending_buffered == 0:
+                self._pending_deadline = None
+        return True
 
     def pop_ready_packet(self, now: float, *, allow_grace: bool) -> Optional[OutGaugePacket]:
         while self._buffer:
@@ -306,16 +557,28 @@ class _OutGaugePacketProcessor:
             if peeked is None:
                 break
             arrival, packet = peeked
-            if not allow_grace and len(self._buffer) == 1 and (now - arrival) < self._buffer_grace:
+            if (
+                not allow_grace
+                and len(self._buffer) == 1
+                and self._last_emitted_id is not None
+                and (now - arrival) < self._buffer_grace
+            ):
+                self._pending_buffered = len(self._buffer)
+                self._pending_deadline = arrival + self._buffer_grace
                 break
             popped = self._buffer.pop_oldest()
             if popped is None:
                 break
             _, packet = popped
+            if self._pending_buffered:
+                self._pending_buffered = max(0, self._pending_buffered - 1)
+                if self._pending_buffered == 0:
+                    self._pending_deadline = None
             if (
                 self._last_emitted_id is not None
                 and packet.packet_id <= self._last_emitted_id
             ):
+                packet.release()
                 continue
             if self._jump_tolerance and self._last_emitted_time is not None:
                 delta = packet.time - self._last_emitted_time
@@ -348,6 +611,9 @@ class _OutGaugePacketProcessor:
             self._last_emitted_id = packet.packet_id
             self._last_emitted_time = packet.time
             return packet
+        if not self._buffer:
+            self._pending_buffered = 0
+            self._pending_deadline = None
         return None
 
     def drain_ready(self, now: float) -> list[OutGaugePacket]:
@@ -360,10 +626,31 @@ class _OutGaugePacketProcessor:
             now = time.monotonic()
         return ready
 
+    @property
+    def pending_buffered(self) -> int:
+        return self._pending_buffered
+
+    def pending_deadline(self) -> float | None:
+        if self._pending_buffered <= 0:
+            return None
+        return self._pending_deadline
+
     def _is_duplicate(self, packet_id: int) -> bool:
         if self._last_emitted_id is not None and packet_id == self._last_emitted_id:
             return True
         return self._buffer.contains_key(packet_id)
+
+    def flush(self) -> None:
+        while True:
+            popped = self._buffer.pop_oldest()
+            if popped is None:
+                break
+            _, packet = popped
+            if hasattr(packet, "release"):
+                packet.release()
+        self._missing_ids.clear()
+        self._pending_buffered = 0
+        self._pending_deadline = None
 
 
 class OutGaugeUDPClient:
@@ -482,13 +769,23 @@ class OutGaugeUDPClient:
                 ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=False)
                 if ready is not None:
                     return ready
+                if self._processor.pending_buffered:
+                    break
                 continue
+            if self._processor.pending_buffered:
+                break
             if not wait_for_read_ready(
                 self._socket,
                 timeout=self._timeout,
                 deadline=deadline,
             ):
                 break
+        if self._processor.pending_buffered:
+            deadline = self._processor.pending_deadline()
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining > 0:
+                    time.sleep(min(remaining, self._timeout if self._timeout > 0 else remaining))
         ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=True)
         if ready is not None:
             return ready
@@ -506,6 +803,8 @@ class OutGaugeUDPClient:
         return None
 
     def close(self) -> None:
+        if self._processor is not None:
+            self._processor.flush()
         self._socket.close()
 
     def __enter__(self) -> "OutGaugeUDPClient":
@@ -562,6 +861,12 @@ class OutGaugeUDPClient:
     def drain_ready(self) -> list[OutGaugePacket]:
         return self._processor.drain_ready(time.monotonic())
 
+    def _record_packet(self, packet: OutGaugePacket) -> None:
+        self._processor.record_packet(packet, time.monotonic())
+
+    def _pop_ready_packet(self, *, now: float, allow_grace: bool) -> Optional[OutGaugePacket]:
+        return self._processor.pop_ready_packet(now, allow_grace=allow_grace)
+
 
 class _AsyncOutGaugeProtocol(asyncio.DatagramProtocol):
     def __init__(self, client: "AsyncOutGaugeUDPClient") -> None:
@@ -617,6 +922,7 @@ class AsyncOutGaugeUDPClient:
         self._condition: asyncio.Condition | None = None
         self._notify_scheduled = False
         self._pending_error: BaseException | None = None
+        self._pending_timer: asyncio.TimerHandle | None = None
         self._timeouts = 0
         self._ignored_hosts = 0
         self._closed_event = asyncio.Event()
@@ -765,6 +1071,9 @@ class AsyncOutGaugeUDPClient:
             await self._closed_event.wait()
             return
         self._closing = True
+        if self._pending_timer is not None:
+            self._pending_timer.cancel()
+            self._pending_timer = None
         transport = self._transport
         if transport is not None:
             transport.close()
@@ -828,6 +1137,8 @@ class AsyncOutGaugeUDPClient:
             made_ready = True
         if made_ready:
             self._wake_waiters()
+        if processor.pending_buffered:
+            self._schedule_pending_release()
 
     def _on_error(self, exc: Exception) -> None:
         self._pending_error = exc
@@ -835,10 +1146,18 @@ class AsyncOutGaugeUDPClient:
 
     def _connection_lost(self, _exc: Exception | None) -> None:
         condition = self._condition
+        processor = self._processor
         self._transport = None
         self._processor = None
         self._condition = None
-        self._ready_packets.clear()
+        if self._pending_timer is not None:
+            self._pending_timer.cancel()
+            self._pending_timer = None
+        while self._ready_packets:
+            packet = self._ready_packets.popleft()
+            packet.release()
+        if processor is not None:
+            processor.flush()
         self._closed_event.set()
         self._wake_waiters(condition)
 
@@ -865,3 +1184,34 @@ class AsyncOutGaugeUDPClient:
     async def _notify_condition(self, condition: asyncio.Condition) -> None:
         async with condition:
             condition.notify_all()
+
+    def _schedule_pending_release(self) -> None:
+        processor = self._processor
+        loop = self._loop
+        if processor is None or loop is None:
+            return
+        deadline = processor.pending_deadline()
+        if deadline is None:
+            if self._pending_timer is not None:
+                self._pending_timer.cancel()
+                self._pending_timer = None
+            return
+        delay = max(0.0, deadline - time.monotonic())
+        if self._pending_timer is not None:
+            self._pending_timer.cancel()
+        self._pending_timer = loop.call_later(delay, self._release_pending_packets)
+
+    def _release_pending_packets(self) -> None:
+        self._pending_timer = None
+        processor = self._processor
+        if processor is None:
+            return
+        made_ready = False
+        while True:
+            packet = processor.pop_ready_packet(time.monotonic(), allow_grace=True)
+            if packet is None:
+                break
+            self._ready_packets.append(packet)
+            made_ready = True
+        if made_ready:
+            self._wake_waiters()

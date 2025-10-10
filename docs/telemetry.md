@@ -35,7 +35,10 @@ async def main() -> None:
     async with AsyncOutSimUDPClient(port=4123) as outsim:
         packet = await outsim.recv()
         if packet is not None:
-            print(packet.time, outsim.statistics)
+            try:
+                print(packet.time, outsim.statistics)
+            finally:
+                packet.release()
 
 asyncio.run(main())
 ```
@@ -43,7 +46,10 @@ asyncio.run(main())
 Both async clients expose the same ``statistics`` fields as their synchronous
 peers and use the shared circular reordering buffer to provide identical packet
 accounting.  Call :meth:`drain_ready` in either mode to fetch packets that are
-already sequenced without waiting on additional datagrams.
+already sequenced without waiting on additional datagrams.  The decoded packets
+come from reusable pools—return them via :meth:`release` once processed or call
+``from_bytes(..., freeze=True)`` when you need immutable snapshots for archival
+workflows.
 
 ## Metric inputs
 

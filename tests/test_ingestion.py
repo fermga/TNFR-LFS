@@ -19,13 +19,16 @@ from tnfr_lfs.ingestion.live import (
     DEFAULT_SCHEMA,
     LEGACY_COLUMNS,
     OPTIONAL_SCHEMA_COLUMNS,
-    OutGaugePacket,
     OutGaugeUDPClient,
     OutSimClient,
-    OutSimPacket,
     OutSimUDPClient,
-    OutSimWheelState,
     TelemetryFusion,
+)
+from tnfr_lfs.ingestion.outgauge_udp import FrozenOutGaugePacket, OutGaugePacket
+from tnfr_lfs.ingestion.outsim_udp import (
+    FrozenOutSimPacket,
+    FrozenOutSimWheelState,
+    OutSimPacket,
 )
 
 
@@ -92,12 +95,14 @@ def extended_outsim_payload() -> bytes:
 
 
 @pytest.fixture
-def extended_outsim_packet(extended_outsim_payload: bytes) -> OutSimPacket:
-    return OutSimPacket.from_bytes(extended_outsim_payload)
+def extended_outsim_packet(extended_outsim_payload: bytes) -> FrozenOutSimPacket:
+    return outsim_module.OutSimPacket.from_bytes(extended_outsim_payload, freeze=True)
 
 
 @pytest.fixture
-def zero_deflection_outsim_packet(extended_outsim_packet: OutSimPacket) -> OutSimPacket:
+def zero_deflection_outsim_packet(
+    extended_outsim_packet: FrozenOutSimPacket,
+) -> FrozenOutSimPacket:
     zero_wheels = tuple(
         replace(wheel, suspension_deflection=0.0) for wheel in extended_outsim_packet.wheels
     )
@@ -105,8 +110,8 @@ def zero_deflection_outsim_packet(extended_outsim_packet: OutSimPacket) -> OutSi
 
 
 @pytest.fixture
-def sample_outgauge_packet() -> OutGaugePacket:
-    return OutGaugePacket(
+def sample_outgauge_packet() -> FrozenOutGaugePacket:
+    return FrozenOutGaugePacket(
         time=0,
         car="XFG",
         player_name="Driver",
@@ -134,11 +139,11 @@ def sample_outgauge_packet() -> OutGaugePacket:
     )
 
 
-def _synthetic_packet(index: int) -> tuple[OutSimPacket, OutGaugePacket]:
+def _synthetic_packet(index: int) -> tuple[FrozenOutSimPacket, FrozenOutGaugePacket]:
     time_ms = index * 50
     base_speed = 20.0 + 0.02 * index
     wheels = tuple(
-        OutSimWheelState(
+        FrozenOutSimWheelState(
             slip_ratio=0.01 + 0.0001 * index + offset,
             slip_angle=0.02 + (offset * 5.0),
             longitudinal_force=110.0 + index + offset * 10.0,
@@ -149,7 +154,7 @@ def _synthetic_packet(index: int) -> tuple[OutSimPacket, OutGaugePacket]:
         )
         for offset in (0.0, 0.0005, -0.0004, 0.0003)
     )
-    outsim = OutSimPacket(
+    outsim = FrozenOutSimPacket(
         time=time_ms,
         ang_vel_x=0.01,
         ang_vel_y=0.02,
@@ -170,7 +175,7 @@ def _synthetic_packet(index: int) -> tuple[OutSimPacket, OutGaugePacket]:
         inputs=None,
         wheels=wheels[:4],
     )
-    outgauge = OutGaugePacket(
+    outgauge = FrozenOutGaugePacket(
         time=index,
         car="XFG",
         player_name="Driver",
@@ -292,8 +297,8 @@ def test_fusion_incremental_scaling() -> None:
 
 
 def test_fusion_preserves_zero_suspension_deflection(
-    zero_deflection_outsim_packet: OutSimPacket,
-    sample_outgauge_packet: OutGaugePacket,
+    zero_deflection_outsim_packet: FrozenOutSimPacket,
+    sample_outgauge_packet: FrozenOutGaugePacket,
 ) -> None:
     fusion = TelemetryFusion()
     record = fusion.fuse(zero_deflection_outsim_packet, sample_outgauge_packet)
@@ -407,7 +412,9 @@ def test_outsim_ingest_legacy_defaults_are_nan() -> None:
     assert math.isnan(record.front_track_width)
     assert math.isnan(record.wheelbase)
 
-def test_outsim_packet_from_bytes_parses_extended_layout(extended_outsim_packet: OutSimPacket) -> None:
+def test_outsim_packet_from_bytes_parses_extended_layout(
+    extended_outsim_packet: FrozenOutSimPacket,
+) -> None:
     packet = extended_outsim_packet
     assert packet.player_id == 7
     assert packet.inputs is not None
@@ -428,7 +435,8 @@ def test_outsim_packet_from_bytes_parses_extended_layout(extended_outsim_packet:
 
 
 def test_fusion_consumes_extended_outsim_packet(
-    extended_outsim_packet: OutSimPacket, sample_outgauge_packet: OutGaugePacket
+    extended_outsim_packet: FrozenOutSimPacket,
+    sample_outgauge_packet: FrozenOutGaugePacket,
 ) -> None:
     fusion = TelemetryFusion()
     record = fusion.fuse(extended_outsim_packet, sample_outgauge_packet)
@@ -481,7 +489,7 @@ def test_fusion_consumes_extended_outsim_packet(
 
 
 def test_udp_client_preserves_extended_payload_for_fusion(
-    extended_outsim_payload: bytes, sample_outgauge_packet: OutGaugePacket
+    extended_outsim_payload: bytes, sample_outgauge_packet: FrozenOutGaugePacket
 ) -> None:
     client = OutSimUDPClient(host="127.0.0.1", port=0, timeout=0.01, retries=20)
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -502,6 +510,7 @@ def test_udp_client_preserves_extended_payload_for_fusion(
         assert record.wheel_load_rr == pytest.approx(285.0)
         assert record.suspension_deflection_fl == pytest.approx(0.06)
         assert record.suspension_deflection_rr == pytest.approx(0.05)
+        packet.release()
     finally:
         sender.close()
         client.close()
@@ -528,7 +537,7 @@ def test_outgauge_udp_client_allows_remote_host_binding() -> None:
 
 
 def test_outgauge_from_bytes_decodes_extended_tyre_payload(
-    extended_outsim_packet: OutSimPacket,
+    extended_outsim_packet: FrozenOutSimPacket,
 ) -> None:
     def _pad(value: str, size: int) -> bytes:
         encoded = value.encode("latin-1")
@@ -570,7 +579,7 @@ def test_outgauge_from_bytes_decodes_extended_tyre_payload(
     brakes = (420.0, 410.0, 400.0, 395.0)
     extras = struct.pack("<20f", *(inner + middle + outer + pressures + brakes))
 
-    packet = OutGaugePacket.from_bytes(base_payload + extras)
+    packet = OutGaugePacket.from_bytes(base_payload + extras, freeze=True)
 
     for value, expected in zip(packet.tyre_temps_inner, inner):
         assert value == pytest.approx(expected)
@@ -599,7 +608,8 @@ def test_outgauge_from_bytes_decodes_extended_tyre_payload(
 
 
 def test_fusion_uses_outgauge_tyre_temperatures(
-    extended_outsim_packet: OutSimPacket, sample_outgauge_packet: OutGaugePacket
+    extended_outsim_packet: FrozenOutSimPacket,
+    sample_outgauge_packet: FrozenOutGaugePacket,
 ) -> None:
     fusion = TelemetryFusion()
     tyre_temps = (88.3, 87.6, 84.2, 83.9)
@@ -635,7 +645,7 @@ def test_fusion_uses_outgauge_tyre_temperatures(
 
 
 def test_fusion_marks_missing_wheel_block_as_nan(
-    sample_outgauge_packet: OutGaugePacket,
+    sample_outgauge_packet: FrozenOutGaugePacket,
 ) -> None:
     time_ms = 5678
     base_floats = [
@@ -694,6 +704,7 @@ def test_fusion_marks_missing_wheel_block_as_nan(
     assert math.isnan(record.suspension_travel_rear)
     assert math.isnan(record.suspension_velocity_front)
     assert math.isnan(record.suspension_velocity_rear)
+    packet.release()
 
 
 class _DummySocket:
@@ -780,6 +791,7 @@ def test_outsim_udp_client_reorders_and_tracks_losses(monkeypatch, caplog) -> No
         packet = client.recv()
         assert packet is not None
         delivered.append(packet.time)
+        packet.release()
 
     assert delivered == [100, 130, 160, 290]
     stats = client.statistics
@@ -817,16 +829,20 @@ def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
     packet = client.recv()
     assert packet is not None
     delivered_ids.append(packet.packet_id)
+    packet.release()
     packet = client.recv()
     assert packet is not None
     delivered_ids.append(packet.packet_id)
+    packet.release()
     packet = client.recv()
     assert packet is not None
     delivered_ids.append(packet.packet_id)
+    packet.release()
     time.sleep(0.02)
     packet = client.recv()
     assert packet is not None
     delivered_ids.append(packet.packet_id)
+    packet.release()
 
     assert delivered_ids == [0, 1, 2, 3]
     stats = client.statistics

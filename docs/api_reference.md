@@ -102,9 +102,14 @@ Set ``TNFR_LFS_BRAKE_THERMAL=off`` (or ``auto``/``force``) to coerce the
 thermals into the desired mode without editing the pack.【F:tnfr_lfs/ingestion/fusion.py†L675-L709】
 
 Instantiate the fuser once per session, then stream UDP packets into it.
-``fuse`` returns the latest ``TelemetryRecord`` while ``fuse_to_bundle`` feeds
-the bundled EPI extractor so downstream tooling can immediately reuse the
-examples from the :mod:`tnfr_lfs.core.epi` documentation.【F:tnfr_lfs/ingestion/fusion.py†L130-L320】
+Packets yielded by :class:`~tnfr_lfs.ingestion.outsim_udp.OutSimUDPClient`
+and :class:`~tnfr_lfs.ingestion.outgauge_udp.OutGaugeUDPClient` are backed by
+reusable pools; call :meth:`release` when you finish consuming a sample or
+request immutable dataclasses via ``from_bytes(..., freeze=True)`` when a
+copy is required.  ``fuse`` returns the latest ``TelemetryRecord`` while
+``fuse_to_bundle`` feeds the bundled EPI extractor so downstream tooling can
+immediately reuse the examples from the :mod:`tnfr_lfs.core.epi`
+documentation.【F:tnfr_lfs/ingestion/fusion.py†L130-L320】
 
 ```python
 from collections import deque
@@ -138,12 +143,16 @@ with OutSimUDPClient(port=4123) as outsim, OutGaugeUDPClient(port=3000) as outga
         while outsim_buffer and outgauge_buffer:
             outsim_packet = outsim_buffer.popleft()
             outgauge_packet = outgauge_buffer.popleft()
-            record = fusion.fuse(outsim_packet, outgauge_packet)
-            records.append(record)
+            try:
+                record = fusion.fuse(outsim_packet, outgauge_packet)
+                records.append(record)
 
-            # Bridge straight into the EPI workflows used by the examples.
-            bundle = fusion.fuse_to_bundle(outsim_packet, outgauge_packet)
-            print(bundle.delta_nfr, bundle.sense_index)
+                # Bridge straight into the EPI workflows used by the examples.
+                bundle = fusion.fuse_to_bundle(outsim_packet, outgauge_packet)
+                print(bundle.delta_nfr, bundle.sense_index)
+            finally:
+                outsim_packet.release()
+                outgauge_packet.release()
 
         if outsim.statistics["loss_events"] or outgauge.statistics["loss_events"]:
             print("Loss detected", outsim.statistics, outgauge.statistics)

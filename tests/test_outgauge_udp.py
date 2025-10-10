@@ -58,7 +58,7 @@ def test_outgauge_packet_parses_extended_datagram_identifiers() -> None:
 
     extras = struct.pack("<20f", *(inner + middle + outer + pressures + brakes))
 
-    packet = OutGaugePacket.from_bytes(base_payload + extras)
+    packet = OutGaugePacket.from_bytes(base_payload + extras, freeze=True)
 
     # The OutGauge decoder is responsible for trimming padded strings and
     # keeping identifier fields intact even when extended tyre data is present.
@@ -170,6 +170,9 @@ def test_outgauge_recv_drains_batch_after_wait(monkeypatch) -> None:
         client.close()
 
     assert [packet.packet_id for packet in packets if packet] == [5, 6, 7]
+    for packet in packets:
+        if packet is not None:
+            packet.release()
     assert len(wait_calls) == 1
 
 
@@ -194,6 +197,8 @@ def test_async_outgauge_client_recovers_out_of_order_packets() -> None:
             stats = client.statistics
             assert stats["delivered"] == 3
             assert stats["reordered"] >= 1
+            for packet in results:
+                packet.release()
         finally:
             sender.close()
             await client.close()
