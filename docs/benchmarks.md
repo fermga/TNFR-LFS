@@ -21,8 +21,9 @@ measure cached versus uncached runs against the bundled Replay Analyzer capture
 passes per repeat, yielding the current baseline of roughly 0.0106 s per
 uncached pass versus 0.0089 s with warm caches (≈×1.2 speed-up).
 
-Use `--sample-limit` to stretch the test—each additional sample increases the
-spectral analysis workload linearly. The CLI accepts CSV, RAF or Replay Analyzer
+Use `--sample-limit` to stretch the test—each additional sample now feeds an
+``O(n \log n)`` FFT-based spectral analysis pipeline, delivering sub-quadratic
+scaling even as the window grows. The CLI accepts CSV, RAF or Replay Analyzer
 bundles, mirroring the behaviour of the standard commands, so you can validate
 optimisations against your own telemetry recordings.
 

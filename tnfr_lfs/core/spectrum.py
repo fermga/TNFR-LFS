@@ -77,6 +77,8 @@ def _resolve_dominant_correlation(
     dominant_phase = 0.0
     dominant_magnitude = 0.0
     for frequency, cross_real, cross_imag in spectrum:
+        if frequency <= 1e-9:
+            continue
         magnitude = math.hypot(cross_real, cross_imag)
         if magnitude > dominant_magnitude:
             dominant_frequency = float(frequency)
@@ -271,28 +273,16 @@ def cross_spectrum(
     input_windowed = np.asarray(apply_window(input_values, window), dtype=float)
     response_windowed = np.asarray(apply_window(response_values, window), dtype=float)
 
+    input_fft = np.fft.rfft(input_windowed)
+    response_fft = np.fft.rfft(response_windowed)
+    cross_values = input_fft * np.conj(response_fft)
+    frequencies = np.fft.rfftfreq(length, d=1.0 / sample_rate)
+
     spectrum: List[Tuple[float, float, float]] = []
-    upper = length // 2
-    for index in range(1, upper + 1):
-        x_real = 0.0
-        x_imag = 0.0
-        y_real = 0.0
-        y_imag = 0.0
-        angle_factor = -2.0 * math.pi * index / length
-        for sample_index in range(length):
-            angle = angle_factor * sample_index
-            cos_val = math.cos(angle)
-            sin_val = math.sin(angle)
-            value_x = input_windowed[sample_index]
-            value_y = response_windowed[sample_index]
-            x_real += value_x * cos_val
-            x_imag += value_x * sin_val
-            y_real += value_y * cos_val
-            y_imag += value_y * sin_val
-        cross_real = x_real * y_real + x_imag * y_imag
-        cross_imag = x_imag * y_real - x_real * y_imag
-        frequency = index * sample_rate / length
-        spectrum.append((frequency, cross_real, cross_imag))
+    for frequency, value in zip(frequencies, cross_values):
+        if frequency <= 1e-9:
+            continue
+        spectrum.append((float(frequency), float(value.real), float(value.imag)))
     return spectrum
 
 
