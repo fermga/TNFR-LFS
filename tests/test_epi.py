@@ -50,6 +50,38 @@ def _clear_epi_cache_state():
     cache_helpers.clear_dynamic_cache()
 
 
+def test_should_use_delta_cache_defaults_to_global_state():
+    cache_helpers.configure_cache(enable_delta_cache=False)
+    assert not cache_helpers.should_use_delta_cache(None)
+
+    cache_helpers.configure_cache(enable_delta_cache=True)
+    assert cache_helpers.should_use_delta_cache(None)
+
+
+def test_should_use_delta_cache_honours_override():
+    options = CacheOptions(enable_delta_cache=False, nu_f_cache_size=64, telemetry_cache_size=1)
+    assert not cache_helpers.should_use_delta_cache(options)
+
+    enabled = CacheOptions(enable_delta_cache=True, nu_f_cache_size=64, telemetry_cache_size=1)
+    assert cache_helpers.should_use_delta_cache(enabled)
+
+
+def test_should_use_dynamic_cache_defaults_to_global_state():
+    cache_helpers.configure_cache(nu_f_cache_size=0)
+    assert not cache_helpers.should_use_dynamic_cache(None)
+
+    cache_helpers.configure_cache(nu_f_cache_size=16)
+    assert cache_helpers.should_use_dynamic_cache(None)
+
+
+def test_should_use_dynamic_cache_honours_override():
+    disabled = CacheOptions(enable_delta_cache=True, nu_f_cache_size=0, telemetry_cache_size=1)
+    assert not cache_helpers.should_use_dynamic_cache(disabled)
+
+    enabled = CacheOptions(enable_delta_cache=False, nu_f_cache_size=8, telemetry_cache_size=1)
+    assert cache_helpers.should_use_dynamic_cache(enabled)
+
+
 def _frequency_record(
     timestamp: float,
     *,

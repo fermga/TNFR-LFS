@@ -234,6 +234,31 @@ def configure_cache_from_options(options: CacheOptions) -> None:
     )
 
 
+def should_use_delta_cache(cache_options: CacheOptions | None) -> bool:
+    """Return ``True`` when ΔNFR caching should be used.
+
+    The helper honours per-call overrides supplied via :class:`CacheOptions`
+    instances, falling back to the global cache toggle when no override is
+    provided.
+    """
+
+    if cache_options is not None:
+        return bool(cache_options.enable_delta_cache)
+    return delta_cache_enabled()
+
+
+def should_use_dynamic_cache(cache_options: CacheOptions | None) -> bool:
+    """Return ``True`` when ν_f multiplier caching should be used.
+
+    When explicit cache options are supplied they take priority, otherwise the
+    helper defers to the module-level cache flag.
+    """
+
+    if cache_options is not None:
+        return cache_options.nu_f_cache_size > 0
+    return dynamic_cache_enabled()
+
+
 def delta_cache_enabled() -> bool:
     """Return ``True`` when ΔNFR caching is active."""
 
@@ -255,6 +280,8 @@ __all__ = [
     "clear_dynamic_cache",
     "configure_cache",
     "configure_cache_from_options",
+    "should_use_delta_cache",
+    "should_use_dynamic_cache",
     "delta_cache_enabled",
     "dynamic_cache_enabled",
     "LRUCache",
