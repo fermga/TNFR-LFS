@@ -62,7 +62,7 @@ from ..core.segmentation import (
     segment_microsectors,
 )
 from ..analysis import compute_session_robustness
-from ..processing import InsightsResult, compute_insights
+from ..analysis.insights import InsightsResult, compute_insights
 
 
 logger = logging.getLogger(__name__)
@@ -3049,7 +3049,7 @@ def _compute_insights(
     engine: Optional[RecommendationEngine] = None,
     profile_manager: Optional[ProfileManager] = None,
 ) -> Tuple[Bundles, Sequence[Microsector], ThresholdProfile, Optional[ProfileSnapshot]]:
-    """Compatibility wrapper delegating to :func:`tnfr_lfs.processing.compute_insights`."""
+    """Compatibility wrapper delegating to :func:`tnfr_lfs.analysis.insights.compute_insights`."""
 
     insights = compute_insights(
         records,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from tnfr_lfs.analysis import compute_session_robustness
 from tnfr_lfs.core.epi import EPIExtractor
 from tnfr_lfs.core.segmentation import segment_microsectors
-from tnfr_lfs.processing import InsightsResult, compute_insights
+from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
 
 from tests.profile_manager_helpers import preloaded_profile_manager
 
