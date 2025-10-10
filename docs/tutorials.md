@@ -8,11 +8,11 @@ sweeps or lap-by-lap comparisons, jump to the
 
 ## 1. Install the toolkit
 
-The quickstart requires Python 3.9+ and the base dependencies listed in
-`requirements.txt`.
+The quickstart requires Python 3.9+ and the base dependencies declared in
+`pyproject.toml`.
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install .
 # Optional: edit the code locally and keep the CLI in sync
 python -m pip install -e .
 ```

@@ -1,11 +1,11 @@
 # Development and verification
 
-This repository relies on linting, typing, and testing workflows to keep the TNFR × LFS toolkit healthy. After cloning the project install the development dependencies (this includes `numpy>=1.24,<2.0` and `pandas>=1.5,<3.0`, required by the tests and analysis pipelines). You can rely on the bundled requirement files or install the package with its development extras:
+This repository relies on linting, typing, and testing workflows to keep the TNFR × LFS toolkit healthy. After cloning the project install the development dependencies (this includes `numpy>=1.24,<2.0` and `pandas>=1.5,<3.0`, required by the tests and analysis pipelines) via the packaged extras:
 
 ```bash
-pip install -r requirements-dev.txt
+python -m pip install ".[dev]"
 # or, for an editable environment
-pip install -e .[dev]
+python -m pip install -e ".[dev]"
 ```
 
 ## Verification flow

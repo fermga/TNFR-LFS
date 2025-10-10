@@ -45,21 +45,21 @@ reports under `examples/out/`.
 
 ```bash
 # Minimal environment to run the CLI and examples
-python -m pip install -r requirements.txt
+python -m pip install .
 
 # Full development environment (linters, mypy, pytest)
-python -m pip install -r requirements-dev.txt
+python -m pip install ".[dev]"
 
 # Optional dominant-frequency acceleration (SciPy Goertzel helper)
-python -m pip install -e .[spectral]
+python -m pip install ".[spectral]"
 
 # Makefile shortcuts
 make install      # base dependencies only
 make dev-install  # base + development tooling
 ```
 
-Prefer an editable install? Run `pip install -e .` after setting up the
-requirements.
+Prefer an editable install? Run `pip install -e .` (or
+`pip install -e ".[dev]"`) to develop against the local sources.
 
 ### Execute the end-to-end flow
 

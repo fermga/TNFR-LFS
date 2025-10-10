@@ -40,7 +40,6 @@ jobs:
               - 'mkdocs.yml'
               - 'modifiers/**'
               - 'pyproject.toml'
-              - 'requirements*.txt'
               - 'tests/**'
               - 'tnfr_lfs.toml'
               - 'src/tnfr_lfs/**'
