@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from itertools import count
 
 import pytest
@@ -153,3 +154,88 @@ def test_outgauge_reorders_packets(monkeypatch: pytest.MonkeyPatch) -> None:
         assert client.statistics["reordered"] == 1
     finally:
         client.close()
+
+
+def test_outsim_buffer_overflow_records_loss_and_logs(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING, logger=outsim_module.__name__)
+
+    processor = outsim_module._OutSimPacketProcessor(
+        remote_host="127.0.0.1",
+        port=0,
+        buffer_capacity=1,
+        buffer_grace=0.0,
+        jump_tolerance=0,
+    )
+
+    class DummyOutSimPacket:
+        def __init__(self, time_value: int) -> None:
+            self.time = time_value
+            self.release_count = 0
+
+        def release(self) -> None:
+            self.release_count += 1
+
+    first = DummyOutSimPacket(1)
+    second = DummyOutSimPacket(2)
+
+    processor.record_packet(first, arrival=0.0)
+    processor.record_packet(second, arrival=0.1)
+
+    assert first.release_count == 1
+    assert processor.statistics["loss_events"] == 1
+    overflow_records = [record for record in caplog.records if "overflow" in record.message]
+    assert overflow_records
+    assert any(getattr(record, "evicted_time", None) == 1 for record in overflow_records)
+
+    async_client = outsim_module.AsyncOutSimUDPClient(buffer_size=1)
+    try:
+        async_client._processor = processor
+        assert async_client.statistics["loss_events"] == 1
+    finally:
+        async_client._processor = None
+
+    processor.flush()
+    assert second.release_count == 1
+
+
+def test_outgauge_buffer_overflow_records_loss_and_logs(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING, logger=outgauge_module.__name__)
+
+    processor = outgauge_module._OutGaugePacketProcessor(
+        remote_host="127.0.0.1",
+        port=0,
+        buffer_capacity=1,
+        buffer_grace=0.0,
+        jump_tolerance=0,
+    )
+
+    class DummyOutGaugePacket:
+        def __init__(self, packet_id: int) -> None:
+            self.packet_id = packet_id
+            self.time = packet_id
+            self.release_count = 0
+
+        def release(self) -> None:
+            self.release_count += 1
+
+    first = DummyOutGaugePacket(1)
+    second = DummyOutGaugePacket(2)
+
+    processor.record_packet(first, arrival=0.0)
+    processor.record_packet(second, arrival=0.1)
+
+    assert first.release_count == 1
+    assert processor.statistics["loss_events"] == 1
+    overflow_records = [record for record in caplog.records if "overflow" in record.message]
+    assert overflow_records
+    assert any(getattr(record, "evicted_packet_id", None) == 1 for record in overflow_records)
+
+    async_client = outgauge_module.AsyncOutGaugeUDPClient(buffer_size=1)
+    try:
+        async_client._processor = processor
+        assert async_client.statistics["loss_events"] == 1
+    finally:
+        async_client._processor = None
+
+    processor.flush()
+    assert second.release_count == 1
