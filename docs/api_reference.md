@@ -158,6 +158,30 @@ events occur.
 
 ## Core Analytics
 
+### `tnfr_lfs.core.spectrum`
+
+The spectrum helpers expose consistent utilities for telemetry FFTs and
+cross-spectra. Two entry-points power the CLI reports and analytics:
+
+* :func:`tnfr_lfs.core.spectrum.motor_input_correlations` extracts the dominant
+  cross-spectrum between driver inputs and chassis responses, returning
+  :class:`tnfr_lfs.core.spectrum.PhaseCorrelation` objects keyed by
+  ``(control, response)``. The ``dominant_strategy`` flag selects the dense FFT
+  evaluation (``"fft"``) or the Goertzel accelerator (``"auto"``/``"goertzel"``)
+  when SciPy is installed via ``pip install tnfr_lfs[spectral]``. Provide
+  ``candidate_frequencies`` to limit the Goertzel search to known resonant bins.
+* :func:`tnfr_lfs.core.spectrum.phase_alignment` mirrors the same configuration
+  knobs when estimating the dominant steer-versus-response bin. The helper also
+  accepts explicit steer/response sequences so ingest pipelines can reuse
+  cached telemetry instead of re-sampling :class:`~tnfr_lfs.core.epi.TelemetryRecord`
+  objects.
+
+When the Goertzel path is active the implementation evaluates a fixed list of
+candidate bins in :math:`O(n·k)` time, so keeping ``k`` constant makes dominant
+frequency lookups scale linearly with the number of samples. The FFT path
+remains available whenever SciPy is missing or a full spectrum is required for
+post-processing.
+
 ### `tnfr_lfs.core.epi.EPIExtractor`
 
 Computes :class:`tnfr_lfs.core.epi_models.EPIBundle` objects including EPI,

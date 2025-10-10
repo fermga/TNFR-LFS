@@ -6,10 +6,16 @@ import math
 from dataclasses import dataclass
 from statistics import mean
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Literal
 
 import numpy as np
 
 from .epi import TelemetryRecord
+
+try:  # pragma: no cover - SciPy is optional
+    from scipy.signal import goertzel as _SCIPY_GOERTZEL
+except Exception:  # pragma: no cover - SciPy is optional
+    _SCIPY_GOERTZEL = None
 
 __all__ = [
     "estimate_sample_rate",
@@ -49,6 +55,25 @@ _DEFAULT_RESPONSE_FIELDS: Mapping[str, Tuple[str, ...]] = {
 }
 
 
+_DEFAULT_GOERTZEL_CANDIDATES: Tuple[float, ...] = (
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5,
+    2.0,
+    2.5,
+    3.0,
+    3.5,
+    4.0,
+    5.0,
+    6.5,
+    8.0,
+    10.0,
+)
+
+
 def phase_to_latency_ms(frequency: float, phase: float) -> float:
     """Convert a phase lag expressed in radians to milliseconds."""
 
@@ -62,6 +87,10 @@ def _resolve_dominant_correlation(
     input_series: Sequence[float],
     response_series: Sequence[float],
     sample_rate: float,
+    *,
+    dominant_only: bool = False,
+    method: Literal["auto", "fft", "goertzel"] = "auto",
+    candidate_frequencies: Sequence[float] | None = None,
 ) -> PhaseCorrelation | None:
     length = min(len(input_series), len(response_series))
     if length < 2 or sample_rate <= 0.0:
@@ -69,6 +98,23 @@ def _resolve_dominant_correlation(
 
     input_values = list(_normalise(input_series))[-length:]
     response_values = list(_normalise(response_series))[-length:]
+    if dominant_only and method in ("auto", "goertzel"):
+        goertzel_candidates = (
+            tuple(candidate_frequencies)
+            if candidate_frequencies is not None
+            else _DEFAULT_GOERTZEL_CANDIDATES
+        )
+        correlation = _dominant_frequency_goertzel(
+            input_values,
+            response_values,
+            sample_rate,
+            goertzel_candidates,
+            require_backend=method == "goertzel",
+        )
+        if correlation is not None:
+            return correlation
+        if method == "goertzel":
+            return None
     spectrum = cross_spectrum(input_values, response_values, sample_rate)
     if not spectrum:
         return None
@@ -85,6 +131,80 @@ def _resolve_dominant_correlation(
             dominant_phase = math.atan2(cross_imag, cross_real)
             dominant_magnitude = magnitude
 
+    alignment = math.cos(dominant_phase)
+    latency = phase_to_latency_ms(dominant_frequency, dominant_phase)
+    return PhaseCorrelation(
+        frequency=dominant_frequency,
+        phase=dominant_phase,
+        alignment=alignment,
+        latency_ms=latency,
+        magnitude=max(0.0, dominant_magnitude),
+    )
+
+
+def _dominant_frequency_goertzel(
+    input_series: Sequence[float],
+    response_series: Sequence[float],
+    sample_rate: float,
+    candidate_frequencies: Sequence[float],
+    *,
+    require_backend: bool = False,
+) -> PhaseCorrelation | None:
+    """Return the dominant correlation using Goertzel on fixed frequency bins.
+
+    Evaluating ``k`` candidate bins via Goertzel costs :math:`O(n·k)`; with the
+    default constant ``k`` the helper runs in :math:`O(n)` with respect to the
+    number of samples.
+    """
+
+    if _SCIPY_GOERTZEL is None:
+        if require_backend:
+            raise RuntimeError(
+                "SciPy is required for the Goertzel-based dominant frequency path"
+            )
+        return None
+    if sample_rate <= 0.0:
+        return None
+
+    valid_bins = [
+        float(freq)
+        for freq in candidate_frequencies
+        if freq > 1e-9 and freq <= (sample_rate * 0.5) + 1e-9
+    ]
+    if not valid_bins:
+        return None
+
+    input_values = np.asarray(input_series, dtype=float)
+    response_values = np.asarray(response_series, dtype=float)
+    length = min(input_values.size, response_values.size)
+    if length < 2:
+        return None
+
+    input_values = np.asarray(detrend(input_values)[-length:], dtype=float)
+    response_values = np.asarray(detrend(response_values)[-length:], dtype=float)
+    window = np.asarray(hann_window(length), dtype=float)
+    input_windowed = np.asarray(apply_window(input_values, window), dtype=float)
+    response_windowed = np.asarray(apply_window(response_values, window), dtype=float)
+
+    dominant_frequency = 0.0
+    dominant_cross = 0.0 + 0.0j
+    dominant_magnitude = 0.0
+
+    for frequency in valid_bins:
+        angular = 2.0 * math.pi * (frequency / sample_rate)
+        input_component = _SCIPY_GOERTZEL(input_windowed, angular)
+        response_component = _SCIPY_GOERTZEL(response_windowed, angular)
+        cross_component = input_component * np.conj(response_component)
+        magnitude = abs(cross_component)
+        if magnitude > dominant_magnitude:
+            dominant_frequency = float(frequency)
+            dominant_cross = cross_component
+            dominant_magnitude = float(magnitude)
+
+    if dominant_frequency <= 1e-9:
+        return None
+
+    dominant_phase = math.atan2(dominant_cross.imag, dominant_cross.real)
     alignment = math.cos(dominant_phase)
     latency = phase_to_latency_ms(dominant_frequency, dominant_phase)
     return PhaseCorrelation(
@@ -137,8 +257,16 @@ def motor_input_correlations(
     controls: Mapping[str, Sequence[str]] | None = None,
     responses: Mapping[str, Sequence[str]] | None = None,
     sample_rate: float | None = None,
+    dominant_strategy: Literal["auto", "fft", "goertzel"] = "auto",
+    candidate_frequencies: Sequence[float] | None = None,
 ) -> Dict[Tuple[str, str], PhaseCorrelation]:
-    """Return dominant correlations between driver inputs and chassis responses."""
+    """Return dominant correlations between driver inputs and chassis responses.
+
+    ``dominant_strategy`` selects whether to evaluate the dense FFT
+    cross-spectrum (``"fft"``) or the sparse Goertzel helper when SciPy is
+    installed (``"auto"``/``"goertzel"``). ``candidate_frequencies`` constrains
+    the Goertzel search to custom bins when provided.
+    """
 
     if controls is None:
         controls = _DEFAULT_CONTROL_FIELDS
@@ -159,7 +287,12 @@ def motor_input_correlations(
             if not _has_variation(response_series):
                 continue
             correlation = _resolve_dominant_correlation(
-                control_series, response_series, sample_rate
+                control_series,
+                response_series,
+                sample_rate,
+                dominant_only=True,
+                method=dominant_strategy,
+                candidate_frequencies=candidate_frequencies,
             )
             if correlation is None:
                 continue
@@ -302,6 +435,8 @@ def phase_alignment(
     *,
     steer_series: Iterable[float] | None = None,
     response_series: Iterable[float] | None = None,
+    dominant_strategy: Literal["auto", "fft", "goertzel"] = "auto",
+    candidate_frequencies: Sequence[float] | None = None,
 ) -> Tuple[float, float, float]:
     """Estimate the dominant frequency and phase lag between steer and response.
 
@@ -312,6 +447,13 @@ def phase_alignment(
     steer_series, response_series:
         Explicit sequences containing steer input and the combined chassis
         response.  When omitted they are derived from ``records``.
+    dominant_strategy:
+        ``"auto"`` uses Goertzel when SciPy is available and falls back to the
+        FFT cross-spectrum otherwise. ``"goertzel"`` enforces the Goertzel path
+        and raises when SciPy is unavailable, while ``"fft"`` always evaluates
+        the dense FFT grid.
+    candidate_frequencies:
+        Optional override for the candidate bins evaluated by the Goertzel path.
     """
 
     if steer_series is None or response_series is None:
@@ -340,7 +482,14 @@ def phase_alignment(
 
     steer_trimmed = steer_values[-length:]
     response_trimmed = combined_response[-length:]
-    correlation = _resolve_dominant_correlation(steer_trimmed, response_trimmed, sample_rate)
+    correlation = _resolve_dominant_correlation(
+        steer_trimmed,
+        response_trimmed,
+        sample_rate,
+        dominant_only=True,
+        method=dominant_strategy,
+        candidate_frequencies=candidate_frequencies,
+    )
     if correlation is None:
         return (0.0, 0.0, 1.0)
     return correlation.frequency, correlation.phase, correlation.alignment
