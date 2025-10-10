@@ -85,7 +85,7 @@ The current version reinforces this logic with an action map for geometry parame
 
 - ``TNFR.pdf`` remains as a compiled artefact. Any substantive update should first land in this ``DESIGN.md``; the PDF can be regenerated from the updated content and must be treated as a derivative.
 - ``coherence_map.<ext>`` serialises the mean and range of ``C(t)`` per microsector together with the estimated cumulative distance from ``TransmissionNode.speed``. It enables reconstruction of the coherence map for the entire lap and correlation with track targets.
-- ``operator_trajectories.<ext>`` applies ``Microsector.operator_events`` to rebuild the structural timeline for the ``AL``/``OZ``/``IL``/``SILENCIO`` detectors. The aggregate preserves structural coverage for the silent intervals of each microsector, helping identify latent states where load, accelerations, and ΔNFR stay below the configured thresholds.
+- ``operator_trajectories.<ext>`` applies ``Microsector.operator_events`` to rebuild the structural timeline for the ``AL``/``OZ``/``IL``/``SILENCE`` detectors. The aggregate preserves structural coverage for the silent intervals of each microsector, helping identify latent states where load, accelerations, and ΔNFR stay below the configured thresholds.
 - ``delta_bifurcations.<ext>`` analyses the ΔNFR series along the structural axis, detecting sign changes and local extrema to spot bifurcations that demand setup tweaks.
 
 The ``.json``, ``.md``, or ``.viz`` suffixes depend on the format selected with ``--report-format`` and share the same semantics regardless of the rendering mode.

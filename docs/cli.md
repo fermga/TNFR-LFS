@@ -155,7 +155,7 @@ The HUD cycles through three pages (press the button to advance):
   loads stay below the configured thresholds an extra “Silence …” line appears,
   reporting coverage percentage and mean density for that latent state. If the
   silent streak spans several consecutive segments the header adds a “do not
-  touch” warning via the ``detect_silencio`` detector to underline that the
+  touch” warning via the ``detect_silence`` detector to underline that the
   current setup should be preserved. Beneath the damping indicators the new
   “CPHI” line colours each wheel with 🟢/🟠/🔴 according to the shared thresholds
   and appends a “+” when the value clears the green objective before attacking
@@ -339,7 +339,7 @@ The additional artefacts provide:
 * ``coherence_map`` – mean/peak coherence per microsector with the
   reconstructed distance along the lap.
 * ``operator_trajectories`` – structural timelines for ``AL``/``OZ``/``IL``/
-  ``SILENCIO`` detections extracted from ``Microsector.operator_events`` along
+  ``SILENCE`` detections extracted from ``Microsector.operator_events`` along
   with the coverage of the new silent latent state.
 * ``delta_bifurcations`` – ΔNFR sign changes and derivative summaries on
   the structural axis to highlight bifurcation hotspots.

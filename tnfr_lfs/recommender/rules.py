@@ -2007,7 +2007,7 @@ def _brake_event_summary(
     microsector: Microsector,
 ) -> tuple[str | None, str | None, float]:
     operator_events = getattr(microsector, "operator_events", {}) or {}
-    silence_payloads = operator_events.get("SILENCIO", ())
+    silence_payloads = operator_events.get("SILENCE", ())
     micro_duration = _safe_float(getattr(microsector, "end_time", 0.0)) - _safe_float(
         getattr(microsector, "start_time", 0.0)
     )

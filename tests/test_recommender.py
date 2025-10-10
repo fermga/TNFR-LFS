@@ -769,7 +769,7 @@ def test_recommendation_engine_suppresses_when_quiet_sequence():
                 "si_variance": 0.0003,
                 "epi_derivative_abs": 0.04,
             },
-            operator_events={"SILENCIO": quiet_payload},
+            operator_events={"SILENCE": quiet_payload},
             index=i,
         )
         for i in range(3)

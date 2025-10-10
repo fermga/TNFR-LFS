@@ -45,7 +45,7 @@ from .metrics import (
     compute_window_metrics,
     phase_synchrony_index,
 )
-from .operator_detection import detect_al, detect_il, detect_oz, detect_silencio
+from .operator_detection import detect_al, detect_il, detect_oz, detect_silence
 from .operators import mutation_operator, recursivity_operator
 from .phases import (
     LEGACY_PHASE_MAP,
@@ -1000,8 +1000,8 @@ def segment_microsectors(
             ("OZ", detect_oz, {}),
             ("IL", detect_il, {}),
             (
-                "SILENCIO",
-                detect_silencio,
+                "SILENCE",
+                detect_silence,
                 {
                     "window": silence_window,
                     "structural_window": silence_struct_window,
@@ -1054,7 +1054,7 @@ def segment_microsectors(
                             "surface_factor": surface_factor,
                         }
                     )
-                elif name == "SILENCIO":
+                elif name == "SILENCE":
                     payload.setdefault(
                         "structural_start",
                         float(
@@ -1805,7 +1805,7 @@ def microsector_stability_metrics(
     events = getattr(microsector, "operator_events", {}) or {}
     payloads = [
         payload
-        for payload in events.get("SILENCIO", ())  # type: ignore[assignment]
+        for payload in events.get("SILENCE", ())  # type: ignore[assignment]
         if isinstance(payload, Mapping)
     ]
     start_time = float(getattr(microsector, "start_time", 0.0))

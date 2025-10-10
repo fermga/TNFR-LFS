@@ -1469,7 +1469,7 @@ def _aggregate_operator_events(
                 event_payload = dict(entry)
                 event_payload.setdefault("microsector", microsector.index)
                 bucket.append(event_payload)
-                if name == "SILENCIO":
+                if name == "SILENCE":
                     silent_events += 1
                     duration = float(event_payload.get("duration", 0.0) or 0.0)
                     silent_duration += max(0.0, duration)
@@ -1481,7 +1481,7 @@ def _aggregate_operator_events(
             coverage = 0.0
             if micro_duration > 1e-9:
                 coverage = min(1.0, silent_duration / micro_duration)
-            state_entry = latent_states.setdefault("SILENCIO", {})
+            state_entry = latent_states.setdefault("SILENCE", {})
             state_entry[microsector.index] = {
                 "coverage": float(coverage),
                 "duration": float(silent_duration),
