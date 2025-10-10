@@ -10,9 +10,10 @@ to the orchestration pipeline.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from statistics import mean
-from typing import List, Mapping, Sequence
+from typing import List, Mapping, Sequence, Tuple
 
 from .epi import TelemetryRecord
 from .structural_time import compute_structural_timestamps
@@ -21,10 +22,12 @@ __all__ = [
     "OperatorEvent",
     "STRUCTURAL_OPERATOR_LABELS",
     "canonical_operator_label",
+    "normalize_structural_operator_identifier",
+    "silence_event_payloads",
     "detect_al",
     "detect_oz",
     "detect_il",
-    "detect_silencio",
+    "detect_silence",
 ]
 
 
@@ -32,8 +35,16 @@ STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
     "AL": "Support",
     "OZ": "Dissonance",
     "IL": "Coherence",
-    "SILENCIO": "Structural silence",
+    "SILENCE": "Structural silence",
 }
+
+
+def normalize_structural_operator_identifier(identifier: str) -> str:
+    """Return the canonical structural identifier for ``identifier``."""
+
+    if not isinstance(identifier, str):
+        return str(identifier)
+    return identifier.upper()
 
 
 def canonical_operator_label(identifier: str) -> str:
@@ -41,8 +52,29 @@ def canonical_operator_label(identifier: str) -> str:
 
     if not isinstance(identifier, str):
         return str(identifier)
-    key = identifier.upper()
+    key = normalize_structural_operator_identifier(identifier)
     return STRUCTURAL_OPERATOR_LABELS.get(key, identifier)
+
+
+def silence_event_payloads(
+    events: Mapping[str, Sequence[Mapping[str, object]] | None] | None,
+) -> Tuple[Mapping[str, object], ...]:
+    """Return all silence payloads, accepting case-insensitive identifiers."""
+
+    if not events:
+        return ()
+
+    collected: List[Mapping[str, object]] = []
+    for name, payload in events.items():
+        if normalize_structural_operator_identifier(name) != "SILENCE":
+            continue
+        if not payload:
+            continue
+        if isinstance(payload, SequenceABC) and not isinstance(payload, Mapping):
+            collected.extend(payload)  # type: ignore[list-item]
+        else:
+            collected.append(payload)  # type: ignore[arg-type]
+    return tuple(collected)
 
 
 @dataclass(frozen=True)
@@ -293,7 +325,7 @@ def detect_il(
     return [event.as_mapping() for event in events]
 
 
-def detect_silencio(
+def detect_silence(
     records: Sequence[TelemetryRecord],
     *,
     window: int = 15,
@@ -370,7 +402,7 @@ def detect_silencio(
         if slack <= 0.0:
             return
         event = _finalise_event(
-            canonical_operator_label("SILENCIO"),
+            canonical_operator_label("SILENCE"),
             records,
             start_index,
             end_index,
