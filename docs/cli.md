@@ -436,6 +436,13 @@ the remaining caches, including the setup recommender.
 
 When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config/global.toml`` together with ``data/cars`` and ``data/profiles``) the CLI resolves car metadata and TNFR objectives from that bundle. The ``--pack-root`` flag overrides the configured value for a single invocation.
 
+Plugin scaffolding ships with the repository under ``config/plugins.toml``.  The
+file documents the discovery rules (``plugin_dir``), execution limits and
+per-plugin flags used by the CLI helpers.  Copy it to your own configuration
+packs when you want to toggle exporters, UDP bridges or relay workers per
+profile (``profiles.racing`` and ``profiles.practice`` illustrate typical
+overrides).
+
 ### Brake thermal proxy modes
 
 The brake thermal proxy honours the ``mode`` declared in ``[thermal.brakes]`` and can be overridden per session with the ``TNFR_LFS_BRAKE_THERMAL`` environment variable. The accepted values are ``auto`` (default), ``off`` and ``force``.【F:tnfr_lfs/ingestion/fusion.py†L616-L733】【F:tnfr_lfs/ingestion/fusion.py†L1064-L1126】
