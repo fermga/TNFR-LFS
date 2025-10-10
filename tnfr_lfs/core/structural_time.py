@@ -7,6 +7,8 @@ from typing import Mapping, Sequence
 
 from .epi import TelemetryRecord
 
+__all__ = ["compute_structural_timestamps", "resolve_time_axis"]
+
 DEFAULT_STRUCTURAL_WEIGHTS: Mapping[str, float] = {
     "brake_pressure": 0.35,
     "throttle": 0.25,

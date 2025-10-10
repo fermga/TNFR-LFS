@@ -9,6 +9,8 @@ from .delta_utils import distribute_weighted_delta
 from .phases import expand_phase_alias, phase_family
 from .utils import normalised_entropy
 
+__all__ = ["compute_node_delta_nfr", "sense_index"]
+
 
 NodeDeltaMap = Dict[str, float]
 
