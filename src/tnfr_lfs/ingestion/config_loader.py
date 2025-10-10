@@ -15,7 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 from .._pack_resources import data_root
-from ..cache_settings import CacheOptions
+from ..core.cache_settings import CacheOptions
 from ..utils.immutables import _freeze_dict, _freeze_value
 
 

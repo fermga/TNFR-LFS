@@ -12,8 +12,8 @@ from typing import Deque, Dict, List, Mapping, Optional, Sequence, Tuple, TYPE_C
 import numpy as np
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
+    from .cache_settings import CacheOptions
     from .coherence_calibration import CoherenceCalibrationStore
-    from ..cache_settings import CacheOptions
 
 from .cache import (
     cached_delta_nfr_map,
