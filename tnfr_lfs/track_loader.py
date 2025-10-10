@@ -134,34 +134,89 @@ def load_track(track_slug: str, tracks_dir: str | Path | None = None) -> Track:
     if not configs_raw:
         raise ValueError(f"Track manifest '{manifest.name}' does not define any [config.*] block")
 
+    raw_configs: dict[str, dict[str, Any]] = {
+        str(identifier): dict(values) for identifier, values in configs_raw.items()
+    }
+
     configs: dict[str, TrackConfig] = {}
+    resolving: set[str] = set()
 
-    for identifier, values in configs_raw.items():
-        name = str(values.get("name", identifier))
-        length_raw = values.get("length_km")
-        length = float(length_raw) if length_raw is not None else None
-        surface_raw = values.get("surface")
-        surface = str(surface_raw).lower() if surface_raw is not None else "unknown"
-        if "track_profile" not in values or values["track_profile"] is None:
+    def resolve(identifier: str) -> TrackConfig:
+        if identifier in configs:
+            return configs[identifier]
+        if identifier in resolving:
             raise ValueError(
-                f"Track layout '{identifier}' from '{manifest.name}' is missing a track_profile"
+                f"Track manifest '{manifest.name}' has a circular alias definition involving '{identifier}'"
             )
-        profile = str(values["track_profile"])
+        if identifier not in raw_configs:
+            raise ValueError(
+                f"Track manifest '{manifest.name}' references undefined layout '{identifier}'"
+            )
 
-        extras = {
-            str(key): value
-            for key, value in values.items()
-            if key not in {"name", "length_km", "surface", "track_profile"}
-        }
+        resolving.add(identifier)
+        try:
+            values = raw_configs[identifier]
+            alias_target_raw = values.get("alias_of")
+            if alias_target_raw is not None:
+                target_identifier = str(alias_target_raw)
+                if target_identifier == identifier:
+                    raise ValueError(
+                        f"Track layout '{identifier}' from '{manifest.name}' cannot alias itself"
+                    )
+                disallowed_overrides = {
+                    key for key in values if key not in {"alias_of", "name"}
+                }
+                if disallowed_overrides:
+                    overrides = ", ".join(sorted(disallowed_overrides))
+                    raise ValueError(
+                        f"Track layout '{identifier}' from '{manifest.name}' declares alias_of "
+                        f"but also overrides: {overrides}"
+                    )
+                base_config = resolve(target_identifier)
+                name = str(values.get("name", base_config.name))
+                config = TrackConfig(
+                    identifier=identifier,
+                    name=name,
+                    length_km=base_config.length_km,
+                    surface=base_config.surface,
+                    track_profile=base_config.track_profile,
+                    extras=base_config.extras,
+                )
+            else:
+                name = str(values.get("name", identifier))
+                length_raw = values.get("length_km")
+                length = float(length_raw) if length_raw is not None else None
+                surface_raw = values.get("surface")
+                surface = str(surface_raw).lower() if surface_raw is not None else "unknown"
+                if "track_profile" not in values or values["track_profile"] is None:
+                    raise ValueError(
+                        f"Track layout '{identifier}' from '{manifest.name}' is missing a track_profile"
+                    )
+                profile = str(values["track_profile"])
 
-        configs[str(identifier)] = TrackConfig(
-            identifier=str(identifier),
-            name=name,
-            length_km=length,
-            surface=surface,
-            track_profile=profile,
-            extras=_freeze_dict(extras),
-        )
+                extras = {
+                    str(key): value
+                    for key, value in values.items()
+                    if key
+                    not in {"name", "length_km", "surface", "track_profile", "alias_of"}
+                }
+
+                config = TrackConfig(
+                    identifier=identifier,
+                    name=name,
+                    length_km=length,
+                    surface=surface,
+                    track_profile=profile,
+                    extras=_freeze_dict(extras),
+                )
+
+            configs[identifier] = config
+            return config
+        finally:
+            resolving.remove(identifier)
+
+    for identifier in raw_configs:
+        resolve(identifier)
 
     return Track(slug=track_slug.upper(), path=manifest, configs=MappingProxyType(configs))
 

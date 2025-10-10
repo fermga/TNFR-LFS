@@ -5,10 +5,8 @@ surface = "asphalt"
 track_profile = "p_balanced_medium"
 
 [config.BL1R]
+alias_of = "BL1"
 name = "Blackwood GP Reverse"
-length_km = 3.3
-surface = "asphalt"
-track_profile = "p_balanced_medium"
 
 [config.BL2]
 name = "Blackwood Rallycross"
@@ -17,10 +15,8 @@ surface = "mixed"
 track_profile = "p_rallycross"
 
 [config.BL2R]
+alias_of = "BL2"
 name = "Blackwood Rallycross Reverse"
-length_km = 3.8
-surface = "mixed"
-track_profile = "p_rallycross"
 
 [config.BL3]
 name = "Blackwood Kart"

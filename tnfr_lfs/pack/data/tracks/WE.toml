@@ -5,10 +5,8 @@ surface = "asphalt"
 track_profile = "p_balanced_long"
 
 [config.WE1R]
+alias_of = "WE1"
 name = "Westhill International Reverse"
-length_km = 5.6
-surface = "asphalt"
-track_profile = "p_balanced_long"
 
 [config.WE2]
 name = "Westhill National"
@@ -17,10 +15,8 @@ surface = "asphalt"
 track_profile = "p_balanced_medium"
 
 [config.WE2R]
+alias_of = "WE2"
 name = "Westhill National Reverse"
-length_km = 4.4
-surface = "asphalt"
-track_profile = "p_balanced_medium"
 
 [config.WE3]
 name = "Westhill Karting"

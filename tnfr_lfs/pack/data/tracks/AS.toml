@@ -41,7 +41,5 @@ surface = "asphalt"
 track_profile = "p_technical_long"
 
 [config.AS7R]
+alias_of = "AS7"
 name = "Aston North Reverse"
-length_km = 5.8
-surface = "asphalt"
-track_profile = "p_technical_long"

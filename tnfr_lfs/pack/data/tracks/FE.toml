@@ -29,7 +29,5 @@ surface = "mixed"
 track_profile = "p_rallycross"
 
 [config.FE6]
+alias_of = "FE5"
 name = "Fern Bay Rallycross Reverse"
-length_km = 3.5
-surface = "mixed"
-track_profile = "p_rallycross"

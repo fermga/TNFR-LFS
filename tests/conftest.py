@@ -465,6 +465,10 @@ def mini_track_pack(tmp_path: Path) -> MiniTrackPack:
             track_profile = "p_test_combo"
             pit_boxes = 32
             notes = ["tight chicane", "long straight"]
+
+            [config.AS3R]
+            alias_of = "AS3"
+            name = "Mini Aston Historic Reverse"
             """
         ),
         encoding="utf8",
