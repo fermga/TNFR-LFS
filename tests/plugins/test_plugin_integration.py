@@ -6,12 +6,13 @@ import math
 
 from tnfr_lfs.core.epi import (
     NaturalFrequencySnapshot,
-    TelemetryRecord,
     apply_plugin_nu_f_snapshot,
     resolve_plugin_nu_f,
 )
 from tnfr_lfs.core.operators import plugin_coherence_operator
 from tnfr_lfs.plugins import TNFRPlugin
+
+from tests.helpers import build_telemetry_record
 
 
 class SamplePlugin(TNFRPlugin):
@@ -33,44 +34,6 @@ class SamplePlugin(TNFRPlugin):
         self, coherence_index: float, series: Sequence[float] | None = None
     ) -> None:
         self.coherence_updates.append((coherence_index, None if series is None else tuple(series)))
-
-
-def _record(timestamp: float, *, steer: float = 0.2) -> TelemetryRecord:
-    base = {
-        "timestamp": timestamp,
-        "vertical_load": 5000.0,
-        "slip_ratio": 0.01,
-        "lateral_accel": 0.5 + steer * 0.1,
-        "longitudinal_accel": 0.3,
-        "yaw": 0.0,
-        "pitch": 0.0,
-        "roll": 0.0,
-        "brake_pressure": 0.1,
-        "locking": 0.0,
-        "nfr": 510.0,
-        "si": 0.82,
-        "speed": 45.0,
-        "yaw_rate": steer * 0.2,
-        "slip_angle": 0.01,
-        "steer": steer,
-        "throttle": 0.5,
-        "gear": 3,
-        "vertical_load_front": 2500.0,
-        "vertical_load_rear": 2500.0,
-        "mu_eff_front": 1.05,
-        "mu_eff_rear": 1.04,
-        "mu_eff_front_lateral": 1.05,
-        "mu_eff_front_longitudinal": 1.0,
-        "mu_eff_rear_lateral": 1.05,
-        "mu_eff_rear_longitudinal": 1.0,
-        "suspension_travel_front": 0.03,
-        "suspension_travel_rear": 0.031,
-        "suspension_velocity_front": 0.02,
-        "suspension_velocity_rear": 0.018,
-    }
-    return TelemetryRecord(**base)
-
-
 def test_apply_snapshot_updates_plugin_state() -> None:
     plugin = SamplePlugin("sample", "Sample plugin", "1.0.0")
     snapshot = NaturalFrequencySnapshot(
@@ -92,8 +55,104 @@ def test_apply_snapshot_updates_plugin_state() -> None:
 
 def test_resolve_plugin_nu_f_uses_pipeline_objects() -> None:
     plugin = SamplePlugin("integration", "Integration test", "1.0.0")
-    history = [_record(0.0, steer=0.1), _record(0.1, steer=0.3)]
-    target = _record(0.2, steer=0.25)
+    history = [
+        build_telemetry_record(
+            0.0,
+            nfr=510.0,
+            si=0.82,
+            vertical_load=5000.0,
+            slip_ratio=0.01,
+            lateral_accel=0.5 + 0.1 * 0.1,
+            longitudinal_accel=0.3,
+            yaw=0.0,
+            pitch=0.0,
+            roll=0.0,
+            brake_pressure=0.1,
+            locking=0.0,
+            speed=45.0,
+            yaw_rate=0.1 * 0.2,
+            slip_angle=0.01,
+            steer=0.1,
+            throttle=0.5,
+            gear=3,
+            vertical_load_front=2500.0,
+            vertical_load_rear=2500.0,
+            mu_eff_front=1.05,
+            mu_eff_rear=1.04,
+            mu_eff_front_lateral=1.05,
+            mu_eff_front_longitudinal=1.0,
+            mu_eff_rear_lateral=1.05,
+            mu_eff_rear_longitudinal=1.0,
+            suspension_travel_front=0.03,
+            suspension_travel_rear=0.031,
+            suspension_velocity_front=0.02,
+            suspension_velocity_rear=0.018,
+        ),
+        build_telemetry_record(
+            0.1,
+            nfr=510.0,
+            si=0.82,
+            vertical_load=5000.0,
+            slip_ratio=0.01,
+            lateral_accel=0.5 + 0.3 * 0.1,
+            longitudinal_accel=0.3,
+            yaw=0.0,
+            pitch=0.0,
+            roll=0.0,
+            brake_pressure=0.1,
+            locking=0.0,
+            speed=45.0,
+            yaw_rate=0.3 * 0.2,
+            slip_angle=0.01,
+            steer=0.3,
+            throttle=0.5,
+            gear=3,
+            vertical_load_front=2500.0,
+            vertical_load_rear=2500.0,
+            mu_eff_front=1.05,
+            mu_eff_rear=1.04,
+            mu_eff_front_lateral=1.05,
+            mu_eff_front_longitudinal=1.0,
+            mu_eff_rear_lateral=1.05,
+            mu_eff_rear_longitudinal=1.0,
+            suspension_travel_front=0.03,
+            suspension_travel_rear=0.031,
+            suspension_velocity_front=0.02,
+            suspension_velocity_rear=0.018,
+        ),
+    ]
+    target = build_telemetry_record(
+        0.2,
+        nfr=510.0,
+        si=0.82,
+        vertical_load=5000.0,
+        slip_ratio=0.01,
+        lateral_accel=0.5 + 0.25 * 0.1,
+        longitudinal_accel=0.3,
+        yaw=0.0,
+        pitch=0.0,
+        roll=0.0,
+        brake_pressure=0.1,
+        locking=0.0,
+        speed=45.0,
+        yaw_rate=0.25 * 0.2,
+        slip_angle=0.01,
+        steer=0.25,
+        throttle=0.5,
+        gear=3,
+        vertical_load_front=2500.0,
+        vertical_load_rear=2500.0,
+        mu_eff_front=1.05,
+        mu_eff_rear=1.04,
+        mu_eff_front_lateral=1.05,
+        mu_eff_front_longitudinal=1.0,
+        mu_eff_rear_lateral=1.05,
+        mu_eff_rear_longitudinal=1.0,
+        suspension_travel_front=0.03,
+        suspension_travel_rear=0.031,
+        suspension_velocity_front=0.02,
+        suspension_velocity_rear=0.018,
+    )
 
     snapshot = resolve_plugin_nu_f(plugin, target, history=history)
 

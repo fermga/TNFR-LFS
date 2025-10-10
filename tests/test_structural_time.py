@@ -2,65 +2,28 @@ from dataclasses import replace
 
 import pytest
 
-from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.core.metrics import compute_window_metrics
 from tnfr_lfs.core.structural_time import compute_structural_timestamps
 
-
-def _record(
-    timestamp: float,
-    *,
-    brake: float = 0.0,
-    throttle: float = 0.0,
-    yaw_rate: float = 0.0,
-    steer: float = 0.0,
-    nfr: float = 0.0,
-    si: float = 0.8,
-) -> TelemetryRecord:
-    return TelemetryRecord(
-        timestamp=timestamp,
-        structural_timestamp=None,
-        vertical_load=5000.0,
-        slip_ratio=0.0,
-        lateral_accel=0.0,
-        longitudinal_accel=0.0,
-        yaw=0.0,
-        pitch=0.0,
-        roll=0.0,
-        brake_pressure=brake,
-        locking=0.0,
-        nfr=nfr,
-        si=si,
-        speed=0.0,
-        yaw_rate=yaw_rate,
-        slip_angle=0.0,
-        steer=steer,
-        throttle=throttle,
-        gear=3,
-        vertical_load_front=2500.0,
-        vertical_load_rear=2500.0,
-        mu_eff_front=1.0,
-        mu_eff_rear=1.0,
-        mu_eff_front_lateral=1.0,
-        mu_eff_front_longitudinal=0.95,
-        mu_eff_rear_lateral=1.0,
-        mu_eff_rear_longitudinal=0.95,
-        suspension_travel_front=0.0,
-        suspension_travel_rear=0.0,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
-    )
+from tests.helpers import build_telemetry_record
 
 
 def test_structural_time_dense_sequences_expand_span() -> None:
     sparse_records = [
-        _record(float(index), brake=0.1 if index == 3 else 0.0, yaw_rate=0.05, steer=0.02)
+        build_telemetry_record(
+            float(index),
+            nfr=0.0,
+            brake_pressure=0.1 if index == 3 else 0.0,
+            yaw_rate=0.05,
+            steer=0.02,
+        )
         for index in range(8)
     ]
     dense_records = [
-        _record(
+        build_telemetry_record(
             float(index),
-            brake=0.6 if index % 2 else 0.0,
+            nfr=0.0,
+            brake_pressure=0.6 if index % 2 else 0.0,
             throttle=0.7 if index % 3 == 0 else 0.2,
             yaw_rate=0.4 if index >= 2 else 0.05,
             steer=0.3 if index >= 4 else 0.1,
@@ -80,7 +43,11 @@ def test_structural_time_dense_sequences_expand_span() -> None:
 
 def test_structural_time_modulates_gradients_with_weights() -> None:
     records = [
-        _record(float(index), brake=0.8 if index in {1, 2} else 0.1, nfr=float(index))
+        build_telemetry_record(
+            float(index),
+            nfr=float(index),
+            brake_pressure=0.8 if index in {1, 2} else 0.1,
+        )
         for index in range(6)
     ]
 

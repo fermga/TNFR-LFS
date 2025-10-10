@@ -42,49 +42,12 @@ from tnfr_lfs.core.epi_models import (
 )
 from tnfr_lfs.core.utils import normalised_entropy
 
+from tests.helpers import build_telemetry_record
 from tests.helpers.steering import build_steering_bundle
 
 
-def _record(timestamp: float, nfr: float, si: float = 0.8, **overrides) -> TelemetryRecord:
-    base = TelemetryRecord(
-        timestamp=timestamp,
-        vertical_load=5000.0,
-        slip_ratio=0.0,
-        lateral_accel=0.0,
-        longitudinal_accel=0.0,
-        yaw=0.0,
-        pitch=0.0,
-        roll=0.0,
-        brake_pressure=0.0,
-        locking=0.0,
-        nfr=nfr,
-        si=si,
-        speed=0.0,
-        yaw_rate=0.0,
-        slip_angle=0.0,
-        steer=0.0,
-        throttle=0.0,
-        gear=3,
-        vertical_load_front=2500.0,
-        vertical_load_rear=2500.0,
-        mu_eff_front=1.0,
-        mu_eff_rear=1.0,
-        mu_eff_front_lateral=1.0,
-        mu_eff_front_longitudinal=0.95,
-        mu_eff_rear_lateral=1.0,
-        mu_eff_rear_longitudinal=0.95,
-        suspension_travel_front=0.0,
-        suspension_travel_rear=0.0,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
-    )
-    if overrides:
-        base = replace(base, **overrides)
-    return base
-
-
 def test_record_optional_defaults_are_nan() -> None:
-    record = _record(0.0, 100.0)
+    record = build_telemetry_record(0.0, 100.0)
 
     assert math.isnan(record.slip_ratio_fl)
     assert math.isnan(record.slip_angle_fl)
@@ -114,7 +77,7 @@ def test_motor_input_correlations_prefers_steer_yaw_pair() -> None:
         steer = math.sin(2.0 * math.pi * frequency * timestamp)
         yaw = math.sin(2.0 * math.pi * frequency * timestamp - phase_offset)
         records.append(
-            _record(
+            build_telemetry_record(
                 timestamp,
                 100.0,
                 yaw_rate=yaw,
@@ -136,7 +99,7 @@ def test_motor_input_correlations_prefers_steer_yaw_pair() -> None:
 
 
 def test_ackermann_parallel_delta_uses_wheel_slip_angles() -> None:
-    baseline = _record(
+    baseline = build_telemetry_record(
         0.0,
         100.0,
         yaw_rate=0.6,
@@ -155,7 +118,7 @@ def test_ackermann_parallel_delta_uses_wheel_slip_angles() -> None:
 
 
 def test_ackermann_parallel_delta_swaps_wheels_on_right_turn() -> None:
-    baseline = _record(
+    baseline = build_telemetry_record(
         0.0,
         95.0,
         yaw_rate=-0.5,
@@ -174,7 +137,7 @@ def test_ackermann_parallel_delta_swaps_wheels_on_right_turn() -> None:
 
 
 def test_ackermann_parallel_delta_ignores_low_yaw_rate() -> None:
-    baseline = _record(0.0, 92.0, yaw_rate=0.0, slip_angle_fl=0.03, slip_angle_fr=0.0)
+    baseline = build_telemetry_record(0.0, 92.0, yaw_rate=0.0, slip_angle_fl=0.03, slip_angle_fr=0.0)
     sample = replace(baseline, yaw_rate=1e-7, slip_angle_fl=0.2, slip_angle_fr=-0.1)
     delta = _ackermann_parallel_delta(sample, baseline)
     assert delta == pytest.approx(0.0)
@@ -182,7 +145,7 @@ def test_ackermann_parallel_delta_ignores_low_yaw_rate() -> None:
 
 def test_compute_window_metrics_tracks_ackermann_overshoot() -> None:
     records = [
-        _record(
+        build_telemetry_record(
             0.0,
             100.0,
             yaw_rate=0.52,
@@ -191,7 +154,7 @@ def test_compute_window_metrics_tracks_ackermann_overshoot() -> None:
             slip_angle_fl=0.09,
             slip_angle_fr=0.01,
         ),
-        _record(
+        build_telemetry_record(
             0.5,
             101.0,
             yaw_rate=0.55,
@@ -200,7 +163,7 @@ def test_compute_window_metrics_tracks_ackermann_overshoot() -> None:
             slip_angle_fl=0.07,
             slip_angle_fr=0.02,
         ),
-        _record(
+        build_telemetry_record(
             1.0,
             99.0,
             yaw_rate=0.58,
@@ -235,12 +198,12 @@ def test_compute_window_metrics_tracks_ackermann_overshoot() -> None:
 
 def test_compute_window_metrics_trending_series() -> None:
     records = [
-        _record(0.0, 100.0, si=0.75),
-        _record(1.0, 102.0, si=0.80),
-        _record(2.0, 104.0, si=0.85),
-        _record(3.0, 106.0, si=0.82),
-        _record(4.0, 108.0, si=0.78),
-        _record(5.0, 110.0, si=0.76),
+        build_telemetry_record(0.0, 100.0, si=0.75),
+        build_telemetry_record(1.0, 102.0, si=0.80),
+        build_telemetry_record(2.0, 104.0, si=0.85),
+        build_telemetry_record(3.0, 106.0, si=0.82),
+        build_telemetry_record(4.0, 108.0, si=0.78),
+        build_telemetry_record(5.0, 110.0, si=0.76),
     ]
 
     metrics = compute_window_metrics(records)
@@ -303,7 +266,7 @@ def test_compute_window_metrics_motor_coupling_correlations() -> None:
         brake = 1.0 - throttle
         acceleration = 2.0 * throttle - 1.0
         records.append(
-            _record(
+            build_telemetry_record(
                 timestamp,
                 100.0 + index,
                 throttle=throttle,
@@ -327,7 +290,7 @@ def test_compute_window_metrics_motor_coupling_correlations() -> None:
 
 def test_compute_window_metrics_motor_coupling_handles_constant_series() -> None:
     records = [
-        _record(
+        build_telemetry_record(
             float(index),
             120.0 + index,
             throttle=0.5,
@@ -422,10 +385,10 @@ def test_compute_window_metrics_phase_std_with_bundles(
 
 def test_compute_window_metrics_entropy_maps(monkeypatch) -> None:
     records = [
-        _record(0.0, 100.0),
-        _record(0.5, 101.0),
-        _record(1.0, 102.0),
-        _record(1.5, 103.0),
+        build_telemetry_record(0.0, 100.0),
+        build_telemetry_record(0.5, 101.0),
+        build_telemetry_record(1.0, 102.0),
+        build_telemetry_record(1.5, 103.0),
     ]
 
     contributions: Mapping[float, Mapping[str, float]] = {
@@ -529,7 +492,7 @@ def test_compute_window_metrics_entropy_maps(monkeypatch) -> None:
     )
 
 def test_compute_window_metrics_handles_small_windows() -> None:
-    single = _record(0.0, 120.0)
+    single = build_telemetry_record(0.0, 120.0)
     metrics = compute_window_metrics([single])
     assert metrics.si == pytest.approx(0.8)
     assert metrics.d_nfr_couple == 0.0
@@ -553,7 +516,7 @@ def test_compute_window_metrics_handles_small_windows() -> None:
 
 
 def test_compute_window_metrics_suspension_velocity_histograms() -> None:
-    base = _record(0.0, 110.0)
+    base = build_telemetry_record(0.0, 110.0)
     front_values = [0.02, 0.08, 0.3, -0.02, -0.15, -0.35]
     rear_values = [0.01, 0.12, 0.25, -0.04, -0.18, -0.5]
     records = [
@@ -658,31 +621,31 @@ def _longitudinal_bundle(
 def test_compute_window_metrics_shift_metrics() -> None:
     records = [
         replace(
-            _record(0.0, 30.0, si=0.78),
+            build_telemetry_record(0.0, 30.0, si=0.78),
             speed=42.0,
             gear=3,
             rpm=4800.0,
         ),
         replace(
-            _record(0.1, 28.0, si=0.76),
+            build_telemetry_record(0.1, 28.0, si=0.76),
             speed=18.0,
             gear=2,
             rpm=5200.0,
         ),
         replace(
-            _record(0.2, 32.0, si=0.79),
+            build_telemetry_record(0.2, 32.0, si=0.79),
             speed=25.0,
             gear=3,
             rpm=4800.0,
         ),
         replace(
-            _record(0.3, 34.0, si=0.8),
+            build_telemetry_record(0.3, 34.0, si=0.8),
             speed=30.0,
             gear=4,
             rpm=3000.0,
         ),
         replace(
-            _record(0.4, 36.0, si=0.82),
+            build_telemetry_record(0.4, 36.0, si=0.82),
             speed=40.0,
             gear=4,
             rpm=5000.0,
@@ -702,7 +665,7 @@ def test_compute_window_metrics_bottoming_ratio_tracks_overlap() -> None:
     delta_long = [0.12, 0.52, 0.55, 0.18, 0.57]
     for index, (front, delta_value) in enumerate(zip(travels_front, delta_long)):
         timestamp = index * 0.1
-        record = _record(timestamp, 100.0 + index, si=0.82)
+        record = build_telemetry_record(timestamp, 100.0 + index, si=0.82)
         records.append(
             replace(
                 record,
@@ -740,7 +703,7 @@ def test_compute_window_metrics_bumpstop_histogram_energy() -> None:
         zip(travels_front, travels_rear, delta_long)
     ):
         timestamp = index * 0.1
-        record = _record(timestamp, 120.0 + index, si=0.83)
+        record = build_telemetry_record(timestamp, 120.0 + index, si=0.83)
         records.append(
             replace(
                 record,
@@ -776,21 +739,21 @@ def test_compute_window_metrics_bumpstop_histogram_energy() -> None:
 def test_compute_window_metrics_mu_usage_ratios() -> None:
     records = [
         replace(
-            _record(0.0, 100.0),
+            build_telemetry_record(0.0, 100.0),
             mu_eff_front_lateral=0.8,
             mu_eff_front_longitudinal=0.6,
             mu_eff_rear_lateral=0.7,
             mu_eff_rear_longitudinal=0.5,
         ),
         replace(
-            _record(0.5, 101.0),
+            build_telemetry_record(0.5, 101.0),
             mu_eff_front_lateral=0.9,
             mu_eff_front_longitudinal=0.4,
             mu_eff_rear_lateral=0.65,
             mu_eff_rear_longitudinal=0.45,
         ),
         replace(
-            _record(1.1, 102.0),
+            build_telemetry_record(1.1, 102.0),
             mu_eff_front_lateral=0.85,
             mu_eff_front_longitudinal=0.55,
             mu_eff_rear_lateral=0.75,
@@ -831,7 +794,7 @@ def test_compute_window_metrics_mu_usage_ratios() -> None:
 
 
 def test_compute_window_metrics_aero_balance_drift_bins() -> None:
-    base = _record(0.0, 110.0, si=0.82)
+    base = build_telemetry_record(0.0, 110.0, si=0.82)
 
     def _rake_value(pitch: float, front: float, rear: float) -> float:
         travel_delta = rear - front
@@ -925,7 +888,7 @@ def test_compute_window_metrics_aero_balance_drift_bins() -> None:
 
 
 def test_compute_window_metrics_aero_balance_drift_balance_slopes() -> None:
-    base = _record(0.0, 110.0, si=0.82)
+    base = build_telemetry_record(0.0, 110.0, si=0.82)
 
     def _sample(
         timestamp: float,
@@ -992,7 +955,7 @@ def test_compute_window_metrics_brake_headroom_components() -> None:
     ]
     records = [
         replace(
-            _record(float(index), 100.0 + index * 2.0),
+            build_telemetry_record(float(index), 100.0 + index * 2.0),
             longitudinal_accel=longitudinal[index],
             locking=locking[index],
             slip_ratio_fl=slip_profiles[index][0],
@@ -1014,7 +977,7 @@ def test_compute_window_metrics_brake_headroom_components() -> None:
 
 
 def test_compute_window_metrics_brake_fade_and_ventilation() -> None:
-    base = _record(0.0, 100.0)
+    base = build_telemetry_record(0.0, 100.0)
     timestamps = [0.0, 0.4, 0.8, 1.2]
     decels = [9.0, 8.6, 8.2, 7.0]
     brake_profiles = [
@@ -1059,7 +1022,7 @@ def test_compute_window_metrics_brake_fade_and_ventilation() -> None:
 
 
 def test_compute_window_metrics_without_brake_temperature_samples() -> None:
-    base = _record(0.0, 100.0)
+    base = build_telemetry_record(0.0, 100.0)
     records = [
         replace(
             base,
@@ -1087,7 +1050,7 @@ def test_compute_window_metrics_without_brake_temperature_samples() -> None:
 
 
 def test_slide_catch_budget_aggregates_components() -> None:
-    base = _record(0.0, 100.0)
+    base = build_telemetry_record(0.0, 100.0)
     records = [
         replace(base, timestamp=0.0, yaw_rate=0.0, steer=0.0, throttle=0.3),
         replace(base, timestamp=0.5, yaw_rate=0.3, steer=0.4, throttle=0.35),
@@ -1105,7 +1068,7 @@ def test_slide_catch_budget_aggregates_components() -> None:
 
 
 def test_locking_window_score_detects_throttle_transitions() -> None:
-    base = _record(0.0, 120.0)
+    base = build_telemetry_record(0.0, 120.0)
     def _sample(ts: float, throttle: float, locking: float, yaw_rate: float, delta_long: float):
         record = replace(
             base,
@@ -1136,7 +1099,7 @@ def test_locking_window_score_detects_throttle_transitions() -> None:
 
 
 def test_aero_balance_drift_normalises_mu_metrics() -> None:
-    base = _record(0.0, 110.0, speed=60.0)
+    base = build_telemetry_record(0.0, 110.0, speed=60.0)
 
     def _sample(
         timestamp: float,
@@ -1270,9 +1233,9 @@ def test_compute_window_metrics_empty_window() -> None:
 
 def test_compute_aero_coherence_splits_bins() -> None:
     records = [
-        replace(_record(0.0, 100.0, si=0.8), speed=25.0),
-        replace(_record(1.0, 101.0, si=0.805), speed=35.0),
-        replace(_record(2.0, 102.0, si=0.81), speed=60.0),
+        replace(build_telemetry_record(0.0, 100.0, si=0.8), speed=25.0),
+        replace(build_telemetry_record(1.0, 101.0, si=0.805), speed=35.0),
+        replace(build_telemetry_record(2.0, 102.0, si=0.81), speed=60.0),
     ]
     bundles = [
         SimpleNamespace(
@@ -1313,10 +1276,10 @@ def test_compute_aero_coherence_splits_bins() -> None:
 
 def test_aero_mechanical_coherence_blends_components() -> None:
     records = [
-        replace(_record(0.0, 95.0, si=0.76), speed=28.0),
-        replace(_record(1.0, 96.5, si=0.77), speed=32.0),
-        replace(_record(2.0, 97.5, si=0.75), speed=58.0),
-        replace(_record(3.0, 98.5, si=0.74), speed=62.0),
+        replace(build_telemetry_record(0.0, 95.0, si=0.76), speed=28.0),
+        replace(build_telemetry_record(1.0, 96.5, si=0.77), speed=32.0),
+        replace(build_telemetry_record(2.0, 97.5, si=0.75), speed=58.0),
+        replace(build_telemetry_record(3.0, 98.5, si=0.74), speed=62.0),
     ]
     bundles = [
         EPIBundle(
@@ -1394,7 +1357,7 @@ def test_aero_mechanical_coherence_blends_components() -> None:
 
 
 def test_cphi_report_structure_and_legacy_mapping() -> None:
-    base = _record(
+    base = build_telemetry_record(
         0.0,
         100.0,
         slip_ratio=0.0,
