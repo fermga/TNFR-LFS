@@ -44,8 +44,7 @@ jobs:
               - 'requirements*.txt'
               - 'tests/**'
               - 'tnfr_lfs.toml'
-              - 'tnfr_lfs/**'
-              - 'tnfr_lfs_pack/**'
+              - 'src/tnfr_lfs/**'
               - 'typing_targets/**'
             examples:
               - 'examples/**'

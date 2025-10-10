@@ -3,6 +3,9 @@
 This package exposes utility functions to ingest telemetry, compute
 Event Performance Indicators (EPI), and derive recommendations for
 improving tyre normal force ratio (ΔNFR) and stability index (ΔSi).
+
+The Python sources now live under :mod:`src.tnfr_lfs`, matching the
+modern layout adopted by the project.
 """
 
 from ._version import __version__
