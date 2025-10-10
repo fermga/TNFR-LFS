@@ -38,6 +38,19 @@ STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
     "SILENCE": "Structural silence",
 }
 
+STRUCTURAL_OPERATOR_ALIASES: Mapping[str, str] = {
+    "SILENCIO": "SILENCE",
+}
+
+
+def normalize_structural_operator_identifier(identifier: str) -> str:
+    """Return the canonical structural identifier for ``identifier``."""
+
+    if not isinstance(identifier, str):
+        return str(identifier)
+    key = identifier.upper()
+    return STRUCTURAL_OPERATOR_ALIASES.get(key, key)
+
 
 def normalize_structural_operator_identifier(identifier: str) -> str:
     """Return the canonical structural identifier for ``identifier``."""
