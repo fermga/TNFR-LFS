@@ -3,9 +3,9 @@
 This repository relies on linting, typing, and testing workflows to keep the TNFR × LFS toolkit healthy. After cloning the project install the development dependencies (this includes `numpy>=1.24,<2.0` and `pandas>=1.5,<3.0`, required by the tests and analysis pipelines) via the packaged extras:
 
 ```bash
-python -m pip install ".[dev]"
+pip install .[dev]
 # or, for an editable environment
-python -m pip install -e ".[dev]"
+pip install -e .[dev]
 ```
 
 ## Verification flow
@@ -41,7 +41,7 @@ extra and execute the module locally whenever a change touches the caching helpe
 natural-frequency analysis:
 
 ```bash
-python -m pip install -e .[benchmark]
+pip install -e .[benchmark]
 python -m benchmarks.delta_cache_benchmark
 # or use the Makefile shortcut
 make benchmark-delta-cache
