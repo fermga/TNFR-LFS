@@ -3,11 +3,18 @@ level = "info"
 output = "stderr"
 format = "json"
 
-[telemetry]
+[core]
 host = "127.0.0.1"
 outsim_port = 4123
 outgauge_port = 3000
 insim_port = 29999
+udp_timeout = 2.0
+udp_retries = 3
+
+[performance]
+telemetry_buffer_size = 64
+cache_enabled = true
+max_cache_size = 256
 
 [analyze]
 export = "json"

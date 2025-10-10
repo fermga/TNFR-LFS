@@ -205,10 +205,13 @@ def test_baseline_overlay_uses_keepalive_and_overlay(
         def close(self) -> None:
             overlay_calls["closed"] = True
 
+    captured_args: dict[str, object] = {}
+
     def _fake_capture(**kwargs):  # type: ignore[no-untyped-def]
         heartbeat = kwargs.get("heartbeat")
         if callable(heartbeat):
             heartbeat()
+        captured_args["buffer_size"] = kwargs.get("buffer_size")
         return workflows_module.CaptureResult(
             records=[],
             metrics=workflows_module.CaptureMetrics(
@@ -246,6 +249,44 @@ def test_baseline_overlay_uses_keepalive_and_overlay(
     assert overlay_calls.get("connected")
     assert overlay_calls.get("tick") == 1
     assert overlay_calls.get("closed")
+    assert captured_args.get("buffer_size") is None
+
+
+def test_baseline_threads_configured_buffer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "tnfr_lfs.toml"
+    config_path.write_text("[performance]\ntelemetry_buffer_size = 12\n", encoding="utf8")
+
+    captured: dict[str, object] = {}
+
+    def _fake_capture(**kwargs):  # type: ignore[no-untyped-def]
+        captured["buffer_size"] = kwargs.get("buffer_size")
+        return workflows_module.CaptureResult(
+            records=[],
+            metrics=workflows_module.CaptureMetrics(
+                attempts=1,
+                samples=0,
+                dropped_pairs=0,
+                duration=0.0,
+                outsim_timeouts=0,
+                outgauge_timeouts=0,
+                outsim_ignored_hosts=0,
+                outgauge_ignored_hosts=0,
+                outsim_loss_events=0,
+                outgauge_loss_events=0,
+                outsim_recovered_packets=0,
+                outgauge_recovered_packets=0,
+            ),
+        )
+
+    monkeypatch.setattr(workflows_module, "_capture_udp_samples", _fake_capture)
+
+    result = run_cli(["baseline", "--duration", "1"])
+
+    assert "No telemetry samples captured" in result
+    assert captured.get("buffer_size") == 12
 
 
 def test_cli_analyze_accepts_raf_sample(
@@ -1050,8 +1091,11 @@ def test_configuration_defaults_are_applied(
     config_path = tmp_path / "tnfr_lfs.toml"
     config_path.write_text(
         """
-[telemetry]
+[core]
 outsim_port = 4567
+
+[performance]
+telemetry_buffer_size = 8
 
 [suggest]
 car_model = "config_gt"
@@ -1096,11 +1140,18 @@ def test_repository_template_configures_default_ports_and_profiles() -> None:
     config_path = Path(__file__).resolve().parents[1] / "tnfr_lfs.toml"
     data = tomllib.loads(config_path.read_text(encoding="utf8"))
 
-    telemetry = data["telemetry"]
-    assert telemetry["host"] == "127.0.0.1"
-    assert telemetry["outsim_port"] == 4123
-    assert telemetry["outgauge_port"] == 3000
-    assert telemetry["insim_port"] == 29999
+    core = data["core"]
+    assert core["host"] == "127.0.0.1"
+    assert core["outsim_port"] == 4123
+    assert core["outgauge_port"] == 3000
+    assert core["insim_port"] == 29999
+    assert core["udp_timeout"] == pytest.approx(2.0)
+    assert core["udp_retries"] == 3
+
+    performance = data["performance"]
+    assert performance["telemetry_buffer_size"] == 64
+    assert performance["cache_enabled"] is True
+    assert performance["max_cache_size"] == 256
 
     suggestion_defaults = data["suggest"]
     assert suggestion_defaults["car_model"] == "FZR"

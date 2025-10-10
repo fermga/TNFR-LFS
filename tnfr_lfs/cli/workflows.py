@@ -2265,6 +2265,7 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         track_name=resolved_track,
         layout=layout,
         hud=hud,
+        telemetry_buffer_size=getattr(namespace, "telemetry_buffer_size", None),
     )
     return controller.run()
 
@@ -2457,6 +2458,7 @@ def _handle_baseline(namespace: argparse.Namespace, *, config: Mapping[str, Any]
                 outgauge_port=namespace.outgauge_port,
                 timeout=namespace.timeout,
                 retries=namespace.retries,
+                buffer_size=getattr(namespace, "telemetry_buffer_size", None),
                 heartbeat=heartbeat,
             )
             records = capture_result.records
@@ -3073,6 +3075,7 @@ def _capture_udp_samples(
     outgauge_port: int,
     timeout: float,
     retries: int,
+    buffer_size: int | None = None,
     heartbeat: Optional[Callable[[], None]] = None,
 ) -> CaptureResult:
     fusion = TelemetryFusion()
@@ -3082,17 +3085,34 @@ def _capture_udp_samples(
     attempts = 0
     dropped_pairs = 0
 
-    outsim_backlog: Deque[OutSimPacket] = deque()
-    outgauge_backlog: Deque[OutGaugePacket] = deque()
+    max_buffer: Optional[int] = None
+    if buffer_size is not None:
+        try:
+            numeric = int(buffer_size)
+        except (TypeError, ValueError):
+            numeric = 0
+        if numeric > 0:
+            max_buffer = numeric
+
+    outsim_backlog: Deque[OutSimPacket] = deque(maxlen=max_buffer)
+    outgauge_backlog: Deque[OutGaugePacket] = deque(maxlen=max_buffer)
     outsim_loss_events = 0
     outgauge_loss_events = 0
     outsim_recovered_packets = 0
     outgauge_recovered_packets = 0
 
     with OutSimUDPClient(
-        host=host, port=outsim_port, timeout=timeout, retries=retries
+        host=host,
+        port=outsim_port,
+        timeout=timeout,
+        retries=retries,
+        buffer_size=max_buffer,
     ) as outsim, OutGaugeUDPClient(
-        host=host, port=outgauge_port, timeout=timeout, retries=retries
+        host=host,
+        port=outgauge_port,
+        timeout=timeout,
+        retries=retries,
+        buffer_size=max_buffer,
     ) as outgauge:
         while len(records) < max_samples and monotonic() < deadline:
             attempts += 1

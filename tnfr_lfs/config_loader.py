@@ -15,46 +15,12 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 from ._pack_resources import data_root
-from .cache_settings import CacheOptions, DEFAULT_RECOMMENDER_CACHE_SIZE
+from .cache_settings import CacheOptions
 from .utils.immutables import _freeze_dict, _freeze_value
 
 
 _DATA_ROOT = data_root()
 _LFS_CLASS_OVERRIDES_CACHE: dict[Path, Mapping[str, Mapping[str, Any]]] = {}
-
-
-def _load_pack_cache_defaults(pack_root: Path | None = None) -> Mapping[str, Any]:
-    """Load cache defaults from the canonical ``config/global.toml`` location."""
-
-    if pack_root is None:
-        base_root = data_root().parent
-    else:
-        base_root = Path(pack_root).expanduser()
-
-    candidate = base_root / "config" / "global.toml"
-    if not candidate.exists():
-        return MappingProxyType({})
-
-    with candidate.open("rb") as buffer:
-        payload = tomllib.load(buffer)
-
-    cache_section = payload.get("cache")
-    if not isinstance(cache_section, ABCMapping):
-        return MappingProxyType({})
-
-    defaults: dict[str, Any] = {}
-
-    for key in ("enable_delta_cache", "nu_f_cache_size", "recommender_cache_size"):
-        if key in cache_section:
-            defaults[key] = cache_section.get(key)
-
-    telemetry_section = cache_section.get("telemetry")
-    if isinstance(telemetry_section, ABCMapping):
-        defaults["telemetry"] = MappingProxyType(
-            {str(key): value for key, value in telemetry_section.items()}
-        )
-
-    return MappingProxyType(defaults)
 
 
 def _coerce_bool(value: Any, fallback: bool) -> bool:
@@ -151,46 +117,26 @@ def parse_cache_options(
 ) -> CacheOptions:
     """Normalise cache configuration from CLI and pack TOML payloads."""
 
-    pack_root_override: Path | None = None
-    if pack_root is not None:
-        pack_root_override = Path(pack_root).expanduser()
-    elif config is not None:
-        paths_cfg = config.get("paths")
-        if isinstance(paths_cfg, ABCMapping):
-            pack_root_value = paths_cfg.get("pack_root")
-            if isinstance(pack_root_value, str) and pack_root_value.strip():
-                pack_root_override = Path(pack_root_value).expanduser()
-
-    overrides: Mapping[str, Any]
+    performance_cfg: Mapping[str, Any]
     if config is None:
-        overrides = MappingProxyType({})
+        performance_cfg = MappingProxyType({})
     else:
-        candidate = config.get("cache")
+        candidate = config.get("performance")
         if isinstance(candidate, ABCMapping):
-            overrides = candidate
+            performance_cfg = candidate
         else:
-            overrides = MappingProxyType({})
+            performance_cfg = MappingProxyType({})
 
-    defaults = _load_pack_cache_defaults(pack_root_override)
-    if defaults:
-        payload = _deep_merge(defaults, overrides)
-    else:
-        payload = dict(overrides)
-
-    telemetry_raw = payload.get("telemetry")
-    telemetry_cfg = telemetry_raw if isinstance(telemetry_raw, ABCMapping) else {}
+    cache_enabled = _coerce_bool(performance_cfg.get("cache_enabled"), True)
+    cache_size = _coerce_int(performance_cfg.get("max_cache_size"), 256, minimum=0)
+    if not cache_enabled:
+        cache_size = 0
 
     options = CacheOptions(
-        enable_delta_cache=_coerce_bool(payload.get("enable_delta_cache"), True),
-        nu_f_cache_size=_coerce_int(payload.get("nu_f_cache_size"), 256, minimum=0),
-        telemetry_cache_size=_coerce_int(
-            telemetry_cfg.get("telemetry_cache_size"), 1, minimum=0
-        ),
-        recommender_cache_size=_coerce_int(
-            payload.get("recommender_cache_size"),
-            DEFAULT_RECOMMENDER_CACHE_SIZE,
-            minimum=0,
-        ),
+        enable_delta_cache=cache_enabled,
+        nu_f_cache_size=cache_size,
+        telemetry_cache_size=cache_size,
+        recommender_cache_size=cache_size,
     )
     return options.with_defaults()
 

@@ -27,6 +27,16 @@ from .workflows import (
 def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.ArgumentParser:
     config = dict(config or {})
     logging_cfg = dict(config.get("logging", {}))
+    core_cfg_raw = config.get("core", {})
+    if isinstance(core_cfg_raw, Mapping):
+        core_cfg = dict(core_cfg_raw)
+    else:
+        core_cfg = {}
+    performance_cfg_raw = config.get("performance", {})
+    if isinstance(performance_cfg_raw, Mapping):
+        performance_cfg = dict(performance_cfg_raw)
+    else:
+        performance_cfg = {}
 
     parser = argparse.ArgumentParser(
         description="TNFR × LFS – Live for Speed Load & Force Synthesis"
@@ -88,33 +98,56 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
     )
     template_parser.set_defaults(handler=_handle_template)
 
-    telemetry_cfg = dict(config.get("telemetry", {}))
-    osd_cfg = dict(config.get("osd", {}))
+    osd_cfg_raw = core_cfg.get("osd", {})
+    if isinstance(osd_cfg_raw, Mapping):
+        osd_cfg = dict(osd_cfg_raw)
+    else:
+        osd_cfg = {}
+    try:
+        udp_timeout_default = float(core_cfg.get("udp_timeout", 2.0))
+    except (TypeError, ValueError):
+        udp_timeout_default = 2.0
+    try:
+        udp_retries_default = int(core_cfg.get("udp_retries", core_cfg.get("retries", 3)))
+    except (TypeError, ValueError):
+        udp_retries_default = 3
+    telemetry_buffer_raw = performance_cfg.get("telemetry_buffer_size")
+    telemetry_buffer_default: int | None
+    try:
+        telemetry_buffer_default = (
+            None
+            if telemetry_buffer_raw is None
+            else int(telemetry_buffer_raw)
+        )
+    except (TypeError, ValueError):
+        telemetry_buffer_default = None
+    if telemetry_buffer_default is not None and telemetry_buffer_default <= 0:
+        telemetry_buffer_default = None
     osd_parser = subparsers.add_parser(
         "osd",
         help="Render the live ΔNFR HUD inside Live for Speed via InSim buttons.",
     )
     osd_parser.add_argument(
         "--host",
-        default=str(osd_cfg.get("host", telemetry_cfg.get("host", "127.0.0.1"))),
+        default=str(osd_cfg.get("host", core_cfg.get("host", "127.0.0.1"))),
         help="Host where the OutSim/OutGauge broadcasters are running.",
     )
     osd_parser.add_argument(
         "--outsim-port",
         type=int,
-        default=int(osd_cfg.get("outsim_port", telemetry_cfg.get("outsim_port", 4123))),
+        default=int(osd_cfg.get("outsim_port", core_cfg.get("outsim_port", 4123))),
         help="Port used by the OutSim UDP stream.",
     )
     osd_parser.add_argument(
         "--outgauge-port",
         type=int,
-        default=int(osd_cfg.get("outgauge_port", telemetry_cfg.get("outgauge_port", 3000))),
+        default=int(osd_cfg.get("outgauge_port", core_cfg.get("outgauge_port", 3000))),
         help="Port used by the OutGauge UDP stream.",
     )
     osd_parser.add_argument(
         "--insim-port",
         type=int,
-        default=int(osd_cfg.get("insim_port", telemetry_cfg.get("insim_port", 29999))),
+        default=int(osd_cfg.get("insim_port", core_cfg.get("insim_port", 29999))),
         help="Port used by the InSim TCP control channel.",
     )
     osd_parser.add_argument(
@@ -164,6 +197,7 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         help="Override the IS_BTN height (0-200).",
     )
     osd_parser.set_defaults(handler=_handle_osd)
+    osd_parser.set_defaults(telemetry_buffer_size=telemetry_buffer_default)
 
     diagnose_parser = subparsers.add_parser(
         "diagnose",
@@ -176,47 +210,47 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
     )
     diagnose_parser.add_argument(
         "--host",
-        default=str(telemetry_cfg.get("host", "127.0.0.1")),
+        default=str(core_cfg.get("host", "127.0.0.1")),
         help="Host where the OutSim/OutGauge broadcasters are running.",
     )
     diagnose_parser.add_argument(
         "--outsim-port",
         type=int,
-        default=int(telemetry_cfg.get("outsim_port", 4123)),
+        default=int(core_cfg.get("outsim_port", 4123)),
         help="Port used by the OutSim UDP stream.",
     )
     diagnose_parser.add_argument(
         "--outgauge-port",
         type=int,
-        default=int(telemetry_cfg.get("outgauge_port", 3000)),
+        default=int(core_cfg.get("outgauge_port", 3000)),
         help="Port used by the OutGauge UDP stream.",
     )
     diagnose_parser.add_argument(
         "--insim-port",
         type=int,
-        default=int(telemetry_cfg.get("insim_port", 29999)),
+        default=int(core_cfg.get("insim_port", 29999)),
         help="Port used by the InSim TCP control channel.",
     )
     diagnose_parser.add_argument(
         "--timeout",
         type=float,
-        default=float(telemetry_cfg.get("timeout", 2.0)),
+        default=udp_timeout_default,
         help="Timeout in seconds to wait for UDP packets before failing.",
     )
     diagnose_parser.add_argument(
         "--retries",
         type=int,
-        default=int(telemetry_cfg.get("retries", 3)),
+        default=udp_retries_default,
         help="Retries when establishing the InSim TCP control channel.",
     )
     diagnose_parser.add_argument(
         "--car-model",
-        default=str(telemetry_cfg.get("car_model", default_car_model(config))),
+        default=str(core_cfg.get("car_model", default_car_model(config))),
         help="Car model used to resolve the telemetry profiles.",
     )
     diagnose_parser.add_argument(
         "--track",
-        default=str(telemetry_cfg.get("track", default_track_name(config))),
+        default=str(core_cfg.get("track", default_track_name(config))),
         help="Track identifier used to resolve the telemetry profiles.",
     )
     diagnose_parser.set_defaults(handler=_handle_diagnose)
@@ -225,38 +259,38 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         "baseline",
         help="Record a telemetry baseline by capturing OutSim/OutGauge streams.",
     )
-    simulate_default = telemetry_cfg.get("simulate")
+    simulate_default = core_cfg.get("simulate")
     if isinstance(simulate_default, str) and simulate_default.strip():
         simulate_default = Path(simulate_default).expanduser()
     else:
         simulate_default = None
-    duration_default = telemetry_cfg.get("duration", 45.0)
+    duration_default = core_cfg.get("duration", 45.0)
     try:
         duration_default = float(duration_default)
     except (TypeError, ValueError):
         duration_default = 45.0
-    limit_default = telemetry_cfg.get("limit")
+    limit_default = core_cfg.get("limit")
     try:
         limit_default = int(limit_default)
     except (TypeError, ValueError):
         limit_default = None
-    overlay_default = bool(telemetry_cfg.get("overlay", False))
-    insim_keepalive_default = telemetry_cfg.get("insim_keepalive", 5.0)
+    overlay_default = bool(core_cfg.get("overlay", False))
+    insim_keepalive_default = core_cfg.get("insim_keepalive", 5.0)
     try:
         insim_keepalive_default = float(insim_keepalive_default)
     except (TypeError, ValueError):
         insim_keepalive_default = 5.0
-    output_default = telemetry_cfg.get("output")
+    output_default = core_cfg.get("output")
     if isinstance(output_default, str) and output_default.strip():
         output_default = Path(output_default).expanduser()
     else:
         output_default = None
-    output_dir_default = telemetry_cfg.get("output_dir")
+    output_dir_default = core_cfg.get("output_dir")
     if isinstance(output_dir_default, str) and output_dir_default.strip():
         output_dir_default = Path(output_dir_default).expanduser()
     else:
         output_dir_default = None
-    force_default = bool(telemetry_cfg.get("force", False))
+    force_default = bool(core_cfg.get("force", False))
     baseline_parser.add_argument(
         "--simulate",
         dest="simulate",
@@ -276,7 +310,7 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
     baseline_parser.add_argument(
         "--format",
         choices=("jsonl", "parquet"),
-        default=str(telemetry_cfg.get("format", "jsonl")),
+        default=str(core_cfg.get("format", "jsonl")),
         help="Telemetry output format (default: jsonl).",
     )
     baseline_parser.add_argument(
@@ -310,42 +344,42 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
     baseline_parser.add_argument(
         "--max-samples",
         type=int,
-        default=int(telemetry_cfg.get("max_samples", 3600)),
+        default=int(core_cfg.get("max_samples", 3600)),
         help="Maximum number of telemetry samples to record.",
     )
     baseline_parser.add_argument(
         "--timeout",
         type=float,
-        default=float(telemetry_cfg.get("timeout", 2.0)),
+        default=udp_timeout_default,
         help="Timeout in seconds to wait for UDP packets before failing.",
     )
     baseline_parser.add_argument(
         "--retries",
         type=int,
-        default=int(telemetry_cfg.get("retries", 3)),
+        default=udp_retries_default,
         help="Retries when establishing the InSim TCP control channel.",
     )
     baseline_parser.add_argument(
         "--host",
-        default=str(telemetry_cfg.get("host", "127.0.0.1")),
+        default=str(core_cfg.get("host", "127.0.0.1")),
         help="Host where the OutSim/OutGauge broadcasters are running.",
     )
     baseline_parser.add_argument(
         "--outsim-port",
         type=int,
-        default=int(telemetry_cfg.get("outsim_port", 4123)),
+        default=int(core_cfg.get("outsim_port", 4123)),
         help="Port used by the OutSim UDP stream.",
     )
     baseline_parser.add_argument(
         "--outgauge-port",
         type=int,
-        default=int(telemetry_cfg.get("outgauge_port", 3000)),
+        default=int(core_cfg.get("outgauge_port", 3000)),
         help="Port used by the OutGauge UDP stream.",
     )
     baseline_parser.add_argument(
         "--insim-port",
         type=int,
-        default=int(telemetry_cfg.get("insim_port", 29999)),
+        default=int(core_cfg.get("insim_port", 29999)),
         help="Port used by the InSim TCP control channel.",
     )
     baseline_parser.add_argument(
@@ -369,6 +403,7 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         help="Overwrite existing files or reuse timestamped runs when colliding.",
     )
     baseline_parser.set_defaults(handler=_handle_baseline)
+    baseline_parser.set_defaults(telemetry_buffer_size=telemetry_buffer_default)
 
     analyze_cfg = dict(config.get("analyze", {}))
     analyze_parser = subparsers.add_parser(

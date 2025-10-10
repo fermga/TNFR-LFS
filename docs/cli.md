@@ -399,7 +399,7 @@ report locations.
     The snippet below is rendered directly from the bundled
     ``tnfr_lfs.toml`` so the documentation always matches the canonical
     defaults.  Additional tables shown later in this section (for
-    example ``[cache]``) illustrate optional overrides rather than
+    example ``[performance]``) illustrate optional overrides rather than
     values written to the default template.
 
 {{ render_config_defaults() }}
@@ -411,31 +411,22 @@ JSON, default ``suggest`` to the FZR/AS5 pairing and store outputs under
 ``out`` at the repository root.  Override any of them with explicit CLI
 flags or by editing the configuration file to match your deployment.
 
-Cache defaults now live in the pack's ``config/global.toml`` and are
-shared by the CLI and analysis helpers.  The default template omits the
-block, but you can still override individual values by adding a
-``[cache]`` table to ``tnfr_lfs.toml`` (as shown in the example below):
+Performance-sensitive toggles now live in the ``[performance]`` table so
+you can control telemetry buffering and cache usage without editing pack
+files:
 
 ```toml
-[cache]
-enable_delta_cache = false
-nu_f_cache_size = 128
-recommender_cache_size = 32
-
-[cache.telemetry]
-telemetry_cache_size = 8
+[performance]
+telemetry_buffer_size = 16
+cache_enabled = false
+max_cache_size = 64
 ```
 
-``enable_delta_cache = false`` recomputes the ΔNFR-by-node maps for
-every sample instead of keeping a per-record LRU, while
-``nu_f_cache_size`` controls the maximum history snapshots stored for
-dynamic ν_f smoothing (set it to ``0`` to disable caching entirely).
-``recommender_cache_size`` bounds the LRU backing ``SetupPlanner`` so
-candidate simulations are reused without unbounded growth. Set it to
-``0`` to disable the cache. ``[cache.telemetry]`` applies the same
-semantics to replay bundles via ``telemetry_cache_size`` so large CSV
-archives can be streamed without retaining cached dataframes or record
-lists.
+``telemetry_buffer_size`` caps the number of packets retained in the
+UDP reordering buffers and HUD backlogs (set it to ``0`` or omit it for
+an unbounded queue).  ``cache_enabled = false`` disables the ΔNFR and ν_f
+caches entirely, while ``max_cache_size`` limits the capacity used by
+the remaining caches, including the setup recommender.
 
 When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config/global.toml`` together with ``data/cars`` and ``data/profiles``) the CLI resolves car metadata and TNFR objectives from that bundle. The ``--pack-root`` flag overrides the configured value for a single invocation.
 
