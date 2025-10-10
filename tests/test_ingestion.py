@@ -1,4 +1,4 @@
-"""Acquisition pipeline regression tests."""
+"""Ingestion pipeline regression tests."""
 
 from __future__ import annotations
 

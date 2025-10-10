@@ -6,6 +6,7 @@ import math
 from collections import deque
 from dataclasses import dataclass, field
 from collections.abc import Mapping as MappingABC
+from statistics import mean
 from typing import Deque, Dict, List, Mapping, Optional, Sequence, Tuple, TYPE_CHECKING
 
 import numpy as np

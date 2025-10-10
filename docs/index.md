@@ -18,7 +18,9 @@ apply those ideas in racing telemetry pipelines:
    functions in :mod:`tnfr_lfs.exporters`.
 
 The project ships with a CLI (`tnfr_lfs`) as well as examples and unit
-tests to illustrate the workflow.
+tests to illustrate the workflow. The ingestion pipeline regression
+suite in `tests/test_ingestion.py` exercises the OutSim/OutGauge UDP
+clients and fusion helpers end-to-end.【F:tests/test_ingestion.py†L1-L376】
 
 ## Installation
 
