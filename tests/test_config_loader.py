@@ -11,7 +11,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from tnfr_lfs.config_loader import (
+from tnfr_lfs.ingestion.config_loader import (
     Car,
     CacheOptions,
     example_pipeline,
@@ -216,7 +216,7 @@ def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
     pack_root.joinpath("config", "global.toml").write_text("", encoding="utf8")
 
     _pack_resources.set_pack_root_override(pack_root)
-    config_loader_module = importlib.import_module("tnfr_lfs.config_loader")
+    config_loader_module = importlib.import_module("tnfr_lfs.ingestion.config_loader")
     try:
         config_loader = importlib.reload(config_loader_module)
         options = config_loader.parse_cache_options({})
@@ -251,7 +251,7 @@ def test_load_cars_uses_packaged_resources(monkeypatch: pytest.MonkeyPatch, tmp_
     )
 
     _pack_resources.set_pack_root_override(pack_root)
-    config_loader_module = importlib.import_module("tnfr_lfs.config_loader")
+    config_loader_module = importlib.import_module("tnfr_lfs.ingestion.config_loader")
     config_loader = importlib.reload(config_loader_module)
 
     workspace = tmp_path / "workspace"

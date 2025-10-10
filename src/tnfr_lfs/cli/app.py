@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from ..config_loader import parse_cache_options
+from ..ingestion.config_loader import parse_cache_options
 from ..core import cache as cache_helpers
 from ..utils.logging import setup_logging
 

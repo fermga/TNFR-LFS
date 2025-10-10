@@ -1,11 +1,11 @@
-"""Tests for :mod:`tnfr_lfs.track_loader`."""
+"""Tests for :mod:`tnfr_lfs.ingestion.track_loader`."""
 
 from __future__ import annotations
 
 import math
 from types import MappingProxyType
 
-from tnfr_lfs.track_loader import (
+from tnfr_lfs.ingestion.track_loader import (
     TrackConfig,
     assemble_session_weights,
     load_modifiers,
