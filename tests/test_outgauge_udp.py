@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
 import socket
 import struct
 import time
-from typing import Deque
-from types import SimpleNamespace
 
 import pytest
 
 from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
 from tnfr_lfs.ingestion.live import OutGaugePacket
 from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
+from tests.helpers import QueueUDPSocket, make_select_stub, make_wait_stub
 
 
 def _pad(value: str, size: int) -> bytes:
@@ -73,16 +71,8 @@ def test_outgauge_packet_parses_extended_datagram_identifiers() -> None:
 
 def test_outgauge_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
     client = OutGaugeUDPClient(timeout=0.05, retries=5)
-    call_args: list[float | None] = []
-
-    def fake_select(read: list[object], write: list[object], err: list[object], timeout: float | None = None):
-        call_args.append(timeout)
-        return ([], [], [])
-
-    fake_socket = SimpleNamespace(
-        recvfrom=lambda _: (_ for _ in ()).throw(BlockingIOError()),
-        close=lambda: None,
-    )
+    fake_select, call_args = make_select_stub()
+    fake_socket = QueueUDPSocket()
     original_socket = client._socket
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
@@ -155,35 +145,19 @@ def test_outgauge_host_resolution_failure_disables_filtering(monkeypatch) -> Non
 def test_outgauge_recv_drains_batch_after_wait(monkeypatch) -> None:
     client = OutGaugeUDPClient(timeout=0.05, retries=5)
 
-    class FakeSocket:
-        def __init__(self) -> None:
-            self.queue: Deque[bytes] = deque()
-
-        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
-            if not self.queue:
-                raise BlockingIOError()
-            payload = self.queue.popleft()
-            return payload, ("127.0.0.1", 3000)
-
-        def close(self) -> None:
-            self.queue.clear()
-
-    fake_socket = FakeSocket()
+    fake_socket = QueueUDPSocket(address=("127.0.0.1", 3000))
     original_socket = client._socket
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
 
-    wait_calls: list[float | None] = []
-
-    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
-        wait_calls.append(timeout)
+    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         if not fake_socket.queue:
-            fake_socket.queue.extend(
+            fake_socket.extend(
                 _outgauge_payload(packet_id, time_value)
                 for packet_id, time_value in ((5, 50), (6, 60), (7, 70))
             )
-        return True
 
+    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
     monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
 
     try:
@@ -200,22 +174,9 @@ def test_outgauge_recv_drains_batch_after_wait(monkeypatch) -> None:
 
 
 def test_outgauge_pending_packet_flushes_when_successor_arrives(monkeypatch) -> None:
-    client = OutGaugeUDPClient(timeout=0.2, retries=2, reorder_grace=0.5)
+    client = OutGaugeUDPClient(port=0, timeout=0.2, retries=2, reorder_grace=0.5)
 
-    class FakeSocket:
-        def __init__(self) -> None:
-            self.queue: Deque[bytes] = deque()
-
-        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
-            if not self.queue:
-                raise BlockingIOError()
-            payload = self.queue.popleft()
-            return payload, ("127.0.0.1", 3000)
-
-        def close(self) -> None:
-            self.queue.clear()
-
-    fake_socket = FakeSocket()
+    fake_socket = QueueUDPSocket(address=("127.0.0.1", 3000))
     original_socket = client._socket
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
@@ -227,17 +188,15 @@ def test_outgauge_pending_packet_flushes_when_successor_arrives(monkeypatch) -> 
     packet.release()
 
     fake_socket.queue.append(_outgauge_payload(6, 60))
-    wait_calls: list[float] = []
     appended = False
 
-    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         nonlocal appended
-        wait_calls.append(timeout)
         if not appended:
             fake_socket.queue.append(_outgauge_payload(7, 70))
             appended = True
-        return True
 
+    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
     monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
 
     start = time.perf_counter()
@@ -256,32 +215,14 @@ def test_outgauge_pending_packet_flushes_when_successor_arrives(monkeypatch) -> 
 
 
 def test_outgauge_isolated_packet_flushes_under_10ms_by_default(monkeypatch) -> None:
-    client = OutGaugeUDPClient(timeout=0.2, retries=1)
+    client = OutGaugeUDPClient(port=0, timeout=0.2, retries=1)
 
-    class FakeSocket:
-        def __init__(self) -> None:
-            self.queue: Deque[bytes] = deque()
-
-        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
-            if not self.queue:
-                raise BlockingIOError()
-            payload = self.queue.popleft()
-            return payload, ("127.0.0.1", 3000)
-
-        def close(self) -> None:
-            self.queue.clear()
-
-    fake_socket = FakeSocket()
+    fake_socket = QueueUDPSocket(address=("127.0.0.1", 3000))
     original_socket = client._socket
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
 
-    wait_calls: list[float] = []
-
-    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
-        wait_calls.append(timeout)
-        return False
-
+    fake_wait, wait_calls = make_wait_stub(return_value=False)
     monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
 
     fake_socket.queue.append(_outgauge_payload(7, 70))

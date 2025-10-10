@@ -30,6 +30,7 @@ from tnfr_lfs.ingestion.outsim_udp import (
     FrozenOutSimWheelState,
     OutSimPacket,
 )
+from tests.helpers import QueueUDPSocket, make_wait_stub
 
 
 def _build_extended_outsim_payload() -> bytes:
@@ -707,29 +708,6 @@ def test_fusion_marks_missing_wheel_block_as_nan(
     packet.release()
 
 
-class _DummySocket:
-    def __init__(self, payloads: deque[tuple[bytes, tuple[str, int]]]):
-        self._payloads = payloads
-        self._address = ("127.0.0.1", 0)
-
-    def setblocking(self, flag: bool) -> None:  # pragma: no cover - compatibility shim
-        pass
-
-    def bind(self, address: tuple[str, int]) -> None:
-        self._address = (address[0] or "127.0.0.1", address[1])
-
-    def getsockname(self) -> tuple[str, int]:
-        return self._address
-
-    def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
-        if not self._payloads:
-            raise BlockingIOError
-        return self._payloads.popleft()
-
-    def close(self) -> None:  # pragma: no cover - compatibility shim
-        pass
-
-
 def _build_outsim_payload(time_ms: int) -> bytes:
     base = [0.0] * 15
     return outsim_module._BASE_STRUCT.pack(time_ms, *base)
@@ -774,7 +752,7 @@ def test_outsim_udp_client_reorders_and_tracks_losses(monkeypatch, caplog) -> No
             (_build_outsim_payload(290), ("127.0.0.1", 4123)),
         ]
     )
-    dummy_socket = _DummySocket(payloads)
+    dummy_socket = QueueUDPSocket(queue=payloads)
     monkeypatch.setattr(outsim_module.socket, "socket", lambda *_, **__: dummy_socket)
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", lambda *_, **__: True)
     client = outsim_module.OutSimUDPClient(
@@ -812,7 +790,7 @@ def test_outsim_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -
             (_build_outsim_payload(120), ("127.0.0.1", 4123)),
         ]
     )
-    dummy_socket = _DummySocket(payloads)
+    dummy_socket = QueueUDPSocket(queue=payloads)
     monkeypatch.setattr(outsim_module.socket, "socket", lambda *_, **__: dummy_socket)
     client = outsim_module.OutSimUDPClient(
         host="127.0.0.1",
@@ -826,17 +804,15 @@ def test_outsim_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -
     assert packet is not None
     packet.release()
 
-    wait_calls: list[float] = []
     appended = False
 
-    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         nonlocal appended
-        wait_calls.append(timeout)
         if not appended:
             payloads.append((_build_outsim_payload(140), ("127.0.0.1", 4123)))
             appended = True
-        return True
 
+    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
 
     start = time.perf_counter()
@@ -863,7 +839,7 @@ def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
             (_build_outgauge_payload(2, 20), ("127.0.0.1", 3000)),
         ]
     )
-    dummy_socket = _DummySocket(payloads)
+    dummy_socket = QueueUDPSocket(queue=payloads)
     monkeypatch.setattr(outgauge_module.socket, "socket", lambda *_, **__: dummy_socket)
     monkeypatch.setattr(outgauge_module, "wait_for_read_ready", lambda *_, **__: True)
     client = outgauge_module.OutGaugeUDPClient(
@@ -912,7 +888,7 @@ def test_outgauge_udp_client_flushes_pending_when_successor_arrives(monkeypatch)
             (_build_outgauge_payload(6, 60), ("127.0.0.1", 3000)),
         ]
     )
-    dummy_socket = _DummySocket(payloads)
+    dummy_socket = QueueUDPSocket(queue=payloads)
     monkeypatch.setattr(outgauge_module.socket, "socket", lambda *_, **__: dummy_socket)
     client = outgauge_module.OutGaugeUDPClient(
         host="127.0.0.1",
@@ -926,17 +902,15 @@ def test_outgauge_udp_client_flushes_pending_when_successor_arrives(monkeypatch)
     assert packet is not None
     packet.release()
 
-    wait_calls: list[float] = []
     appended = False
 
-    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         nonlocal appended
-        wait_calls.append(timeout)
         if not appended:
             payloads.append((_build_outgauge_payload(7, 70), ("127.0.0.1", 3000)))
             appended = True
-        return True
 
+    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
     monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
 
     start = time.perf_counter()
