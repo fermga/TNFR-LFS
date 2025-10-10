@@ -77,7 +77,7 @@ viewer to check the first sample:
 
 `analyze.json` aggregates the ΔNFR and Sense Index series. The report and
 suggestion files summarise the recommended setup changes, while
-`setup_plan.md` distils the plan in table form:
+`setup_plan.md` (see the [setup plan workflow](setup_plan.md) for a guided breakdown) distils the plan in table form:
 
 ```markdown
 | Change | Adjustment | Rationale | Expected effect |
@@ -92,5 +92,5 @@ notebooks for further processing.
 
 Continue with the [advanced workflows](advanced_workflows.md) to learn how to
 run robustness checks, sweep the Pareto front and compare laps between two
-stints. Pair those guides with the [CLI reference](cli.md) for complete
-command options.
+stints. Pair those guides with the [setup plan workflow](setup_plan.md) and the
+[CLI reference](cli.md) for complete command options.
