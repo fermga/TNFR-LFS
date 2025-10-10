@@ -2,6 +2,7 @@
 
 from .base import TNFRPlugin
 from .interfaces import PluginContract, PluginMetadata
+from .config import PluginConfig, PluginConfigError
 from .registry import (
     available_operator_identifiers,
     get_plugin_operator_requirements,
@@ -15,6 +16,8 @@ __all__ = [
     "TNFRPlugin",
     "PluginContract",
     "PluginMetadata",
+    "PluginConfig",
+    "PluginConfigError",
     "available_operator_identifiers",
     "get_plugin_operator_requirements",
     "iter_plugin_operator_requirements",

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tnfr_lfs.plugins.manager import PluginManager
+from tnfr_lfs.plugins.config import PluginConfig
 from tnfr_lfs.plugins import registry
 from tnfr_lfs.plugins.base import TNFRPlugin
 
@@ -42,6 +43,31 @@ def _create_plugin(
         )
     )
     return module_path
+
+
+def _write_manager_config(tmp_path: Path, plugin_dir: Path) -> Path:
+    config_path = tmp_path / "plugins.toml"
+    config_path.write_text(
+        textwrap.dedent(
+            f"""
+            [plugins]
+            auto_discover = true
+            plugin_dir = "{plugin_dir.as_posix()}"
+            max_concurrent = 0
+
+            [plugins.first]
+            enabled = true
+
+            [plugins.second]
+            enabled = true
+
+            [profiles.single]
+            plugins = ["first", "second"]
+            max_concurrent = 1
+            """
+        )
+    )
+    return config_path
 
 
 def test_discover_plugins_registers_valid_plugins(tmp_path: Path) -> None:
@@ -154,3 +180,39 @@ def test_discovery_skips_plugins_without_metadata(tmp_path: Path) -> None:
     manager.discover_plugins(tmp_path)
 
     assert not manager.plugin_registry
+
+
+def test_execute_analysis_respects_max_concurrent_from_config(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugins"
+    plugin_dir.mkdir()
+
+    _create_plugin(
+        plugin_dir,
+        module_name="first_plugin",
+        class_name="FirstPlugin",
+        body="def analyze(self, payload):\n                    return {'name': 'first'}",
+    )
+
+    _create_plugin(
+        plugin_dir,
+        module_name="second_plugin",
+        class_name="SecondPlugin",
+        body="def analyze(self, payload):\n                    return {'name': 'second'}",
+    )
+
+    config_path = _write_manager_config(tmp_path, plugin_dir)
+    config = PluginConfig(config_path)
+    config.set_profile("single")
+
+    manager = PluginManager(config=config)
+
+    assert manager.plugin_registry
+
+    for plugin_name in list(manager.plugin_registry):
+        manager.load_plugin(plugin_name)
+
+    result = manager.execute_analysis({"value": 42})
+
+    assert len(manager.plugins) == 2
+    assert len(result["results"]) == 1
+    assert result["errors"] == {}
