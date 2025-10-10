@@ -41,4 +41,4 @@ HUD breakdown, consult [`docs/cli.md`](cli.md).
 
 * [CLI guide](cli.md)
 * [Setup equivalences](setup_equivalences.md)
-* [Examples gallery](examples_gallery.md)
+* [Examples gallery](examples.md)
