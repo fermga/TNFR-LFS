@@ -2,6 +2,10 @@
 
 This project uses [`python-semantic-release`](https://python-semantic-release.readthedocs.io/) to automate version generation while following the commit convention. The pipeline calculates the next semantic version, updates the changelog, and publishes artifacts when changes are merged into the `main` branch or when tags are created that follow the `vMAJOR.MINOR.PATCH` format.
 
+## Inspecting the current version
+
+The installed package exposes the version string through ``tnfr_lfs.__version__``. It is resolved from the package metadata at import time and validated to comply with strict semantic versioning. The value always follows the ``MAJOR.MINOR.PATCH`` format so automation and external tooling can rely on it without further parsing.
+
 ## Commit convention
 
 Releases are determined from commit messages using the **Conventional Commits** specification. The most common prefixes are:
