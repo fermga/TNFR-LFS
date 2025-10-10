@@ -5,6 +5,7 @@ Event Performance Indicators (EPI), and derive recommendations for
 improving tyre normal force ratio (ΔNFR) and stability index (ΔSi).
 """
 
+from ._version import __version__
 from .core.coherence import compute_node_delta_nfr, sense_index
 from .core.epi import (
     DeltaCalculator,
@@ -68,4 +69,5 @@ __all__ = [
     "load_track_profiles",
     "load_modifiers",
     "assemble_session_weights",
+    "__version__",
 ]
