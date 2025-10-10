@@ -14,6 +14,7 @@ from typing import Any, Dict, Iterable, Mapping
 
 from .base import TNFRPlugin
 from . import registry
+from .config import PluginConfig, PluginConfigError
 
 
 logger = logging.getLogger(__name__)
@@ -31,10 +32,14 @@ class RegisteredPlugin:
 class PluginManager:
     """Manage discovery, loading and execution of TNFR × LFS plugins."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: PluginConfig | None = None) -> None:
         self.plugins: Dict[str, TNFRPlugin] = {}
         self.plugin_registry: Dict[str, RegisteredPlugin] = {}
         self._lock = threading.Lock()
+        self._config = config
+
+        if self._config is not None:
+            self._apply_auto_discovery()
 
     # ------------------------------------------------------------------
     # Discovery
@@ -80,6 +85,33 @@ class PluginManager:
                 discovered[qualified_name] = registration
 
         return discovered
+
+    def _apply_auto_discovery(self) -> None:
+        """Automatically discover plugins when requested via configuration."""
+
+        try:
+            if not self._config or not self._config.auto_discover:
+                return
+        except PluginConfigError:
+            logger.exception("Plugin configuration auto-discovery flag is invalid")
+            return
+
+        try:
+            plugin_dir = self._config.plugin_dir
+        except PluginConfigError:
+            logger.exception("Plugin configuration has invalid plugin directory")
+            return
+
+        try:
+            discovered = self.discover_plugins(plugin_dir)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Automatic plugin discovery failed for '%s'", plugin_dir)
+            return
+
+        if discovered:
+            logger.info(
+                "Automatically discovered %d plugins from '%s'", len(discovered), plugin_dir
+            )
 
     def _iter_plugin_module_paths(self, root: Path) -> Iterable[Path]:
         """Yield importable module paths contained in ``root``."""
@@ -183,7 +215,27 @@ class PluginManager:
         results: Dict[str, Any] = {}
         errors: Dict[str, str] = {}
 
+        limit = None
+        if self._config is not None:
+            try:
+                limit = self._config.max_concurrent
+            except PluginConfigError:
+                logger.exception("Invalid 'max_concurrent' setting in plugin configuration")
+                limit = None
+            else:
+                if limit <= 0:
+                    limit = None
+
+        processed = 0
         for plugin_name, plugin in list(self.plugins.items()):
+            if limit is not None and processed >= limit:
+                logger.debug(
+                    "Skipping plugin '%s' execution due to max_concurrent limit (%d)",
+                    plugin_name,
+                    limit,
+                )
+                continue
+
             try:
                 analysis = plugin.analyze(payload)  # type: ignore[attr-defined]
             except Exception as exc:  # pragma: no cover - error path tested
@@ -191,6 +243,7 @@ class PluginManager:
                 errors[plugin_name] = str(exc)
             else:
                 results[plugin_name] = analysis
+                processed += 1
 
         return {"results": results, "errors": errors}
 
