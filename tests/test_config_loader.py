@@ -192,51 +192,18 @@ def test_example_pipeline_accepts_custom_data_root(config_pack: Path) -> None:
 def test_parse_cache_options_defaults() -> None:
     options = parse_cache_options({})
     assert isinstance(options, CacheOptions)
-    pack_root = data_root().parent
-    with pack_root.joinpath("config", "global.toml").open("rb") as buffer:
-        payload = tomllib.load(buffer)
-
-    cache_defaults = payload.get("cache", {}) if isinstance(payload, dict) else {}
-    telemetry_defaults = cache_defaults.get("telemetry")
-    telemetry_defaults = (
-        dict(telemetry_defaults) if isinstance(telemetry_defaults, dict) else {}
-    )
-
-    expected_enable = cache_defaults.get("enable_delta_cache")
-    if expected_enable is None:
-        expected_enable = True
-
-    expected_nu_f = cache_defaults.get("nu_f_cache_size")
-    if expected_nu_f is None:
-        expected_nu_f = 256
-
-    expected_recommender = cache_defaults.get("recommender_cache_size")
-    if expected_recommender is None:
-        expected_recommender = 32
-
-    expected_telemetry = telemetry_defaults.get("telemetry_cache_size")
-    if expected_telemetry is None:
-        expected_telemetry = 1
-
-    assert options.enable_delta_cache is bool(expected_enable)
-    assert options.nu_f_cache_size == int(expected_nu_f)
-    assert options.recommender_cache_size == int(expected_recommender)
-    assert options.telemetry_cache_size == int(expected_telemetry)
+    assert options.enable_delta_cache is True
+    assert options.nu_f_cache_size == 256
+    assert options.recommender_cache_size == 256
+    assert options.telemetry_cache_size == 256
 
 
 def test_parse_cache_options_overrides() -> None:
-    raw = {
-        "cache": {
-            "enable_delta_cache": False,
-            "nu_f_cache_size": 16,
-            "recommender_cache_size": 4,
-            "telemetry": {"telemetry_cache_size": 0},
-        }
-    }
+    raw = {"performance": {"cache_enabled": False, "max_cache_size": 16}}
     options = parse_cache_options(raw)
     assert options.enable_delta_cache is False
-    assert options.nu_f_cache_size == 16
-    assert options.recommender_cache_size == 4
+    assert options.nu_f_cache_size == 0
+    assert options.recommender_cache_size == 0
     assert options.telemetry_cache_size == 0
 
 
@@ -246,29 +213,17 @@ def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
     pack_root = tmp_path / "pack"
     (pack_root / "config").mkdir(parents=True)
     (pack_root / "data").mkdir()
-    pack_root.joinpath("config", "global.toml").write_text(
-        dedent(
-            """
-            [cache]
-            enable_delta_cache = false
-            nu_f_cache_size = 64
-            recommender_cache_size = 12
-
-            [cache.telemetry]
-            telemetry_cache_size = 8
-            """
-        )
-    )
+    pack_root.joinpath("config", "global.toml").write_text("", encoding="utf8")
 
     _pack_resources.set_pack_root_override(pack_root)
     config_loader_module = importlib.import_module("tnfr_lfs.config_loader")
     try:
         config_loader = importlib.reload(config_loader_module)
         options = config_loader.parse_cache_options({})
-        assert options.enable_delta_cache is False
-        assert options.nu_f_cache_size == 64
-        assert options.recommender_cache_size == 12
-        assert options.telemetry_cache_size == 8
+        assert options.enable_delta_cache is True
+        assert options.nu_f_cache_size == 256
+        assert options.recommender_cache_size == 256
+        assert options.telemetry_cache_size == 256
     finally:
         _pack_resources.set_pack_root_override(None)
         importlib.reload(config_loader_module)

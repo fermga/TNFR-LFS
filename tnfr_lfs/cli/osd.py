@@ -2067,6 +2067,7 @@ class OSDController:
         layout: Optional[ButtonLayout] = None,
         fusion: Optional[TelemetryFusion] = None,
         hud: Optional[TelemetryHUD] = None,
+        telemetry_buffer_size: Optional[int] = None,
     ) -> None:
         self.host = host
         self.outsim_port = outsim_port
@@ -2089,6 +2090,13 @@ class OSDController:
         self._car_stopped = True
         self._next_change_index = 0
         self._last_plan_signature: Tuple[Tuple[str, float], ...] = ()
+        if telemetry_buffer_size is not None:
+            try:
+                numeric = int(telemetry_buffer_size)
+            except (TypeError, ValueError):
+                numeric = 0
+            telemetry_buffer_size = numeric if numeric > 0 else None
+        self.telemetry_buffer_size = telemetry_buffer_size
 
     APPLY_TRIGGER_FLAG = 0x10
     STOPPED_SPEED_THRESHOLD = 1.0
@@ -2099,13 +2107,22 @@ class OSDController:
         insim: Optional[InSimClient] = None
         overlay: Optional[OverlayManager] = None
         last_render = 0.0
-        outsim_backlog: Deque[OutSimPacket] = deque()
-        outgauge_backlog: Deque[OutGaugePacket] = deque()
+        max_buffer = self.telemetry_buffer_size
+        outsim_backlog: Deque[OutSimPacket] = deque(maxlen=max_buffer)
+        outgauge_backlog: Deque[OutGaugePacket] = deque(maxlen=max_buffer)
         outsim_loss_events = 0
         outgauge_loss_events = 0
         try:
-            outsim = OutSimUDPClient(host=self.host, port=self.outsim_port)
-            outgauge = OutGaugeUDPClient(host=self.host, port=self.outgauge_port)
+            outsim = OutSimUDPClient(
+                host=self.host,
+                port=self.outsim_port,
+                buffer_size=max_buffer,
+            )
+            outgauge = OutGaugeUDPClient(
+                host=self.host,
+                port=self.outgauge_port,
+                buffer_size=max_buffer,
+            )
             insim = InSimClient(
                 host=self.host,
                 port=self.insim_port,

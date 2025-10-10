@@ -27,5 +27,17 @@ class CacheOptions:
             recommender_cache_size=max(0, int(self.recommender_cache_size)),
         )
 
+    @property
+    def cache_enabled(self) -> bool:
+        """Backward compatible alias describing whether caches are active."""
+
+        return self.enable_delta_cache and self.nu_f_cache_size > 0
+
+    @property
+    def max_cache_size(self) -> int:
+        """Largest cache size configured for runtime helpers."""
+
+        return max(self.nu_f_cache_size, self.telemetry_cache_size, self.recommender_cache_size)
+
 
 __all__ = ["CacheOptions", "DEFAULT_RECOMMENDER_CACHE_SIZE"]

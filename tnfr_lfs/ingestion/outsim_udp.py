@@ -186,6 +186,7 @@ class OutSimUDPClient:
         retries: int = 5,
         reorder_grace: float | None = None,
         jump_tolerance: int = 200,
+        buffer_size: int | None = None,
     ) -> None:
         """Create a UDP client bound to the local host.
 
@@ -210,8 +211,19 @@ class OutSimUDPClient:
         jump_tolerance:
             Maximum tolerated gap (in milliseconds) between successive packet
             timestamps before the client flags a suspected loss event.
+        buffer_size:
+            Optional maximum number of packets kept in the internal reordering
+            buffer. ``None`` leaves the buffer unbounded.
         """
 
+        max_buffer: Optional[int] = None
+        if buffer_size is not None:
+            try:
+                numeric = int(buffer_size)
+            except (TypeError, ValueError):
+                numeric = 0
+            if numeric > 0:
+                max_buffer = numeric
         self._remote_host = host
         self._remote_addresses = self._resolve_remote_addresses(host)
         self._timeout = timeout
@@ -223,7 +235,7 @@ class OutSimUDPClient:
         self._address: Tuple[str, int] = (local_host, local_port)
         self._timeouts = 0
         self._ignored_hosts = 0
-        self._buffer: Deque[tuple[float, OutSimPacket]] = deque()
+        self._buffer: Deque[tuple[float, OutSimPacket]] = deque(maxlen=max_buffer)
         self._buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
         self._received_packets = 0
         self._delivered_packets = 0
