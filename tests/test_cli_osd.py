@@ -915,7 +915,7 @@ def test_render_page_a_includes_no_tocar_notice():
 
 def test_silence_event_meter_renders_when_present() -> None:
     operator_events = {
-        "SILENCIO": (
+        "SILENCE": (
             {
                 "duration": 1.8,
                 "structural_density_mean": 0.03,

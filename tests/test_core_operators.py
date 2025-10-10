@@ -1209,7 +1209,7 @@ def test_aggregate_operator_events_returns_latent_state_summary() -> None:
         "structural_density_mean": 0.04,
         "slack": 0.6,
     }
-    enriched = replace(microsector, operator_events={"SILENCIO": (silence_payload,)})
+    enriched = replace(microsector, operator_events={"SILENCE": (silence_payload,)})
     aggregated = _aggregate_operator_events([enriched])
     events = aggregated.get("events", {})
     assert "SILENCE" in events
