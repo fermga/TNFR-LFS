@@ -1,5 +1,6 @@
 """Core computation utilities for TNFR × LFS."""
 
+from .cache_settings import CacheOptions, DEFAULT_RECOMMENDER_CACHE_SIZE
 from .coherence import compute_node_delta_nfr, sense_index
 from .coherence_calibration import (
     CalibrationSnapshot,
@@ -56,6 +57,8 @@ from .segmentation import (
 from .structural_time import compute_structural_timestamps, resolve_time_axis
 
 __all__ = [
+    "CacheOptions",
+    "DEFAULT_RECOMMENDER_CACHE_SIZE",
     "TelemetryRecord",
     "EPIExtractor",
     "NaturalFrequencyAnalyzer",

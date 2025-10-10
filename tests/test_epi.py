@@ -7,7 +7,7 @@ from typing import Dict, Sequence
 import numpy as np
 import pytest
 
-from tnfr_lfs.cache_settings import CacheOptions
+from tnfr_lfs.core.cache_settings import CacheOptions
 from tnfr_lfs.core import cache as cache_helpers
 from tnfr_lfs.core import epi as epi_module
 from tnfr_lfs.core.epi import (

@@ -18,8 +18,8 @@ from types import MappingProxyType
 from statistics import fmean
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence
 
-from ..cache_settings import DEFAULT_RECOMMENDER_CACHE_SIZE
 from ..core.cache import LRUCache
+from ..core.cache_settings import DEFAULT_RECOMMENDER_CACHE_SIZE
 from ..core.dissonance import compute_useful_dissonance_stats
 from ..core.epi_models import EPIBundle
 from ..core.segmentation import Microsector
