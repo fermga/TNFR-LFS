@@ -44,6 +44,32 @@ When finer-grained control is required the `apply_plugin_nu_f_snapshot(...)`
 helper can be used to push an existing snapshot into the plugin without
 recomputing it.
 
+## Metadata registry
+
+Plugins declare their dependencies on TNFR operators through the
+`tnfr_lfs.plugins.register_plugin_metadata` helper (or its
+`tnfr_lfs.plugins.plugin_metadata` decorator variant).  Each plugin registers a
+sequence of operator identifiers that correspond to the public names exported by
+[`tnfr_lfs.core.operators`](../src/tnfr_lfs/core/operators.py).  The identifiers
+are validated against the module's `__all__` contents so pipelines can rely on
+the metadata at runtime.  The canonical list of identifiers can be retrieved via
+`tnfr_lfs.plugins.available_operator_identifiers()`.
+
+```python
+from tnfr_lfs.plugins import TNFRPlugin, plugin_metadata
+
+
+@plugin_metadata(operators=["reception_operator", "coherence_operator"])
+class ReceptionAwarePlugin(TNFRPlugin):
+    ...
+```
+
+`tnfr_lfs.plugins.get_plugin_operator_requirements(PluginClass)` returns the
+declared operator names for a registered plugin.  Pipelines can iterate over the
+registry using `tnfr_lfs.plugins.iter_plugin_operator_requirements()` to build
+dependency matrices or to ensure that all required operators are available
+before activating a plugin instance.
+
 ## Example
 
 ```python
