@@ -3,30 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
 import socket
 import time
-from typing import Deque
-from types import SimpleNamespace
 
 import pytest
 
 from tnfr_lfs.ingestion import outsim_udp as outsim_module
 from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
+from tests.helpers import QueueUDPSocket, make_select_stub, make_wait_stub
 
 
 def test_outsim_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
     client = OutSimUDPClient(timeout=0.05, retries=5)
-    call_args: list[float | None] = []
-
-    def fake_select(read: list[object], write: list[object], err: list[object], timeout: float | None = None):
-        call_args.append(timeout)
-        return ([], [], [])
-
-    fake_socket = SimpleNamespace(
-        recvfrom=lambda _: (_ for _ in ()).throw(BlockingIOError()),
-        close=lambda: None,
-    )
+    fake_select, call_args = make_select_stub()
+    fake_socket = QueueUDPSocket()
     original_socket = client._socket
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
@@ -74,34 +64,16 @@ def test_outsim_host_resolution_failure_disables_filtering(monkeypatch) -> None:
 def test_outsim_recv_drains_batch_after_wait(monkeypatch) -> None:
     client = OutSimUDPClient(timeout=0.05, retries=5)
 
-    class FakeSocket:
-        def __init__(self) -> None:
-            self.queue: Deque[bytes] = deque()
-
-        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
-            if not self.queue:
-                raise BlockingIOError()
-            payload = self.queue.popleft()
-            return payload, ("127.0.0.1", 4123)
-
-        def close(self) -> None:
-            self.queue.clear()
-
-    fake_socket = FakeSocket()
+    fake_socket = QueueUDPSocket(address=("127.0.0.1", 4123))
     original_socket = client._socket
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
 
-    wait_calls: list[float | None] = []
-
-    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
-        wait_calls.append(timeout)
+    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         if not fake_socket.queue:
-            fake_socket.queue.extend(
-                _outsim_payload(time_value) for time_value in (100, 120, 140)
-            )
-        return True
+            fake_socket.extend(_outsim_payload(time_value) for time_value in (100, 120, 140))
 
+    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
 
     try:
@@ -117,20 +89,7 @@ def test_outsim_recv_drains_batch_after_wait(monkeypatch) -> None:
 def test_outsim_pending_packet_flushes_when_successor_arrives(monkeypatch) -> None:
     client = OutSimUDPClient(timeout=0.2, retries=2, reorder_grace=0.5)
 
-    class FakeSocket:
-        def __init__(self) -> None:
-            self.queue: Deque[bytes] = deque()
-
-        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
-            if not self.queue:
-                raise BlockingIOError()
-            payload = self.queue.popleft()
-            return payload, ("127.0.0.1", 4123)
-
-        def close(self) -> None:
-            self.queue.clear()
-
-    fake_socket = FakeSocket()
+    fake_socket = QueueUDPSocket(address=("127.0.0.1", 4123))
     original_socket = client._socket
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
@@ -145,14 +104,13 @@ def test_outsim_pending_packet_flushes_when_successor_arrives(monkeypatch) -> No
     wait_calls: list[float] = []
     appended = False
 
-    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
         nonlocal appended
-        wait_calls.append(timeout)
         if not appended:
             fake_socket.queue.append(_outsim_payload(140))
             appended = True
-        return True
 
+    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
 
     start = time.perf_counter()
@@ -173,30 +131,14 @@ def test_outsim_pending_packet_flushes_when_successor_arrives(monkeypatch) -> No
 def test_outsim_isolated_packet_flushes_under_10ms_by_default(monkeypatch) -> None:
     client = OutSimUDPClient(timeout=0.2, retries=1)
 
-    class FakeSocket:
-        def __init__(self) -> None:
-            self.queue: Deque[bytes] = deque()
-
-        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
-            if not self.queue:
-                raise BlockingIOError()
-            payload = self.queue.popleft()
-            return payload, ("127.0.0.1", 4123)
-
-        def close(self) -> None:
-            self.queue.clear()
-
-    fake_socket = FakeSocket()
+    fake_socket = QueueUDPSocket(address=("127.0.0.1", 4123))
     original_socket = client._socket
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
 
     wait_calls: list[float] = []
 
-    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
-        wait_calls.append(timeout)
-        return False
-
+    fake_wait, wait_calls = make_wait_stub(return_value=False)
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
 
     fake_socket.queue.append(_outsim_payload(100))
