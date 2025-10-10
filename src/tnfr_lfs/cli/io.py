@@ -15,7 +15,13 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
 from ..ingestion import OutSimClient
-from ..io import ReplayCSVBundleReader, logs, raf_to_telemetry_records, read_raf
+from ..ingestion.offline import (
+    ReplayCSVBundleReader,
+    iter_run,
+    raf_to_telemetry_records,
+    read_raf,
+    write_run,
+)
 from ..core.epi import TelemetryRecord
 from .errors import CliError
 
@@ -89,7 +95,7 @@ def _persist_records(records: Records, destination: Path, fmt: str) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if fmt == "jsonl":
         compress = destination.suffix in {".gz", ".gzip"}
-        logs.write_run(records, destination, compress=compress)
+        write_run(records, destination, compress=compress)
         return
 
     if fmt == "parquet":
@@ -154,7 +160,7 @@ def _load_records(source: Path) -> Records:
     if suffix == ".raf":
         return raf_to_telemetry_records(read_raf(source))
     if name.endswith(".jsonl") or name.endswith(".jsonl.gz") or name.endswith(".jsonl.gzip"):
-        return list(logs.iter_run(source))
+        return list(iter_run(source))
     if suffix == ".parquet":
         data = _load_parquet_records(source)
         return [TelemetryRecord(**_coerce_payload(item)) for item in data]

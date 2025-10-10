@@ -12,8 +12,8 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from ..core.archetypes import PhaseArchetypeTargets
-from ..recommender.rules import (
+from tnfr_lfs.core.archetypes import PhaseArchetypeTargets
+from tnfr_lfs.recommender.rules import (
     DEFAULT_THRESHOLD_LIBRARY,
     DEFAULT_THRESHOLD_PROFILE,
     ThresholdProfile,

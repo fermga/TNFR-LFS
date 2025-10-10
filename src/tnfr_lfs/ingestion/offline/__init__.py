@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from tnfr_lfs.io.logs import DeterministicReplayer, iter_run, write_run
-from tnfr_lfs.io.playbook import load_playbook
-from tnfr_lfs.io.profiles import (
+from . import logs as logs
+from .logs import DeterministicReplayer, iter_run, write_run
+from .playbook import load_playbook
+from .profiles import (
     AeroProfile,
     ProfileManager,
     ProfileObjectives,
@@ -12,7 +13,7 @@ from tnfr_lfs.io.profiles import (
     ProfileTolerances,
     StintMetrics,
 )
-from tnfr_lfs.io.raf import (
+from .raf import (
     RafCarStatic,
     RafFile,
     RafFrame,
@@ -22,7 +23,7 @@ from tnfr_lfs.io.raf import (
     raf_to_telemetry_records,
     read_raf,
 )
-from tnfr_lfs.io.replay_csv_bundle import ReplayCSVBundleReader
+from .replay_csv_bundle import ReplayCSVBundleReader
 
 __all__ = [
     "AeroProfile",
@@ -44,4 +45,5 @@ __all__ = [
     "raf_to_telemetry_records",
     "read_raf",
     "write_run",
+    "logs",
 ]

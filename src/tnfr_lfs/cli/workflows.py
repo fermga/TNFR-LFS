@@ -82,8 +82,8 @@ from ..ingestion.offline import (
     ProfileObjectives,
     ProfileSnapshot,
     load_playbook,
+    logs,
 )
-from ..io import logs
 from ..recommender import Plan, RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
 from .session import format_session_messages
