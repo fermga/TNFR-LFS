@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from tnfr_lfs.core.cache import LRUCache
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -19,7 +20,12 @@ from tnfr_lfs.core.epi_models import (
 from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.recommender import RecommendationEngine
 import tnfr_lfs.recommender.search as search_module
-from tnfr_lfs.recommender.search import DEFAULT_DECISION_LIBRARY, SetupPlanner, objective_score
+from tnfr_lfs.recommender.search import (
+    DEFAULT_DECISION_LIBRARY,
+    SetupPlanner,
+    evaluate_candidate,
+    objective_score,
+)
 from tests.profile_manager_helpers import preloaded_profile_manager
 
 
@@ -651,3 +657,49 @@ def test_decision_spaces_include_gearing_sliders():
         assert "final_drive_ratio" in variable_names
         for gear in range(1, 8):
             assert f"gear_{gear}_ratio" in variable_names
+
+
+def test_evaluate_candidate_evicts_lru_entries() -> None:
+    space = DEFAULT_DECISION_LIBRARY["XFG"]
+    baseline = [
+        _build_bundle(0.0, delta_nfr=6.0, si=0.55),
+        _build_bundle(0.1, delta_nfr=5.5, si=0.56),
+        _build_bundle(0.2, delta_nfr=5.0, si=0.57),
+    ]
+    call_count = 0
+
+    def simulator(vector: Mapping[str, float], _: Sequence[EPIBundle]) -> Sequence[EPIBundle]:
+        nonlocal call_count
+        call_count += 1
+        return baseline
+
+    variables = list(space.variables)
+    base_vector = space.initial_guess()
+    vector_a = dict(base_vector)
+    vector_b = dict(base_vector)
+    vector_c = dict(base_vector)
+    first = variables[0]
+    second = variables[1]
+    vector_b[first.name] = first.clamp(vector_b[first.name] + first.step)
+    vector_c[second.name] = second.clamp(vector_c[second.name] + second.step)
+
+    cache: LRUCache[
+        tuple[tuple[str, float], ...],
+        tuple[float, tuple[EPIBundle, ...], Mapping[str, float], Mapping[str, float]],
+    ] = LRUCache(maxsize=2)
+
+    evaluate_candidate(space, vector_a, baseline, simulator=simulator, cache=cache)
+    evaluate_candidate(space, vector_b, baseline, simulator=simulator, cache=cache)
+    assert call_count == 2
+
+    evaluate_candidate(space, vector_a, baseline, simulator=simulator, cache=cache)
+    assert call_count == 2
+
+    evaluate_candidate(space, vector_c, baseline, simulator=simulator, cache=cache)
+    assert call_count == 3
+
+    evaluate_candidate(space, vector_b, baseline, simulator=simulator, cache=cache)
+    assert call_count == 4
+
+    evaluate_candidate(space, vector_c, baseline, simulator=simulator, cache=cache)
+    assert call_count == 4

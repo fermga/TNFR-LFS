@@ -210,12 +210,17 @@ def test_parse_cache_options_defaults() -> None:
     if expected_nu_f is None:
         expected_nu_f = 256
 
+    expected_recommender = cache_defaults.get("recommender_cache_size")
+    if expected_recommender is None:
+        expected_recommender = 32
+
     expected_telemetry = telemetry_defaults.get("telemetry_cache_size")
     if expected_telemetry is None:
         expected_telemetry = 1
 
     assert options.enable_delta_cache is bool(expected_enable)
     assert options.nu_f_cache_size == int(expected_nu_f)
+    assert options.recommender_cache_size == int(expected_recommender)
     assert options.telemetry_cache_size == int(expected_telemetry)
 
 
@@ -224,12 +229,14 @@ def test_parse_cache_options_overrides() -> None:
         "cache": {
             "enable_delta_cache": False,
             "nu_f_cache_size": 16,
+            "recommender_cache_size": 4,
             "telemetry": {"telemetry_cache_size": 0},
         }
     }
     options = parse_cache_options(raw)
     assert options.enable_delta_cache is False
     assert options.nu_f_cache_size == 16
+    assert options.recommender_cache_size == 4
     assert options.telemetry_cache_size == 0
 
 
@@ -245,6 +252,7 @@ def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
             [cache]
             enable_delta_cache = false
             nu_f_cache_size = 64
+            recommender_cache_size = 12
 
             [cache.telemetry]
             telemetry_cache_size = 8
@@ -259,6 +267,7 @@ def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
         options = config_loader.parse_cache_options({})
         assert options.enable_delta_cache is False
         assert options.nu_f_cache_size == 64
+        assert options.recommender_cache_size == 12
         assert options.telemetry_cache_size == 8
     finally:
         _pack_resources.set_pack_root_override(None)

@@ -420,6 +420,7 @@ block, but you can still override individual values by adding a
 [cache]
 enable_delta_cache = false
 nu_f_cache_size = 128
+recommender_cache_size = 32
 
 [cache.telemetry]
 telemetry_cache_size = 8
@@ -429,9 +430,12 @@ telemetry_cache_size = 8
 every sample instead of keeping a per-record LRU, while
 ``nu_f_cache_size`` controls the maximum history snapshots stored for
 dynamic ν_f smoothing (set it to ``0`` to disable caching entirely).
-``[cache.telemetry]`` applies the same semantics to replay bundles via
-``telemetry_cache_size`` so large CSV archives can be streamed without
-retaining cached dataframes or record lists.
+``recommender_cache_size`` bounds the LRU backing ``SetupPlanner`` so
+candidate simulations are reused without unbounded growth. Set it to
+``0`` to disable the cache. ``[cache.telemetry]`` applies the same
+semantics to replay bundles via ``telemetry_cache_size`` so large CSV
+archives can be streamed without retaining cached dataframes or record
+lists.
 
 When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config/global.toml`` together with ``data/cars`` and ``data/profiles``) the CLI resolves car metadata and TNFR objectives from that bundle. The ``--pack-root`` flag overrides the configured value for a single invocation.
 
