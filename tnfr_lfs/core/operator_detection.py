@@ -10,9 +10,10 @@ to the orchestration pipeline.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from statistics import mean
-from typing import List, Mapping, Sequence
+from typing import List, Mapping, Sequence, Tuple
 
 from .epi import TelemetryRecord
 from .structural_time import compute_structural_timestamps
@@ -21,6 +22,8 @@ __all__ = [
     "OperatorEvent",
     "STRUCTURAL_OPERATOR_LABELS",
     "canonical_operator_label",
+    "normalize_structural_operator_identifier",
+    "silence_event_payloads",
     "detect_al",
     "detect_oz",
     "detect_il",
@@ -35,14 +38,48 @@ STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
     "SILENCE": "Structural silence",
 }
 
+STRUCTURAL_OPERATOR_ALIASES: Mapping[str, str] = {
+    "SILENCIO": "SILENCE",
+}
+
+
+def normalize_structural_operator_identifier(identifier: str) -> str:
+    """Return the canonical structural identifier for ``identifier``."""
+
+    if not isinstance(identifier, str):
+        return str(identifier)
+    key = identifier.upper()
+    return STRUCTURAL_OPERATOR_ALIASES.get(key, key)
+
 
 def canonical_operator_label(identifier: str) -> str:
     """Return the canonical structural label for an operator identifier."""
 
     if not isinstance(identifier, str):
         return str(identifier)
-    key = identifier.upper()
+    key = normalize_structural_operator_identifier(identifier)
     return STRUCTURAL_OPERATOR_LABELS.get(key, identifier)
+
+
+def silence_event_payloads(
+    events: Mapping[str, Sequence[Mapping[str, object]] | None] | None,
+) -> Tuple[Mapping[str, object], ...]:
+    """Return all silence payloads, accepting legacy ``SILENCIO`` keys."""
+
+    if not events:
+        return ()
+
+    collected: List[Mapping[str, object]] = []
+    for name, payload in events.items():
+        if normalize_structural_operator_identifier(name) != "SILENCE":
+            continue
+        if not payload:
+            continue
+        if isinstance(payload, SequenceABC) and not isinstance(payload, Mapping):
+            collected.extend(payload)  # type: ignore[list-item]
+        else:
+            collected.append(payload)  # type: ignore[arg-type]
+    return tuple(collected)
 
 
 @dataclass(frozen=True)

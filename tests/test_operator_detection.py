@@ -11,6 +11,8 @@ from tnfr_lfs.core.operator_detection import (
     detect_il,
     detect_oz,
     detect_silence,
+    normalize_structural_operator_identifier,
+    silence_event_payloads,
 )
 
 
@@ -248,3 +250,14 @@ def test_detect_silence_flags_quiet_structural_intervals() -> None:
         )
         == []
     )
+
+
+def test_normalize_structural_operator_identifier_handles_legacy_alias() -> None:
+    assert normalize_structural_operator_identifier("silencio") == "SILENCE"
+
+
+def test_silence_event_payloads_accepts_legacy_identifier() -> None:
+    payload = {"duration": 1.2}
+    events = {"SILENCIO": (payload,)}
+    result = silence_event_payloads(events)
+    assert result == (payload,)

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass, field, replace
 import math
 import warnings
 from math import sqrt
 from statistics import mean, pvariance
-from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
+from typing import Dict, List, Mapping, MutableMapping, Sequence, Tuple, TYPE_CHECKING
 
 from .constants import WHEEL_SUFFIXES
 
@@ -30,6 +31,10 @@ from .epi import (
 from .epi_models import EPIBundle
 from .phases import expand_phase_alias
 from .archetypes import ARCHETYPE_MEDIUM
+from .operator_detection import (
+    normalize_structural_operator_identifier,
+    silence_event_payloads,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
     from .segmentation import Microsector
@@ -1454,7 +1459,22 @@ def _aggregate_operator_events(
     if not microsectors:
         return {"events": aggregated, "latent_states": latent_states}
     for microsector in microsectors:
-        events = getattr(microsector, "operator_events", {}) or {}
+        raw_events = getattr(microsector, "operator_events", {}) or {}
+        events: Dict[str, Tuple[Mapping[str, object], ...]] = {}
+        for name, payload in raw_events.items():
+            normalized_name = normalize_structural_operator_identifier(name)
+            if isinstance(payload, SequenceABC) and not isinstance(payload, Mapping):
+                entries = tuple(payload)
+            elif payload is None:
+                entries = ()
+            else:
+                entries = (payload,)
+            if not entries:
+                continue
+            if normalized_name in events:
+                events[normalized_name] = events[normalized_name] + entries
+            else:
+                events[normalized_name] = entries
         micro_duration = max(
             0.0,
             float(getattr(microsector, "end_time", 0.0))
@@ -1469,14 +1489,15 @@ def _aggregate_operator_events(
                 event_payload = dict(entry)
                 event_payload.setdefault("microsector", microsector.index)
                 bucket.append(event_payload)
-                if name == "SILENCE":
-                    silent_events += 1
-                    duration = float(event_payload.get("duration", 0.0) or 0.0)
-                    silent_duration += max(0.0, duration)
-                    density_value = float(
-                        event_payload.get("structural_density_mean", 0.0) or 0.0
-                    )
-                    silent_density += max(0.0, density_value)
+        silence_entries = silence_event_payloads(events)
+        silent_events = len(silence_entries)
+        for event_payload in silence_entries:
+            duration = float(event_payload.get("duration", 0.0) or 0.0)
+            silent_duration += max(0.0, duration)
+            density_value = float(
+                event_payload.get("structural_density_mean", 0.0) or 0.0
+            )
+            silent_density += max(0.0, density_value)
         if silent_events:
             coverage = 0.0
             if micro_duration > 1e-9:

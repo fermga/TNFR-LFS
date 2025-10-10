@@ -5,6 +5,7 @@
 ### Changed
 
 * Rename operator helpers to English (`coupling_operator`, `recursive_filter_operator`) while keeping deprecated Spanish aliases for compatibility.
+* Translate the structural silence operator naming to English (`detect_silence`, `SILENCE`) and honour legacy `SILENCIO` payloads when aggregating telemetry.
 
 ## v0.3.0 (2025-10-10)
 

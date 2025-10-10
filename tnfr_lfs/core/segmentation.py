@@ -45,7 +45,13 @@ from .metrics import (
     compute_window_metrics,
     phase_synchrony_index,
 )
-from .operator_detection import detect_al, detect_il, detect_oz, detect_silence
+from .operator_detection import (
+    detect_al,
+    detect_il,
+    detect_oz,
+    detect_silence,
+    silence_event_payloads,
+)
 from .operators import mutation_operator, recursivity_operator
 from .phases import (
     LEGACY_PHASE_MAP,
@@ -1805,7 +1811,7 @@ def microsector_stability_metrics(
     events = getattr(microsector, "operator_events", {}) or {}
     payloads = [
         payload
-        for payload in events.get("SILENCE", ())  # type: ignore[assignment]
+        for payload in silence_event_payloads(events)  # type: ignore[assignment]
         if isinstance(payload, Mapping)
     ]
     start_time = float(getattr(microsector, "start_time", 0.0))
