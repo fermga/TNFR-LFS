@@ -120,10 +120,7 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
 
     config = load_cli_config(preliminary.config_path)
     cache_options = parse_cache_options(config, pack_root=preliminary.pack_root)
-    cache_helpers.configure_cache(
-        enable_delta_cache=cache_options.enable_delta_cache,
-        nu_f_cache_size=cache_options.nu_f_cache_size,
-    )
+    cache_helpers.configure_cache_from_options(cache_options)
     config["_cache_options"] = cache_options
     logging_config = dict(config.get("logging", {}))
     if preliminary.log_level is not None:

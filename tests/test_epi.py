@@ -7,7 +7,7 @@ from typing import Dict, Sequence
 import numpy as np
 import pytest
 
-from tnfr_lfs.core.cache_settings import CacheOptions, DEFAULT_DYNAMIC_CACHE_SIZE
+from tnfr_lfs.core.cache_settings import CacheOptions
 from tnfr_lfs.core import cache as cache_helpers
 from tnfr_lfs.core import epi as epi_module
 from tnfr_lfs.core.epi import (
@@ -41,17 +41,11 @@ from tnfr_lfs.core.spectrum import (
 
 @pytest.fixture(autouse=True)
 def _clear_epi_cache_state():
-    cache_helpers.configure_cache(
-        enable_delta_cache=True,
-        nu_f_cache_size=DEFAULT_DYNAMIC_CACHE_SIZE,
-    )
+    cache_helpers.configure_cache_from_options(CacheOptions())
     cache_helpers.clear_delta_cache()
     cache_helpers.clear_dynamic_cache()
     yield
-    cache_helpers.configure_cache(
-        enable_delta_cache=True,
-        nu_f_cache_size=DEFAULT_DYNAMIC_CACHE_SIZE,
-    )
+    cache_helpers.configure_cache_from_options(CacheOptions())
     cache_helpers.clear_delta_cache()
     cache_helpers.clear_dynamic_cache()
 
@@ -794,7 +788,7 @@ def test_delta_nfr_cache_disable(monkeypatch):
         _fake_compute,
     )
 
-    cache_helpers.configure_cache(enable_delta_cache=False)
+    cache_helpers.configure_cache_from_options(CacheOptions(enable_delta_cache=False))
 
     delta_nfr_by_node(record)
     delta_nfr_by_node(record)

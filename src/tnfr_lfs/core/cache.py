@@ -6,7 +6,7 @@ from collections import OrderedDict
 import threading
 from typing import Callable, Generic, Hashable, Mapping, Sequence, Tuple, TypeVar
 
-from .cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
+from .cache_settings import CacheOptions, DEFAULT_DYNAMIC_CACHE_SIZE
 
 _T = TypeVar("_T")
 _K = TypeVar("_K", bound=Hashable)
@@ -224,6 +224,16 @@ def configure_cache(*, enable_delta_cache: bool | None = None, nu_f_cache_size: 
         _DYNAMIC_MULTIPLIER_CACHE = _LRUCache(maxsize=DEFAULT_DYNAMIC_CACHE_SIZE)
 
 
+def configure_cache_from_options(options: CacheOptions) -> None:
+    """Normalise and apply cache settings declared via :class:`CacheOptions`."""
+
+    normalised = options.with_defaults()
+    configure_cache(
+        enable_delta_cache=normalised.enable_delta_cache,
+        nu_f_cache_size=normalised.nu_f_cache_size,
+    )
+
+
 def delta_cache_enabled() -> bool:
     """Return ``True`` when ΔNFR caching is active."""
 
@@ -244,6 +254,7 @@ __all__ = [
     "invalidate_dynamic_record",
     "clear_dynamic_cache",
     "configure_cache",
+    "configure_cache_from_options",
     "delta_cache_enabled",
     "dynamic_cache_enabled",
     "LRUCache",
