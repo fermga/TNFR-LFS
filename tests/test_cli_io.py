@@ -36,11 +36,13 @@ def test_load_cli_config_promotes_legacy_cache(tmp_path: Path) -> None:
 
     assert config["_config_path"] == str(config_path.resolve())
     performance_cfg = config["performance"]
-    assert performance_cfg["cache_enabled"] is True
-    assert performance_cfg["max_cache_size"] == 48
-    assert performance_cfg["nu_f_cache_size"] == 48
-    assert performance_cfg["telemetry_cache_size"] == 48
-    assert performance_cfg["recommender_cache_size"] == 48
+    expected = CacheOptions(
+        enable_delta_cache=True,
+        nu_f_cache_size=48,
+        telemetry_cache_size=48,
+        recommender_cache_size=48,
+    ).to_performance_config()
+    assert performance_cfg == expected
 
 
 def test_load_cli_config_normalises_performance_section(tmp_path: Path) -> None:
@@ -59,12 +61,16 @@ def test_load_cli_config_normalises_performance_section(tmp_path: Path) -> None:
 
     config = cli_io.load_cli_config(config_path)
 
-    assert config["performance"]["cache_enabled"] is False
-    assert config["performance"]["max_cache_size"] == 0
-    assert config["performance"]["nu_f_cache_size"] == 0
-    assert config["performance"]["telemetry_cache_size"] == 0
-    assert config["performance"]["recommender_cache_size"] == 0
-    assert config["performance"]["telemetry_buffer_size"] == 42
+    expected = CacheOptions(
+        enable_delta_cache=False,
+        nu_f_cache_size=0,
+        telemetry_cache_size=0,
+        recommender_cache_size=0,
+    ).to_performance_config()
+    performance_cfg = config["performance"]
+    for key, value in expected.items():
+        assert performance_cfg[key] == value
+    assert performance_cfg["telemetry_buffer_size"] == 42
 
 
 def test_resolve_cache_size_returns_none_without_options() -> None:
