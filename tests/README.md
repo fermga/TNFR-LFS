@@ -5,7 +5,7 @@ exercise the EPI extractor, segmentation heuristics and CLI pipelines.  This
 directory documents how to rebuild them if the telemetry model changes in the
 future.
 
-## `tnfr_lfs/pack/data/BL1_XFG_baseline.csv`
+## `src/tnfr_lfs/pack/data/BL1_XFG_baseline.csv`
 
 * Canonical dataset for the quickstart walkthrough and the CLI regression
   suite.
@@ -17,14 +17,14 @@ future.
   `tnfr_lfs.examples.quickstart_dataset.dataset_columns()`; update the three
   sources together if the telemetry schema changes.
 * For tutorials or manual checks you can also fall back to the RAF capture
-  `tnfr_lfs/pack/data/test1.raf`; the CLI auto-detects it through the native RAF
+  `src/tnfr_lfs/pack/data/test1.raf`; the CLI auto-detects it through the native RAF
   parser.
 
 To regenerate the file you can copy the contents of
 `tests/data/synthetic_stint.csv` or rerun the script shown below, saving the
-result to `tnfr_lfs/pack/data/BL1_XFG_baseline.csv`.
+result to `src/tnfr_lfs/pack/data/BL1_XFG_baseline.csv`.
 
-## `tnfr_lfs/pack/data/synthetic_stint.csv`
+## `src/tnfr_lfs/pack/data/synthetic_stint.csv`
 
 * Seventeen-sample telemetry stint that captures two distinct cornering
   segments.
@@ -74,7 +74,7 @@ with Path("tests/data/synthetic_stint.csv").open("w", newline="", encoding="utf8
     writer.writerows(rows)
 ```
 
-## `tnfr_lfs/pack/data/car_track_profiles.json`
+## `src/tnfr_lfs/pack/data/car_track_profiles.json`
 
 * Compact catalogue of ΔNFR tolerances scoped by car model and track.
 * Loaded into `ThresholdProfile` instances so the tests can validate context

@@ -41,6 +41,12 @@ Homepage = "https://example.com/tnfr_lfs"
 [project.scripts]
 "tnfr_lfs" = "tnfr_lfs.cli:main"
 
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra"
@@ -49,7 +55,7 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py39"
 line-length = 88
-src = ["tnfr_lfs", "tests", "examples"]
+src = ["src", "tests", "examples"]
 
 [tool.ruff.lint]
 per-file-ignores = {"tests/conftest.py" = ["E402"]}
@@ -60,7 +66,7 @@ target-version = ["py39"]
 
 [tool.mypy]
 python_version = "3.9"
-files = ["tnfr_lfs", "tests"]
+files = ["src", "tests"]
 warn_unused_configs = true
 
 [tool.setuptools.package-data]

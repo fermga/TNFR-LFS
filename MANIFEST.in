@@ -1,3 +1,3 @@
-recursive-include tnfr_lfs/pack/data *
-recursive-include tnfr_lfs/pack/config *
-recursive-include tnfr_lfs/pack/modifiers *
+recursive-include src/tnfr_lfs/pack/data *
+recursive-include src/tnfr_lfs/pack/config *
+recursive-include src/tnfr_lfs/pack/modifiers *
