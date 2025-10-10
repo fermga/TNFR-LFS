@@ -21,6 +21,7 @@ from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
+from tests.helpers.abtest import DummyBundle
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -506,22 +507,18 @@ def test_compare_command_attaches_abtest(
     baseline_path.write_text("", encoding="utf8")
     variant_path.write_text("", encoding="utf8")
 
-    class DummyBundle:
-        def __init__(self, value: float) -> None:
-            self.sense_index = value
-            self.delta_nfr = value
-            self.coherence_index = value
-            self.delta_nfr_proj_longitudinal = value
-            self.delta_nfr_proj_lateral = value
-
     metrics_a = {
         "stages": {
             "coherence": {
                 "bundles": [
-                    DummyBundle(0.60),
-                    DummyBundle(0.62),
-                    DummyBundle(0.61),
-                    DummyBundle(0.63),
+                    DummyBundle(
+                        sense_index=value,
+                        delta_nfr=value,
+                        coherence_index=value,
+                        delta_nfr_proj_longitudinal=value,
+                        delta_nfr_proj_lateral=value,
+                    )
+                    for value in (0.60, 0.62, 0.61, 0.63)
                 ]
             },
             "reception": {"lap_indices": [0, 0, 1, 1]},
@@ -531,10 +528,14 @@ def test_compare_command_attaches_abtest(
         "stages": {
             "coherence": {
                 "bundles": [
-                    DummyBundle(0.65),
-                    DummyBundle(0.67),
-                    DummyBundle(0.66),
-                    DummyBundle(0.68),
+                    DummyBundle(
+                        sense_index=value,
+                        delta_nfr=value,
+                        coherence_index=value,
+                        delta_nfr_proj_longitudinal=value,
+                        delta_nfr_proj_lateral=value,
+                    )
+                    for value in (0.65, 0.67, 0.66, 0.68)
                 ]
             },
             "reception": {"lap_indices": [0, 0, 1, 1]},
