@@ -160,6 +160,18 @@ class CacheOptions:
             recommender_cache_size=max(0, int(self.recommender_cache_size)),
         )
 
+    def to_performance_config(self) -> dict[str, int | bool]:
+        """Serialise the cache options into a ``[performance]`` mapping."""
+
+        normalised = self.with_defaults()
+        return {
+            "cache_enabled": normalised.enable_delta_cache,
+            "max_cache_size": normalised.max_cache_size,
+            "nu_f_cache_size": normalised.nu_f_cache_size,
+            "telemetry_cache_size": normalised.telemetry_cache_size,
+            "recommender_cache_size": normalised.recommender_cache_size,
+        }
+
     @property
     def cache_enabled(self) -> bool:
         """Backward compatible alias describing whether caches are active."""

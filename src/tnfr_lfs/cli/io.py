@@ -77,15 +77,7 @@ def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
                     performance_cfg = dict(performance_cfg_raw)
                 else:
                     performance_cfg = {}
-                performance_cfg.update(
-                    {
-                        "cache_enabled": cache_options.enable_delta_cache,
-                        "max_cache_size": cache_options.max_cache_size,
-                        "nu_f_cache_size": cache_options.nu_f_cache_size,
-                        "telemetry_cache_size": cache_options.telemetry_cache_size,
-                        "recommender_cache_size": cache_options.recommender_cache_size,
-                    }
-                )
+                performance_cfg.update(cache_options.to_performance_config())
                 data["performance"] = performance_cfg
         data["_config_path"] = str(resolved)
         return data
