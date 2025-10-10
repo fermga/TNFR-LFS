@@ -1,6 +1,7 @@
 import math
 
 from dataclasses import replace
+from statistics import mean
 from typing import Dict, Sequence
 
 import pytest
@@ -288,6 +289,62 @@ def test_delta_calculation_against_baseline(synthetic_records):
     assert bundle.driver.steer == pytest.approx(sample.steer)
     assert bundle.driver.throttle == pytest.approx(sample.throttle)
     assert bundle.driver.style_index == pytest.approx(sample.si)
+
+
+def test_vectorised_baseline_matches_scalar_means(synthetic_records):
+    """Vectorised baseline derivation must remain numerically compatible."""
+
+    baseline = DeltaCalculator.derive_baseline(synthetic_records)
+
+    float_fields = (
+        "vertical_load",
+        "slip_ratio",
+        "slip_ratio_fl",
+        "slip_ratio_fr",
+        "slip_ratio_rl",
+        "slip_ratio_rr",
+        "lateral_accel",
+        "longitudinal_accel",
+        "yaw",
+        "pitch",
+        "roll",
+        "brake_pressure",
+        "locking",
+        "nfr",
+        "si",
+        "speed",
+        "yaw_rate",
+        "slip_angle",
+        "slip_angle_fl",
+        "slip_angle_fr",
+        "slip_angle_rl",
+        "slip_angle_rr",
+        "steer",
+        "throttle",
+        "vertical_load_front",
+        "vertical_load_rear",
+        "mu_eff_front",
+        "mu_eff_rear",
+        "mu_eff_front_lateral",
+        "mu_eff_front_longitudinal",
+        "mu_eff_rear_lateral",
+        "mu_eff_rear_longitudinal",
+        "suspension_travel_front",
+        "suspension_travel_rear",
+        "suspension_velocity_front",
+        "suspension_velocity_rear",
+    )
+
+    for field in float_fields:
+        expected = mean(getattr(record, field) for record in synthetic_records)
+        value = getattr(baseline, field)
+        if math.isnan(expected):
+            assert math.isnan(value)
+        else:
+            assert value == pytest.approx(expected)
+
+    expected_gear = int(round(mean(record.gear for record in synthetic_records)))
+    assert baseline.gear == expected_gear
 
 
 def test_dynamic_multipliers_vectorisation_matches_legacy(synthetic_records):
