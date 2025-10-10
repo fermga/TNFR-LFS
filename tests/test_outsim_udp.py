@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from types import SimpleNamespace
+from collections import deque
 import socket
+import time
+from typing import Deque
+from types import SimpleNamespace
 
 import pytest
 
@@ -45,6 +47,48 @@ def test_outsim_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
 
 def _outsim_payload(time_ms: int) -> bytes:
     return outsim_module._BASE_STRUCT.pack(time_ms, *([0.0] * 15))
+
+
+def test_outsim_recv_drains_batch_after_wait(monkeypatch) -> None:
+    client = OutSimUDPClient(timeout=0.05, retries=5)
+
+    class FakeSocket:
+        def __init__(self) -> None:
+            self.queue: Deque[bytes] = deque()
+
+        def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
+            if not self.queue:
+                raise BlockingIOError()
+            payload = self.queue.popleft()
+            return payload, ("127.0.0.1", 4123)
+
+        def close(self) -> None:
+            self.queue.clear()
+
+    fake_socket = FakeSocket()
+    original_socket = client._socket
+    monkeypatch.setattr(client, "_socket", fake_socket)
+    original_socket.close()
+
+    wait_calls: list[float | None] = []
+
+    def fake_wait(sock: object, *, timeout: float, deadline: float | None) -> bool:
+        wait_calls.append(timeout)
+        if not fake_socket.queue:
+            fake_socket.queue.extend(
+                _outsim_payload(time_value) for time_value in (100, 120, 140)
+            )
+        return True
+
+    monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
+
+    try:
+        packets = [client.recv() for _ in range(3)]
+    finally:
+        client.close()
+
+    assert [packet.time for packet in packets if packet] == [100, 120, 140]
+    assert len(wait_calls) == 1
 
 
 def test_async_outsim_client_handles_concurrent_receivers() -> None:

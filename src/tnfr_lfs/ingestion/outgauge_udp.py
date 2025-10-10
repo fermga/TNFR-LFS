@@ -379,6 +379,7 @@ class OutGaugeUDPClient:
         reorder_grace: float | None = None,
         jump_tolerance: int = 200,
         buffer_size: int | None = None,
+        max_batch: int | None = None,
     ) -> None:
         """Create a UDP client bound locally while expecting a remote host.
 
@@ -405,6 +406,10 @@ class OutGaugeUDPClient:
         buffer_size:
             Optional maximum number of packets retained in the internal
             reordering buffer. ``None`` leaves the buffer unbounded.
+        max_batch:
+            Optional maximum number of datagrams drained from the socket after
+            a readiness notification.  ``None`` keeps draining until the socket
+            raises :class:`BlockingIOError`.
         """
 
         buffer_capacity = DEFAULT_REORDER_BUFFER_SIZE
@@ -415,6 +420,14 @@ class OutGaugeUDPClient:
                 numeric = 0
             if numeric > 0:
                 buffer_capacity = numeric
+        batch_limit = None
+        if max_batch is not None:
+            try:
+                numeric = int(max_batch)
+            except (TypeError, ValueError):
+                numeric = 0
+            if numeric > 0:
+                batch_limit = numeric
         self._remote_host = host
         self._remote_addresses = self._resolve_remote_addresses(host)
         self._timeout = timeout
@@ -424,6 +437,7 @@ class OutGaugeUDPClient:
         self._socket.bind(("", port))
         local_host, local_port = self._socket.getsockname()
         self._address: Tuple[str, int] = (local_host, local_port)
+        self._max_batch = batch_limit
         buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
         self._processor = _OutGaugePacketProcessor(
             remote_host=self._remote_host,
@@ -464,38 +478,17 @@ class OutGaugeUDPClient:
             deadline = now + self._timeout
 
         for _ in range(self._retries):
-            try:
-                payload, source = self._socket.recvfrom(_MAX_DATAGRAM_SIZE)
-            except BlockingIOError:
-                if not wait_for_read_ready(
-                    self._socket,
-                    timeout=self._timeout,
-                    deadline=deadline,
-                ):
-                    break
+            if self._drain_datagrams():
                 ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=False)
                 if ready is not None:
                     return ready
                 continue
-            if not payload:
-                continue
-            if self._remote_addresses and source[0] not in self._remote_addresses:
-                self._ignored_hosts += 1
-                logger.warning(
-                    "Ignoring OutGauge datagram from unexpected host.",
-                    extra={
-                        "event": "outgauge.ignored_host",
-                        "expected_hosts": sorted(self._remote_addresses),
-                        "source_host": source[0],
-                        "port": self._address[1],
-                    },
-                )
-                continue
-            packet = OutGaugePacket.from_bytes(payload)
-            self._processor.record_packet(packet, time.monotonic())
-            ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=False)
-            if ready is not None:
-                return ready
+            if not wait_for_read_ready(
+                self._socket,
+                timeout=self._timeout,
+                deadline=deadline,
+            ):
+                break
         ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=True)
         if ready is not None:
             return ready
@@ -517,6 +510,35 @@ class OutGaugeUDPClient:
 
     def __enter__(self) -> "OutGaugeUDPClient":
         return self
+
+    def _drain_datagrams(self) -> bool:
+        processed = False
+        limit = self._max_batch
+        drained = 0
+        while limit is None or drained < limit:
+            try:
+                payload, source = self._socket.recvfrom(_MAX_DATAGRAM_SIZE)
+            except BlockingIOError:
+                break
+            drained += 1
+            processed = True
+            if not payload:
+                continue
+            if self._remote_addresses and source[0] not in self._remote_addresses:
+                self._ignored_hosts += 1
+                logger.warning(
+                    "Ignoring OutGauge datagram from unexpected host.",
+                    extra={
+                        "event": "outgauge.ignored_host",
+                        "expected_hosts": sorted(self._remote_addresses),
+                        "source_host": source[0],
+                        "port": self._address[1],
+                    },
+                )
+                continue
+            packet = OutGaugePacket.from_bytes(payload)
+            self._processor.record_packet(packet, time.monotonic())
+        return processed
 
     def __exit__(
         self,

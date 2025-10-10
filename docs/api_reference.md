@@ -156,7 +156,10 @@ packets can be reinserted automatically, and call ``fuse_to_bundle`` (or
 ``fusion.extractor.update``) whenever you need the aggregated ΔNFR/SI metrics.
 Inspect :attr:`OutSimUDPClient.statistics` or
 :attr:`OutGaugeUDPClient.statistics` to surface warnings when suspected loss
-events occur.
+events occur.  Both UDP clients accept an optional ``max_batch`` argument to
+limit how many datagrams are drained after each readiness notification, which
+can help throttle exceptionally chatty streams while still returning already
+decoded packets without additional polling.
 
 An asynchronous workflow can drop the polling loop entirely by switching to
 :class:`tnfr_lfs.ingestion.outsim_udp.AsyncOutSimUDPClient` and
