@@ -87,8 +87,8 @@ from ..io import logs
 from ..recommender import Plan, RecommendationEngine, SetupPlanner
 from ..recommender.rules import ThresholdProfile
 from ..session import format_session_messages
-from ..track_loader import assemble_session_weights
-from ..config_loader import (
+from ..ingestion.track_loader import assemble_session_weights
+from ..ingestion.config_loader import (
     Car as PackCar,
     Profile as PackProfile,
     load_lfs_class_overrides as load_pack_lfs_class_overrides,
