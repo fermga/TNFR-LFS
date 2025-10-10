@@ -282,14 +282,18 @@ range [0, 1]. The ``phase_delta_nfr_entropy`` map contains the normalised phase
 probabilities (summing to 1.0) used to compute entropy, and
 ``phase_node_entropy`` details the Shannon entropy per phase derived from the
 nodal contributions.  Both maps stay within the [0, 1] interval and preserve the
-legacy phase aliases so HUDs and the CLI can consume them directly.
+legacy phase aliases so HUDs and the CLI can consume them directly.  The
+``entry``/``apex``/``exit`` aliases are slated for removal; consumers relying on
+them receive a :class:`DeprecationWarning` to ease the migration towards the
+granular identifiers (``entry1``, ``entry2``, ``apex3a``, ``apex3b``, ``exit4``).
 
 ``WindowMetrics.cphi`` now yields a :class:`~tnfr_lfs.core.metrics.CPHIReport`
 with per-wheel :class:`~tnfr_lfs.core.metrics.CPHIWheel` data and the shared
 :class:`~tnfr_lfs.core.metrics.CPHIThresholds`. The thresholds follow a
 red/amber/green traffic-light scheme so HUD pages and CLI reports colour tyre
 health consistently. Consumers that require the historical flat keys can rely
-on :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_legacy_mapping`.
+on :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_legacy_mapping`, which now emits
+a :class:`DeprecationWarning` because the flat keys are on a deprecation path.
 
 When the ``operator_state`` shared by ``segment_microsectors`` is supplied, the
 orchestrator adds the ``network_memory`` field and a mirror in

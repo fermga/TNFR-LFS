@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Callable, Mapping, Sequence, Tuple, TypeVar
 
 PHASE_SEQUENCE: Tuple[str, ...] = ("entry1", "entry2", "apex3a", "apex3b", "exit4")
@@ -33,6 +34,11 @@ def expand_phase_alias(phase: str) -> Tuple[str, ...]:
 
     key = normalise_phase_key(phase)
     if key in LEGACY_PHASE_MAP:
+        warnings.warn(
+            "Phase alias %r is deprecated and will be removed in a future release" % phase,
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return LEGACY_PHASE_MAP[key] + (key,)
     return (key,)
 
@@ -41,6 +47,12 @@ def phase_family(phase: str) -> str:
     """Return the legacy family identifier for ``phase``."""
 
     key = normalise_phase_key(phase)
+    if key in LEGACY_PHASE_MAP:
+        warnings.warn(
+            "Phase alias %r is deprecated and will be removed in a future release" % phase,
+            DeprecationWarning,
+            stacklevel=2,
+        )
     return _PHASE_TO_FAMILY.get(key, key)
 
 
@@ -66,6 +78,13 @@ def replicate_phase_aliases(
     normalised: dict[str, T] = {
         normalise_phase_key(str(key)): value for key, value in payload.items()
     }
+    for alias in LEGACY_PHASE_MAP:
+        if alias in normalised:
+            warnings.warn(
+                "Phase alias %r is deprecated and will be removed in a future release" % alias,
+                DeprecationWarning,
+                stacklevel=2,
+            )
     for alias, phases in LEGACY_PHASE_MAP.items():
         if alias in normalised:
             continue
@@ -76,6 +95,11 @@ def replicate_phase_aliases(
         ]
         if not candidates:
             continue
+        warnings.warn(
+            "Phase alias %r is deprecated and will be removed in a future release" % alias,
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if combine is not None:
             normalised[alias] = combine(tuple(candidates))
         else:

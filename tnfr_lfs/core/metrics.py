@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from collections import defaultdict
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field
@@ -572,6 +573,11 @@ class CPHIReport(MappingABC[str, CPHIWheel]):
         return payload
 
     def as_legacy_mapping(self) -> dict[str, float]:
+        warnings.warn(
+            "CPHIReport.as_legacy_mapping() is deprecated and will be removed in a future release",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         legacy: dict[str, float] = {}
         for suffix, wheel in self.wheels.items():
             legacy[f"cphi_{suffix}"] = wheel.value
