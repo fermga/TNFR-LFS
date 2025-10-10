@@ -12,6 +12,14 @@ DEFAULT_DYNAMIC_CACHE_SIZE = 256
 LEGACY_TELEMETRY_CACHE_KEY = "telemetry_cache_size"
 
 
+def resolve_recommender_cache_size(cache_size: int | None) -> int:
+    """Normalise cache sizes used by recommendation helpers."""
+
+    if cache_size is None:
+        return DEFAULT_RECOMMENDER_CACHE_SIZE
+    return max(0, int(cache_size))
+
+
 @dataclass(frozen=True, slots=True)
 class CacheOptions:
     """Immutable cache configuration parsed from TOML sources."""
@@ -169,4 +177,5 @@ __all__ = [
     "CacheOptions",
     "DEFAULT_DYNAMIC_CACHE_SIZE",
     "DEFAULT_RECOMMENDER_CACHE_SIZE",
+    "resolve_recommender_cache_size",
 ]

@@ -19,7 +19,7 @@ from statistics import fmean
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence
 
 from ..core.cache import LRUCache
-from ..core.cache_settings import DEFAULT_RECOMMENDER_CACHE_SIZE
+from ..core.cache_settings import resolve_recommender_cache_size
 from ..core.dissonance import compute_useful_dissonance_stats
 from ..core.epi_models import EPIBundle
 from ..core.segmentation import Microsector
@@ -425,9 +425,7 @@ def sweep_candidates(
 ) -> list[ParetoPoint]:
     """Evaluate a sweep of candidates returning :class:`ParetoPoint` entries."""
 
-    resolved_cache_size = (
-        DEFAULT_RECOMMENDER_CACHE_SIZE if cache_size is None else max(0, int(cache_size))
-    )
+    resolved_cache_size = resolve_recommender_cache_size(cache_size)
     cache: LRUCache[
         tuple[tuple[str, float], ...],
         tuple[float, tuple[EPIBundle, ...], Mapping[str, float], Mapping[str, float]],
@@ -656,9 +654,7 @@ class SetupPlanner:
         self.recommendation_engine = recommendation_engine or RecommendationEngine()
         self.decision_library = decision_library or DEFAULT_DECISION_LIBRARY
         self.optimiser = optimiser or CoordinateDescentOptimizer()
-        self._cache_size = (
-            DEFAULT_RECOMMENDER_CACHE_SIZE if cache_size is None else max(0, int(cache_size))
-        )
+        self._cache_size = resolve_recommender_cache_size(cache_size)
 
     @property
     def cache_size(self) -> int:
