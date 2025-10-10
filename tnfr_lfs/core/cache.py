@@ -48,6 +48,51 @@ class _LRUCache(Generic[_K, _V]):
             self._data.clear()
 
 
+class LRUCache(Generic[_K, _V]):
+    """Public wrapper around :class:`_LRUCache` supporting ``maxsize >= 0``."""
+
+    __slots__ = ("_maxsize", "_cache")
+
+    def __init__(self, *, maxsize: int) -> None:
+        size = int(maxsize)
+        if size < 0:
+            raise ValueError("maxsize must be >= 0")
+        self._maxsize = size
+        self._cache: _LRUCache[_K, _V] | None = None
+        if size > 0:
+            self._cache = _LRUCache(maxsize=size)
+
+    @property
+    def maxsize(self) -> int:
+        """Return the configured capacity for the cache."""
+
+        return self._maxsize
+
+    def get_or_create(self, key: _K, factory: Callable[[], _V]) -> _V:
+        """Return cached value for ``key`` or materialise it via ``factory``."""
+
+        cache = self._cache
+        if cache is None:
+            return factory()
+        return cache.get_or_create(key, factory)
+
+    def invalidate(self, predicate: Callable[[_K], bool]) -> None:
+        """Remove cached entries matching ``predicate`` when caching is active."""
+
+        cache = self._cache
+        if cache is None:
+            return
+        cache.invalidate(predicate)
+
+    def clear(self) -> None:
+        """Drop all cached entries when caching is active."""
+
+        cache = self._cache
+        if cache is None:
+            return
+        cache.clear()
+
+
 _DEFAULT_DELTA_CACHE_SIZE = 1024
 
 _ENABLE_DELTA_CACHE = True
@@ -197,4 +242,5 @@ __all__ = [
     "configure_cache",
     "delta_cache_enabled",
     "dynamic_cache_enabled",
+    "LRUCache",
 ]

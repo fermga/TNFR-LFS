@@ -28,6 +28,7 @@ minimum_brake_input = 0.02
 [cache]
 enable_delta_cache = true
 nu_f_cache_size = 256
+recommender_cache_size = 32
 
 [cache.telemetry]
 telemetry_cache_size = 1

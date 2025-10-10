@@ -462,7 +462,11 @@ def compute_setup_plan(
         car_model=namespace.car_model,
         track_name=track_name,
     )
-    planner = SetupPlanner(recommendation_engine=engine)
+    cache_options = getattr(namespace, "cache_options", None)
+    cache_size = None
+    if cache_options is not None:
+        cache_size = getattr(cache_options, "recommender_cache_size", None)
+    planner = SetupPlanner(recommendation_engine=engine, cache_size=cache_size)
     plan = planner.plan(
         bundles,
         microsectors,
@@ -2236,11 +2240,19 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
             pack_delta if pack_delta is not None else snapshot.objectives.target_delta_nfr,
             pack_si if pack_si is not None else snapshot.objectives.target_sense_index,
         )
+    cache_options = getattr(namespace, "cache_options", None)
+    recommender_cache_size = None
+    if cache_options is not None:
+        recommender_cache_size = getattr(cache_options, "recommender_cache_size", None)
+    setup_planner = SetupPlanner(
+        recommendation_engine=engine, cache_size=recommender_cache_size
+    )
     hud = TelemetryHUD(
         car_model=resolved_car_model,
         track_name=resolved_track,
         recommendation_engine=engine,
         session=session_payload,
+        setup_planner=setup_planner,
     )
     controller = OSDController(
         host=str(namespace.host),

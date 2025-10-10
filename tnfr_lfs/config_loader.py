@@ -15,7 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 from ._pack_resources import data_root
-from .cache_settings import CacheOptions
+from .cache_settings import CacheOptions, DEFAULT_RECOMMENDER_CACHE_SIZE
 from .utils.immutables import _freeze_dict, _freeze_value
 
 
@@ -44,7 +44,7 @@ def _load_pack_cache_defaults(pack_root: Path | None = None) -> Mapping[str, Any
 
     defaults: dict[str, Any] = {}
 
-    for key in ("enable_delta_cache", "nu_f_cache_size"):
+    for key in ("enable_delta_cache", "nu_f_cache_size", "recommender_cache_size"):
         if key in cache_section:
             defaults[key] = cache_section.get(key)
 
@@ -185,6 +185,11 @@ def parse_cache_options(
         nu_f_cache_size=_coerce_int(payload.get("nu_f_cache_size"), 256, minimum=0),
         telemetry_cache_size=_coerce_int(
             telemetry_cfg.get("telemetry_cache_size"), 1, minimum=0
+        ),
+        recommender_cache_size=_coerce_int(
+            payload.get("recommender_cache_size"),
+            DEFAULT_RECOMMENDER_CACHE_SIZE,
+            minimum=0,
         ),
     )
     return options.with_defaults()

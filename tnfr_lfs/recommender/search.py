@@ -18,6 +18,8 @@ from types import MappingProxyType
 from statistics import fmean
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence
 
+from ..cache_settings import DEFAULT_RECOMMENDER_CACHE_SIZE
+from ..core.cache import LRUCache
 from ..core.dissonance import compute_useful_dissonance_stats
 from ..core.epi_models import EPIBundle
 from ..core.segmentation import Microsector
@@ -328,34 +330,43 @@ def evaluate_candidate(
     simulator: Callable[[Mapping[str, float], Sequence[EPIBundle]], Sequence[EPIBundle]] | None = None,
     session_weights: Mapping[str, Mapping[str, float]] | None = None,
     session_hints: Mapping[str, object] | None = None,
-    cache: MutableMapping[
+    cache: LRUCache[
         tuple[tuple[str, float], ...],
-        tuple[float, Sequence[EPIBundle], Mapping[str, float], Mapping[str, float]],
-    ] | None = None,
+        tuple[float, tuple[EPIBundle, ...], Mapping[str, float], Mapping[str, float]],
+    ]
+    | None = None,
 ) -> ParetoPoint:
     """Evaluate ``vector`` returning a :class:`ParetoPoint`."""
 
     clamped = space.clamp(vector)
     key = tuple(sorted(clamped.items()))
-    if cache is None:
-        cache = {}
-    if key not in cache:
+    candidate_cache = cache or LRUCache(maxsize=0)
+
+    def _compute() -> tuple[
+        float,
+        tuple[EPIBundle, ...],
+        Mapping[str, float],
+        Mapping[str, float],
+    ]:
         simulated = simulator(clamped, baseline) if simulator else baseline
         breakdown_components: Dict[str, float] = {}
-        score = objective_score(
+        score_value = objective_score(
             simulated,
             microsectors,
             session_weights=session_weights,
             session_hints=session_hints,
             breakdown=breakdown_components,
         )
-        cache[key] = (
-            score,
+        return (
+            score_value,
             tuple(simulated),
             MappingProxyType(dict(breakdown_components)),
             _penalty_breakdown(breakdown_components),
         )
-    score, telemetry, components, penalties = cache[key]
+
+    score, telemetry, components, penalties = candidate_cache.get_or_create(
+        key, _compute
+    )
     return ParetoPoint(
         decision_vector=MappingProxyType(dict(clamped)),
         score=score,
@@ -410,13 +421,17 @@ def sweep_candidates(
     radius: int = 1,
     include_centre: bool = True,
     candidates: Iterable[Mapping[str, float]] | None = None,
+    cache_size: int | None = None,
 ) -> list[ParetoPoint]:
     """Evaluate a sweep of candidates returning :class:`ParetoPoint` entries."""
 
-    cache: MutableMapping[
+    resolved_cache_size = (
+        DEFAULT_RECOMMENDER_CACHE_SIZE if cache_size is None else max(0, int(cache_size))
+    )
+    cache: LRUCache[
         tuple[tuple[str, float], ...],
-        tuple[float, Sequence[EPIBundle], Mapping[str, float], Mapping[str, float]],
-    ] = {}
+        tuple[float, tuple[EPIBundle, ...], Mapping[str, float], Mapping[str, float]],
+    ] = LRUCache(maxsize=resolved_cache_size)
     if candidates is None:
         vectors = axis_sweep_vectors(
             space,
@@ -636,10 +651,20 @@ class SetupPlanner:
         recommendation_engine: RecommendationEngine | None = None,
         decision_library: Mapping[str, DecisionSpace] | None = None,
         optimiser: CoordinateDescentOptimizer | None = None,
+        cache_size: int | None = None,
     ) -> None:
         self.recommendation_engine = recommendation_engine or RecommendationEngine()
         self.decision_library = decision_library or DEFAULT_DECISION_LIBRARY
         self.optimiser = optimiser or CoordinateDescentOptimizer()
+        self._cache_size = (
+            DEFAULT_RECOMMENDER_CACHE_SIZE if cache_size is None else max(0, int(cache_size))
+        )
+
+    @property
+    def cache_size(self) -> int:
+        """Return the maximum entries stored in the planner cache."""
+
+        return self._cache_size
 
     def _space_for_car(self, car_model: str) -> DecisionSpace:
         key = (car_model or "").strip()
@@ -665,10 +690,10 @@ class SetupPlanner:
         space = self._space_for_car(car_model)
         resolved_track = track_name or getattr(self.recommendation_engine, "track_name", "")
         space = self._adapt_space(space, car_model, resolved_track)
-        cache: MutableMapping[
+        cache: LRUCache[
             tuple[tuple[str, float], ...],
-            tuple[float, Sequence[EPIBundle], Mapping[str, float]],
-        ] = {}
+            tuple[float, tuple[EPIBundle, ...], Mapping[str, float]],
+        ] = LRUCache(maxsize=self._cache_size)
         session_payload = getattr(self.recommendation_engine, "session", None)
         session_hints: Mapping[str, Any] | None = None
         session_weights: Mapping[str, Mapping[str, float]] | None = None
@@ -680,27 +705,32 @@ class SetupPlanner:
             if isinstance(weights_payload, Mapping):
                 session_weights = weights_payload  # type: ignore[assignment]
 
+        def _materialise(
+            clamped_vector: Mapping[str, float]
+        ) -> tuple[float, tuple[EPIBundle, ...], Mapping[str, float]]:
+            simulated = simulator(clamped_vector, baseline) if simulator else baseline
+            local_breakdown: Dict[str, float] = {}
+            score_value = objective_score(
+                simulated,
+                microsectors,
+                session_weights=session_weights,
+                session_hints=session_hints,
+                breakdown=local_breakdown,
+            )
+            return (
+                score_value,
+                tuple(simulated),
+                MappingProxyType(dict(local_breakdown)),
+            )
+
         def _simulate_and_score(
             vector: Mapping[str, float]
-        ) -> tuple[float, Sequence[EPIBundle], Mapping[str, float]]:
+        ) -> tuple[float, tuple[EPIBundle, ...], Mapping[str, float]]:
             clamped = space.clamp(vector)
             key = tuple(sorted(clamped.items()))
-            if key not in cache:
-                simulated = simulator(clamped, baseline) if simulator else baseline
-                local_breakdown: Dict[str, float] = {}
-                score = objective_score(
-                    simulated,
-                    microsectors,
-                    session_weights=session_weights,
-                    session_hints=session_hints,
-                    breakdown=local_breakdown,
-                )
-                cache[key] = (
-                    score,
-                    simulated,
-                    MappingProxyType(dict(local_breakdown)),
-                )
-            stored_score, stored_results, stored_breakdown = cache[key]
+            stored_score, stored_results, stored_breakdown = cache.get_or_create(
+                key, lambda: _materialise(clamped)
+            )
             return stored_score, stored_results, stored_breakdown
 
         def evaluate(vector: Mapping[str, float]) -> float:
@@ -819,9 +849,9 @@ class SetupPlanner:
         microsectors: Sequence[Microsector] | None,
         simulator: Callable[[Mapping[str, float], Sequence[EPIBundle]], Sequence[EPIBundle]] | None,
         space: DecisionSpace,
-        cache: MutableMapping[
+        cache: LRUCache[
             tuple[tuple[str, float], ...],
-            tuple[float, Sequence[EPIBundle], Mapping[str, float]],
+            tuple[float, tuple[EPIBundle, ...], Mapping[str, float]],
         ],
         score: float,
         session_weights: Mapping[str, Mapping[str, float]] | None,
@@ -860,24 +890,30 @@ class SetupPlanner:
 
         base_integral, base_phase = _integral_metrics(telemetry)
 
-        def _simulate(clamped_vector: Mapping[str, float]) -> tuple[float, Sequence[EPIBundle]]:
+        def _materialise(
+            clamped_vector: Mapping[str, float]
+        ) -> tuple[float, tuple[EPIBundle, ...], Mapping[str, float]]:
+            simulated = simulator(clamped_vector, baseline) if simulator else baseline
+            local_breakdown: Dict[str, float] = {}
+            score_value = objective_score(
+                simulated,
+                microsectors,
+                session_weights=session_weights,
+                session_hints=session_hints,
+                breakdown=local_breakdown,
+            )
+            return (
+                score_value,
+                tuple(simulated),
+                MappingProxyType(dict(local_breakdown)),
+            )
+
+        def _simulate(clamped_vector: Mapping[str, float]) -> tuple[float, tuple[EPIBundle, ...]]:
             key = tuple(sorted(clamped_vector.items()))
-            if key not in cache:
-                simulated = simulator(clamped_vector, baseline) if simulator else baseline
-                local_breakdown: Dict[str, float] = {}
-                score_value = objective_score(
-                    simulated,
-                    microsectors,
-                    session_weights=session_weights,
-                    session_hints=session_hints,
-                    breakdown=local_breakdown,
-                )
-                cache[key] = (
-                    score_value,
-                    simulated,
-                    MappingProxyType(dict(local_breakdown)),
-                )
-            stored_score, stored_results, _ = cache[key]
+            stored_score, stored_results, _ = cache.get_or_create(
+                key,
+                lambda: _materialise(clamped_vector),
+            )
             return stored_score, stored_results
 
         for variable in space.variables:
