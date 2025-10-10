@@ -24,7 +24,7 @@ __all__ = [
     "detect_al",
     "detect_oz",
     "detect_il",
-    "detect_silencio",
+    "detect_silence",
 ]
 
 
@@ -32,7 +32,7 @@ STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
     "AL": "Support",
     "OZ": "Dissonance",
     "IL": "Coherence",
-    "SILENCIO": "Structural silence",
+    "SILENCE": "Structural silence",
 }
 
 
@@ -293,7 +293,7 @@ def detect_il(
     return [event.as_mapping() for event in events]
 
 
-def detect_silencio(
+def detect_silence(
     records: Sequence[TelemetryRecord],
     *,
     window: int = 15,
@@ -370,7 +370,7 @@ def detect_silencio(
         if slack <= 0.0:
             return
         event = _finalise_event(
-            canonical_operator_label("SILENCIO"),
+            canonical_operator_label("SILENCE"),
             records,
             start_index,
             end_index,

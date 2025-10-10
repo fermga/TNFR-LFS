@@ -1308,7 +1308,7 @@ def _sense_state_line(
 
 def _brake_event_meter(microsector: Microsector) -> Optional[str]:
     events = getattr(microsector, "operator_events", {}) or {}
-    silence_payloads = events.get("SILENCIO", ())
+    silence_payloads = events.get("SILENCE", ())
     micro_duration = _safe_float(getattr(microsector, "end_time", 0.0)) - _safe_float(
         getattr(microsector, "start_time", 0.0)
     )
@@ -1374,7 +1374,7 @@ def _silence_event_meter(microsector: Microsector) -> Optional[str]:
     events = getattr(microsector, "operator_events", {}) or {}
     payloads = [
         payload
-        for payload in events.get("SILENCIO", ())  # type: ignore[assignment]
+        for payload in events.get("SILENCE", ())  # type: ignore[assignment]
         if isinstance(payload, Mapping)
     ]
     if not payloads:
