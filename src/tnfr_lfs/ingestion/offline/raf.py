@@ -16,7 +16,7 @@ import math
 import struct
 from typing import BinaryIO, Mapping, Sequence
 
-from ..core.epi import TelemetryRecord
+from tnfr_lfs.core.epi import TelemetryRecord
 
 _MAGIC = b"LFSRAF"
 _U16 = struct.Struct("<H")

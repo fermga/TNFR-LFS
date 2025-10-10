@@ -46,7 +46,7 @@ from ..core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
 from ..utils.numeric import _safe_float
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from ..io.profiles import AeroProfile, ProfileManager
+    from tnfr_lfs.ingestion.offline.profiles import AeroProfile, ProfileManager
 from ..core.segmentation import (
     Goal,
     Microsector,
