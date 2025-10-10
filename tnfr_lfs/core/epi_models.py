@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Mapping
 
+__all__ = ["EPIBundle"]
+
 
 @dataclass(frozen=True)
 class TyresNode:

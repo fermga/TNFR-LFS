@@ -160,6 +160,29 @@ events occur.
 
 ## Core Analytics
 
+### `tnfr_lfs.core` public surface
+
+The `tnfr_lfs.core` namespace re-exports a curated set of analytics helpers.
+Each submodule now defines ``__all__`` so that ``from tnfr_lfs.core.<module>
+import *`` only surfaces the documented symbols:
+
+* `tnfr_lfs.core.epi`: ``TelemetryRecord``, ``EPIExtractor``,
+  ``NaturalFrequencyAnalyzer``, ``NaturalFrequencySnapshot``,
+  ``NaturalFrequencySettings``, ``DeltaCalculator`` and
+  ``delta_nfr_by_node``.【F:tnfr_lfs/core/epi.py†L39-L46】
+* `tnfr_lfs.core.epi_models`: ``EPIBundle``.【F:tnfr_lfs/core/epi_models.py†L8-L8】
+* `tnfr_lfs.core.coherence`: ``compute_node_delta_nfr`` and
+  ``sense_index``.【F:tnfr_lfs/core/coherence.py†L12-L12】
+* `tnfr_lfs.core.segmentation`: ``Goal``, ``Microsector``,
+  ``detect_quiet_microsector_streaks``, ``microsector_stability_metrics`` and
+  ``segment_microsectors``.【F:tnfr_lfs/core/segmentation.py†L67-L73】
+* `tnfr_lfs.core.resonance`: ``ModalPeak``, ``ModalAnalysis`` and
+  ``analyse_modal_resonance``.【F:tnfr_lfs/core/resonance.py†L12-L12】
+* `tnfr_lfs.core.structural_time`: ``compute_structural_timestamps`` and
+  ``resolve_time_axis``.【F:tnfr_lfs/core/structural_time.py†L10-L10】
+* `tnfr_lfs.core.delta_utils` intentionally keeps ``__all__`` empty because the
+  helper is not part of the public surface.【F:tnfr_lfs/core/delta_utils.py†L8-L8】
+
 ### `tnfr_lfs.core.spectrum`
 
 The spectrum helpers expose consistent utilities for telemetry FFTs and

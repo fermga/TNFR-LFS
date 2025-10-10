@@ -64,6 +64,15 @@ from .archetypes import (
 from .resonance import estimate_excitation_frequency
 from .spectrum import phase_alignment
 
+# Public API: core.__init__ re-exports segmentation artefacts via these names.
+__all__ = [
+    "Goal",
+    "Microsector",
+    "detect_quiet_microsector_streaks",
+    "microsector_stability_metrics",
+    "segment_microsectors",
+]
+
 # Thresholds derived from typical race car dynamics.  They can be tuned in
 # the future without affecting the public API of the segmentation module.
 CURVATURE_THRESHOLD = 1.2  # g units of lateral acceleration

@@ -9,6 +9,8 @@ from typing import Dict, Iterable, List, Sequence
 from .epi import TelemetryRecord
 from .spectrum import detrend, estimate_sample_rate, power_spectrum
 
+__all__ = ["ModalPeak", "ModalAnalysis", "analyse_modal_resonance"]
+
 
 @dataclass(frozen=True)
 class ModalPeak:

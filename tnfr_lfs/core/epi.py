@@ -36,6 +36,16 @@ from .epi_models import (
 )
 from .phases import expand_phase_alias, phase_family
 
+__all__ = [
+    "TelemetryRecord",
+    "EPIExtractor",
+    "NaturalFrequencyAnalyzer",
+    "NaturalFrequencySnapshot",
+    "NaturalFrequencySettings",
+    "DeltaCalculator",
+    "delta_nfr_by_node",
+]
+
 # Natural frequencies for each subsystem (Hz) extracted from the
 # Activation-model tables in the manual.  They provide the base
 # rate at which ΔNFR fluctuations modulate the EPI dynamics.
