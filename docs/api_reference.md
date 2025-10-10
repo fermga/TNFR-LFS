@@ -344,11 +344,11 @@ the same red/amber/green semantics without recomputing the bands.
 * ``dominant_nodes`` – the subsystems whose ΔNFR signature anchors the goal.
 * ``window_occupancy`` – percentage of telemetry samples that remain within
   each window for entry, apex, and exit.
-* ``operator_events`` – grouped by ``AL``/``OZ``/``IL``/``SILENCIO`` and enriched
+* ``operator_events`` – grouped by ``AL``/``OZ``/``IL``/``SILENCE`` and enriched
   with the surface type derived from ``context_factors`` plus the contextual
   ΔNFR threshold (``delta_nfr_threshold``) for the microsector.  Each event
   lists the peak/mean ΔNFR observed in the window and its ratio to the
-  threshold (``delta_nfr_ratio``), while the aggregate ``SILENCIO`` entry adds
+  threshold (``delta_nfr_ratio``), while the aggregate ``SILENCE`` entry adds
   average coverage and structural density to flag low-activation latent states.
 
 ## Recommendation Engine

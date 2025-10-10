@@ -52,7 +52,7 @@ from ..core.metrics import (
     compute_window_metrics,
 )
 from ..core.operators import orchestrate_delta_metrics
-from ..core.operator_detection import canonical_operator_label
+from ..core.operator_detection import canonical_operator_label, silence_event_payloads
 from ..core.phases import PHASE_SEQUENCE, phase_family
 from ..core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
 from ..core.segmentation import (
@@ -1308,7 +1308,7 @@ def _sense_state_line(
 
 def _brake_event_meter(microsector: Microsector) -> Optional[str]:
     events = getattr(microsector, "operator_events", {}) or {}
-    silence_payloads = events.get("SILENCIO", ())
+    silence_payloads = silence_event_payloads(events)
     micro_duration = _safe_float(getattr(microsector, "end_time", 0.0)) - _safe_float(
         getattr(microsector, "start_time", 0.0)
     )
@@ -1374,7 +1374,7 @@ def _silence_event_meter(microsector: Microsector) -> Optional[str]:
     events = getattr(microsector, "operator_events", {}) or {}
     payloads = [
         payload
-        for payload in events.get("SILENCIO", ())  # type: ignore[assignment]
+        for payload in silence_event_payloads(events)  # type: ignore[assignment]
         if isinstance(payload, Mapping)
     ]
     if not payloads:

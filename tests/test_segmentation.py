@@ -31,6 +31,7 @@ from tnfr_lfs.core.metrics import (
     SuspensionVelocityBands,
     WindowMetrics,
 )
+from tnfr_lfs.core.operator_detection import silence_event_payloads
 from tnfr_lfs.core.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
@@ -248,7 +249,7 @@ def test_detect_quiet_microsector_streaks_flags_sequences() -> None:
                 "structural_density_mean": 0.05,
             },
         )
-        operator_events = {"SILENCIO": events} if quiet else {}
+        operator_events = {"SILENCE": events} if quiet else {}
         return Microsector(
             index=index,
             start_time=float(index),
@@ -612,7 +613,7 @@ def test_segment_microsectors_emits_structural_silence_events() -> None:
     bundles = EPIExtractor().extract(records)
     microsectors = segment_microsectors(records, bundles)
     assert microsectors
-    silence_events = microsectors[0].operator_events.get("SILENCIO")
+    silence_events = silence_event_payloads(microsectors[0].operator_events)
     assert silence_events
     event = silence_events[0]
     assert event["duration"] > 0.5

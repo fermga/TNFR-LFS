@@ -838,7 +838,7 @@ def test_render_page_a_includes_no_tocar_notice():
             "epi_derivative_abs": 0.05,
         },
         operator_events={
-            "SILENCIO": (
+            "SILENCE": (
                 {
                     "duration": 0.8,
                     "slack": 0.5,
@@ -915,7 +915,7 @@ def test_render_page_a_includes_no_tocar_notice():
 
 def test_silence_event_meter_renders_when_present() -> None:
     operator_events = {
-        "SILENCIO": (
+        "SILENCE": (
             {
                 "duration": 1.8,
                 "structural_density_mean": 0.03,
@@ -937,7 +937,7 @@ def test_silence_event_meter_renders_when_present() -> None:
 
 def test_brake_meter_skips_when_silence_dominates() -> None:
     operator_events = {
-        "SILENCIO": ({"duration": 2.0},),
+        "SILENCE": ({"duration": 2.0},),
         "OZ": (
             {
                 "name": canonical_operator_label("OZ"),
