@@ -130,6 +130,28 @@ def _outgauge_payload(packet_id: int, time_value: int) -> bytes:
     )
 
 
+def test_outgauge_host_resolution_failure_disables_filtering(monkeypatch) -> None:
+    def raise_gaierror(*_args: object, **_kwargs: object) -> list[object]:
+        raise socket.gaierror()
+
+    monkeypatch.setattr(outgauge_module.socket, "getaddrinfo", raise_gaierror)
+
+    client = OutGaugeUDPClient(host="unresolvable", port=0, timeout=0.05, retries=1)
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    packet = None
+    try:
+        sender.sendto(_outgauge_payload(7, 70), client.address)
+        packet = client.recv()
+        assert packet is not None
+        assert packet.packet_id == 7
+        assert client.ignored_hosts == 0
+    finally:
+        if packet is not None:
+            packet.release()
+        sender.close()
+        client.close()
+
+
 def test_outgauge_recv_drains_batch_after_wait(monkeypatch) -> None:
     client = OutGaugeUDPClient(timeout=0.05, retries=5)
 
