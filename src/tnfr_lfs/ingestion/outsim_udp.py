@@ -17,16 +17,19 @@ packet loss or recovery counters emitted while the client operates.
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 import logging
 from types import TracebackType
 import socket
 import struct
 import time
-from typing import Deque, Optional, Tuple
+from typing import Optional, Tuple
 
 from tnfr_lfs.ingestion._socket_poll import wait_for_read_ready
+from tnfr_lfs.ingestion._reorder_buffer import (
+    CircularReorderBuffer,
+    DEFAULT_REORDER_BUFFER_SIZE,
+)
 
 __all__ = [
     "OUTSIM_MAX_PACKET_SIZE",
@@ -216,14 +219,14 @@ class OutSimUDPClient:
             buffer. ``None`` leaves the buffer unbounded.
         """
 
-        max_buffer: Optional[int] = None
+        buffer_capacity = DEFAULT_REORDER_BUFFER_SIZE
         if buffer_size is not None:
             try:
                 numeric = int(buffer_size)
             except (TypeError, ValueError):
                 numeric = 0
             if numeric > 0:
-                max_buffer = numeric
+                buffer_capacity = numeric
         self._remote_host = host
         self._remote_addresses = self._resolve_remote_addresses(host)
         self._timeout = timeout
@@ -235,7 +238,7 @@ class OutSimUDPClient:
         self._address: Tuple[str, int] = (local_host, local_port)
         self._timeouts = 0
         self._ignored_hosts = 0
-        self._buffer: Deque[tuple[float, OutSimPacket]] = deque(maxlen=max_buffer)
+        self._buffer = CircularReorderBuffer[OutSimPacket](buffer_capacity)
         self._buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
         self._received_packets = 0
         self._delivered_packets = 0
@@ -387,10 +390,16 @@ class OutSimUDPClient:
         self, now: float, *, allow_grace: bool
     ) -> Optional[OutSimPacket]:
         while self._buffer:
-            arrival, packet = self._buffer[0]
+            peeked = self._buffer.peek_oldest()
+            if peeked is None:
+                break
+            arrival, packet = peeked
             if not allow_grace and len(self._buffer) == 1 and (now - arrival) < self._buffer_grace:
                 break
-            self._buffer.popleft()
+            popped = self._buffer.pop_oldest()
+            if popped is None:
+                break
+            _, packet = popped
             if (
                 self._last_emitted_time is not None
                 and packet.time <= self._last_emitted_time
@@ -456,18 +465,16 @@ class OutSimUDPClient:
             )
             return
 
-        inserted = False
-        for index, (_, existing) in enumerate(self._buffer):
-            if packet.time < existing.time:
-                self._buffer.insert(index, (arrival, packet))
-                inserted = True
-                if packet.time not in self._reordered_times:
-                    self._reordered_times.add(packet.time)
-                break
-        if not inserted:
-            self._buffer.append((arrival, packet))
+        index, _ = self._buffer.insert(arrival, packet, packet.time)
+        current_length = len(self._buffer)
+        if (
+            current_length > 1
+            and index < (current_length - 1)
+            and packet.time not in self._reordered_times
+        ):
+            self._reordered_times.add(packet.time)
 
     def _is_duplicate(self, timestamp: int) -> bool:
         if self._last_emitted_time is not None and timestamp == self._last_emitted_time:
             return True
-        return any(existing.time == timestamp for _, existing in self._buffer)
+        return self._buffer.contains_key(timestamp)
