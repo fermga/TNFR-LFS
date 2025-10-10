@@ -2686,7 +2686,7 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     robustness_thresholds = getattr(thresholds, "robustness", None)
     stages_payload = metrics.get("stages") if isinstance(metrics, Mapping) else None
     reception_stage = (
-        stages_payload.get("recepcion") if isinstance(stages_payload, Mapping) else None
+        stages_payload.get("reception") if isinstance(stages_payload, Mapping) else None
     )
     lap_indices = (
         reception_stage.get("lap_indices") if isinstance(reception_stage, Mapping) else None

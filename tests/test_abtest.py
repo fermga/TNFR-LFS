@@ -33,7 +33,7 @@ def build_metrics(lap_samples: Sequence[Sequence[float]]) -> dict[str, object]:
     return {
         "stages": {
             "coherence": {"bundles": tuple(bundles)},
-            "recepcion": {"lap_indices": tuple(lap_indices)},
+            "reception": {"lap_indices": tuple(lap_indices)},
         }
     }
 

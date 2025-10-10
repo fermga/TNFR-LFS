@@ -112,7 +112,7 @@ def _lap_groups(
             ]
             if not indices:
                 continue
-            groups.append((int(lap_index), f"Vuelta {int(lap_index) + 1}", indices))
+            groups.append((int(lap_index), f"Lap {int(lap_index) + 1}", indices))
     return groups
 
 
