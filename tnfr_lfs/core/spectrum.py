@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
+import numpy as np
+
 from .epi import TelemetryRecord
 
 __all__ = [
@@ -192,15 +194,26 @@ def hann_window(length: int) -> List[float]:
     return [0.5 - 0.5 * math.cos(factor * idx) for idx in range(length)]
 
 
-def apply_window(samples: Sequence[float], window: Sequence[float]) -> List[float]:
+def apply_window(
+    samples: Sequence[float], window: Sequence[float]
+) -> Sequence[float] | np.ndarray:
     """Multiply ``samples`` by ``window`` element wise."""
 
+    if isinstance(samples, np.ndarray):
+        return samples * np.asarray(window, dtype=float)
+    if isinstance(window, np.ndarray):
+        return np.asarray(samples, dtype=float) * window
     return [value * window[idx] for idx, value in enumerate(samples)]
 
 
-def detrend(values: Sequence[float]) -> List[float]:
+def detrend(values: Sequence[float]) -> Sequence[float] | np.ndarray:
     """Remove the arithmetic mean from ``values``."""
 
+    if isinstance(values, np.ndarray):
+        if values.size == 0:
+            return values
+        centre = float(np.mean(values))
+        return values - centre
     if not values:
         return []
     centre = mean(values)
@@ -235,7 +248,8 @@ def _fourier_components(samples: Sequence[float], sample_rate: float) -> List[Tu
 def power_spectrum(samples: Sequence[float], sample_rate: float) -> List[Tuple[float, float]]:
     """Return the single-sided power spectrum of ``samples``."""
 
-    detrended = detrend(samples)
+    sample_values = np.asarray(samples, dtype=float)
+    detrended = detrend(sample_values)
     components = _fourier_components(detrended, sample_rate)
     length = len(detrended)
     if length == 0:
@@ -254,15 +268,17 @@ def cross_spectrum(
 ) -> List[Tuple[float, float, float]]:
     """Return the cross-spectrum between ``input_series`` and ``response_series``."""
 
-    length = min(len(input_series), len(response_series))
+    input_values = np.asarray(input_series, dtype=float)
+    response_values = np.asarray(response_series, dtype=float)
+    length = min(len(input_values), len(response_values))
     if length < 2 or sample_rate <= 0.0:
         return []
 
-    input_values = list(detrend(input_series))[-length:]
-    response_values = list(detrend(response_series))[-length:]
-    window = hann_window(length)
-    input_windowed = apply_window(input_values, window)
-    response_windowed = apply_window(response_values, window)
+    input_values = detrend(input_values)[-length:]
+    response_values = detrend(response_values)[-length:]
+    window = np.asarray(hann_window(length), dtype=float)
+    input_windowed = np.asarray(apply_window(input_values, window), dtype=float)
+    response_windowed = np.asarray(apply_window(response_values, window), dtype=float)
 
     spectrum: List[Tuple[float, float, float]] = []
     upper = length // 2
