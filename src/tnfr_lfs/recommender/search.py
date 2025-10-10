@@ -19,7 +19,7 @@ from statistics import fmean
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence
 
 from ..core.cache import LRUCache
-from ..core.cache_settings import resolve_recommender_cache_size
+from ..core.cache_settings import CacheOptions, resolve_recommender_cache_size
 from ..core.dissonance import compute_useful_dissonance_stats
 from ..core.epi_models import EPIBundle
 from ..core.segmentation import Microsector
@@ -409,6 +409,17 @@ def axis_sweep_vectors(
     return list(unique.values())
 
 
+def _resolve_planner_cache_size(
+    cache_options: CacheOptions | None = None,
+    cache_size: int | None = None,
+) -> int:
+    """Resolve the planner cache size from options or legacy ``cache_size``."""
+
+    if cache_options is not None:
+        return resolve_recommender_cache_size(cache_options.recommender_cache_size)
+    return resolve_recommender_cache_size(cache_size)
+
+
 def sweep_candidates(
     space: DecisionSpace,
     centre: Mapping[str, float],
@@ -422,10 +433,13 @@ def sweep_candidates(
     include_centre: bool = True,
     candidates: Iterable[Mapping[str, float]] | None = None,
     cache_size: int | None = None,
+    cache_options: CacheOptions | None = None,
 ) -> list[ParetoPoint]:
     """Evaluate a sweep of candidates returning :class:`ParetoPoint` entries."""
 
-    resolved_cache_size = resolve_recommender_cache_size(cache_size)
+    resolved_cache_size = _resolve_planner_cache_size(
+        cache_options=cache_options, cache_size=cache_size
+    )
     cache: LRUCache[
         tuple[tuple[str, float], ...],
         tuple[float, tuple[EPIBundle, ...], Mapping[str, float], Mapping[str, float]],
@@ -650,11 +664,14 @@ class SetupPlanner:
         decision_library: Mapping[str, DecisionSpace] | None = None,
         optimiser: CoordinateDescentOptimizer | None = None,
         cache_size: int | None = None,
+        cache_options: CacheOptions | None = None,
     ) -> None:
         self.recommendation_engine = recommendation_engine or RecommendationEngine()
         self.decision_library = decision_library or DEFAULT_DECISION_LIBRARY
         self.optimiser = optimiser or CoordinateDescentOptimizer()
-        self._cache_size = resolve_recommender_cache_size(cache_size)
+        self._cache_size = _resolve_planner_cache_size(
+            cache_options=cache_options, cache_size=cache_size
+        )
 
     @property
     def cache_size(self) -> int:

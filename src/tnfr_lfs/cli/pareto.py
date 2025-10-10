@@ -104,6 +104,7 @@ def handle(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
         radius=radius,
         include_centre=True,
         cache_size=planner.cache_size,
+        cache_options=getattr(namespace, "cache_options", None),
     )
     front = pareto_front(candidates)
     pareto_payload = [dict(point.as_dict()) for point in front]
