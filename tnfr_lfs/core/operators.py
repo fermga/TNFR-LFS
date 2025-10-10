@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field, replace
 import math
+import warnings
 from math import sqrt
 from statistics import mean, pvariance
 from typing import Dict, List, Mapping, MutableMapping, Sequence, TYPE_CHECKING
@@ -248,7 +249,7 @@ def dissonance_breakdown_operator(
     )
 
 
-def acoplamiento_operator(
+def coupling_operator(
     series_a: Sequence[float], series_b: Sequence[float], *, strict_length: bool = True
 ) -> float:
     """Return the normalised coupling (correlation) between two series."""
@@ -277,12 +278,26 @@ def acoplamiento_operator(
     return covariance / sqrt(variance_a * variance_b)
 
 
+def acoplamiento_operator(
+    series_a: Sequence[float], series_b: Sequence[float], *, strict_length: bool = True
+) -> float:
+    """Compatibility wrapper for :func:`coupling_operator`."""
+
+    warnings.warn(
+        "acoplamiento_operator has been renamed to coupling_operator; "
+        "please update imports before the legacy name is removed.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return coupling_operator(series_a, series_b, strict_length=strict_length)
+
+
 def pairwise_coupling_operator(
     series_by_node: Mapping[str, Sequence[float]],
     *,
     pairs: Sequence[tuple[str, str]] | None = None,
 ) -> Dict[str, float]:
-    """Compute coupling metrics for each node pair using the ``acoplamiento_operator`` coupling helper."""
+    """Compute coupling metrics for each node pair using :func:`coupling_operator`."""
 
     if pairs is None:
         ordered_nodes = list(series_by_node.keys())
@@ -296,7 +311,7 @@ def pairwise_coupling_operator(
         if not series_a or not series_b:
             coupling[label] = 0.0
             continue
-        coupling[label] = acoplamiento_operator(series_a, series_b, strict_length=False)
+        coupling[label] = coupling_operator(series_a, series_b, strict_length=False)
     return coupling
 
 
@@ -941,7 +956,7 @@ def mutation_operator(
     }
 
 
-def recursividad_operator(
+def recursive_filter_operator(
     series: Sequence[float], *, seed: float = 0.0, decay: float = 0.5
 ) -> List[float]:
     """Apply a recursive filter to a series to capture hysteresis effects."""
@@ -956,6 +971,20 @@ def recursividad_operator(
         state = (decay * state) + ((1.0 - decay) * value)
         trace.append(state)
     return trace
+
+
+def recursividad_operator(
+    series: Sequence[float], *, seed: float = 0.0, decay: float = 0.5
+) -> List[float]:
+    """Compatibility wrapper for :func:`recursive_filter_operator`."""
+
+    warnings.warn(
+        "recursividad_operator has been renamed to recursive_filter_operator; "
+        "please update imports before the legacy name is removed.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return recursive_filter_operator(series, seed=seed, decay=decay)
 
 
 def _stage_reception(
@@ -1061,7 +1090,7 @@ def _stage_coherence(
         bundles=updated_bundles,
     )
     dissonance = breakdown.value
-    coupling = acoplamiento_operator(smoothed_delta, clamped_si)
+    coupling = coupling_operator(smoothed_delta, clamped_si)
     resonance = resonance_operator(clamped_si)
     ct_series = [bundle.coherence_index for bundle in updated_bundles]
     average_ct = mean(ct_series) if ct_series else 0.0
@@ -1201,7 +1230,7 @@ def _stage_sense(
             "decay": recursion_decay,
         }
 
-    recursive_trace = recursividad_operator(series, seed=series[0], decay=recursion_decay)
+    recursive_trace = recursive_filter_operator(series, seed=series[0], decay=recursion_decay)
     return {
         "series": list(series),
         "memory": recursive_trace,
@@ -1649,11 +1678,13 @@ __all__ = [
     "dissonance_operator",
     "dissonance_breakdown_operator",
     "DissonanceBreakdown",
+    "coupling_operator",
     "acoplamiento_operator",
     "pairwise_coupling_operator",
     "resonance_operator",
     "recursivity_operator",
     "mutation_operator",
+    "recursive_filter_operator",
     "recursividad_operator",
     "orchestrate_delta_metrics",
     "evolve_epi",
