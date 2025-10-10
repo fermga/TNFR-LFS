@@ -5,7 +5,7 @@ from tnfr_lfs.core.epi import EPIExtractor
 from tnfr_lfs.core.segmentation import segment_microsectors
 from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
 
-from tests.profile_manager_helpers import preloaded_profile_manager
+from tests.helpers import preloaded_profile_manager
 
 
 def test_compute_insights_matches_components(

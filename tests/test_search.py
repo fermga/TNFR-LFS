@@ -26,7 +26,7 @@ from tnfr_lfs.recommender.search import (
     evaluate_candidate,
     objective_score,
 )
-from tests.profile_manager_helpers import preloaded_profile_manager
+from tests.helpers import preloaded_profile_manager
 
 
 SUPPORTED_CAR_MODELS = [
