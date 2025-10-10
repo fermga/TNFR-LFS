@@ -67,6 +67,30 @@ def test_load_cli_config_normalises_performance_section(tmp_path: Path) -> None:
     assert config["performance"]["telemetry_buffer_size"] == 42
 
 
+def test_resolve_cache_size_returns_none_without_options() -> None:
+    namespace = argparse.Namespace()
+
+    assert cli_common.resolve_cache_size(namespace, "telemetry_cache_size") is None
+
+
+def test_resolve_cache_size_handles_missing_attribute() -> None:
+    namespace = argparse.Namespace()
+    namespace.cache_options = types.SimpleNamespace()
+
+    assert cli_common.resolve_cache_size(namespace, "telemetry_cache_size") is None
+
+
+def test_resolve_cache_size_returns_configured_value() -> None:
+    namespace = argparse.Namespace()
+    namespace.cache_options = CacheOptions(
+        enable_delta_cache=True,
+        nu_f_cache_size=32,
+        telemetry_cache_size=16,
+    )
+
+    assert cli_common.resolve_cache_size(namespace, "telemetry_cache_size") == 16
+
+
 def test_load_records_from_namespace_prefers_replay(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     bundle_path = tmp_path / "bundle.zip"
     bundle_path.write_bytes(b"dummy")

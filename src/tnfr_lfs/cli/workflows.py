@@ -100,6 +100,7 @@ from .common import (
     default_car_model,
     default_track_name,
     group_records_by_lap,
+    resolve_cache_size,
     _load_records_from_namespace,
     load_pack_cars,
     load_pack_profiles,
@@ -462,10 +463,7 @@ def compute_setup_plan(
         car_model=namespace.car_model,
         track_name=track_name,
     )
-    cache_options = getattr(namespace, "cache_options", None)
-    cache_size = None
-    if cache_options is not None:
-        cache_size = getattr(cache_options, "recommender_cache_size", None)
+    cache_size = resolve_cache_size(namespace, "recommender_cache_size")
     planner = SetupPlanner(recommendation_engine=engine, cache_size=cache_size)
     plan = planner.plan(
         bundles,
@@ -2240,10 +2238,7 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
             pack_delta if pack_delta is not None else snapshot.objectives.target_delta_nfr,
             pack_si if pack_si is not None else snapshot.objectives.target_sense_index,
         )
-    cache_options = getattr(namespace, "cache_options", None)
-    recommender_cache_size = None
-    if cache_options is not None:
-        recommender_cache_size = getattr(cache_options, "recommender_cache_size", None)
+    recommender_cache_size = resolve_cache_size(namespace, "recommender_cache_size")
     setup_planner = SetupPlanner(
         recommendation_engine=engine, cache_size=recommender_cache_size
     )
