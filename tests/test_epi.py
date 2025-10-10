@@ -4,6 +4,7 @@ from dataclasses import replace
 from statistics import mean
 from typing import Dict, Sequence
 
+import numpy as np
 import pytest
 
 from tnfr_lfs.cache_settings import CacheOptions
@@ -119,6 +120,23 @@ def _synthetic_frequency_series(
             )
         )
     return records
+
+
+def test_power_spectrum_identifies_peak_frequency():
+    sample_rate = 100.0
+    duration = 2.0
+    dominant_frequency = 5.0
+    time = np.arange(int(sample_rate * duration), dtype=float) / sample_rate
+    signal = np.sin(2.0 * math.pi * dominant_frequency * time)
+
+    spectrum = power_spectrum(signal, sample_rate)
+
+    assert spectrum
+    frequencies = np.array([entry[0] for entry in spectrum], dtype=float)
+    energy = np.array([entry[1] for entry in spectrum], dtype=float)
+    peak_frequency = float(frequencies[np.argmax(energy)])
+
+    assert math.isclose(peak_frequency, dominant_frequency, rel_tol=1e-2, abs_tol=1e-2)
 
 
 def _legacy_dynamic_multipliers(

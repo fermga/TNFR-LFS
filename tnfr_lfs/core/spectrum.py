@@ -220,45 +220,36 @@ def detrend(values: Sequence[float]) -> Sequence[float] | np.ndarray:
     return [value - centre for value in values]
 
 
-def _fourier_components(samples: Sequence[float], sample_rate: float) -> List[Tuple[float, float, float]]:
-    length = len(samples)
+def _fourier_components(
+    samples: Sequence[float], sample_rate: float
+) -> Tuple[np.ndarray, np.ndarray]:
+    sample_values = np.asarray(samples, dtype=float)
+    length = int(sample_values.size)
     if length < 2 or sample_rate <= 0.0:
-        return []
+        return np.asarray([], dtype=float), np.asarray([], dtype=complex)
 
-    window = hann_window(length)
-    windowed = apply_window(samples, window)
+    detrended = np.asarray(detrend(sample_values), dtype=float)
+    window = np.asarray(hann_window(length), dtype=float)
+    windowed = np.asarray(apply_window(detrended, window), dtype=float)
 
-    components: List[Tuple[float, float, float]] = []
-    upper = length // 2
-    for index in range(1, upper + 1):
-        real = 0.0
-        imag = 0.0
-        angle_factor = -2.0 * math.pi * index / length
-        for sample_index, value in enumerate(windowed):
-            angle = angle_factor * sample_index
-            cos_val = math.cos(angle)
-            sin_val = math.sin(angle)
-            real += value * cos_val
-            imag += value * sin_val
-        frequency = index * sample_rate / length
-        components.append((frequency, real, imag))
-    return components
+    fft_values = np.fft.rfft(windowed)
+    frequencies = np.fft.rfftfreq(length, d=1.0 / sample_rate)
+
+    # Skip the DC component to preserve the historical single-sided behaviour.
+    return frequencies[1:], fft_values[1:]
 
 
 def power_spectrum(samples: Sequence[float], sample_rate: float) -> List[Tuple[float, float]]:
     """Return the single-sided power spectrum of ``samples``."""
 
-    sample_values = np.asarray(samples, dtype=float)
-    detrended = detrend(sample_values)
-    components = _fourier_components(detrended, sample_rate)
-    length = len(detrended)
-    if length == 0:
+    frequencies, fft_values = _fourier_components(samples, sample_rate)
+    length = len(samples)
+    if length == 0 or frequencies.size == 0:
         return []
-    spectrum: List[Tuple[float, float]] = []
-    for frequency, real, imag in components:
-        energy = (real * real + imag * imag) / length
-        spectrum.append((frequency, energy))
-    return spectrum
+
+    magnitudes = np.abs(fft_values)
+    energy = np.square(magnitudes) / float(length)
+    return list(zip(frequencies.tolist(), energy.tolist()))
 
 
 def cross_spectrum(

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## Unreleased
+
+### Performance
+
+* refactor: replace manual DFT loops with FFT-based spectrum analysis, reducing
+  power spectrum complexity and introducing an FFT dependency in spectral
+  helpers.
+
 ## v0.1.0 (2025-10-09)
 
 ### Build
