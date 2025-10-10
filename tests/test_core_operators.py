@@ -9,6 +9,8 @@ from typing import List, Mapping
 
 import pytest
 
+from tests.helpers import build_dynamic_record
+
 from tnfr_lfs.core import Goal, Microsector, TelemetryRecord, phase_synchrony_index
 from tnfr_lfs.core.spectrum import phase_to_latency_ms
 from tnfr_lfs.core.coherence import sense_index
@@ -60,75 +62,8 @@ from tnfr_lfs.core.metrics import compute_window_metrics
 from tnfr_lfs.core.operator_detection import canonical_operator_label
 
 
-def _build_record(
-    timestamp: float,
-    vertical_load: float,
-    slip_ratio: float,
-    lateral_accel: float,
-    longitudinal_accel: float,
-    nfr: float,
-    si: float,
-    *,
-    yaw: float = 0.0,
-    pitch: float = 0.0,
-    roll: float = 0.0,
-    brake_pressure: float = 0.0,
-    locking: float = 0.0,
-    speed: float = 0.0,
-    yaw_rate: float = 0.0,
-    slip_angle: float = 0.0,
-    steer: float = 0.0,
-    throttle: float = 0.0,
-    gear: int = 0,
-    vertical_load_front: float = 0.0,
-    vertical_load_rear: float = 0.0,
-    mu_eff_front: float = 0.0,
-    mu_eff_rear: float = 0.0,
-    mu_eff_front_lateral: float = 0.0,
-    mu_eff_front_longitudinal: float = 0.0,
-    mu_eff_rear_lateral: float = 0.0,
-    mu_eff_rear_longitudinal: float = 0.0,
-    suspension_travel_front: float = 0.0,
-    suspension_travel_rear: float = 0.0,
-    suspension_velocity_front: float = 0.0,
-    suspension_velocity_rear: float = 0.0,
-) -> TelemetryRecord:
-    return TelemetryRecord(
-        timestamp=timestamp,
-        vertical_load=vertical_load,
-        slip_ratio=slip_ratio,
-        lateral_accel=lateral_accel,
-        longitudinal_accel=longitudinal_accel,
-        yaw=yaw,
-        pitch=pitch,
-        roll=roll,
-        brake_pressure=brake_pressure,
-        locking=locking,
-        nfr=nfr,
-        si=si,
-        speed=speed,
-        yaw_rate=yaw_rate,
-        slip_angle=slip_angle,
-        steer=steer,
-        throttle=throttle,
-        gear=gear,
-        vertical_load_front=vertical_load_front,
-        vertical_load_rear=vertical_load_rear,
-        mu_eff_front=mu_eff_front,
-        mu_eff_rear=mu_eff_rear,
-        mu_eff_front_lateral=mu_eff_front_lateral,
-        mu_eff_front_longitudinal=mu_eff_front_longitudinal,
-        mu_eff_rear_lateral=mu_eff_rear_lateral,
-        mu_eff_rear_longitudinal=mu_eff_rear_longitudinal,
-        suspension_travel_front=suspension_travel_front,
-        suspension_travel_rear=suspension_travel_rear,
-        suspension_velocity_front=suspension_velocity_front,
-        suspension_velocity_rear=suspension_velocity_rear,
-    )
-
-
 def test_delta_calculator_decomposes_longitudinal_component():
-    baseline = _build_record(
+    baseline = build_dynamic_record(
         timestamp=0.0,
         vertical_load=4000.0,
         slip_ratio=0.0,
@@ -162,7 +97,7 @@ def test_delta_calculator_decomposes_longitudinal_component():
 
 
 def test_delta_calculator_decomposes_lateral_component():
-    baseline = _build_record(
+    baseline = build_dynamic_record(
         timestamp=0.0,
         vertical_load=4100.0,
         slip_ratio=0.02,
@@ -362,8 +297,8 @@ def test_evolve_epi_runs_euler_step():
 
 
 def test_sense_index_penalises_active_phase_weights():
-    baseline = _build_record(0.0, 5000.0, 0.02, 0.9, 0.3, 0.8, 0.92)
-    sample = _build_record(0.1, 5450.0, 0.18, 1.4, -0.6, 0.86, 0.78)
+    baseline = build_dynamic_record(0.0, 5000.0, 0.02, 0.9, 0.3, 0.8, 0.92)
+    sample = build_dynamic_record(0.1, 5450.0, 0.18, 1.4, -0.6, 0.86, 0.78)
     node_deltas = delta_nfr_by_node(replace(sample, reference=baseline))
     weights = {
         "entry": {"__default__": 1.0},
@@ -408,12 +343,12 @@ def test_sense_index_penalises_active_phase_weights():
 
 def test_orchestrator_pipeline_builds_consistent_metrics():
     segment_a = [
-        _build_record(0.0, 5200.0, 0.05, 1.2, 0.6, 0.82, 0.91),
-        _build_record(1.0, 5100.0, 0.04, 1.1, 0.5, 0.81, 0.92),
+        build_dynamic_record(0.0, 5200.0, 0.05, 1.2, 0.6, 0.82, 0.91),
+        build_dynamic_record(1.0, 5100.0, 0.04, 1.1, 0.5, 0.81, 0.92),
     ]
     segment_b = [
-        _build_record(2.0, 5000.0, 0.03, 1.0, 0.4, 0.80, 0.90),
-        _build_record(3.0, 4950.0, 0.02, 0.9, 0.35, 0.79, 0.88),
+        build_dynamic_record(2.0, 5000.0, 0.03, 1.0, 0.4, 0.80, 0.90),
+        build_dynamic_record(3.0, 4950.0, 0.02, 0.9, 0.35, 0.79, 0.88),
     ]
 
     results = orchestrate_delta_metrics(
@@ -469,7 +404,7 @@ def test_window_metrics_phase_alignment_tracks_cross_spectrum():
         steer_value = sin(2.0 * pi * frequency * timestamp)
         response_value = sin(2.0 * pi * frequency * timestamp - phase_offset)
         records.append(
-            _build_record(
+            build_dynamic_record(
                 timestamp,
                 5000.0,
                 0.02,
@@ -498,10 +433,10 @@ def test_window_metrics_phase_alignment_tracks_cross_spectrum():
 
 def test_orchestrator_respects_phase_weight_overrides():
     raw_records = [
-        _build_record(0.0, 5200.0, 0.06, 1.2, 0.4, 500.0, 0.88),
-        _build_record(0.1, 5300.0, 0.08, 1.3, 0.35, 502.0, 0.86),
+        build_dynamic_record(0.0, 5200.0, 0.06, 1.2, 0.4, 500.0, 0.88),
+        build_dynamic_record(0.1, 5300.0, 0.08, 1.3, 0.35, 502.0, 0.86),
     ]
-    baseline = _build_record(0.0, 5100.0, 0.02, 1.0, 0.2, 498.0, 0.9)
+    baseline = build_dynamic_record(0.0, 5100.0, 0.02, 1.0, 0.2, 498.0, 0.9)
     records = [replace(sample, reference=baseline) for sample in raw_records]
     base_weights = {
         "entry": {"__default__": 1.0, "tyres": 1.0},
@@ -592,8 +527,8 @@ def test_orchestrator_consumes_fixture_segments(synthetic_records):
 
 
 def test_orchestrator_reports_microsector_variability(monkeypatch):
-    segment_a = [_build_record(0.0, 5000.0, 0.1, 0.5, 0.2, 0.5, 0.8)] * 2
-    segment_b = [_build_record(2.0, 4800.0, 0.2, 0.6, 0.25, 0.4, 0.78)] * 2
+    segment_a = [build_dynamic_record(0.0, 5000.0, 0.1, 0.5, 0.2, 0.5, 0.8)] * 2
+    segment_b = [build_dynamic_record(2.0, 4800.0, 0.2, 0.6, 0.25, 0.4, 0.78)] * 2
     delta_values = [[0.1, 0.3], [0.2, 0.4]]
     si_values = [[0.8, 0.82], [0.78, 0.76]]
 
@@ -839,8 +774,8 @@ def test_emission_operator_clamps_sense_index():
 
 def test_reception_operator_wraps_epi_extractor():
     records = [
-        _build_record(0.0, 5000.0, 0.1, 1.0, 0.5, 0.8, 0.9),
-        _build_record(1.0, 5050.0, 0.09, 1.1, 0.6, 0.81, 0.91),
+        build_dynamic_record(0.0, 5000.0, 0.1, 1.0, 0.5, 0.8, 0.9),
+        build_dynamic_record(1.0, 5050.0, 0.09, 1.1, 0.6, 0.81, 0.91),
     ]
 
     bundles = reception_operator(records)

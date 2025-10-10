@@ -7,6 +7,8 @@ from typing import Dict, Sequence
 import numpy as np
 import pytest
 
+from tests.helpers import build_frequency_record
+
 from tnfr_lfs.core.cache_settings import CacheOptions
 from tnfr_lfs.core import cache as cache_helpers
 from tnfr_lfs.core import epi as epi_module
@@ -82,49 +84,6 @@ def test_should_use_dynamic_cache_honours_override():
     assert cache_helpers.should_use_dynamic_cache(enabled)
 
 
-def _frequency_record(
-    timestamp: float,
-    *,
-    steer: float,
-    throttle: float,
-    brake: float,
-    suspension: float,
-) -> TelemetryRecord:
-    base = {
-        "timestamp": timestamp,
-        "vertical_load": 5200.0 + suspension * 150.0,
-        "slip_ratio": 0.02,
-        "lateral_accel": 0.6 + steer * 0.1,
-        "longitudinal_accel": 0.2 + (throttle - brake) * 0.05,
-        "yaw": 0.0,
-        "pitch": 0.0,
-        "roll": 0.0,
-        "brake_pressure": max(0.0, brake),
-        "locking": 0.0,
-        "nfr": 500.0,
-        "si": 0.82,
-        "speed": 45.0,
-        "yaw_rate": steer * 0.15,
-        "slip_angle": 0.01,
-        "steer": steer,
-        "throttle": max(0.0, min(1.0, throttle)),
-        "gear": 3,
-        "vertical_load_front": 2600.0 + suspension * 40.0,
-        "vertical_load_rear": 2600.0 - suspension * 40.0,
-        "mu_eff_front": 1.05,
-        "mu_eff_rear": 1.05,
-        "mu_eff_front_lateral": 1.05,
-        "mu_eff_front_longitudinal": 1.0,
-        "mu_eff_rear_lateral": 1.05,
-        "mu_eff_rear_longitudinal": 1.0,
-        "suspension_travel_front": 0.02 + suspension * 0.01,
-        "suspension_travel_rear": 0.02 + suspension * 0.01,
-        "suspension_velocity_front": suspension,
-        "suspension_velocity_rear": suspension * 0.92,
-    }
-    return TelemetryRecord(**base)
-
-
 def _synthetic_frequency_series(
     frequency: float,
     *,
@@ -150,7 +109,7 @@ def _synthetic_frequency_series(
             2.0 * math.pi * (frequency * 1.3) * timestamp + math.pi / 8.0
         )
         records.append(
-            _frequency_record(
+            build_frequency_record(
                 timestamp,
                 steer=steer,
                 throttle=throttle,
@@ -769,9 +728,9 @@ def test_natural_frequency_analysis_converges_to_dominant_signal():
 
 
 def test_delta_nfr_cache_reuses_result(monkeypatch):
-    baseline = _frequency_record(0.0, steer=0.1, throttle=0.6, brake=0.1, suspension=0.02)
+    baseline = build_frequency_record(0.0, steer=0.1, throttle=0.6, brake=0.1, suspension=0.02)
     record = replace(
-        _frequency_record(0.1, steer=0.2, throttle=0.4, brake=0.2, suspension=0.05),
+        build_frequency_record(0.1, steer=0.2, throttle=0.4, brake=0.2, suspension=0.05),
         reference=baseline,
         nfr=baseline.nfr + 10.0,
     )
@@ -801,9 +760,9 @@ def test_delta_nfr_cache_reuses_result(monkeypatch):
 
 
 def test_delta_nfr_cache_disable(monkeypatch):
-    baseline = _frequency_record(0.0, steer=0.1, throttle=0.6, brake=0.1, suspension=0.02)
+    baseline = build_frequency_record(0.0, steer=0.1, throttle=0.6, brake=0.1, suspension=0.02)
     record = replace(
-        _frequency_record(0.1, steer=0.2, throttle=0.4, brake=0.2, suspension=0.05),
+        build_frequency_record(0.1, steer=0.2, throttle=0.4, brake=0.2, suspension=0.05),
         reference=baseline,
         nfr=baseline.nfr + 8.0,
     )
@@ -829,9 +788,9 @@ def test_delta_nfr_cache_disable(monkeypatch):
 
 
 def test_delta_nfr_cache_options_override(monkeypatch):
-    baseline = _frequency_record(0.0, steer=0.1, throttle=0.6, brake=0.1, suspension=0.02)
+    baseline = build_frequency_record(0.0, steer=0.1, throttle=0.6, brake=0.1, suspension=0.02)
     record = replace(
-        _frequency_record(0.1, steer=0.2, throttle=0.4, brake=0.2, suspension=0.05),
+        build_frequency_record(0.1, steer=0.2, throttle=0.4, brake=0.2, suspension=0.05),
         reference=baseline,
         nfr=baseline.nfr + 6.0,
     )
@@ -866,9 +825,9 @@ def test_dynamic_multiplier_cache_invalidation(monkeypatch):
     analyzer = NaturalFrequencyAnalyzer(settings)
 
     samples = [
-        _frequency_record(0.00, steer=0.1, throttle=0.5, brake=0.2, suspension=0.03),
-        _frequency_record(0.05, steer=0.2, throttle=0.6, brake=0.1, suspension=0.04),
-        _frequency_record(0.10, steer=0.15, throttle=0.55, brake=0.12, suspension=0.02),
+        build_frequency_record(0.00, steer=0.1, throttle=0.5, brake=0.2, suspension=0.03),
+        build_frequency_record(0.05, steer=0.2, throttle=0.6, brake=0.1, suspension=0.04),
+        build_frequency_record(0.10, steer=0.15, throttle=0.55, brake=0.12, suspension=0.02),
     ]
     for sample in samples:
         analyzer._append_record(sample)
@@ -900,7 +859,7 @@ def test_dynamic_multiplier_cache_invalidation(monkeypatch):
     assert first == second
 
     analyzer._append_record(
-        _frequency_record(0.20, steer=0.25, throttle=0.65, brake=0.15, suspension=0.05)
+        build_frequency_record(0.20, steer=0.25, throttle=0.65, brake=0.15, suspension=0.05)
     )
 
     third = analyzer._dynamic_multipliers("proto_car")
@@ -924,8 +883,8 @@ def test_dynamic_multiplier_cache_disable(monkeypatch):
     )
 
     samples = [
-        _frequency_record(0.00, steer=0.1, throttle=0.5, brake=0.2, suspension=0.03),
-        _frequency_record(0.05, steer=0.2, throttle=0.6, brake=0.1, suspension=0.04),
+        build_frequency_record(0.00, steer=0.1, throttle=0.5, brake=0.2, suspension=0.03),
+        build_frequency_record(0.05, steer=0.2, throttle=0.6, brake=0.1, suspension=0.04),
     ]
     for sample in samples:
         analyzer._append_record(sample)

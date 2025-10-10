@@ -4,43 +4,9 @@ import math
 
 import pytest
 
-from tnfr_lfs.core.epi import TelemetryRecord
+from tests.helpers import build_resonance_record
+
 from tnfr_lfs.core.resonance import analyse_modal_resonance
-
-
-def _make_record(timestamp: float, yaw: float, pitch: float, roll: float) -> TelemetryRecord:
-    return TelemetryRecord(
-        timestamp=timestamp,
-        vertical_load=0.0,
-        slip_ratio=0.0,
-        lateral_accel=0.0,
-        longitudinal_accel=0.0,
-        yaw=yaw,
-        pitch=pitch,
-        roll=roll,
-        brake_pressure=0.0,
-        locking=0.0,
-        nfr=0.0,
-        si=0.0,
-        speed=0.0,
-        yaw_rate=0.0,
-        slip_angle=0.0,
-        steer=0.0,
-        throttle=0.0,
-        gear=0,
-        vertical_load_front=0.0,
-        vertical_load_rear=0.0,
-        mu_eff_front=0.0,
-        mu_eff_rear=0.0,
-        mu_eff_front_lateral=0.0,
-        mu_eff_front_longitudinal=0.0,
-        mu_eff_rear_lateral=0.0,
-        mu_eff_rear_longitudinal=0.0,
-        suspension_travel_front=0.0,
-        suspension_travel_rear=0.0,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
-    )
 
 
 @pytest.mark.parametrize(
@@ -62,7 +28,7 @@ def test_resonance_identifies_modal_peaks(
         roll += 0.05 * math.sin(2.0 * math.pi * 1.2 * t)
         pitch = 0.5 * math.sin(2.0 * math.pi * freq_pitch * t)
         pitch += 0.05 * math.sin(2.0 * math.pi * 2.5 * t)
-        records.append(_make_record(t, yaw=yaw, pitch=pitch, roll=roll))
+        records.append(build_resonance_record(t, yaw=yaw, pitch=pitch, roll=roll))
 
     analysis = analyse_modal_resonance(records)
 

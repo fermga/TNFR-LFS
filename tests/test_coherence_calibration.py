@@ -7,47 +7,17 @@ from typing import Dict, List
 
 import pytest
 
+from tests.helpers import build_calibration_record
+
 from tnfr_lfs.core.coherence_calibration import CoherenceCalibrationStore
 from tnfr_lfs.core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
 
 
-def _make_record(vertical_load: float, *, nfr: float = 0.7, si: float = 0.8) -> TelemetryRecord:
-    return TelemetryRecord(
-        timestamp=0.0,
-        vertical_load=vertical_load,
-        slip_ratio=0.02,
-        lateral_accel=0.0,
-        longitudinal_accel=0.0,
-        yaw=0.0,
-        pitch=0.0,
-        roll=0.0,
-        brake_pressure=0.0,
-        locking=0.0,
-        nfr=nfr,
-        si=si,
-        speed=50.0,
-        yaw_rate=0.0,
-        slip_angle=0.0,
-        steer=0.0,
-        throttle=0.5,
-        gear=3,
-        vertical_load_front=vertical_load * 0.6,
-        vertical_load_rear=vertical_load * 0.4,
-        mu_eff_front=0.8,
-        mu_eff_rear=0.8,
-        mu_eff_front_lateral=0.8,
-        mu_eff_front_longitudinal=0.8,
-        mu_eff_rear_lateral=0.8,
-        mu_eff_rear_longitudinal=0.8,
-        suspension_travel_front=0.02,
-        suspension_travel_rear=0.02,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
-    )
-
-
 def _make_stint(vertical_load: float, *, nfr: float = 0.7, samples: int = 5) -> List[TelemetryRecord]:
-    return [_make_record(vertical_load, nfr=nfr + index * 0.001) for index in range(samples)]
+    return [
+        build_calibration_record(vertical_load, nfr=nfr + index * 0.001)
+        for index in range(samples)
+    ]
 
 
 def test_coherence_calibration_converges_per_player(tmp_path: Path) -> None:
