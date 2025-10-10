@@ -1,5 +1,6 @@
 """Convenience re-exports for test helpers."""
 
+from .abtest import DummyBundle, build_metrics, scale_samples
 from .profile_manager import preloaded_profile_manager
 from .steering import build_steering_bundle, build_steering_record
 from .telemetry import (
@@ -22,6 +23,9 @@ __all__ = [
     "build_frequency_record",
     "build_resonance_record",
     "build_telemetry_record",
+    "DummyBundle",
+    "build_metrics",
+    "scale_samples",
     "QueueUDPSocket",
     "make_select_stub",
     "make_wait_stub",

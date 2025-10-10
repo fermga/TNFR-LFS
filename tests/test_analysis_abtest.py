@@ -5,7 +5,7 @@ import pytest
 
 from tnfr_lfs.analysis import ABResult, ab_compare_by_lap
 
-from tests.test_abtest import build_metrics, scale_samples
+from tests.helpers import build_metrics, scale_samples
 
 
 @pytest.mark.parametrize(
