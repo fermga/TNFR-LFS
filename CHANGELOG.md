@@ -1,5 +1,43 @@
 # CHANGELOG
 
+## v0.3.0 (2025-10-10)
+
+### Documentation
+
+* docs: highlight ingestion namespace ([`527e083`](https://github.com/fermga/TNFR-LFS/commit/527e083fc2b0af29e05c18873b6d68a7905dbf00))
+
+### Feature
+
+* feat: expose package version metadata ([`e57ea3b`](https://github.com/fermga/TNFR-LFS/commit/e57ea3b3d1f63b465628be3135bc0685cb69f420))
+
+### Unknown
+
+* Merge pull request #325 from fermga/codex/add-version-management-module-and-documentation
+
+Expose validated package version metadata ([`bc50564`](https://github.com/fermga/TNFR-LFS/commit/bc505642c25643304c1f4a991cd6ec06fbb84f18))
+
+* Merge pull request #324 from fermga/codex/add-__all__-list-to-core-modules
+
+Define explicit __all__ for core analytics modules ([`1de7df1`](https://github.com/fermga/TNFR-LFS/commit/1de7df179287cdbe4e300bd96e3ccf877db86c55))
+
+* Define core __all__ surfaces and guard star imports ([`905a0d8`](https://github.com/fermga/TNFR-LFS/commit/905a0d8359903500b0f76fe6d434c59a229f4c67))
+
+* Merge pull request #323 from fermga/codex/rename-test_acquisition-to-test_ingestion
+
+Rename acquisition regression tests to ingestion and fix statistics import ([`7fc1d0e`](https://github.com/fermga/TNFR-LFS/commit/7fc1d0e94821e0d22b54327aee6ab4aa705e47d3))
+
+* Rename ingestion regression tests and import mean ([`a0dc356`](https://github.com/fermga/TNFR-LFS/commit/a0dc3568ee825eac9db1274039c8842deeb155ae))
+
+* Merge pull request #322 from fermga/codex/update-documentation-for-tnfr_lfs-namespace
+
+docs: emphasise ingestion namespace ([`c711e1e`](https://github.com/fermga/TNFR-LFS/commit/c711e1e1da8ae5efcf8bac0df4fab6427f9f0528))
+
+* Merge pull request #321 from fermga/codex/delete-old-acquisition-package-and-verify
+
+Remove legacy acquisition package alias ([`8f5e6bf`](https://github.com/fermga/TNFR-LFS/commit/8f5e6bf0865f7b71c3437b22e87e01d5d5ff9f9e))
+
+* Remove legacy acquisition package stub ([`3522c7e`](https://github.com/fermga/TNFR-LFS/commit/3522c7e817e88441fb0f1dc724b7e2be10f41be4))
+
 ## v0.2.0 (2025-10-10)
 
 ### Documentation
