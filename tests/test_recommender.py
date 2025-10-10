@@ -46,18 +46,8 @@ from tnfr_lfs.recommender.rules import (
 )
 from tnfr_lfs.core.operators import tyre_balance_controller
 
+from tests.helpers import BASE_NU_F
 from tests.helpers.steering import build_steering_bundle, build_steering_record
-
-
-BASE_NU_F = {
-    "tyres": 0.18,
-    "suspension": 0.14,
-    "chassis": 0.12,
-    "brakes": 0.16,
-    "transmission": 0.11,
-    "track": 0.08,
-    "driver": 0.05,
-}
 def _parallel_window_metrics(
     slip_angles: Sequence[tuple[float, float]],
     *,

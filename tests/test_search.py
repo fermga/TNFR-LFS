@@ -26,21 +26,7 @@ from tnfr_lfs.recommender.search import (
     evaluate_candidate,
     objective_score,
 )
-from tests.helpers import preloaded_profile_manager
-
-
-SUPPORTED_CAR_MODELS = [
-    "XFG",
-    "XRG",
-    "RB4",
-    "FXO",
-    "FXR",
-    "XRR",
-    "FZR",
-    "FO8",
-    "BF1",
-]
-
+from tests.helpers import BASE_NU_F, SUPPORTED_CAR_MODELS, preloaded_profile_manager
 
 def test_decision_space_includes_parallel_steer_controls() -> None:
     space = DEFAULT_DECISION_LIBRARY["XFG"]
@@ -62,19 +48,6 @@ def test_front_wing_limits_defined_per_model() -> None:
         assert variable.lower == pytest.approx(limits[0])
         assert variable.upper == pytest.approx(limits[1])
         assert variable.step == pytest.approx(limits[2])
-
-
-BASE_NU_F = {
-    "tyres": 0.18,
-    "suspension": 0.14,
-    "chassis": 0.12,
-    "brakes": 0.16,
-    "transmission": 0.11,
-    "track": 0.08,
-    "driver": 0.05,
-}
-
-
 def _timestamp_delta(results, index: int) -> float:
     if index + 1 < len(results):
         return max(1e-3, results[index + 1].timestamp - results[index].timestamp)
