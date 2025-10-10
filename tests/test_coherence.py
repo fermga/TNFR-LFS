@@ -6,19 +6,10 @@ import math
 
 import pytest
 
+from tests.helpers import BASE_NU_F
 from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
 from tnfr_lfs.core.utils import normalised_entropy
 
-
-BASE_NU_F = {
-    "tyres": 0.18,
-    "suspension": 0.14,
-    "chassis": 0.12,
-    "brakes": 0.16,
-    "transmission": 0.11,
-    "track": 0.08,
-    "driver": 0.05,
-}
 
 PHASE_WEIGHTS = {
     "__default__": 1.0,
