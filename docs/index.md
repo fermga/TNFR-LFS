@@ -57,7 +57,7 @@ from leaking into the metrics pipeline.【F:tnfr_lfs/ingestion/outsim_client.py�
 When the wheel payload is disabled the toolkit now surfaces tyre loads,
 slip ratios and suspension metrics as “no data” rather than
 fabricating zeroed values, making it obvious that the telemetry stream
-is incomplete.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】【F:tests/test_acquisition.py†L229-L288】
+is incomplete.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】
 
 ### Metric field checklist
 

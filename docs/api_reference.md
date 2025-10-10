@@ -53,10 +53,12 @@ session = assemble_session_weights(
 ## Ingestion
 
 !!! note
-    The ingestion utilities previously exposed as
-    `tnfr_lfs.acquisition` now live exclusively under
-    `tnfr_lfs.ingestion`. Update downstream imports to reference
-    the ingestion namespace directly.
+    The ingestion surface is consolidated under the
+    `tnfr_lfs.ingestion` namespace, which exposes live UDP clients,
+    CSV/RAF readers and fusion helpers via modules such as
+    `tnfr_lfs.ingestion.live`, `tnfr_lfs.ingestion.replay` and
+    `tnfr_lfs.ingestion.fusion`. Import from these modules to wire
+    data capture directly into the analytics stack.
 
 ### `tnfr_lfs.ingestion.live.OutSimClient`
 
