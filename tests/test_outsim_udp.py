@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from types import SimpleNamespace
+import socket
 
 import pytest
 
-from tnfr_lfs.ingestion.outsim_udp import OutSimUDPClient
+from tnfr_lfs.ingestion import outsim_udp as outsim_module
+from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
 
 
 def test_outsim_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
@@ -38,3 +41,50 @@ def test_outsim_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
     assert elapsed_ms < 10.0
     assert call_args, "select.select should be invoked"
     assert call_args[0] == pytest.approx(client._timeout, rel=0.1)
+
+
+def _outsim_payload(time_ms: int) -> bytes:
+    return outsim_module._BASE_STRUCT.pack(time_ms, *([0.0] * 15))
+
+
+def test_async_outsim_client_handles_concurrent_receivers() -> None:
+    async def runner() -> None:
+        client = await AsyncOutSimUDPClient.create(port=0, reorder_grace=0.1, timeout=0.5)
+        sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sender.bind(("127.0.0.1", 0))
+        try:
+            _, port = client.address
+            target = ("127.0.0.1", port)
+            await asyncio.sleep(0)
+            sender.sendto(_outsim_payload(100), target)
+            sender.sendto(_outsim_payload(140), target)
+            sender.sendto(_outsim_payload(120), target)
+            results = []
+            for _ in range(3):
+                packet = await client.recv()
+                if packet is not None:
+                    results.append(packet)
+            assert [packet.time for packet in results] == [100, 120, 140]
+            stats = client.statistics
+            assert stats["delivered"] == 3
+            assert stats["reordered"] >= 1
+        finally:
+            sender.close()
+            await client.close()
+
+    asyncio.run(runner())
+
+
+def test_async_outsim_client_wakes_waiters_on_close() -> None:
+    async def runner() -> None:
+        client = await AsyncOutSimUDPClient.create(port=0, timeout=0.2)
+        try:
+            recv_task = asyncio.create_task(client.recv())
+            await asyncio.sleep(0)
+            await client.close()
+            with pytest.raises(RuntimeError):
+                await recv_task
+        finally:
+            await client.close()
+
+    asyncio.run(runner())

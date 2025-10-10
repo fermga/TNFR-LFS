@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import socket
 import struct
 import time
 from types import SimpleNamespace
 
 import pytest
 
+from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
 from tnfr_lfs.ingestion.live import OutGaugePacket
-from tnfr_lfs.ingestion.outgauge_udp import OutGaugeUDPClient
+from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
 
 
 def _pad(value: str, size: int) -> bytes:
@@ -94,3 +97,75 @@ def test_outgauge_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
     assert elapsed_ms < 10.0
     assert call_args, "select.select should be invoked"
     assert call_args[0] == pytest.approx(client._timeout, rel=0.1)
+
+
+def _outgauge_payload(packet_id: int, time_value: int) -> bytes:
+    return outgauge_module._PACK_STRUCT.pack(
+        time_value,
+        b"XFG\x00",
+        b"Driver\x00" + b"\x00" * 9,
+        b"\x00" * 8,
+        b"BL1\x00\x00",
+        b"LYT\x00\x00",
+        0,
+        3,
+        0,
+        50.0,
+        4000.0,
+        0.0,
+        80.0,
+        30.0,
+        0.0,
+        90.0,
+        0,
+        0,
+        0.5,
+        0.1,
+        0.0,
+        b"\x00" * 16,
+        b"\x00" * 16,
+        packet_id,
+    )
+
+
+def test_async_outgauge_client_recovers_out_of_order_packets() -> None:
+    async def runner() -> None:
+        client = await AsyncOutGaugeUDPClient.create(port=0, reorder_grace=0.1, timeout=0.5)
+        sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sender.bind(("127.0.0.1", 0))
+        try:
+            _, port = client.address
+            target = ("127.0.0.1", port)
+            await asyncio.sleep(0)
+            sender.sendto(_outgauge_payload(5, 50), target)
+            sender.sendto(_outgauge_payload(7, 70), target)
+            sender.sendto(_outgauge_payload(6, 60), target)
+            results = []
+            for _ in range(3):
+                packet = await client.recv()
+                if packet is not None:
+                    results.append(packet)
+            assert [packet.packet_id for packet in results] == [5, 6, 7]
+            stats = client.statistics
+            assert stats["delivered"] == 3
+            assert stats["reordered"] >= 1
+        finally:
+            sender.close()
+            await client.close()
+
+    asyncio.run(runner())
+
+
+def test_async_outgauge_client_wakes_waiters_on_close() -> None:
+    async def runner() -> None:
+        client = await AsyncOutGaugeUDPClient.create(port=0, timeout=0.2)
+        try:
+            recv_task = asyncio.create_task(client.recv())
+            await asyncio.sleep(0)
+            await client.close()
+            with pytest.raises(RuntimeError):
+                await recv_task
+        finally:
+            await client.close()
+
+    asyncio.run(runner())

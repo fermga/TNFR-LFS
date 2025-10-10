@@ -10,6 +10,8 @@ successful recoveries.
 
 from __future__ import annotations
 
+import asyncio
+from collections import deque
 from dataclasses import dataclass
 import logging
 from types import TracebackType
@@ -25,7 +27,7 @@ from tnfr_lfs.ingestion._reorder_buffer import (
     DEFAULT_REORDER_BUFFER_SIZE,
 )
 
-__all__ = ["OutGaugePacket", "OutGaugeUDPClient"]
+__all__ = ["AsyncOutGaugeUDPClient", "OutGaugePacket", "OutGaugeUDPClient"]
 
 
 logger = logging.getLogger(__name__)
@@ -205,6 +207,165 @@ class OutGaugePacket:
         )
 
 
+class _OutGaugePacketProcessor:
+    """Shared buffering and accounting logic for OutGauge UDP clients."""
+
+    def __init__(
+        self,
+        *,
+        remote_host: str,
+        port: int,
+        buffer_capacity: int,
+        buffer_grace: float,
+        jump_tolerance: int,
+    ) -> None:
+        self._remote_host = remote_host
+        self._port = port
+        self._buffer = CircularReorderBuffer[OutGaugePacket](buffer_capacity)
+        self._buffer_grace = buffer_grace
+        self._jump_tolerance = jump_tolerance
+        self._received_packets = 0
+        self._delivered_packets = 0
+        self._duplicate_packets = 0
+        self._out_of_order_packets = 0
+        self._loss_events = 0
+        self._recovered_packets = 0
+        self._last_seen_id: Optional[int] = None
+        self._last_emitted_id: Optional[int] = None
+        self._last_emitted_time: Optional[int] = None
+        self._missing_ids: set[int] = set()
+
+    @property
+    def statistics(self) -> dict[str, int]:
+        return {
+            "received": self._received_packets,
+            "delivered": self._delivered_packets,
+            "duplicates": self._duplicate_packets,
+            "reordered": self._out_of_order_packets,
+            "loss_events": self._loss_events,
+            "recovered": self._recovered_packets,
+        }
+
+    def record_packet(self, packet: OutGaugePacket, arrival: float) -> None:
+        self._received_packets += 1
+
+        if self._last_seen_id is not None:
+            delta = packet.packet_id - self._last_seen_id
+            if delta > 1:
+                missing = list(range(self._last_seen_id + 1, packet.packet_id))
+                if missing:
+                    self._loss_events += len(missing)
+                    self._missing_ids.update(missing)
+                    logger.warning(
+                        "OutGauge packet gap detected (possible loss).",
+                        extra={
+                            "event": "outgauge.packet_gap",
+                            "missing": missing,
+                            "last_packet_id": self._last_seen_id,
+                            "current_packet_id": packet.packet_id,
+                            "port": self._port,
+                            "remote_host": self._remote_host,
+                        },
+                    )
+            elif delta < 0:
+                self._out_of_order_packets += 1
+                logger.warning(
+                    "OutGauge out-of-order packet received.",
+                    extra={
+                        "event": "outgauge.out_of_order",
+                        "last_packet_id": self._last_seen_id,
+                        "current_packet_id": packet.packet_id,
+                        "port": self._port,
+                        "remote_host": self._remote_host,
+                    },
+                )
+        self._last_seen_id = (
+            packet.packet_id
+            if self._last_seen_id is None
+            else max(self._last_seen_id, packet.packet_id)
+        )
+
+        if self._is_duplicate(packet.packet_id):
+            self._duplicate_packets += 1
+            logger.warning(
+                "OutGauge duplicate packet dropped.",
+                extra={
+                    "event": "outgauge.duplicate",
+                    "packet_id": packet.packet_id,
+                    "port": self._port,
+                    "remote_host": self._remote_host,
+                },
+            )
+            return
+
+        self._buffer.insert(arrival, packet, packet.packet_id)
+
+    def pop_ready_packet(self, now: float, *, allow_grace: bool) -> Optional[OutGaugePacket]:
+        while self._buffer:
+            peeked = self._buffer.peek_oldest()
+            if peeked is None:
+                break
+            arrival, packet = peeked
+            if not allow_grace and len(self._buffer) == 1 and (now - arrival) < self._buffer_grace:
+                break
+            popped = self._buffer.pop_oldest()
+            if popped is None:
+                break
+            _, packet = popped
+            if (
+                self._last_emitted_id is not None
+                and packet.packet_id <= self._last_emitted_id
+            ):
+                continue
+            if self._jump_tolerance and self._last_emitted_time is not None:
+                delta = packet.time - self._last_emitted_time
+                if delta > self._jump_tolerance:
+                    self._loss_events += 1
+                    logger.warning(
+                        "OutGauge time jump detected (possible packet loss).",
+                        extra={
+                            "event": "outgauge.time_jump",
+                            "delta": delta,
+                            "last_time": self._last_emitted_time,
+                            "current_time": packet.time,
+                            "port": self._port,
+                            "remote_host": self._remote_host,
+                        },
+                    )
+            if packet.packet_id in self._missing_ids:
+                self._missing_ids.discard(packet.packet_id)
+                self._recovered_packets += 1
+                logger.info(
+                    "OutGauge packet recovered after gap.",
+                    extra={
+                        "event": "outgauge.recovered",
+                        "packet_id": packet.packet_id,
+                        "port": self._port,
+                        "remote_host": self._remote_host,
+                    },
+                )
+            self._delivered_packets += 1
+            self._last_emitted_id = packet.packet_id
+            self._last_emitted_time = packet.time
+            return packet
+        return None
+
+    def drain_ready(self, now: float) -> list[OutGaugePacket]:
+        ready: list[OutGaugePacket] = []
+        while True:
+            packet = self.pop_ready_packet(now, allow_grace=False)
+            if packet is None:
+                break
+            ready.append(packet)
+            now = time.monotonic()
+        return ready
+
+    def _is_duplicate(self, packet_id: int) -> bool:
+        if self._last_emitted_id is not None and packet_id == self._last_emitted_id:
+            return True
+        return self._buffer.contains_key(packet_id)
+
+
 class OutGaugeUDPClient:
     """Non-blocking UDP client for OutGauge telemetry."""
 
@@ -263,21 +424,16 @@ class OutGaugeUDPClient:
         self._socket.bind(("", port))
         local_host, local_port = self._socket.getsockname()
         self._address: Tuple[str, int] = (local_host, local_port)
+        buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
+        self._processor = _OutGaugePacketProcessor(
+            remote_host=self._remote_host,
+            port=self._address[1],
+            buffer_capacity=buffer_capacity,
+            buffer_grace=buffer_grace,
+            jump_tolerance=max(int(jump_tolerance), 0),
+        )
         self._timeouts = 0
         self._ignored_hosts = 0
-        self._buffer = CircularReorderBuffer[OutGaugePacket](buffer_capacity)
-        self._buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
-        self._received_packets = 0
-        self._delivered_packets = 0
-        self._duplicate_packets = 0
-        self._out_of_order_packets = 0
-        self._loss_events = 0
-        self._recovered_packets = 0
-        self._last_seen_id: Optional[int] = None
-        self._last_emitted_id: Optional[int] = None
-        self._last_emitted_time: Optional[int] = None
-        self._jump_tolerance = max(int(jump_tolerance), 0)
-        self._missing_ids: set[int] = set()
 
     @property
     def address(self) -> Tuple[str, int]:
@@ -295,18 +451,11 @@ class OutGaugeUDPClient:
     def statistics(self) -> dict[str, int]:
         """Return packet accounting metrics collected by the client."""
 
-        return {
-            "received": self._received_packets,
-            "delivered": self._delivered_packets,
-            "duplicates": self._duplicate_packets,
-            "reordered": self._out_of_order_packets,
-            "loss_events": self._loss_events,
-            "recovered": self._recovered_packets,
-        }
+        return self._processor.statistics
 
     def recv(self) -> Optional[OutGaugePacket]:
         now = time.monotonic()
-        ready = self._pop_ready_packet(now, allow_grace=False)
+        ready = self._processor.pop_ready_packet(now, allow_grace=False)
         if ready is not None:
             return ready
 
@@ -324,7 +473,7 @@ class OutGaugeUDPClient:
                     deadline=deadline,
                 ):
                     break
-                ready = self._pop_ready_packet(time.monotonic(), allow_grace=False)
+                ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=False)
                 if ready is not None:
                     return ready
                 continue
@@ -343,11 +492,11 @@ class OutGaugeUDPClient:
                 )
                 continue
             packet = OutGaugePacket.from_bytes(payload)
-            self._record_packet(packet)
-            ready = self._pop_ready_packet(time.monotonic(), allow_grace=False)
+            self._processor.record_packet(packet, time.monotonic())
+            ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=False)
             if ready is not None:
                 return ready
-        ready = self._pop_ready_packet(time.monotonic(), allow_grace=True)
+        ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=True)
         if ready is not None:
             return ready
         self._timeouts += 1
@@ -362,17 +511,6 @@ class OutGaugeUDPClient:
             },
         )
         return None
-
-    def drain_ready(self) -> list[OutGaugePacket]:
-        """Return all packets ready for immediate consumption."""
-
-        ready: list[OutGaugePacket] = []
-        while True:
-            packet = self._pop_ready_packet(time.monotonic(), allow_grace=False)
-            if packet is None:
-                break
-            ready.append(packet)
-        return ready
 
     def close(self) -> None:
         self._socket.close()
@@ -399,114 +537,309 @@ class OutGaugeUDPClient:
         addresses = {record[4][0] for record in info if record[0] == socket.AF_INET}
         return addresses or {host}
 
-    def _record_packet(self, packet: OutGaugePacket) -> None:
-        self._received_packets += 1
-        arrival = time.monotonic()
+    def drain_ready(self) -> list[OutGaugePacket]:
+        return self._processor.drain_ready(time.monotonic())
 
-        if self._last_seen_id is not None:
-            delta = packet.packet_id - self._last_seen_id
-            if delta > 1:
-                missing = list(range(self._last_seen_id + 1, packet.packet_id))
-                if missing:
-                    self._loss_events += len(missing)
-                    self._missing_ids.update(missing)
-                    logger.warning(
-                        "OutGauge packet gap detected (possible loss).",
-                        extra={
-                            "event": "outgauge.packet_gap",
-                            "missing": missing,
-                            "last_packet_id": self._last_seen_id,
-                            "current_packet_id": packet.packet_id,
-                            "port": self._address[1],
-                            "remote_host": self._remote_host,
-                        },
-                    )
-            elif delta < 0:
-                self._out_of_order_packets += 1
-                logger.warning(
-                    "OutGauge out-of-order packet received.",
-                    extra={
-                        "event": "outgauge.out_of_order",
-                        "last_packet_id": self._last_seen_id,
-                        "current_packet_id": packet.packet_id,
-                        "port": self._address[1],
-                        "remote_host": self._remote_host,
-                    },
-                )
-        self._last_seen_id = (
-            packet.packet_id
-            if self._last_seen_id is None
-            else max(self._last_seen_id, packet.packet_id)
+
+class _AsyncOutGaugeProtocol(asyncio.DatagramProtocol):
+    def __init__(self, client: "AsyncOutGaugeUDPClient") -> None:
+        self._client = client
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:  # pragma: no cover - exercised indirectly
+        self._client._connection_made(transport)
+
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
+        self._client._on_datagram(data, addr)
+
+    def error_received(self, exc: Exception) -> None:  # pragma: no cover - defensive
+        self._client._on_error(exc)
+
+    def connection_lost(self, exc: Exception | None) -> None:
+        self._client._connection_lost(exc)
+
+
+class AsyncOutGaugeUDPClient:
+    """Asynchronous UDP client delivering :class:`OutGaugePacket` objects."""
+
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 3000,
+        *,
+        timeout: float = 0.05,
+        reorder_grace: float | None = None,
+        jump_tolerance: int = 200,
+        buffer_size: int | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
+        buffer_capacity = DEFAULT_REORDER_BUFFER_SIZE
+        if buffer_size is not None:
+            try:
+                numeric = int(buffer_size)
+            except (TypeError, ValueError):
+                numeric = 0
+            if numeric > 0:
+                buffer_capacity = numeric
+        self._remote_host = host
+        self._remote_addresses = OutGaugeUDPClient._resolve_remote_addresses(host)
+        self._timeout = timeout
+        self._requested_port = port
+        self._buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
+        self._jump_tolerance = max(int(jump_tolerance), 0)
+        self._buffer_capacity = buffer_capacity
+        self._loop = loop
+        self._transport: asyncio.DatagramTransport | None = None
+        self._address: Tuple[str, int] = ("", 0)
+        self._processor: _OutGaugePacketProcessor | None = None
+        self._ready_packets: deque[OutGaugePacket] = deque()
+        self._condition: asyncio.Condition | None = None
+        self._notify_scheduled = False
+        self._pending_error: BaseException | None = None
+        self._timeouts = 0
+        self._ignored_hosts = 0
+        self._closed_event = asyncio.Event()
+        self._closed_event.set()
+        self._closing = False
+
+    @classmethod
+    async def create(
+        cls,
+        host: str = "127.0.0.1",
+        port: int = 3000,
+        *,
+        timeout: float = 0.05,
+        reorder_grace: float | None = None,
+        jump_tolerance: int = 200,
+        buffer_size: int | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> "AsyncOutGaugeUDPClient":
+        self = cls(
+            host=host,
+            port=port,
+            timeout=timeout,
+            reorder_grace=reorder_grace,
+            jump_tolerance=jump_tolerance,
+            buffer_size=buffer_size,
+            loop=loop,
         )
+        await self.start()
+        return self
 
-        if self._is_duplicate(packet.packet_id):
-            self._duplicate_packets += 1
+    async def start(self) -> None:
+        if self._transport is not None:
+            return
+        loop = self._loop or asyncio.get_running_loop()
+        self._loop = loop
+        transport, _ = await loop.create_datagram_endpoint(
+            lambda: _AsyncOutGaugeProtocol(self),
+            local_addr=(None, self._requested_port),
+            family=socket.AF_INET,
+        )
+        self._transport = transport
+
+    async def __aenter__(self) -> "AsyncOutGaugeUDPClient":
+        if self._transport is None:
+            await self.start()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.close()
+
+    @property
+    def address(self) -> Tuple[str, int]:
+        return self._address
+
+    @property
+    def timeouts(self) -> int:
+        return self._timeouts
+
+    @property
+    def ignored_hosts(self) -> int:
+        return self._ignored_hosts
+
+    @property
+    def statistics(self) -> dict[str, int]:
+        if self._processor is None:
+            return {
+                "received": 0,
+                "delivered": 0,
+                "duplicates": 0,
+                "reordered": 0,
+                "loss_events": 0,
+                "recovered": 0,
+            }
+        return self._processor.statistics
+
+    async def recv(self, timeout: float | None = None) -> Optional[OutGaugePacket]:
+        if self._transport is None or self._processor is None or self._condition is None:
+            raise RuntimeError("AsyncOutGaugeUDPClient is not started")
+        loop = self._loop
+        assert loop is not None
+        if timeout is None:
+            timeout = self._timeout
+        if timeout is not None and timeout < 0:
+            timeout = 0.0
+        start = loop.time()
+        while True:
+            if self._pending_error is not None:
+                error = self._pending_error
+                self._pending_error = None
+                raise error
+            if self._ready_packets:
+                return self._ready_packets.popleft()
+            if self._closing:
+                raise RuntimeError("AsyncOutGaugeUDPClient is closed")
+            if timeout == 0.0:
+                break
+            if timeout is None:
+                remaining = None
+            else:
+                elapsed = loop.time() - start
+                remaining = timeout - elapsed
+                if remaining <= 0:
+                    break
+            condition = self._condition
+            async with condition:
+                waiter = condition.wait()
+                try:
+                    if remaining is None:
+                        await waiter
+                    else:
+                        await asyncio.wait_for(waiter, remaining)
+                except asyncio.TimeoutError:
+                    break
+                continue
+        packet = self._processor.pop_ready_packet(time.monotonic(), allow_grace=True)
+        if packet is not None:
+            return packet
+        self._timeouts += 1
+        logger.warning(
+            "OutGauge recv retries exhausted without receiving a packet.",
+            extra={
+                "event": "outgauge.recv_timeout",
+                "retries": 0,
+                "timeout": timeout,
+                "remote_host": self._remote_host,
+                "port": self._address[1],
+            },
+        )
+        return None
+
+    def drain_ready(self) -> list[OutGaugePacket]:
+        packets: list[OutGaugePacket] = []
+        while self._ready_packets:
+            packets.append(self._ready_packets.popleft())
+        if self._processor is not None:
+            packets.extend(self._processor.drain_ready(time.monotonic()))
+        return packets
+
+    async def close(self) -> None:
+        if self._closing:
+            await self._closed_event.wait()
+            return
+        self._closing = True
+        transport = self._transport
+        if transport is not None:
+            transport.close()
+        else:
+            self._closed_event.set()
+        await self._closed_event.wait()
+        self._wake_waiters()
+
+    def _connection_made(self, transport: asyncio.BaseTransport) -> None:
+        datagram = transport  # type: ignore[assignment]
+        assert isinstance(datagram, asyncio.DatagramTransport)
+        self._transport = datagram
+        sockname = datagram.get_extra_info("sockname")
+        if isinstance(sockname, tuple) and len(sockname) >= 2:
+            host = sockname[0] if isinstance(sockname[0], str) else ""
+            port = int(sockname[1]) if isinstance(sockname[1], int) else 0
+            self._address = (host, port)
+        else:  # pragma: no cover - defensive
+            self._address = ("", self._requested_port)
+        self._processor = _OutGaugePacketProcessor(
+            remote_host=self._remote_host,
+            port=self._address[1],
+            buffer_capacity=self._buffer_capacity,
+            buffer_grace=self._buffer_grace,
+            jump_tolerance=self._jump_tolerance,
+        )
+        self._condition = asyncio.Condition()
+        self._closed_event = asyncio.Event()
+
+    def _on_datagram(self, payload: bytes, source: tuple[str, int]) -> None:
+        if not payload:
+            return
+        if self._remote_addresses and source[0] not in self._remote_addresses:
+            self._ignored_hosts += 1
             logger.warning(
-                "OutGauge duplicate packet dropped.",
+                "Ignoring OutGauge datagram from unexpected host.",
                 extra={
-                    "event": "outgauge.duplicate",
-                    "packet_id": packet.packet_id,
+                    "event": "outgauge.ignored_host",
+                    "expected_hosts": sorted(self._remote_addresses),
+                    "source_host": source[0],
                     "port": self._address[1],
-                    "remote_host": self._remote_host,
                 },
             )
             return
-
-        self._buffer.insert(arrival, packet, packet.packet_id)
-
-    def _pop_ready_packet(
-        self, now: float, *, allow_grace: bool
-    ) -> Optional[OutGaugePacket]:
-        while self._buffer:
-            peeked = self._buffer.peek_oldest()
-            if peeked is None:
+        processor = self._processor
+        if processor is None:
+            return
+        try:
+            packet = OutGaugePacket.from_bytes(payload)
+        except Exception as exc:  # pragma: no cover - propagate decoding issues
+            self._pending_error = exc
+            self._wake_waiters()
+            return
+        processor.record_packet(packet, time.monotonic())
+        made_ready = False
+        while True:
+            ready = processor.pop_ready_packet(time.monotonic(), allow_grace=False)
+            if ready is None:
                 break
-            arrival, packet = peeked
-            if not allow_grace and len(self._buffer) == 1 and (now - arrival) < self._buffer_grace:
-                break
-            popped = self._buffer.pop_oldest()
-            if popped is None:
-                break
-            _, packet = popped
-            if (
-                self._last_emitted_id is not None
-                and packet.packet_id <= self._last_emitted_id
-            ):
-                continue
-            if self._jump_tolerance and self._last_emitted_time is not None:
-                delta = packet.time - self._last_emitted_time
-                if delta > self._jump_tolerance:
-                    self._loss_events += 1
-                    logger.warning(
-                        "OutGauge time jump detected (possible packet loss).",
-                        extra={
-                            "event": "outgauge.time_jump",
-                            "delta": delta,
-                            "last_time": self._last_emitted_time,
-                            "current_time": packet.time,
-                            "port": self._address[1],
-                            "remote_host": self._remote_host,
-                        },
-                    )
-            if packet.packet_id in self._missing_ids:
-                self._missing_ids.discard(packet.packet_id)
-                self._recovered_packets += 1
-                logger.info(
-                    "OutGauge packet recovered after gap.",
-                    extra={
-                        "event": "outgauge.recovered",
-                        "packet_id": packet.packet_id,
-                        "port": self._address[1],
-                        "remote_host": self._remote_host,
-                    },
-                )
-            self._delivered_packets += 1
-            self._last_emitted_id = packet.packet_id
-            self._last_emitted_time = packet.time
-            return packet
-        return None
+            self._ready_packets.append(ready)
+            made_ready = True
+        if made_ready:
+            self._wake_waiters()
 
-    def _is_duplicate(self, packet_id: int) -> bool:
-        if self._last_emitted_id is not None and packet_id == self._last_emitted_id:
-            return True
-        return self._buffer.contains_key(packet_id)
+    def _on_error(self, exc: Exception) -> None:
+        self._pending_error = exc
+        self._wake_waiters()
+
+    def _connection_lost(self, _exc: Exception | None) -> None:
+        condition = self._condition
+        self._transport = None
+        self._processor = None
+        self._condition = None
+        self._ready_packets.clear()
+        self._closed_event.set()
+        self._wake_waiters(condition)
+
+    def _wake_waiters(self, condition: asyncio.Condition | None = None) -> None:
+        if self._notify_scheduled:
+            return
+        loop = self._loop
+        if loop is None:
+            return
+        if condition is None:
+            condition = self._condition
+        if condition is None:
+            return
+        self._notify_scheduled = True
+        loop.call_soon(self._schedule_notification, condition)
+
+    def _schedule_notification(self, condition: asyncio.Condition) -> None:
+        self._notify_scheduled = False
+        loop = self._loop
+        if loop is None:
+            return
+        loop.create_task(self._notify_condition(condition))
+
+    async def _notify_condition(self, condition: asyncio.Condition) -> None:
+        async with condition:
+            condition.notify_all()

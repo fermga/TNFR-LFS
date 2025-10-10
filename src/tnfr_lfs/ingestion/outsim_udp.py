@@ -17,6 +17,8 @@ packet loss or recovery counters emitted while the client operates.
 
 from __future__ import annotations
 
+import asyncio
+from collections import deque
 from dataclasses import dataclass
 import logging
 from types import TracebackType
@@ -33,6 +35,7 @@ from tnfr_lfs.ingestion._reorder_buffer import (
 
 __all__ = [
     "OUTSIM_MAX_PACKET_SIZE",
+    "AsyncOutSimUDPClient",
     "OutSimDriverInputs",
     "OutSimPacket",
     "OutSimUDPClient",
@@ -177,6 +180,144 @@ class OutSimPacket:
         )
 
 
+class _OutSimPacketProcessor:
+    """Shared buffering and accounting logic for OutSim UDP clients."""
+
+    def __init__(
+        self,
+        *,
+        remote_host: str,
+        port: int,
+        buffer_capacity: int,
+        buffer_grace: float,
+        jump_tolerance: int,
+    ) -> None:
+        self._remote_host = remote_host
+        self._port = port
+        self._buffer = CircularReorderBuffer[OutSimPacket](buffer_capacity)
+        self._buffer_grace = buffer_grace
+        self._jump_tolerance = jump_tolerance
+        self._received_packets = 0
+        self._delivered_packets = 0
+        self._duplicate_packets = 0
+        self._out_of_order_packets = 0
+        self._late_reordered_packets = 0
+        self._loss_events = 0
+        self._last_emitted_time: Optional[int] = None
+        self._last_seen_time: Optional[int] = None
+        self._reordered_times: set[int] = set()
+
+    @property
+    def statistics(self) -> dict[str, int]:
+        return {
+            "received": self._received_packets,
+            "delivered": self._delivered_packets,
+            "duplicates": self._duplicate_packets,
+            "reordered": self._out_of_order_packets,
+            "late_recovered": self._late_reordered_packets,
+            "loss_events": self._loss_events,
+        }
+
+    def record_packet(self, packet: OutSimPacket, arrival: float) -> None:
+        self._received_packets += 1
+
+        if self._last_seen_time is not None and packet.time < self._last_seen_time:
+            self._out_of_order_packets += 1
+            self._reordered_times.add(packet.time)
+            logger.warning(
+                "OutSim out-of-order packet received.",
+                extra={
+                    "event": "outsim.out_of_order",
+                    "last_time": self._last_seen_time,
+                    "current_time": packet.time,
+                    "port": self._port,
+                    "remote_host": self._remote_host,
+                },
+            )
+        self._last_seen_time = (
+            packet.time
+            if self._last_seen_time is None
+            else max(self._last_seen_time, packet.time)
+        )
+
+        if self._is_duplicate(packet.time):
+            self._duplicate_packets += 1
+            logger.warning(
+                "OutSim duplicate packet dropped.",
+                extra={
+                    "event": "outsim.duplicate",
+                    "time": packet.time,
+                    "port": self._port,
+                    "remote_host": self._remote_host,
+                },
+            )
+            return
+
+        index, _ = self._buffer.insert(arrival, packet, packet.time)
+        current_length = len(self._buffer)
+        if (
+            current_length > 1
+            and index < (current_length - 1)
+            and packet.time not in self._reordered_times
+        ):
+            self._reordered_times.add(packet.time)
+
+    def pop_ready_packet(self, now: float, *, allow_grace: bool) -> Optional[OutSimPacket]:
+        while self._buffer:
+            peeked = self._buffer.peek_oldest()
+            if peeked is None:
+                break
+            arrival, packet = peeked
+            if not allow_grace and len(self._buffer) == 1 and (now - arrival) < self._buffer_grace:
+                break
+            popped = self._buffer.pop_oldest()
+            if popped is None:
+                break
+            _, packet = popped
+            if (
+                self._last_emitted_time is not None
+                and packet.time <= self._last_emitted_time
+            ):
+                continue
+            if self._jump_tolerance and self._last_emitted_time is not None:
+                delta = packet.time - self._last_emitted_time
+                if delta > self._jump_tolerance:
+                    self._loss_events += 1
+                    logger.warning(
+                        "OutSim time jump detected (possible packet loss).",
+                        extra={
+                            "event": "outsim.packet_gap",
+                            "delta": delta,
+                            "last_time": self._last_emitted_time,
+                            "current_time": packet.time,
+                            "port": self._port,
+                            "remote_host": self._remote_host,
+                        },
+                    )
+            if packet.time in self._reordered_times:
+                self._reordered_times.discard(packet.time)
+                self._late_reordered_packets += 1
+            self._delivered_packets += 1
+            self._last_emitted_time = packet.time
+            return packet
+        return None
+
+    def drain_ready(self, now: float) -> list[OutSimPacket]:
+        ready: list[OutSimPacket] = []
+        while True:
+            packet = self.pop_ready_packet(now, allow_grace=False)
+            if packet is None:
+                break
+            ready.append(packet)
+            now = time.monotonic()
+        return ready
+
+    def _is_duplicate(self, timestamp: int) -> bool:
+        if self._last_emitted_time is not None and timestamp == self._last_emitted_time:
+            return True
+        return self._buffer.contains_key(timestamp)
+
+
 class OutSimUDPClient:
     """Non-blocking UDP client that yields :class:`OutSimPacket` objects."""
 
@@ -236,20 +377,16 @@ class OutSimUDPClient:
         self._socket.bind(("", port))
         local_host, local_port = self._socket.getsockname()
         self._address: Tuple[str, int] = (local_host, local_port)
+        buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
+        self._processor = _OutSimPacketProcessor(
+            remote_host=self._remote_host,
+            port=self._address[1],
+            buffer_capacity=buffer_capacity,
+            buffer_grace=buffer_grace,
+            jump_tolerance=max(int(jump_tolerance), 0),
+        )
         self._timeouts = 0
         self._ignored_hosts = 0
-        self._buffer = CircularReorderBuffer[OutSimPacket](buffer_capacity)
-        self._buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
-        self._received_packets = 0
-        self._delivered_packets = 0
-        self._duplicate_packets = 0
-        self._out_of_order_packets = 0
-        self._late_reordered_packets = 0
-        self._loss_events = 0
-        self._last_emitted_time: Optional[int] = None
-        self._last_seen_time: Optional[int] = None
-        self._jump_tolerance = max(int(jump_tolerance), 0)
-        self._reordered_times: set[int] = set()
 
     @property
     def address(self) -> Tuple[str, int]:
@@ -273,20 +410,13 @@ class OutSimUDPClient:
     def statistics(self) -> dict[str, int]:
         """Return packet accounting metrics collected by the client."""
 
-        return {
-            "received": self._received_packets,
-            "delivered": self._delivered_packets,
-            "duplicates": self._duplicate_packets,
-            "reordered": self._out_of_order_packets,
-            "late_recovered": self._late_reordered_packets,
-            "loss_events": self._loss_events,
-        }
+        return self._processor.statistics
 
     def recv(self) -> Optional[OutSimPacket]:
         """Attempt to receive a packet, returning ``None`` on timeout."""
 
         now = time.monotonic()
-        ready = self._pop_ready_packet(now, allow_grace=False)
+        ready = self._processor.pop_ready_packet(now, allow_grace=False)
         if ready is not None:
             return ready
 
@@ -304,7 +434,7 @@ class OutSimUDPClient:
                     deadline=deadline,
                 ):
                     break
-                ready = self._pop_ready_packet(time.monotonic(), allow_grace=False)
+                ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=False)
                 if ready is not None:
                     return ready
                 continue
@@ -323,11 +453,11 @@ class OutSimUDPClient:
                 )
                 continue
             packet = OutSimPacket.from_bytes(payload)
-            self._record_packet(packet)
-            ready = self._pop_ready_packet(time.monotonic(), allow_grace=False)
+            self._processor.record_packet(packet, time.monotonic())
+            ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=False)
             if ready is not None:
                 return ready
-        ready = self._pop_ready_packet(time.monotonic(), allow_grace=True)
+        ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=True)
         if ready is not None:
             return ready
         self._timeouts += 1
@@ -351,13 +481,7 @@ class OutSimUDPClient:
         already followed by newer datagrams.
         """
 
-        ready: list[OutSimPacket] = []
-        while True:
-            packet = self._pop_ready_packet(time.monotonic(), allow_grace=False)
-            if packet is None:
-                break
-            ready.append(packet)
-        return ready
+        return self._processor.drain_ready(time.monotonic())
 
     @staticmethod
     def _resolve_remote_addresses(host: str) -> set[str]:
@@ -386,95 +510,307 @@ class OutSimUDPClient:
     ) -> None:
         self.close()
 
-    def _pop_ready_packet(
-        self, now: float, *, allow_grace: bool
-    ) -> Optional[OutSimPacket]:
-        while self._buffer:
-            peeked = self._buffer.peek_oldest()
-            if peeked is None:
+
+class _AsyncOutSimProtocol(asyncio.DatagramProtocol):
+    def __init__(self, client: "AsyncOutSimUDPClient") -> None:
+        self._client = client
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:  # pragma: no cover - exercised indirectly
+        self._client._connection_made(transport)
+
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
+        self._client._on_datagram(data, addr)
+
+    def error_received(self, exc: Exception) -> None:  # pragma: no cover - defensive
+        self._client._on_error(exc)
+
+    def connection_lost(self, exc: Exception | None) -> None:
+        self._client._connection_lost(exc)
+
+
+class AsyncOutSimUDPClient:
+    """Asynchronous UDP client delivering :class:`OutSimPacket` objects."""
+
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 4123,
+        *,
+        timeout: float = 0.05,
+        reorder_grace: float | None = None,
+        jump_tolerance: int = 200,
+        buffer_size: int | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
+        buffer_capacity = DEFAULT_REORDER_BUFFER_SIZE
+        if buffer_size is not None:
+            try:
+                numeric = int(buffer_size)
+            except (TypeError, ValueError):
+                numeric = 0
+            if numeric > 0:
+                buffer_capacity = numeric
+        self._remote_host = host
+        self._remote_addresses = OutSimUDPClient._resolve_remote_addresses(host)
+        self._timeout = timeout
+        self._requested_port = port
+        self._buffer_grace = max(float(reorder_grace) if reorder_grace is not None else timeout, 0.0)
+        self._jump_tolerance = max(int(jump_tolerance), 0)
+        self._buffer_capacity = buffer_capacity
+        self._loop = loop
+        self._transport: asyncio.DatagramTransport | None = None
+        self._address: Tuple[str, int] = ("", 0)
+        self._processor: _OutSimPacketProcessor | None = None
+        self._ready_packets: deque[OutSimPacket] = deque()
+        self._condition: asyncio.Condition | None = None
+        self._notify_scheduled = False
+        self._pending_error: BaseException | None = None
+        self._timeouts = 0
+        self._ignored_hosts = 0
+        self._closed_event = asyncio.Event()
+        self._closed_event.set()
+        self._closing = False
+
+    @classmethod
+    async def create(
+        cls,
+        host: str = "127.0.0.1",
+        port: int = 4123,
+        *,
+        timeout: float = 0.05,
+        reorder_grace: float | None = None,
+        jump_tolerance: int = 200,
+        buffer_size: int | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> "AsyncOutSimUDPClient":
+        self = cls(
+            host=host,
+            port=port,
+            timeout=timeout,
+            reorder_grace=reorder_grace,
+            jump_tolerance=jump_tolerance,
+            buffer_size=buffer_size,
+            loop=loop,
+        )
+        await self.start()
+        return self
+
+    async def start(self) -> None:
+        if self._transport is not None:
+            return
+        loop = self._loop or asyncio.get_running_loop()
+        self._loop = loop
+        transport, _ = await loop.create_datagram_endpoint(
+            lambda: _AsyncOutSimProtocol(self),
+            local_addr=(None, self._requested_port),
+            family=socket.AF_INET,
+        )
+        self._transport = transport  # connection_made will configure the rest
+
+    async def __aenter__(self) -> "AsyncOutSimUDPClient":
+        if self._transport is None:
+            await self.start()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.close()
+
+    @property
+    def address(self) -> Tuple[str, int]:
+        return self._address
+
+    @property
+    def timeouts(self) -> int:
+        return self._timeouts
+
+    @property
+    def ignored_hosts(self) -> int:
+        return self._ignored_hosts
+
+    @property
+    def statistics(self) -> dict[str, int]:
+        if self._processor is None:
+            return {
+                "received": 0,
+                "delivered": 0,
+                "duplicates": 0,
+                "reordered": 0,
+                "late_recovered": 0,
+                "loss_events": 0,
+            }
+        return self._processor.statistics
+
+    async def recv(self, timeout: float | None = None) -> Optional[OutSimPacket]:
+        if self._transport is None or self._processor is None or self._condition is None:
+            raise RuntimeError("AsyncOutSimUDPClient is not started")
+        loop = self._loop
+        assert loop is not None
+        if timeout is None:
+            timeout = self._timeout
+        if timeout is not None and timeout < 0:
+            timeout = 0.0
+        start = loop.time()
+        while True:
+            if self._pending_error is not None:
+                error = self._pending_error
+                self._pending_error = None
+                raise error
+            if self._ready_packets:
+                return self._ready_packets.popleft()
+            if self._closing:
+                raise RuntimeError("AsyncOutSimUDPClient is closed")
+            if timeout == 0.0:
                 break
-            arrival, packet = peeked
-            if not allow_grace and len(self._buffer) == 1 and (now - arrival) < self._buffer_grace:
-                break
-            popped = self._buffer.pop_oldest()
-            if popped is None:
-                break
-            _, packet = popped
-            if (
-                self._last_emitted_time is not None
-                and packet.time <= self._last_emitted_time
-            ):
-                # Drop stale packets that somehow slipped through.
+            remaining: float | None
+            if timeout is None:
+                remaining = None
+            else:
+                elapsed = loop.time() - start
+                remaining = timeout - elapsed
+                if remaining <= 0:
+                    break
+            condition = self._condition
+            async with condition:
+                waiter = condition.wait()
+                try:
+                    if remaining is None:
+                        await waiter
+                    else:
+                        await asyncio.wait_for(waiter, remaining)
+                except asyncio.TimeoutError:
+                    break
                 continue
-            if self._jump_tolerance and self._last_emitted_time is not None:
-                delta = packet.time - self._last_emitted_time
-                if delta > self._jump_tolerance:
-                    self._loss_events += 1
-                    logger.warning(
-                        "OutSim time jump detected (possible packet loss).",
-                        extra={
-                            "event": "outsim.packet_gap",
-                            "delta": delta,
-                            "last_time": self._last_emitted_time,
-                            "current_time": packet.time,
-                            "port": self._address[1],
-                            "remote_host": self._remote_host,
-                        },
-                    )
-            if packet.time in self._reordered_times:
-                self._reordered_times.discard(packet.time)
-                self._late_reordered_packets += 1
-            self._delivered_packets += 1
-            self._last_emitted_time = packet.time
+        packet = self._processor.pop_ready_packet(time.monotonic(), allow_grace=True)
+        if packet is not None:
             return packet
+        self._timeouts += 1
+        logger.warning(
+            "OutSim recv retries exhausted without receiving a packet.",
+            extra={
+                "event": "outsim.recv_timeout",
+                "retries": 0,
+                "timeout": timeout,
+                "remote_host": self._remote_host,
+                "port": self._address[1],
+            },
+        )
         return None
 
-    def _record_packet(self, packet: OutSimPacket) -> None:
-        self._received_packets += 1
-        arrival = time.monotonic()
+    def drain_ready(self) -> list[OutSimPacket]:
+        packets: list[OutSimPacket] = []
+        while self._ready_packets:
+            packets.append(self._ready_packets.popleft())
+        if self._processor is not None:
+            packets.extend(self._processor.drain_ready(time.monotonic()))
+        return packets
 
-        if self._last_seen_time is not None and packet.time < self._last_seen_time:
-            self._out_of_order_packets += 1
-            self._reordered_times.add(packet.time)
-            logger.warning(
-                "OutSim out-of-order packet received.",
-                extra={
-                    "event": "outsim.out_of_order",
-                    "last_time": self._last_seen_time,
-                    "current_time": packet.time,
-                    "port": self._address[1],
-                    "remote_host": self._remote_host,
-                },
-            )
-        self._last_seen_time = (
-            packet.time
-            if self._last_seen_time is None
-            else max(self._last_seen_time, packet.time)
+    async def close(self) -> None:
+        if self._closing:
+            await self._closed_event.wait()
+            return
+        self._closing = True
+        transport = self._transport
+        if transport is not None:
+            transport.close()
+        else:
+            self._closed_event.set()
+        await self._closed_event.wait()
+        self._wake_waiters()
+
+    def _connection_made(self, transport: asyncio.BaseTransport) -> None:
+        datagram = transport  # type: ignore[assignment]
+        assert isinstance(datagram, asyncio.DatagramTransport)
+        self._transport = datagram
+        sockname = datagram.get_extra_info("sockname")
+        if isinstance(sockname, tuple) and len(sockname) >= 2:
+            host = sockname[0] if isinstance(sockname[0], str) else ""
+            port = int(sockname[1]) if isinstance(sockname[1], int) else 0
+            self._address = (host, port)
+        else:  # pragma: no cover - defensive
+            self._address = ("", self._requested_port)
+        self._processor = _OutSimPacketProcessor(
+            remote_host=self._remote_host,
+            port=self._address[1],
+            buffer_capacity=self._buffer_capacity,
+            buffer_grace=self._buffer_grace,
+            jump_tolerance=self._jump_tolerance,
         )
+        self._condition = asyncio.Condition()
+        self._closed_event = asyncio.Event()
 
-        if self._is_duplicate(packet.time):
-            self._duplicate_packets += 1
+    def _on_datagram(self, payload: bytes, source: tuple[str, int]) -> None:
+        if not payload:
+            return
+        if self._remote_addresses and source[0] not in self._remote_addresses:
+            self._ignored_hosts += 1
             logger.warning(
-                "OutSim duplicate packet dropped.",
+                "Ignoring OutSim datagram from unexpected host.",
                 extra={
-                    "event": "outsim.duplicate",
-                    "time": packet.time,
+                    "event": "outsim.ignored_host",
+                    "expected_hosts": sorted(self._remote_addresses),
+                    "source_host": source[0],
                     "port": self._address[1],
-                    "remote_host": self._remote_host,
                 },
             )
             return
+        processor = self._processor
+        if processor is None:
+            return
+        try:
+            packet = OutSimPacket.from_bytes(payload)
+        except Exception as exc:  # pragma: no cover - propagate decoding issues
+            self._pending_error = exc
+            self._wake_waiters()
+            return
+        processor.record_packet(packet, time.monotonic())
+        made_ready = False
+        while True:
+            ready = processor.pop_ready_packet(time.monotonic(), allow_grace=False)
+            if ready is None:
+                break
+            self._ready_packets.append(ready)
+            made_ready = True
+        if made_ready:
+            self._wake_waiters()
 
-        index, _ = self._buffer.insert(arrival, packet, packet.time)
-        current_length = len(self._buffer)
-        if (
-            current_length > 1
-            and index < (current_length - 1)
-            and packet.time not in self._reordered_times
-        ):
-            self._reordered_times.add(packet.time)
+    def _on_error(self, exc: Exception) -> None:
+        self._pending_error = exc
+        self._wake_waiters()
 
-    def _is_duplicate(self, timestamp: int) -> bool:
-        if self._last_emitted_time is not None and timestamp == self._last_emitted_time:
-            return True
-        return self._buffer.contains_key(timestamp)
+    def _connection_lost(self, _exc: Exception | None) -> None:
+        condition = self._condition
+        self._transport = None
+        self._processor = None
+        self._condition = None
+        self._ready_packets.clear()
+        self._closed_event.set()
+        self._wake_waiters(condition)
+
+    def _wake_waiters(self, condition: asyncio.Condition | None = None) -> None:
+        if self._notify_scheduled:
+            return
+        loop = self._loop
+        if loop is None:
+            return
+        if condition is None:
+            condition = self._condition
+        if condition is None:
+            return
+        self._notify_scheduled = True
+        loop.call_soon(self._schedule_notification, condition)
+
+    def _schedule_notification(self, condition: asyncio.Condition) -> None:
+        self._notify_scheduled = False
+        loop = self._loop
+        if loop is None:
+            return
+        loop.create_task(self._notify_condition(condition))
+
+    async def _notify_condition(self, condition: asyncio.Condition) -> None:
+        async with condition:
+            condition.notify_all()

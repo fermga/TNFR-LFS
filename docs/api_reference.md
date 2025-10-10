@@ -158,6 +158,38 @@ Inspect :attr:`OutSimUDPClient.statistics` or
 :attr:`OutGaugeUDPClient.statistics` to surface warnings when suspected loss
 events occur.
 
+An asynchronous workflow can drop the polling loop entirely by switching to
+:class:`tnfr_lfs.ingestion.outsim_udp.AsyncOutSimUDPClient` and
+:class:`tnfr_lfs.ingestion.outgauge_udp.AsyncOutGaugeUDPClient`.  Both classes
+share the same reordering buffer and statistics interface, allowing existing
+fusion code to run unchanged inside ``async`` tasks:
+
+```python
+import asyncio
+from collections import deque
+from tnfr_lfs.ingestion.live import TelemetryFusion
+from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient
+from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient
+
+
+async def stream_once(fusion: TelemetryFusion) -> None:
+    async with AsyncOutSimUDPClient(port=4123) as outsim, AsyncOutGaugeUDPClient(port=3000) as outgauge:
+        outsim_buffer = deque(outsim.drain_ready())
+        outgauge_buffer = deque(outgauge.drain_ready())
+
+        outsims, outgauges = await asyncio.gather(outsim.recv(), outgauge.recv())
+        if outsims:
+            outsim_buffer.append(outsims)
+        if outgauges:
+            outgauge_buffer.append(outgauges)
+
+        if outsim_buffer and outgauge_buffer:
+            fusion.fuse(outsim_buffer.popleft(), outgauge_buffer.popleft())
+
+
+asyncio.run(stream_once(TelemetryFusion()))
+```
+
 ## Core Analytics
 
 ### `tnfr_lfs.core` public surface
