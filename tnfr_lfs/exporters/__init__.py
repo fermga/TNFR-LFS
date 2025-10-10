@@ -847,14 +847,14 @@ def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str,
                 stats["count"] += 1.0
                 stats["duration"] += duration
                 stats["peak"] += abs(delta_metrics.get("peak", 0.0))
-                if operator_code == "SILENCIO":
+                if operator_code == "SILENCE":
                     quiet_total = stats.setdefault("quiet_duration", 0.0)
                     stats["quiet_duration"] = quiet_total + duration
                     density_total = stats.setdefault("density_total", 0.0)
                     stats["density_total"] = density_total + max(
                         0.0, _to_float(payload.get("structural_density_mean"), default=0.0)
                     )
-                    event_entry.setdefault("details", {})["latent_state"] = "SILENCIO"
+                    event_entry.setdefault("details", {})["latent_state"] = "SILENCE"
 
     events.sort(key=lambda entry: (entry["structural_start"], entry["start_time"]))
     for name, stats in summary.items():

@@ -57,6 +57,7 @@ from tnfr_lfs.core.operators import (
     tyre_balance_controller,
 )
 from tnfr_lfs.core.metrics import compute_window_metrics
+from tnfr_lfs.core.operator_detection import canonical_operator_label
 
 
 def _build_record(
@@ -1198,7 +1199,7 @@ def test_pairwise_coupling_operator_allows_unbalanced_lengths():
 def test_aggregate_operator_events_returns_latent_state_summary() -> None:
     microsector = _build_microsector(1, 0, 2, 4, apex_target=0.3)
     silence_payload = {
-        "name": "SILENCIO",
+        "name": canonical_operator_label("SILENCE"),
         "start_index": 0,
         "end_index": 4,
         "start_time": 0.0,
@@ -1208,14 +1209,15 @@ def test_aggregate_operator_events_returns_latent_state_summary() -> None:
         "structural_density_mean": 0.04,
         "slack": 0.6,
     }
-    enriched = replace(microsector, operator_events={"SILENCIO": (silence_payload,)})
+    enriched = replace(microsector, operator_events={"SILENCE": (silence_payload,)})
     aggregated = _aggregate_operator_events([enriched])
     events = aggregated.get("events", {})
-    assert "SILENCIO" in events
-    assert events["SILENCIO"][0]["microsector"] == enriched.index
+    assert "SILENCE" in events
+    assert events["SILENCE"][0]["name"] == canonical_operator_label("SILENCE")
+    assert events["SILENCE"][0]["microsector"] == enriched.index
     latent = aggregated.get("latent_states", {})
-    assert "SILENCIO" in latent
-    summary = latent["SILENCIO"][enriched.index]
+    assert "SILENCE" in latent
+    summary = latent["SILENCE"][enriched.index]
     assert pytest.approx(summary["coverage"], rel=1e-6) == 1.0
     assert pytest.approx(summary["duration"], rel=1e-6) == 4.0
 
