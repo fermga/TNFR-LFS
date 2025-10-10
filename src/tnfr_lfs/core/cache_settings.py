@@ -18,7 +18,7 @@ class CacheOptions:
 
     enable_delta_cache: bool = True
     nu_f_cache_size: int = DEFAULT_DYNAMIC_CACHE_SIZE
-    telemetry_cache_size: int = 1
+    telemetry_cache_size: int = DEFAULT_DYNAMIC_CACHE_SIZE
     recommender_cache_size: int = DEFAULT_RECOMMENDER_CACHE_SIZE
 
     @classmethod
