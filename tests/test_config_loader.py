@@ -208,6 +208,23 @@ def test_parse_cache_options_overrides() -> None:
     assert options.telemetry_cache_size == 0
 
 
+def test_parse_cache_options_supports_legacy_cache_section() -> None:
+    raw = {
+        "cache": {
+            "cache_enabled": "true",
+            "nu_f_cache_size": "64",
+            "telemetry": {"telemetry_cache_size": "12"},
+        }
+    }
+
+    options = parse_cache_options(raw)
+
+    assert options.enable_delta_cache is True
+    assert options.nu_f_cache_size == 64
+    assert options.recommender_cache_size == 64
+    assert options.telemetry_cache_size == 12
+
+
 def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
     from tnfr_lfs import _pack_resources
 

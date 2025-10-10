@@ -7,6 +7,7 @@ import sys
 import types
 from dataclasses import dataclass
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -16,6 +17,54 @@ from tnfr_lfs.core.cache_settings import CacheOptions
 from tnfr_lfs.cli import common as cli_common
 from tnfr_lfs.cli import io as cli_io
 from tnfr_lfs.cli.common import CliError
+
+
+def test_load_cli_config_promotes_legacy_cache(tmp_path: Path) -> None:
+    config_path = tmp_path / "tnfr_lfs.toml"
+    config_path.write_text(
+        dedent(
+            """
+            [cache]
+            cache_enabled = "yes"
+            nu_f_cache_size = "48"
+            """
+        ),
+        encoding="utf8",
+    )
+
+    config = cli_io.load_cli_config(config_path)
+
+    assert config["_config_path"] == str(config_path.resolve())
+    performance_cfg = config["performance"]
+    assert performance_cfg["cache_enabled"] is True
+    assert performance_cfg["max_cache_size"] == 48
+    assert performance_cfg["nu_f_cache_size"] == 48
+    assert performance_cfg["telemetry_cache_size"] == 48
+    assert performance_cfg["recommender_cache_size"] == 48
+
+
+def test_load_cli_config_normalises_performance_section(tmp_path: Path) -> None:
+    config_path = tmp_path / "tnfr_lfs.toml"
+    config_path.write_text(
+        dedent(
+            """
+            [performance]
+            cache_enabled = "no"
+            max_cache_size = "12"
+            telemetry_buffer_size = 42
+            """
+        ),
+        encoding="utf8",
+    )
+
+    config = cli_io.load_cli_config(config_path)
+
+    assert config["performance"]["cache_enabled"] is False
+    assert config["performance"]["max_cache_size"] == 0
+    assert config["performance"]["nu_f_cache_size"] == 0
+    assert config["performance"]["telemetry_cache_size"] == 0
+    assert config["performance"]["recommender_cache_size"] == 0
+    assert config["performance"]["telemetry_buffer_size"] == 42
 
 
 def test_load_records_from_namespace_prefers_replay(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
