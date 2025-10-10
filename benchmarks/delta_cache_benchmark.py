@@ -14,7 +14,7 @@ from tnfr_lfs._pack_resources import data_root
 from tnfr_lfs.core.cache import (
     clear_delta_cache,
     clear_dynamic_cache,
-    configure_cache,
+    configure_cache_from_options,
 )
 from tnfr_lfs.core.cache_settings import CacheOptions
 from tnfr_lfs.core.epi import (
@@ -52,9 +52,11 @@ class BenchmarkResult:
 
 
 def _configure_caches(enable: bool, *, nu_f_cache_size: int) -> None:
-    configure_cache(
-        enable_delta_cache=enable,
-        nu_f_cache_size=nu_f_cache_size if enable else 0,
+    configure_cache_from_options(
+        CacheOptions(
+            enable_delta_cache=enable,
+            nu_f_cache_size=nu_f_cache_size if enable else 0,
+        )
     )
     clear_delta_cache()
     clear_dynamic_cache()
