@@ -61,7 +61,20 @@ _MODULE_EXPORTS: Tuple[Tuple[str, Iterable[str]], ...] = (
         ),
     ),
     ("replay_bundle", ("RowToRecordCounter", "monkeypatch_row_to_record_counter")),
-    ("packets", ("build_outsim_packet", "build_outgauge_packet")),
+    (
+        "packets",
+        (
+            "build_extended_outsim_packet",
+            "build_extended_outsim_payload",
+            "build_outgauge_packet",
+            "build_outgauge_sample",
+            "build_outsim_packet",
+            "build_outsim_sample",
+            "build_sample_outgauge_packet",
+            "build_synthetic_packet_pair",
+            "simple_outsim_namespace",
+        ),
+    ),
     (
         "udp",
         (
@@ -144,7 +157,17 @@ if TYPE_CHECKING:
     )
     from .microsector import build_goal, build_microsector
     from .osd import DummyHUD, _populate_hud, _window_metrics_from_parallel_turn
-    from .packets import build_outgauge_packet, build_outsim_packet
+    from .packets import (
+        build_extended_outsim_packet,
+        build_extended_outsim_payload,
+        build_outgauge_packet,
+        build_outgauge_sample,
+        build_outsim_packet,
+        build_outsim_sample,
+        build_sample_outgauge_packet,
+        build_synthetic_packet_pair,
+        simple_outsim_namespace,
+    )
     from .packs import (
         MINIMAL_DATA_CAR,
         PackBuilder,

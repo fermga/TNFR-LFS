@@ -25,85 +25,26 @@ from tnfr_lfs.ingestion.live import (
     TelemetryFusion,
 )
 from tnfr_lfs.ingestion.outgauge_udp import FrozenOutGaugePacket, OutGaugePacket
-from tnfr_lfs.ingestion.outsim_udp import (
-    FrozenOutSimPacket,
-    FrozenOutSimWheelState,
-    OutSimPacket,
-)
+from tnfr_lfs.ingestion.outsim_udp import FrozenOutSimPacket, OutSimPacket
 from tests.helpers import (
     QueueUDPSocket,
     append_once_on_wait,
+    build_extended_outsim_packet,
+    build_extended_outsim_payload,
     build_outgauge_payload,
     build_outsim_payload,
+    build_sample_outgauge_packet,
+    build_synthetic_packet_pair,
     make_wait_stub,
 )
-
-
-def _build_extended_outsim_payload() -> bytes:
-    time_ms = 1234
-    base_floats = [
-        0.1,
-        0.2,
-        0.3,
-        0.45,
-        0.05,
-        -0.02,
-        0.5,
-        0.6,
-        -9.2,
-        15.0,
-        1.5,
-        0.0,
-        102.0,
-        205.0,
-        0.4,
-    ]
-    player_id = 7
-    driver_inputs = [0.72, 0.35, 0.1, 0.0, -0.15]
-    wheel_values = [
-        0.02,
-        0.05,
-        120.0,
-        180.0,
-        310.0,
-        0.06,
-        0.03,
-        0.04,
-        115.0,
-        175.0,
-        305.0,
-        0.058,
-        0.01,
-        0.03,
-        130.0,
-        165.0,
-        290.0,
-        0.052,
-        0.015,
-        0.025,
-        125.0,
-        160.0,
-        285.0,
-        0.05,
-    ]
-    return struct.pack(
-        "<I15fI5f24f",
-        time_ms,
-        *base_floats,
-        player_id,
-        *driver_inputs,
-        *wheel_values,
-    )
-
-
 @pytest.fixture
 def extended_outsim_payload() -> bytes:
-    return _build_extended_outsim_payload()
+    return build_extended_outsim_payload()
 
 
 @pytest.fixture
 def extended_outsim_packet(extended_outsim_payload: bytes) -> FrozenOutSimPacket:
-    return outsim_module.OutSimPacket.from_bytes(extended_outsim_payload, freeze=True)
+    return build_extended_outsim_packet()
 
 
 @pytest.fixture
@@ -118,97 +59,7 @@ def zero_deflection_outsim_packet(
 
 @pytest.fixture
 def sample_outgauge_packet() -> FrozenOutGaugePacket:
-    return FrozenOutGaugePacket(
-        time=0,
-        car="XFG",
-        player_name="Driver",
-        plate="",
-        track="BL1",
-        layout="",
-        flags=0,
-        gear=3,
-        plid=0,
-        speed=15.0,
-        rpm=5200.0,
-        turbo=0.0,
-        eng_temp=0.0,
-        fuel=40.0,
-        oil_pressure=0.0,
-        oil_temp=0.0,
-        dash_lights=0,
-        show_lights=0,
-        throttle=0.3,
-        brake=0.2,
-        clutch=0.1,
-        display1="",
-        display2="",
-        packet_id=0,
-    )
-
-
-def _synthetic_packet(index: int) -> tuple[FrozenOutSimPacket, FrozenOutGaugePacket]:
-    time_ms = index * 50
-    base_speed = 20.0 + 0.02 * index
-    wheels = tuple(
-        FrozenOutSimWheelState(
-            slip_ratio=0.01 + 0.0001 * index + offset,
-            slip_angle=0.02 + (offset * 5.0),
-            longitudinal_force=110.0 + index + offset * 10.0,
-            lateral_force=95.0 + index + offset * 8.0,
-            load=900.0 + index + offset * 50.0,
-            suspension_deflection=0.03 + offset,
-            decoded=True,
-        )
-        for offset in (0.0, 0.0005, -0.0004, 0.0003)
-    )
-    outsim = FrozenOutSimPacket(
-        time=time_ms,
-        ang_vel_x=0.01,
-        ang_vel_y=0.02,
-        ang_vel_z=0.03,
-        heading=0.1,
-        pitch=0.05,
-        roll=0.02,
-        accel_x=0.5,
-        accel_y=0.3,
-        accel_z=-9.0,
-        vel_x=base_speed,
-        vel_y=0.5,
-        vel_z=0.0,
-        pos_x=float(index) * 0.1,
-        pos_y=float(index) * 0.2,
-        pos_z=0.0,
-        player_id=1,
-        inputs=None,
-        wheels=wheels[:4],
-    )
-    outgauge = FrozenOutGaugePacket(
-        time=index,
-        car="XFG",
-        player_name="Driver",
-        plate="",
-        track="BL1",
-        layout="GP",
-        flags=0,
-        gear=3,
-        plid=0,
-        speed=base_speed,
-        rpm=4000.0 + index,
-        turbo=0.0,
-        eng_temp=80.0,
-        fuel=40.0,
-        oil_pressure=0.0,
-        oil_temp=90.0,
-        dash_lights=0,
-        show_lights=0,
-        throttle=0.4,
-        brake=0.2,
-        clutch=0.1,
-        display1="",
-        display2="",
-        packet_id=index,
-    )
-    return outsim, outgauge
+    return build_sample_outgauge_packet()
 
 
 def test_outsim_ingest_captures_per_wheel_slip_and_radius() -> None:
@@ -286,7 +137,7 @@ def test_fusion_incremental_scaling() -> None:
     start = time.perf_counter()
     midpoint: float | None = None
     for index in range(total_samples):
-        outsim, outgauge = _synthetic_packet(index)
+        outsim, outgauge = build_synthetic_packet_pair(index)
         bundle = fusion.fuse_to_bundle(outsim, outgauge)
         assert bundle is not None
         if index == half - 1:

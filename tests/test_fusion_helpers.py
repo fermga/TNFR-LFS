@@ -14,9 +14,7 @@ from tnfr_lfs.ingestion.live import (
     _WheelTelemetry,
 )
 
-
-def _simple_outsim(*wheels: OutSimWheelState) -> SimpleNamespace:
-    return SimpleNamespace(wheels=wheels)
+from tests.helpers import simple_outsim_namespace
 
 
 def test_preprocess_wheels_handles_partial_payload() -> None:
@@ -32,7 +30,7 @@ def test_preprocess_wheels_handles_partial_payload() -> None:
             decoded=True,
         ),
     )
-    data = fusion._preprocess_wheels(_simple_outsim(*wheels))
+    data = fusion._preprocess_wheels(simple_outsim_namespace(*wheels))
 
     assert len(data.wheels) == 4
     assert math.isclose(data.slip_ratios[0], 1.0)
@@ -52,7 +50,7 @@ def test_preprocess_wheels_propagates_nan_payloads() -> None:
         decoded=True,
     )
 
-    data = fusion._preprocess_wheels(_simple_outsim(wheel))
+    data = fusion._preprocess_wheels(simple_outsim_namespace(wheel))
 
     assert math.isnan(data.slip_ratios[0])
     assert math.isnan(data.slip_angles[0])
@@ -80,7 +78,7 @@ def test_preprocess_wheels_marks_missing_deflections() -> None:
         decoded=True,
     )
 
-    data = fusion._preprocess_wheels(_simple_outsim(wheel))
+    data = fusion._preprocess_wheels(simple_outsim_namespace(wheel))
 
     assert math.isfinite(data.slip_ratios[0])
     assert math.isnan(data.deflections[0])
@@ -95,7 +93,7 @@ def test_aggregate_wheel_slip_weights_by_load() -> None:
         OutSimWheelState(slip_ratio=-0.1, slip_angle=-0.2, load=100.0, decoded=True),
         OutSimWheelState(slip_ratio=0.0, slip_angle=0.0, load=100.0, decoded=True),
     )
-    data = fusion._preprocess_wheels(_simple_outsim(*wheels))
+    data = fusion._preprocess_wheels(simple_outsim_namespace(*wheels))
 
     ratio, angle = fusion._aggregate_wheel_slip(data)
 
@@ -111,7 +109,7 @@ def test_aggregate_wheel_slip_weights_by_load() -> None:
 def test_aggregate_wheel_slip_handles_missing_data() -> None:
     fusion = TelemetryFusion()
     data = fusion._preprocess_wheels(
-        _simple_outsim(*(OutSimWheelState() for _ in range(4)))
+        simple_outsim_namespace(*(OutSimWheelState() for _ in range(4)))
     )
 
     ratio, angle = fusion._aggregate_wheel_slip(data)
@@ -128,7 +126,7 @@ def test_calculate_suspension_with_wheel_data() -> None:
         OutSimWheelState(suspension_deflection=0.08, decoded=True),
         OutSimWheelState(suspension_deflection=0.10, decoded=True),
     )
-    data = fusion._preprocess_wheels(_simple_outsim(*wheels))
+    data = fusion._preprocess_wheels(simple_outsim_namespace(*wheels))
     previous = SimpleNamespace(
         suspension_travel_front=0.04, suspension_travel_rear=0.09
     )
@@ -301,7 +299,7 @@ def test_construct_record_populates_fields() -> None:
             decoded=True,
         ),
     ) * 4
-    wheel_data = fusion._preprocess_wheels(_simple_outsim(*wheels))
+    wheel_data = fusion._preprocess_wheels(simple_outsim_namespace(*wheels))
 
     record = fusion._construct_record(
         timestamp=1.23,

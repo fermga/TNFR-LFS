@@ -3,42 +3,10 @@ from dataclasses import replace
 
 import pytest
 
-from tnfr_lfs.ingestion.live import OutGaugePacket, OutSimPacket, TelemetryFusion
-
-from tests.helpers import build_outgauge_packet, build_outsim_packet
 from tnfr_lfs.core.epi import delta_nfr_by_node, resolve_nu_f_by_node
+from tnfr_lfs.ingestion.live import TelemetryFusion
 
-
-def _outsim_sample(timestamp: float, speed: float, slip: float, *, lateral: float = 6.0) -> OutSimPacket:
-    reference_speed = max(speed, 1.0)
-    vel_x = reference_speed * (1.0 + slip)
-    return build_outsim_packet(
-        time=int(timestamp * 1000),
-        ang_vel_z=0.12,
-        heading=0.01,
-        pitch=0.02,
-        roll=0.01,
-        accel_x=0.3,
-        accel_y=lateral,
-        vel_x=vel_x,
-        vel_y=reference_speed * 0.05,
-        player_id=1,
-    )
-
-
-def _outgauge_sample(car: str, track: str, speed: float, *, rpm: float = 5200.0) -> OutGaugePacket:
-    return build_outgauge_packet(
-        time=0,
-        car=car,
-        player_name="Test",
-        track=track,
-        gear=4,
-        speed=speed,
-        rpm=rpm,
-        fuel=50.0,
-        throttle=0.65,
-        brake=0.1,
-    )
+from tests.helpers import build_outgauge_sample, build_outsim_sample
 
 
 @pytest.mark.parametrize("slip_sequence", [[0.02, 0.06, 0.1]])
@@ -47,8 +15,8 @@ def test_fusion_calibration_mu_eff_trend_for_xfg(slip_sequence):
     records = []
     baseline = None
     for index, slip in enumerate(slip_sequence):
-        outsim = _outsim_sample(index * 0.1, 20.0, slip, lateral=5.0 + index)
-        outgauge = _outgauge_sample("XFG", "BL1", 20.0, rpm=5000.0 + index * 200.0)
+        outsim = build_outsim_sample(index * 0.1, 20.0, slip, lateral=5.0 + index)
+        outgauge = build_outgauge_sample("XFG", "BL1", 20.0, rpm=5000.0 + index * 200.0)
         record = fusion.fuse(outsim, outgauge)
         if baseline is None:
             baseline = record
@@ -70,8 +38,8 @@ def test_fusion_calibration_nu_f_converges_for_fxr():
     slip_values = [0.18, 0.1, 0.05, 0.01]
     nu_f_history = []
     for index, slip in enumerate(slip_values):
-        outsim = _outsim_sample(index * 0.2, 28.0, slip, lateral=6.5 - index * 0.8)
-        outgauge = _outgauge_sample("FXR", "ASO4", 28.0, rpm=6000.0 - index * 150.0)
+        outsim = build_outsim_sample(index * 0.2, 28.0, slip, lateral=6.5 - index * 0.8)
+        outgauge = build_outgauge_sample("FXR", "ASO4", 28.0, rpm=6000.0 - index * 150.0)
         record = fusion.fuse(outsim, outgauge)
         nu_map = resolve_nu_f_by_node(record).by_node
         nu_f_history.append(nu_map["tyres"])
