@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       core: ${{ steps.filter.outputs.core }}
+      core_pkg: ${{ steps.filter.outputs.core_pkg }}
       examples: ${{ steps.filter.outputs.examples }}
       analysis: ${{ steps.filter.outputs.analysis }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -53,6 +54,18 @@ jobs:
               - 'tnfr_lfs.toml'
               - 'src/tnfr_lfs/**'
               - 'typing_targets/**'
+            core_pkg:
+              - 'src/tnfr_lfs/core/**'
+              - 'tests/test_core_*.py'
+              - 'tests/test_coherence*.py'
+              - 'tests/test_contextual_delta.py'
+              - 'tests/test_metrics.py'
+              - 'tests/test_operator_detection.py'
+              - 'tests/test_phase_alias_deprecations.py'
+              - 'tests/test_resonance.py'
+              - 'tests/test_segmentation.py'
+              - 'tests/test_structural_time.py'
+              - 'tests/test_epi.py'
             analysis:
               - 'src/tnfr_lfs/analysis/**'
               - 'tests/test_analysis_*.py'
@@ -111,6 +124,7 @@ jobs:
         id: pytest-targets
         env:
           ON_MAIN: ${{ github.ref == 'refs/heads/main' }}
+          CHANGED_CORE: ${{ needs.detect-changes.outputs.core_pkg }}
           CHANGED_ANALYSIS: ${{ needs.detect-changes.outputs.analysis }}
           CHANGED_CLI: ${{ needs.detect-changes.outputs.cli }}
           CHANGED_EXPORTERS: ${{ needs.detect-changes.outputs.exporters }}
@@ -129,6 +143,7 @@ jobs:
 
           areas=()
           if [[ "$CHANGED_ANALYSIS" == "true" ]]; then areas+=("analysis"); fi
+          if [[ "$CHANGED_CORE" == "true" ]]; then areas+=("core"); fi
           if [[ "$CHANGED_CLI" == "true" ]]; then areas+=("cli"); fi
           if [[ "$CHANGED_EXPORTERS" == "true" ]]; then areas+=("exporters"); fi
           if [[ "$CHANGED_INGESTION" == "true" ]]; then areas+=("ingestion"); fi
@@ -149,6 +164,20 @@ jobs:
           case "${areas[0]}" in
             analysis)
               targets=("tests/test_analysis_*.py" "tests/analysis")
+              ;;
+            core)
+              targets=(
+                "tests/test_core_*.py"
+                "tests/test_coherence*.py"
+                "tests/test_contextual_delta.py"
+                "tests/test_metrics.py"
+                "tests/test_operator_detection.py"
+                "tests/test_phase_alias_deprecations.py"
+                "tests/test_resonance.py"
+                "tests/test_segmentation.py"
+                "tests/test_structural_time.py"
+                "tests/test_epi.py"
+              )
               ;;
             cli)
               targets=(
