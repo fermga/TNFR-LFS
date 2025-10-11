@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from textwrap import dedent
 
 import pytest
 
@@ -24,121 +23,12 @@ from tnfr_lfs.ingestion.config_loader import (
     _deep_merge,
 )
 from tnfr_lfs._pack_resources import data_root
+from tests.helpers import MINIMAL_DATA_CAR, create_config_pack, pack_builder
 
 
-@pytest.fixture()
-def config_pack(tmp_path: Path) -> Path:
-    pack_root = tmp_path / "pack"
-    cars_dir = pack_root / "cars"
-    profiles_dir = pack_root / "profiles"
-    cars_dir.mkdir(parents=True)
-    profiles_dir.mkdir()
-
-    cars_dir.joinpath("ABC.toml").write_text(
-        dedent(
-            """
-            abbrev = "ABC"
-            name = "Alpha"
-            license = "demo"
-            engine_layout = "front"
-            drive = "RWD"
-            weight_kg = 900
-            wheel_rotation_group_deg = 30
-            profile = "custom-profile"
-            lfs_class = "STD"
-            """
-        )
-    )
-
-    cars_dir.joinpath("DEF.toml").write_text(
-        dedent(
-            """
-            abbrev = "DEF"
-            name = "Delta"
-            license = "s3"
-            engine_layout = "mid"
-            drive = "AWD"
-            weight_kg = 1000
-            wheel_rotation_group_deg = 28
-            profile = "missing-profile"
-            lfs_class = "Unclassified"
-            """
-        )
-    )
-
-    cars_dir.joinpath("GHI.toml").write_text(
-        dedent(
-            """
-            abbrev = "GHI"
-            name = "Gamma"
-            license = "demo"
-            engine_layout = "rear"
-            drive = "RWD"
-            weight_kg = 950
-            wheel_rotation_group_deg = 32
-            profile = "fallback"
-            lfs_class = "GT"
-            """
-        )
-    )
-
-    profiles_dir.joinpath("custom.toml").write_text(
-        dedent(
-            """
-            [meta]
-            id = "custom-profile"
-            category = "road"
-
-            [targets.balance]
-            delta_nfr = 0.1
-
-            [policy.steering]
-            aggressiveness = 0.5
-
-            [recommender.steering]
-            kp = 1.0
-            """
-        )
-    )
-
-    profiles_dir.joinpath("fallback.toml").write_text(
-        dedent(
-            """
-            [meta]
-            category = "race"
-
-            [targets.balance]
-            delta_nfr = 0.2
-
-            [policy.steering]
-            aggressiveness = 0.6
-
-            [recommender.steering]
-            kp = 1.2
-            """
-        )
-    )
-
-    pack_root.joinpath("lfs_class_overrides.toml").write_text(
-        dedent(
-            """
-            ["STD".overrides.targets.balance]
-            delta_nfr = 0.3
-
-            ["STD".overrides.policy.steering]
-            aggressiveness = 0.75
-
-            ["STD".overrides.recommender.steering]
-            kp = 2.5
-            """
-        )
-    )
-
-    return pack_root
-
-
-def test_load_cars_indexed_by_abbrev(config_pack: Path) -> None:
-    cars = load_cars(config_pack / "cars")
+def test_load_cars_indexed_by_abbrev(tmp_path: Path) -> None:
+    pack_root = create_config_pack(tmp_path / "pack")
+    cars = load_cars(pack_root / "cars")
 
     assert set(cars) == {"ABC", "DEF", "GHI"}
     assert isinstance(cars["ABC"], Car)
@@ -147,24 +37,27 @@ def test_load_cars_indexed_by_abbrev(config_pack: Path) -> None:
     assert cars["GHI"].lfs_class == "GT"
 
 
-def test_load_profiles_prefers_meta_id(config_pack: Path) -> None:
-    profiles = load_profiles(config_pack / "profiles")
+def test_load_profiles_prefers_meta_id(tmp_path: Path) -> None:
+    pack_root = create_config_pack(tmp_path / "pack")
+    profiles = load_profiles(pack_root / "profiles")
 
     assert "custom-profile" in profiles
     assert "fallback" in profiles
 
 
-def test_resolve_targets_missing_profile(config_pack: Path) -> None:
-    cars = load_cars(config_pack / "cars")
-    profiles = load_profiles(config_pack / "profiles")
+def test_resolve_targets_missing_profile(tmp_path: Path) -> None:
+    pack_root = create_config_pack(tmp_path / "pack")
+    cars = load_cars(pack_root / "cars")
+    profiles = load_profiles(pack_root / "profiles")
 
     with pytest.raises(KeyError):
         resolve_targets("DEF", cars, profiles)
 
 
-def test_resolve_targets_returns_expected_sections(config_pack: Path) -> None:
-    cars = load_cars(config_pack / "cars")
-    profiles = load_profiles(config_pack / "profiles")
+def test_resolve_targets_returns_expected_sections(tmp_path: Path) -> None:
+    pack_root = create_config_pack(tmp_path / "pack")
+    cars = load_cars(pack_root / "cars")
+    profiles = load_profiles(pack_root / "profiles")
 
     resolved = resolve_targets("ABC", cars, profiles)
 
@@ -172,10 +65,11 @@ def test_resolve_targets_returns_expected_sections(config_pack: Path) -> None:
     assert resolved["meta"]["category"] == "road"
 
 
-def test_resolve_targets_applies_class_overrides(config_pack: Path) -> None:
-    cars = load_cars(config_pack / "cars")
-    profiles = load_profiles(config_pack / "profiles")
-    overrides = load_lfs_class_overrides(config_pack / "lfs_class_overrides.toml")
+def test_resolve_targets_applies_class_overrides(tmp_path: Path) -> None:
+    pack_root = create_config_pack(tmp_path / "pack")
+    cars = load_cars(pack_root / "cars")
+    profiles = load_profiles(pack_root / "profiles")
+    overrides = load_lfs_class_overrides(pack_root / "lfs_class_overrides.toml")
 
     resolved = resolve_targets("ABC", cars, profiles, overrides=overrides)
 
@@ -184,8 +78,9 @@ def test_resolve_targets_applies_class_overrides(config_pack: Path) -> None:
     assert resolved["recommender"]["steering"]["kp"] == pytest.approx(2.5)
 
 
-def test_example_pipeline_accepts_custom_data_root(config_pack: Path) -> None:
-    resolved = example_pipeline("ABC", data_root=config_pack)
+def test_example_pipeline_accepts_custom_data_root(tmp_path: Path) -> None:
+    pack_root = create_config_pack(tmp_path / "pack")
+    resolved = example_pipeline("ABC", data_root=pack_root)
 
     assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
 
@@ -228,12 +123,11 @@ def test_parse_cache_options_supports_legacy_cache_section() -> None:
 def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
     from tnfr_lfs import _pack_resources
 
-    pack_root = tmp_path / "pack"
-    (pack_root / "config").mkdir(parents=True)
-    (pack_root / "data").mkdir()
-    pack_root.joinpath("config", "global.toml").write_text("", encoding="utf8")
+    builder = pack_builder(tmp_path / "pack")
+    builder.add_config("")
+    builder.ensure_dir("data")
 
-    _pack_resources.set_pack_root_override(pack_root)
+    _pack_resources.set_pack_root_override(builder.root)
     config_loader_module = importlib.import_module("tnfr_lfs.ingestion.config_loader")
     try:
         config_loader = importlib.reload(config_loader_module)
@@ -250,25 +144,10 @@ def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
 def test_load_cars_uses_packaged_resources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from tnfr_lfs import _pack_resources
 
-    pack_root = tmp_path / "pack"
-    cars_dir = pack_root / "data" / "cars"
-    cars_dir.mkdir(parents=True)
-    cars_dir.joinpath("AAA.toml").write_text(
-        dedent(
-            """
-            abbrev = "AAA"
-            name = "Alpha"
-            license = "demo"
-            engine_layout = "front"
-            drive = "RWD"
-            weight_kg = 900
-            wheel_rotation_group_deg = 30
-            profile = "default"
-            """
-        )
-    )
+    builder = pack_builder(tmp_path / "pack")
+    builder.add_car("AAA", MINIMAL_DATA_CAR, in_data=True)
 
-    _pack_resources.set_pack_root_override(pack_root)
+    _pack_resources.set_pack_root_override(builder.root)
     config_loader_module = importlib.import_module("tnfr_lfs.ingestion.config_loader")
     config_loader = importlib.reload(config_loader_module)
 
