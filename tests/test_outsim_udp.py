@@ -12,7 +12,9 @@ from tnfr_lfs.ingestion import outsim_udp as outsim_module
 from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
 from tests.helpers import (
     QueueUDPSocket,
+    append_once_on_wait,
     build_outsim_payload,
+    extend_queue_on_wait,
     make_select_stub,
     make_wait_stub,
     raise_gaierror,
@@ -68,11 +70,14 @@ def test_outsim_recv_drains_batch_after_wait(monkeypatch) -> None:
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
 
-    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
-        if not fake_socket.queue:
-            fake_socket.extend(build_outsim_payload(time_value) for time_value in (100, 120, 140))
-
-    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
+    fake_wait, wait_calls = make_wait_stub(
+        hook=extend_queue_on_wait(
+            fake_socket.queue,
+            lambda: [
+                build_outsim_payload(time_value) for time_value in (100, 120, 140)
+            ],
+        )
+    )
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
 
     try:
@@ -101,15 +106,12 @@ def test_outsim_pending_packet_flushes_when_successor_arrives(monkeypatch) -> No
 
     fake_socket.queue.append(build_outsim_payload(120))
     wait_calls: list[float] = []
-    appended = False
-
-    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
-        nonlocal appended
-        if not appended:
-            fake_socket.queue.append(build_outsim_payload(140))
-            appended = True
-
-    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
+    fake_wait, wait_calls = make_wait_stub(
+        hook=append_once_on_wait(
+            fake_socket.queue,
+            lambda: build_outsim_payload(140),
+        )
+    )
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
 
     start = time.perf_counter()

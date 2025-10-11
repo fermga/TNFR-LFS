@@ -54,9 +54,11 @@ from .telemetry import (
     build_telemetry_record,
 )
 from .udp import (
+    append_once_on_wait,
     QueueUDPSocket,
     build_outgauge_payload,
     build_outsim_payload,
+    extend_queue_on_wait,
     make_select_stub,
     make_wait_stub,
     pad_outgauge_field,
@@ -102,9 +104,11 @@ __all__ = [
     "build_outsim_packet",
     "build_outgauge_packet",
     "QueueUDPSocket",
+    "append_once_on_wait",
     "pad_outgauge_field",
     "build_outgauge_payload",
     "build_outsim_payload",
+    "extend_queue_on_wait",
     "make_select_stub",
     "make_wait_stub",
     "raise_gaierror",

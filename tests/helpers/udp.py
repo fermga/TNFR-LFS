@@ -116,6 +116,38 @@ def make_wait_stub(
     return fake_wait, timeouts
 
 
+def extend_queue_on_wait(
+    queue: Deque[UDPPayload],
+    iterable_factory: Callable[[], Iterable[UDPPayload]],
+) -> WaitHook:
+    """Return a wait hook that extends ``queue`` when it is empty."""
+
+    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
+        if not queue:
+            queue.extend(iterable_factory())
+        return None
+
+    return on_wait
+
+
+def append_once_on_wait(
+    queue: Deque[UDPPayload],
+    payload_factory: Callable[[], UDPPayload],
+) -> WaitHook:
+    """Return a wait hook that appends a payload to ``queue`` at most once."""
+
+    appended = False
+
+    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
+        nonlocal appended
+        if not appended:
+            queue.append(payload_factory())
+            appended = True
+        return None
+
+    return on_wait
+
+
 def pad_outgauge_field(value: str, size: int, *, encoding: str = "latin-1") -> bytes:
     """Pad an OutGauge string field to the expected byte length."""
 

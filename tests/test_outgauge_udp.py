@@ -14,7 +14,9 @@ from tnfr_lfs.ingestion.live import OutGaugePacket
 from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
 from tests.helpers import (
     QueueUDPSocket,
+    append_once_on_wait,
     build_outgauge_payload,
+    extend_queue_on_wait,
     make_select_stub,
     make_wait_stub,
     pad_outgauge_field,
@@ -124,14 +126,15 @@ def test_outgauge_recv_drains_batch_after_wait(monkeypatch) -> None:
     monkeypatch.setattr(client, "_socket", fake_socket)
     original_socket.close()
 
-    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
-        if not fake_socket.queue:
-            fake_socket.extend(
+    fake_wait, wait_calls = make_wait_stub(
+        hook=extend_queue_on_wait(
+            fake_socket.queue,
+            lambda: [
                 build_outgauge_payload(packet_id, time_value, layout="LYT")
                 for packet_id, time_value in ((5, 50), (6, 60), (7, 70))
-            )
-
-    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
+            ],
+        )
+    )
     monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
 
     try:
@@ -162,15 +165,12 @@ def test_outgauge_pending_packet_flushes_when_successor_arrives(monkeypatch) -> 
     packet.release()
 
     fake_socket.queue.append(build_outgauge_payload(6, 60, layout="LYT"))
-    appended = False
-
-    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
-        nonlocal appended
-        if not appended:
-            fake_socket.queue.append(build_outgauge_payload(7, 70, layout="LYT"))
-            appended = True
-
-    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
+    fake_wait, wait_calls = make_wait_stub(
+        hook=append_once_on_wait(
+            fake_socket.queue,
+            lambda: build_outgauge_payload(7, 70, layout="LYT"),
+        )
+    )
     monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
 
     start = time.perf_counter()
