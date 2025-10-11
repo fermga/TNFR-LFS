@@ -158,81 +158,85 @@ jobs:
           if [[ "$CHANGED_RECOMMENDER" == "true" ]]; then areas+=("recommender"); fi
           if [[ "$CHANGED_PLUGINS" == "true" ]]; then areas+=("plugins"); fi
 
-          if (( ${#areas[@]} != 1 )); then
+          if (( ${#areas[@]} == 0 )); then
             echo "args=" >> "$GITHUB_OUTPUT"
-            if (( ${#areas[@]} == 0 )); then
-              echo "summary=no targeted area detected -> run full suite" >> "$GITHUB_OUTPUT"
-            else
-              echo "summary=multiple areas (${areas[*]}) -> run full suite" >> "$GITHUB_OUTPUT"
-            fi
+            echo "summary=no targeted area detected -> run full suite" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          case "${areas[0]}" in
-            analysis)
-              targets=("tests/test_analysis_*.py" "tests/analysis")
-              ;;
-            core)
-              targets=(
-                "tests/test_core_*.py"
-                "tests/test_coherence*.py"
-                "tests/test_contextual_delta.py"
-                "tests/test_metrics.py"
-                "tests/test_operator_detection.py"
-                "tests/test_phase_alias_deprecations.py"
-                "tests/test_resonance.py"
-                "tests/test_segmentation.py"
-                "tests/test_structural_time.py"
-                "tests/test_epi.py"
-              )
-              ;;
-            cli)
-              targets=(
-                "tests/test_cli.py"
-                "tests/test_cli_*.py"
-                "tests/test_cli_parser.py"
-              )
-              ;;
-            exporters)
-              targets=(
-                "tests/test_*exporter*.py"
-                "tests/test_replay_csv_bundle.py"
-              )
-              ;;
-            ingestion)
-              targets=("tests/test_ingestion.py" "tests/ingestion")
-              ;;
-            io)
-              targets=("tests/test_io_*.py" "tests/test_cli_io.py")
-              ;;
-            processing)
-              targets=("tests/test_processing.py")
-              ;;
-            recommender)
-              targets=(
-                "tests/test_recommender*.py"
-                "tests/test_recommender_search_cache.py"
-              )
-              ;;
-            plugins)
-              targets=(
-                "tests/plugins"
-                "tests/test_cli_osd.py"
-              )
-              ;;
-            *)
-              targets=()
-              ;;
-          esac
+          targets=()
+
+          for area in "${areas[@]}"; do
+            area_targets=()
+            case "$area" in
+              analysis)
+                area_targets=("tests/test_analysis_*.py" "tests/analysis")
+                ;;
+              core)
+                area_targets=(
+                  "tests/test_core_*.py"
+                  "tests/test_coherence*.py"
+                  "tests/test_contextual_delta.py"
+                  "tests/test_metrics.py"
+                  "tests/test_operator_detection.py"
+                  "tests/test_phase_alias_deprecations.py"
+                  "tests/test_resonance.py"
+                  "tests/test_segmentation.py"
+                  "tests/test_structural_time.py"
+                  "tests/test_epi.py"
+                )
+                ;;
+              cli)
+                area_targets=(
+                  "tests/test_cli.py"
+                  "tests/test_cli_*.py"
+                  "tests/test_cli_parser.py"
+                )
+                ;;
+              exporters)
+                area_targets=(
+                  "tests/test_*exporter*.py"
+                  "tests/test_replay_csv_bundle.py"
+                )
+                ;;
+              ingestion)
+                area_targets=("tests/test_ingestion.py" "tests/ingestion")
+                ;;
+              io)
+                area_targets=("tests/test_io_*.py" "tests/test_cli_io.py")
+                ;;
+              processing)
+                area_targets=("tests/test_processing.py")
+                ;;
+              recommender)
+                area_targets=(
+                  "tests/test_recommender*.py"
+                  "tests/test_recommender_search_cache.py"
+                )
+                ;;
+              plugins)
+                area_targets=(
+                  "tests/plugins"
+                  "tests/test_cli_osd.py"
+                )
+                ;;
+              *)
+                ;;
+            esac
+
+            if (( ${#area_targets[@]} > 0 )); then
+              targets+=("${area_targets[@]}")
+            fi
+          done
 
           if (( ${#targets[@]} == 0 )); then
             echo "args=" >> "$GITHUB_OUTPUT"
-            echo "summary=${areas[0]} has no explicit target -> run full suite" >> "$GITHUB_OUTPUT"
+            echo "summary=areas (${areas[*]}) have no explicit targets -> run full suite" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "args=${targets[*]}" >> "$GITHUB_OUTPUT"
-          echo "summary=targeted run for ${areas[0]} -> ${targets[*]}" >> "$GITHUB_OUTPUT"
+          echo "summary=targeted run for areas (${areas[*]}) -> ${targets[*]}" >> "$GITHUB_OUTPUT"
 
       - name: Pytest
         env:
