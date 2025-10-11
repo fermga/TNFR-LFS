@@ -22,8 +22,6 @@ from collections.abc import Mapping
 from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.core.operator_detection import canonical_operator_label
 from tnfr_lfs.ingestion.offline import AeroProfile, ProfileManager
-from tnfr_lfs.core.metrics import compute_window_metrics
-from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
 from tnfr_lfs.recommender.rules import (
     AeroCoherenceRule,
     FrontWingBalanceRule,
@@ -52,55 +50,10 @@ from tests.helpers import (
     build_microsector,
     build_epi_bundle,
     build_epi_nodes,
+    build_parallel_window_metrics,
     build_steering_bundle,
     build_steering_record,
 )
-def _parallel_window_metrics(
-    slip_angles: Sequence[tuple[float, float]],
-    *,
-    yaw_sign: float,
-    yaw_rates: Sequence[float] | None = None,
-    steer_series: Sequence[float] | None = None,
-):
-    records: list[TelemetryRecord] = []
-    for index, (inner, outer) in enumerate(slip_angles):
-        timestamp = float(index) * 0.4
-        yaw_rate = (
-            float(yaw_rates[index])
-            if yaw_rates is not None and index < len(yaw_rates)
-            else yaw_sign * (0.5 + 0.05 * index)
-        )
-        steer = (
-            float(steer_series[index])
-            if steer_series is not None and index < len(steer_series)
-            else yaw_sign * (0.2 + 0.04 * index)
-        )
-        if yaw_sign >= 0.0:
-            slip_fl, slip_fr = inner, outer
-        else:
-            slip_fl, slip_fr = outer, inner
-        records.append(
-            build_steering_record(
-                timestamp,
-                yaw_rate=yaw_rate,
-                steer=steer,
-                slip_angle_fl=slip_fl,
-                slip_angle_fr=slip_fr,
-                nfr=100.0 + index,
-            )
-        )
-    baseline = DeltaCalculator.derive_baseline(records)
-    ackermann_values = [
-        _ackermann_parallel_delta(record, baseline) for record in records
-    ]
-    bundles = [
-        build_steering_bundle(record, ackermann)
-        for record, ackermann in zip(records, ackermann_values)
-    ]
-    metrics = compute_window_metrics(records, bundles=bundles)
-    return metrics
-
-
 def _brake_headroom_microsector(
     index: int,
     headroom: float,
@@ -565,7 +518,7 @@ def test_tyre_balance_rule_skips_when_cphi_healthy(car_track_thresholds) -> None
 
 def test_parallel_steer_rule_recommends_parallel_adjustment_on_negative_delta() -> None:
     rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.2)
-    metrics = _parallel_window_metrics(
+    metrics = build_parallel_window_metrics(
         [(0.04, 0.015), (0.034, 0.018), (0.03, 0.02)],
         yaw_sign=1.0,
     )
@@ -590,7 +543,7 @@ def test_parallel_steer_rule_recommends_parallel_adjustment_on_negative_delta() 
 
 def test_parallel_steer_rule_recommends_reducing_parallel_on_positive_delta() -> None:
     rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.15)
-    metrics = _parallel_window_metrics(
+    metrics = build_parallel_window_metrics(
         [(0.082, 0.012), (0.078, 0.015), (0.074, 0.018)],
         yaw_sign=1.0,
     )
@@ -614,7 +567,7 @@ def test_parallel_steer_rule_recommends_reducing_parallel_on_positive_delta() ->
 
 def test_parallel_steer_rule_recommends_lock_when_budget_limited() -> None:
     rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.1, lock_step=0.75)
-    metrics = _parallel_window_metrics(
+    metrics = build_parallel_window_metrics(
         [(0.02, 0.019), (0.022, 0.0215), (0.18, 0.01)],
         yaw_sign=1.0,
         yaw_rates=[0.0, 1.5, -1.5],

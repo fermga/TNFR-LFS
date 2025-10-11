@@ -22,16 +22,11 @@ from tnfr_lfs.core.metrics import (
     LockingWindowScore,
     SlideCatchBudget,
     WindowMetrics,
-    compute_window_metrics,
 )
 from tnfr_lfs.core.operator_detection import canonical_operator_label
 from tnfr_lfs.recommender.rules import RuleProfileObjectives
-from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
-from tests.helpers import (
-    build_minimal_setup_plan,
-    build_steering_bundle,
-    build_steering_record,
-)
+from tnfr_lfs.core.epi import TelemetryRecord
+from tests.helpers import build_minimal_setup_plan, build_parallel_window_metrics
 
 
 def _populate_hud(records) -> TelemetryHUD:
@@ -72,34 +67,25 @@ class DummyHUD:
 def _window_metrics_from_parallel_turn(
     slip_angles: tuple[tuple[float, float], ...]
 ) -> WindowMetrics:
-    records = [
-        build_steering_record(
-            float(index) * 0.5,
-            yaw_rate=0.52 + 0.04 * index,
-            steer=0.2 + 0.05 * index,
-            slip_angle_fl=fl,
-            slip_angle_fr=fr,
-            nfr=105.0 + index,
-            si=0.78,
-            speed=50.0,
-            throttle=0.45,
-            vertical_load=4800.0,
-            vertical_load_front=2400.0,
-            vertical_load_rear=2400.0,
-            mu_eff_front_longitudinal=0.96,
-            mu_eff_rear_longitudinal=0.94,
-        )
-        for index, (fl, fr) in enumerate(slip_angles)
-    ]
-    baseline = DeltaCalculator.derive_baseline(records)
-    ackermann_values = [
-        _ackermann_parallel_delta(record, baseline) for record in records
-    ]
-    bundles = [
-        build_steering_bundle(record, value)
-        for record, value in zip(records, ackermann_values)
-    ]
-    return compute_window_metrics(records, bundles=bundles)
+    base_overrides = {
+        "si": 0.78,
+        "speed": 50.0,
+        "throttle": 0.45,
+        "vertical_load": 4800.0,
+        "vertical_load_front": 2400.0,
+        "vertical_load_rear": 2400.0,
+        "mu_eff_front_longitudinal": 0.96,
+        "mu_eff_rear_longitudinal": 0.94,
+    }
+    record_overrides = [{**base_overrides} for _ in slip_angles]
+    return build_parallel_window_metrics(
+        slip_angles,
+        yaw_rates=[0.52 + 0.04 * index for index in range(len(slip_angles))],
+        steer_series=[0.2 + 0.05 * index for index in range(len(slip_angles))],
+        nfr_series=[105.0 + index for index in range(len(slip_angles))],
+        timestamp_step=0.5,
+        record_overrides=record_overrides,
+    )
 
     def pages(self) -> Tuple[str, str, str, str]:
         return self._pages

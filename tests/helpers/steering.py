@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
-from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -16,6 +17,7 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
+from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
 
 
 def build_steering_record(
@@ -141,3 +143,87 @@ def build_steering_bundle(
     if overrides:
         bundle = replace(bundle, **overrides)
     return bundle
+
+
+def _resolve_overrides(
+    overrides: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None,
+    index: int,
+) -> Mapping[str, Any]:
+    if overrides is None:
+        return {}
+    if isinstance(overrides, Mapping):
+        return overrides
+    if index < len(overrides):
+        return overrides[index]
+    return {}
+
+
+def build_parallel_window_metrics(
+    slip_angles: Sequence[tuple[float, float]],
+    *,
+    yaw_sign: float = 1.0,
+    yaw_rates: Sequence[float] | None = None,
+    steer_series: Sequence[float] | None = None,
+    nfr_series: Sequence[float] | None = None,
+    timestamp_start: float = 0.0,
+    timestamp_step: float = 0.4,
+    record_overrides: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = None,
+    bundle_overrides: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = None,
+    return_components: bool = False,
+) -> WindowMetrics | tuple[
+    WindowMetrics,
+    list[TelemetryRecord],
+    list[EPIBundle],
+    list[float],
+    TelemetryRecord,
+]:
+    """Build :class:`WindowMetrics` for a parallel-turn slip-angle series."""
+
+    records: list[TelemetryRecord] = []
+    for index, (inner_slip, outer_slip) in enumerate(slip_angles):
+        timestamp = timestamp_start + float(index) * timestamp_step
+        yaw_rate = (
+            float(yaw_rates[index])
+            if yaw_rates is not None and index < len(yaw_rates)
+            else yaw_sign * (0.5 + 0.05 * index)
+        )
+        steer = (
+            float(steer_series[index])
+            if steer_series is not None and index < len(steer_series)
+            else yaw_sign * (0.2 + 0.04 * index)
+        )
+        if yaw_sign >= 0.0:
+            slip_fl, slip_fr = inner_slip, outer_slip
+        else:
+            slip_fl, slip_fr = outer_slip, inner_slip
+        nfr = (
+            float(nfr_series[index])
+            if nfr_series is not None and index < len(nfr_series)
+            else 100.0 + index
+        )
+        overrides = _resolve_overrides(record_overrides, index)
+        record = build_steering_record(
+            timestamp,
+            yaw_rate=yaw_rate,
+            steer=steer,
+            slip_angle_fl=slip_fl,
+            slip_angle_fr=slip_fr,
+            nfr=nfr,
+            **overrides,
+        )
+        records.append(record)
+
+    baseline = DeltaCalculator.derive_baseline(records)
+    ackermann_values = [
+        _ackermann_parallel_delta(record, baseline) for record in records
+    ]
+    bundles: list[EPIBundle] = []
+    for index, (record, ackermann) in enumerate(zip(records, ackermann_values)):
+        overrides = _resolve_overrides(bundle_overrides, index)
+        bundles.append(build_steering_bundle(record, ackermann, **overrides))
+
+    metrics = compute_window_metrics(records, bundles=bundles)
+
+    if return_components:
+        return metrics, records, bundles, ackermann_values, baseline
+    return metrics

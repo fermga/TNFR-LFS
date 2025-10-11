@@ -8,7 +8,11 @@ from .packets import build_outgauge_packet, build_outsim_packet
 from .plugins import plugin_registry_state
 from .profile_manager import preloaded_profile_manager
 from .setup import build_minimal_setup_plan, build_native_export_plan, build_setup_plan
-from .steering import build_steering_bundle, build_steering_record
+from .steering import (
+    build_parallel_window_metrics,
+    build_steering_bundle,
+    build_steering_record,
+)
 from .telemetry import (
     build_calibration_record,
     build_contextual_delta_record,
@@ -28,6 +32,7 @@ from .udp import (
 
 __all__ = [
     "preloaded_profile_manager",
+    "build_parallel_window_metrics",
     "build_steering_bundle",
     "build_steering_record",
     "build_calibration_record",
