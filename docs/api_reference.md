@@ -227,6 +227,133 @@ import *`` only surfaces the documented symbols:
 * `tnfr_lfs.core.delta_utils` intentionally keeps ``__all__`` empty because the
   helper is not part of the public surface.【F:tnfr_lfs/core/delta_utils.py†L8-L8】
 
+### `tnfr_lfs.core.epi`
+
+Natural frequency helpers complement the ΔNFR/EPI extractors by exposing
+baseline utilities and ν_f tracking over sliding telemetry windows.
+
+* :class:`tnfr_lfs.core.epi.NaturalFrequencySettings` centralises window bounds,
+  bandpass filters, smoothing parameters and per-car categories, exposing
+  ``resolve_*`` helpers to derive vehicle and band defaults for each
+  sample.【F:src/tnfr_lfs/core/epi.py†L71-L115】
+* :class:`tnfr_lfs.core.epi.NaturalFrequencyAnalyzer` keeps a deque of
+  :class:`~tnfr_lfs.core.epi.TelemetryRecord` samples, applies smoothing,
+  honours cache settings and emits :class:`~tnfr_lfs.core.epi.NaturalFrequencySnapshot`
+  instances whenever ν_f multipliers are updated.【F:src/tnfr_lfs/core/epi.py†L140-L220】
+* :class:`tnfr_lfs.core.epi.NaturalFrequencySnapshot` captures the per-node ν_f
+  map, dominant frequency, categorical labels and a ``frequency_label`` helper
+  tailored for UI overlays.【F:src/tnfr_lfs/core/epi.py†L118-L137】
+* :class:`tnfr_lfs.core.epi.DeltaCalculator` derives average baselines from
+  telemetry windows, resolves calibration-aware baselines and assembles
+  :class:`~tnfr_lfs.core.epi_models.EPIBundle` records against arbitrary ν_f
+  inputs.【F:src/tnfr_lfs/core/epi.py†L1369-L1467】
+* :func:`tnfr_lfs.core.epi.apply_plugin_nu_f_snapshot` forwards analyser output
+  into any :class:`tnfr_lfs.plugins.TNFRPlugin`, keeping ν_f and coherence state
+  synchronised with one call.【F:src/tnfr_lfs/core/epi.py†L961-L986】
+* :func:`tnfr_lfs.core.epi.resolve_plugin_nu_f` wraps snapshot resolution plus
+  plugin synchronisation when a sliding window is available, returning the same
+  snapshot for further inspection.【F:src/tnfr_lfs/core/epi.py†L986-L1010】
+
+#### Example: deriving ΔNFR baselines and synchronising ν_f plugins
+
+```python
+from tnfr_lfs.core.epi import (
+    DeltaCalculator,
+    NaturalFrequencyAnalyzer,
+    NaturalFrequencySettings,
+    TelemetryRecord,
+    apply_plugin_nu_f_snapshot,
+    resolve_plugin_nu_f,
+)
+from tnfr_lfs.plugins import TNFRPlugin
+
+
+class DemoPlugin(TNFRPlugin):
+    def on_nu_f_updated(self, snapshot):
+        print(
+            f"{snapshot.frequency_label} | ν_f tyres={snapshot.by_node['tyres']:.3f} Hz"
+        )
+
+
+base_sample = {
+    "timestamp": 0.0,
+    "vertical_load": 3950.0,
+    "slip_ratio": 0.018,
+    "lateral_accel": 14.8,
+    "longitudinal_accel": -1.05,
+    "yaw": 0.012,
+    "pitch": 0.002,
+    "roll": -0.007,
+    "brake_pressure": 0.08,
+    "locking": 0.015,
+    "nfr": 0.66,
+    "si": 0.76,
+    "speed": 59.2,
+    "yaw_rate": 0.13,
+    "slip_angle": 0.03,
+    "steer": 0.082,
+    "throttle": 0.64,
+    "gear": 3,
+    "vertical_load_front": 2120.0,
+    "vertical_load_rear": 1830.0,
+    "mu_eff_front": 2.24,
+    "mu_eff_rear": 2.12,
+    "mu_eff_front_lateral": 1.94,
+    "mu_eff_front_longitudinal": 1.63,
+    "mu_eff_rear_lateral": 1.83,
+    "mu_eff_rear_longitudinal": 1.54,
+    "suspension_travel_front": 0.041,
+    "suspension_travel_rear": 0.037,
+    "suspension_velocity_front": 0.004,
+    "suspension_velocity_rear": 0.006,
+    "car_model": "fo8",
+    "track_name": "SO1",
+    "tyre_compound": "R3",
+}
+
+records: list[TelemetryRecord] = []
+for index, adjustments in enumerate(
+    (
+        {"nfr": 0.65, "throttle": 0.6, "steer": 0.085},
+        {"timestamp": 0.2, "nfr": 0.69, "slip_ratio": 0.02},
+        {"timestamp": 0.4, "nfr": 0.72, "slip_ratio": 0.024, "locking": 0.03},
+    )
+):
+    payload = base_sample.copy()
+    payload["timestamp"] = index * 0.2
+    payload.update(adjustments)
+    records.append(TelemetryRecord(**payload))
+
+baseline = DeltaCalculator.derive_baseline(records)
+settings = NaturalFrequencySettings(min_window_seconds=1.2, max_window_seconds=2.5)
+analyzer = NaturalFrequencyAnalyzer(settings)
+plugin = DemoPlugin(
+    identifier="demo.nu_f",
+    display_name="Demo ν_f consumer",
+    version="0.1.0",
+)
+
+window: list[TelemetryRecord] = []
+for record in records:
+    window.append(record)
+    snapshot = resolve_plugin_nu_f(
+        plugin,
+        record,
+        history=window,
+        car_model=record.car_model,
+        analyzer=analyzer,
+        settings=settings,
+    )
+
+final_snapshot = snapshot
+delta_nfr = records[-1].nfr - baseline.nfr
+print(f"ΔNFR vs baseline: {delta_nfr:+.3f}")
+
+# Reapply the snapshot explicitly when sharing it with other plugin instances.
+apply_plugin_nu_f_snapshot(plugin, final_snapshot)
+print("Plugin ν_f map:", plugin.nu_f)
+```
+
 ### `tnfr_lfs.core.archetypes`
 
 Archetype targets capture the strategic intent the segmentation and
