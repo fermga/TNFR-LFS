@@ -8,16 +8,11 @@ from pathlib import Path
 import pytest
 
 from tnfr_lfs.plugins.config import PluginConfig, PluginConfigError
-
-
-def _write_config(tmp_path: Path, content: str) -> Path:
-    path = tmp_path / "plugins.toml"
-    path.write_text(textwrap.dedent(content))
-    return path
+from tests.helpers import write_plugin_config_text
 
 
 def test_plugin_config_loads_and_merges_global_settings(tmp_path: Path) -> None:
-    config_path = _write_config(
+    config_path = write_plugin_config_text(
         tmp_path,
         """
         [plugins]
@@ -81,7 +76,7 @@ def test_plugin_config_loads_and_merges_global_settings(tmp_path: Path) -> None:
 
 
 def test_plugin_config_profile_overrides(tmp_path: Path) -> None:
-    config_path = _write_config(
+    config_path = write_plugin_config_text(
         tmp_path,
         """
         [plugins]
@@ -129,7 +124,7 @@ def test_plugin_config_profile_overrides(tmp_path: Path) -> None:
 
 
 def test_reload_config_preserves_active_profile(tmp_path: Path) -> None:
-    config_path = _write_config(
+    config_path = write_plugin_config_text(
         tmp_path,
         """
         [plugins]
@@ -186,7 +181,7 @@ def test_reload_config_preserves_active_profile(tmp_path: Path) -> None:
 
 
 def test_reload_config_failure_retains_previous_state(tmp_path: Path) -> None:
-    config_path = _write_config(
+    config_path = write_plugin_config_text(
         tmp_path,
         """
         [plugins]
