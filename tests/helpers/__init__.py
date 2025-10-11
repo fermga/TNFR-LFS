@@ -6,6 +6,14 @@ from .constants import BASE_NU_F, SUPPORTED_CAR_MODELS
 from .epi import build_balanced_bundle, build_epi_bundle, build_epi_nodes
 from .microsector import build_goal, build_microsector
 from .packets import build_outgauge_packet, build_outsim_packet
+from .packs import (
+    MINIMAL_DATA_CAR,
+    PackBuilder,
+    create_brake_thermal_pack,
+    create_cli_config_pack,
+    create_config_pack,
+    pack_builder,
+)
 from .plugins import (
     plugin_registry_state,
     write_plugin_config_text,
@@ -73,4 +81,10 @@ __all__ = [
     "make_select_stub",
     "make_wait_stub",
     "instrument_prepare_pack_context",
+    "MINIMAL_DATA_CAR",
+    "PackBuilder",
+    "create_cli_config_pack",
+    "create_config_pack",
+    "create_brake_thermal_pack",
+    "pack_builder",
 ]

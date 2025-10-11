@@ -13,7 +13,7 @@ from tnfr_lfs.ingestion.live import (
     TelemetryFusion,
 )
 
-from tests.helpers import build_outgauge_packet, build_outsim_packet
+from tests.helpers import build_outgauge_packet, build_outsim_packet, create_brake_thermal_pack
 
 
 def test_brake_thermal_estimator_heats_and_cools() -> None:
@@ -53,34 +53,7 @@ def test_telemetry_fusion_uses_packaged_resources(
 ) -> None:
     from tnfr_lfs import _pack_resources
 
-    pack_root = tmp_path / "pack"
-    config_dir = pack_root / "config"
-    cars_dir = pack_root / "data" / "cars"
-    config_dir.mkdir(parents=True)
-    cars_dir.mkdir(parents=True)
-
-    config_dir.joinpath("global.toml").write_text(
-        """
-[thermal.brakes]
-mode = "auto"
-"""
-    )
-
-    cars_dir.joinpath("AAA.toml").write_text(
-        """
-abbrev = "AAA"
-name = "Alpha"
-license = "demo"
-engine_layout = "front"
-drive = "RWD"
-weight_kg = 900
-wheel_rotation_group_deg = 30
-profile = "default"
-
-[thermal.brakes]
-mode = "auto"
-"""
-    )
+    pack_root = create_brake_thermal_pack(tmp_path / "pack")
 
     _pack_resources.set_pack_root_override(pack_root)
     ingestion_mod = importlib.import_module("tnfr_lfs.ingestion.live")

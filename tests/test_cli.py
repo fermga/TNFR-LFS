@@ -21,7 +21,7 @@ from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
-from tests.helpers import DummyBundle, instrument_prepare_pack_context
+from tests.helpers import DummyBundle, create_cli_config_pack, instrument_prepare_pack_context
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -384,77 +384,6 @@ def test_cli_analyze_accepts_raf_sample(
         assert record.wheel_load_fl == pytest.approx(3056.1862793, rel=1e-6)
         assert record.wheel_longitudinal_force_rr == pytest.approx(901.4348755, rel=1e-6)
         assert record.wheel_lateral_force_fl == pytest.approx(1046.0095215, rel=1e-6)
-
-
-@pytest.fixture()
-def cli_config_pack(tmp_path: Path) -> Path:
-    pack_root = tmp_path / "pack"
-    config_dir = pack_root / "config"
-    cars_dir = pack_root / "data" / "cars"
-    profiles_dir = pack_root / "data" / "profiles"
-    profiles_dir.mkdir(parents=True)
-    cars_dir.mkdir(parents=True)
-    config_dir.mkdir(parents=True)
-
-    cars_dir.joinpath("ABC.toml").write_text(
-        dedent(
-            """
-            abbrev = "ABC"
-            name = "Alpha"
-            license = "demo"
-            engine_layout = "front"
-            drive = "RWD"
-            weight_kg = 900
-            wheel_rotation_group_deg = 30
-            profile = "custom-profile"
-            """
-        ),
-        encoding="utf8",
-    )
-
-    profiles_dir.joinpath("custom.toml").write_text(
-        dedent(
-            """
-            [meta]
-            id = "custom-profile"
-            category = "road"
-
-            [targets.balance]
-            delta_nfr = 0.42
-            sense_index = 0.83
-
-            [policy.steering]
-            aggressiveness = 0.5
-
-            [recommender.steering]
-            kp = 1.0
-            """
-        ),
-        encoding="utf8",
-    )
-
-    config_dir.joinpath("global.toml").write_text(
-        dedent(
-            """
-            [analyze]
-            car_model = "ABC"
-
-            [suggest]
-            car_model = "ABC"
-            track = "AS5"
-
-            [write_set]
-            car_model = "ABC"
-
-            [osd]
-            car_model = "ABC"
-            track = "AS5"
-            """
-        ),
-        encoding="utf8",
-    )
-
-    return pack_root
 
 
 def test_template_command_emits_phase_presets() -> None:
@@ -1318,12 +1247,12 @@ def test_analyze_uses_pack_root_metadata(
     tmp_path: Path,
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    cli_config_pack: Path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     baseline_path = tmp_path / "baseline.jsonl"
-    config_path = cli_config_pack / "config" / "global.toml"
-    pack_arg = str(cli_config_pack)
+    pack_root = create_cli_config_pack(tmp_path / "pack")
+    config_path = pack_root / "config" / "global.toml"
+    pack_arg = str(pack_root)
 
     run_cli(
         [
