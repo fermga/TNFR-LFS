@@ -8,12 +8,12 @@ import pytest
 
 from tnfr_lfs.analysis.brake_thermal import BrakeThermalConfig, BrakeThermalEstimator
 from tnfr_lfs.ingestion.live import (
-    OutGaugePacket,
     OutSimDriverInputs,
-    OutSimPacket,
     OutSimWheelState,
     TelemetryFusion,
 )
+
+from tests.helpers import build_outgauge_packet, build_outsim_packet
 
 
 def test_brake_thermal_estimator_heats_and_cools() -> None:
@@ -97,91 +97,91 @@ mode = "auto"
     finally:
         _pack_resources.set_pack_root_override(None)
         importlib.reload(fusion_mod)
-
-
-def _make_outsim_packet(
-    timestamp_ms: int,
-    speed: float,
-    accel_x: float,
-    brake: float,
-    load: float,
-) -> OutSimPacket:
-    wheels = tuple(
-        OutSimWheelState(
-            slip_ratio=0.0,
-            slip_angle=0.0,
-            longitudinal_force=0.0,
-            lateral_force=0.0,
-            load=load,
-            suspension_deflection=0.0,
-            decoded=True,
-        )
-        for _ in range(4)
-    )
-    inputs = OutSimDriverInputs(throttle=0.0, brake=brake, clutch=0.0, handbrake=0.0, steer=0.0)
-    return OutSimPacket(
-        time=timestamp_ms,
-        ang_vel_x=0.0,
-        ang_vel_y=0.0,
-        ang_vel_z=0.0,
-        heading=0.0,
-        pitch=0.0,
-        roll=0.0,
-        accel_x=accel_x,
-        accel_y=0.0,
-        accel_z=9.81,
-        vel_x=speed,
-        vel_y=0.0,
-        vel_z=0.0,
-        pos_x=0.0,
-        pos_y=0.0,
-        pos_z=0.0,
-        inputs=inputs,
-        wheels=wheels,
-    )
-
-
-def _make_outgauge_packet(timestamp_ms: int, speed: float) -> OutGaugePacket:
-    return OutGaugePacket(
-        time=timestamp_ms,
-        car="FZR",
-        player_name="",
-        plate="",
-        track="AS5",
-        layout="",
-        flags=0,
-        gear=3,
-        plid=0,
-        speed=speed,
-        rpm=4500.0,
-        turbo=0.0,
-        eng_temp=90.0,
-        fuel=0.5,
-        oil_pressure=0.0,
-        oil_temp=80.0,
-        dash_lights=0,
-        show_lights=0,
-        throttle=0.0,
-        brake=1.0,
-        clutch=0.0,
-        display1="",
-        display2="",
-        packet_id=0,
-        brake_temps=(0.0, 0.0, 0.0, 0.0),
-    )
-
-
 def test_fusion_brake_proxy_fills_missing_outgauge(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TNFR_LFS_BRAKE_THERMAL", raising=False)
 
     fusion = TelemetryFusion()
 
-    first_outsim = _make_outsim_packet(0, speed=25.0, accel_x=-1.0, brake=1.0, load=3800.0)
-    first_outgauge = _make_outgauge_packet(0, speed=25.0)
+    first_inputs = OutSimDriverInputs(throttle=0.0, brake=1.0, clutch=0.0, handbrake=0.0, steer=0.0)
+    first_wheels = tuple(
+        OutSimWheelState(
+            slip_ratio=0.0,
+            slip_angle=0.0,
+            longitudinal_force=0.0,
+            lateral_force=0.0,
+            load=3800.0,
+            suspension_deflection=0.0,
+            decoded=True,
+        )
+        for _ in range(4)
+    )
+    first_outsim = build_outsim_packet(
+        time=0,
+        accel_x=-1.0,
+        accel_z=9.81,
+        vel_x=25.0,
+        inputs=first_inputs,
+        wheels=first_wheels,
+    )
+    first_outgauge = build_outgauge_packet(
+        time=0,
+        car="FZR",
+        player_name="",
+        plate="",
+        track="AS5",
+        layout="",
+        gear=3,
+        speed=25.0,
+        rpm=4500.0,
+        eng_temp=90.0,
+        fuel=0.5,
+        oil_temp=80.0,
+        throttle=0.0,
+        brake=1.0,
+        clutch=0.0,
+        brake_temps=(0.0, 0.0, 0.0, 0.0),
+    )
     fusion.fuse(first_outsim, first_outgauge)
 
-    second_outsim = _make_outsim_packet(100, speed=35.0, accel_x=-5.0, brake=1.0, load=4200.0)
-    second_outgauge = _make_outgauge_packet(100, speed=35.0)
+    second_inputs = OutSimDriverInputs(throttle=0.0, brake=1.0, clutch=0.0, handbrake=0.0, steer=0.0)
+    second_wheels = tuple(
+        OutSimWheelState(
+            slip_ratio=0.0,
+            slip_angle=0.0,
+            longitudinal_force=0.0,
+            lateral_force=0.0,
+            load=4200.0,
+            suspension_deflection=0.0,
+            decoded=True,
+        )
+        for _ in range(4)
+    )
+    second_outsim = build_outsim_packet(
+        time=100,
+        accel_x=-5.0,
+        accel_z=9.81,
+        vel_x=35.0,
+        inputs=second_inputs,
+        wheels=second_wheels,
+    )
+    second_outgauge = build_outgauge_packet(
+        time=100,
+        car="FZR",
+        player_name="",
+        plate="",
+        track="AS5",
+        layout="",
+        gear=3,
+        speed=35.0,
+        rpm=4500.0,
+        eng_temp=90.0,
+        fuel=0.5,
+        oil_temp=80.0,
+        throttle=0.0,
+        brake=1.0,
+        clutch=0.0,
+        brake_temps=(0.0, 0.0, 0.0, 0.0),
+    )
     record = fusion.fuse(second_outsim, second_outgauge)
 
     assert math.isfinite(record.brake_temp_fl)

@@ -9,55 +9,7 @@ from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
 from tnfr_lfs.ingestion import outsim_udp as outsim_module
 from tnfr_lfs.ingestion._reorder_buffer import CircularReorderBuffer
 
-
-def _make_outsim_packet(time_value: int) -> outsim_module.OutSimPacket:
-    return outsim_module.OutSimPacket(
-        time=time_value,
-        ang_vel_x=0.0,
-        ang_vel_y=0.0,
-        ang_vel_z=0.0,
-        heading=0.0,
-        pitch=0.0,
-        roll=0.0,
-        accel_x=0.0,
-        accel_y=0.0,
-        accel_z=0.0,
-        vel_x=0.0,
-        vel_y=0.0,
-        vel_z=0.0,
-        pos_x=0.0,
-        pos_y=0.0,
-        pos_z=0.0,
-    )
-
-
-def _make_outgauge_packet(packet_id: int, time_value: int) -> outgauge_module.OutGaugePacket:
-    return outgauge_module.OutGaugePacket(
-        time=time_value,
-        car="XFG",
-        player_name="Driver",
-        plate="",
-        track="BL1",
-        layout="",
-        flags=0,
-        gear=0,
-        plid=0,
-        speed=0.0,
-        rpm=0.0,
-        turbo=0.0,
-        eng_temp=0.0,
-        fuel=0.0,
-        oil_pressure=0.0,
-        oil_temp=0.0,
-        dash_lights=0,
-        show_lights=0,
-        throttle=0.0,
-        brake=0.0,
-        clutch=0.0,
-        display1="",
-        display2="",
-        packet_id=packet_id,
-    )
+from tests.helpers import build_outgauge_packet, build_outsim_packet
 
 
 def test_circular_buffer_orders_out_of_sequence_packets() -> None:
@@ -97,8 +49,8 @@ def test_outsim_reorders_packets_and_drains_in_order(monkeypatch: pytest.MonkeyP
     client._buffer_grace = 0.0
 
     try:
-        client._record_packet(_make_outsim_packet(200))
-        client._record_packet(_make_outsim_packet(100))
+        client._record_packet(build_outsim_packet(time=200))
+        client._record_packet(build_outsim_packet(time=100))
 
         drained = client.drain_ready()
         assert [packet.time for packet in drained] == [100, 200]
@@ -121,9 +73,9 @@ def test_outgauge_capacity_discards_oldest(monkeypatch: pytest.MonkeyPatch) -> N
     client._buffer_grace = 0.0
 
     try:
-        client._record_packet(_make_outgauge_packet(1, 10))
-        client._record_packet(_make_outgauge_packet(2, 20))
-        client._record_packet(_make_outgauge_packet(3, 30))
+        client._record_packet(build_outgauge_packet(packet_id=1, time=10))
+        client._record_packet(build_outgauge_packet(packet_id=2, time=20))
+        client._record_packet(build_outgauge_packet(packet_id=3, time=30))
 
         first = client._pop_ready_packet(now=100.0, allow_grace=True)
         second = client._pop_ready_packet(now=100.0, allow_grace=True)
@@ -146,8 +98,8 @@ def test_outgauge_reorders_packets(monkeypatch: pytest.MonkeyPatch) -> None:
     client._buffer_grace = 0.0
 
     try:
-        client._record_packet(_make_outgauge_packet(2, 20))
-        client._record_packet(_make_outgauge_packet(1, 10))
+        client._record_packet(build_outgauge_packet(packet_id=2, time=20))
+        client._record_packet(build_outgauge_packet(packet_id=1, time=10))
 
         drained = client.drain_ready()
         assert [packet.packet_id for packet in drained] == [1, 2]
