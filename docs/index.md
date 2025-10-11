@@ -124,6 +124,7 @@ aerodynamic imbalance).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 ## Resources
 
 - [API Reference](api_reference.md)
+  - [Window metrics & tyre health](api_reference.md#tnfr_lfscoremetrics)
 - [Command Line Interface](cli.md)
 - [Tutorials](tutorials.md)
 - [Setup equivalences](setup_equivalences.md)
