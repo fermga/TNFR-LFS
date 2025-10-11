@@ -4,59 +4,40 @@ from dataclasses import replace
 import pytest
 
 from tnfr_lfs.ingestion.live import OutGaugePacket, OutSimPacket, TelemetryFusion
+
+from tests.helpers import build_outgauge_packet, build_outsim_packet
 from tnfr_lfs.core.epi import delta_nfr_by_node, resolve_nu_f_by_node
 
 
 def _outsim_sample(timestamp: float, speed: float, slip: float, *, lateral: float = 6.0) -> OutSimPacket:
     reference_speed = max(speed, 1.0)
     vel_x = reference_speed * (1.0 + slip)
-    return OutSimPacket(
+    return build_outsim_packet(
         time=int(timestamp * 1000),
-        ang_vel_x=0.0,
-        ang_vel_y=0.0,
         ang_vel_z=0.12,
         heading=0.01,
         pitch=0.02,
         roll=0.01,
         accel_x=0.3,
         accel_y=lateral,
-        accel_z=0.0,
         vel_x=vel_x,
         vel_y=reference_speed * 0.05,
-        vel_z=0.0,
-        pos_x=0.0,
-        pos_y=0.0,
-        pos_z=0.0,
         player_id=1,
     )
 
 
 def _outgauge_sample(car: str, track: str, speed: float, *, rpm: float = 5200.0) -> OutGaugePacket:
-    return OutGaugePacket(
+    return build_outgauge_packet(
         time=0,
         car=car,
         player_name="Test",
-        plate="",
         track=track,
-        layout="",
-        flags=0,
         gear=4,
-        plid=0,
         speed=speed,
         rpm=rpm,
-        turbo=0.0,
-        eng_temp=0.0,
         fuel=50.0,
-        oil_pressure=0.0,
-        oil_temp=0.0,
-        dash_lights=0,
-        show_lights=0,
         throttle=0.65,
         brake=0.1,
-        clutch=0.0,
-        display1="",
-        display2="",
-        packet_id=0,
     )
 
 
