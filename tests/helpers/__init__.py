@@ -44,6 +44,17 @@ _MODULE_EXPORTS: Tuple[Tuple[str, Iterable[str]], ...] = (
     ),
     ("microsector", ("build_goal", "build_microsector")),
     (
+        "recommender",
+        (
+            "_brake_headroom_microsector",
+            "_udr_goal",
+            "_udr_microsector",
+            "_entry_goal_with_gradient",
+            "_entry_microsector_with_gradient",
+            "_entry_results_with_gradient",
+        ),
+    ),
+    (
         "setup",
         (
             "build_setup_plan",
@@ -174,6 +185,14 @@ if TYPE_CHECKING:
         build_udr_bundle_series,
     )
     from .microsector import build_goal, build_microsector
+    from .recommender import (
+        _brake_headroom_microsector,
+        _entry_goal_with_gradient,
+        _entry_microsector_with_gradient,
+        _entry_results_with_gradient,
+        _udr_goal,
+        _udr_microsector,
+    )
     from .osd import DummyHUD, _populate_hud, _window_metrics_from_parallel_turn
     from .packets import (
         build_extended_outsim_packet,
