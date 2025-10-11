@@ -11,9 +11,9 @@ import pytest
 
 from tests.helpers import (
     build_dynamic_record,
-    build_epi_bundle,
     build_goal,
     build_microsector,
+    build_operator_bundle,
 )
 
 from tnfr_lfs.core import Microsector, TelemetryRecord, phase_synchrony_index
@@ -169,24 +169,6 @@ def _build_microsector(
     if cphi_values is not None:
         kwargs["cphi_values"] = cphi_values
     return build_microsector(**kwargs)
-
-
-def _build_bundle(
-    timestamp: float,
-    tyre_delta: float,
-    *,
-    delta_nfr: float | None = None,
-    yaw_rate: float = 0.0,
-) -> EPIBundle:
-    delta_value = tyre_delta if delta_nfr is None else delta_nfr
-    return build_epi_bundle(
-        timestamp=timestamp,
-        delta_nfr=delta_value,
-        sense_index=0.9,
-        tyres={"delta_nfr": tyre_delta},
-        suspension={"delta_nfr": delta_value},
-        chassis={"delta_nfr": delta_value, "yaw_rate": yaw_rate},
-    )
 
 
 def test_coherence_operator_reduces_jitter_without_bias():
@@ -591,11 +573,11 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
 
 def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
     bundles = [
-        _build_bundle(0.0, 0.1, yaw_rate=0.0),
-        _build_bundle(0.1, 0.6, yaw_rate=0.1),
-        _build_bundle(0.2, 0.2, yaw_rate=0.25),
-        _build_bundle(0.3, -0.4, yaw_rate=0.3),
-        _build_bundle(0.4, -0.1, yaw_rate=0.31),
+        build_operator_bundle(timestamp=0.0, tyre_delta=0.1, yaw_rate=0.0),
+        build_operator_bundle(timestamp=0.1, tyre_delta=0.6, yaw_rate=0.1),
+        build_operator_bundle(timestamp=0.2, tyre_delta=0.2, yaw_rate=0.25),
+        build_operator_bundle(timestamp=0.3, tyre_delta=-0.4, yaw_rate=0.3),
+        build_operator_bundle(timestamp=0.4, tyre_delta=-0.1, yaw_rate=0.31),
     ]
     microsectors = [
         _build_microsector(0, 0, 1, 2, apex_target=0.5),

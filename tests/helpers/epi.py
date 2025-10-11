@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Callable
 
 from tnfr_lfs.core.epi_models import (
@@ -146,4 +146,163 @@ def build_epi_nodes(delta_nfr: float, sense_index: float):
         "driver": DriverNode(delta_nfr=share, sense_index=sense_index, nu_f=BASE_NU_F["driver"]),
     }
 
-__all__ = ["build_epi_bundle", "build_balanced_bundle", "build_epi_nodes"]
+def build_support_bundle(
+    *,
+    timestamp: float,
+    structural_timestamp: float,
+    tyre_delta: float,
+    suspension_delta: float,
+    longitudinal_delta: float,
+    lateral_delta: float,
+    yaw_rate: float,
+    sense_index: float = 0.8,
+) -> EPIBundle:
+    """Bundle tailored for support metric calculations."""
+
+    return build_epi_bundle(
+        timestamp=timestamp,
+        delta_nfr=tyre_delta + suspension_delta,
+        sense_index=sense_index,
+        structural_timestamp=structural_timestamp,
+        delta_nfr_proj_longitudinal=longitudinal_delta,
+        delta_nfr_proj_lateral=lateral_delta,
+        tyres={"delta_nfr": tyre_delta},
+        suspension={"delta_nfr": suspension_delta},
+        chassis={"delta_nfr": 0.0, "yaw_rate": yaw_rate},
+    )
+
+
+def build_operator_bundle(
+    *,
+    timestamp: float,
+    tyre_delta: float,
+    delta_nfr: float | None = None,
+    yaw_rate: float = 0.0,
+    sense_index: float = 0.9,
+) -> EPIBundle:
+    """Bundle used in operator-specific tests with convenient defaults."""
+
+    delta_value = tyre_delta if delta_nfr is None else delta_nfr
+    return build_epi_bundle(
+        timestamp=timestamp,
+        delta_nfr=delta_value,
+        sense_index=sense_index,
+        tyres={"delta_nfr": tyre_delta},
+        suspension={"delta_nfr": delta_value},
+        chassis={"delta_nfr": delta_value, "yaw_rate": yaw_rate},
+    )
+
+
+def build_axis_bundle(
+    *,
+    delta_nfr: float,
+    long_component: float,
+    lat_component: float,
+    sense_index: float = 0.8,
+    gradient: float = 0.0,
+) -> EPIBundle:
+    """Bundle distributing delta evenly across nodes with axis projections."""
+
+    share = delta_nfr / 7.0
+    return build_epi_bundle(
+        timestamp=0.0,
+        delta_nfr=delta_nfr,
+        sense_index=sense_index,
+        delta_nfr_proj_longitudinal=long_component,
+        delta_nfr_proj_lateral=lat_component,
+        tyres={"delta_nfr": share},
+        suspension={"delta_nfr": share},
+        chassis={"delta_nfr": share},
+        brakes={"delta_nfr": share},
+        transmission={"delta_nfr": share},
+        track={"delta_nfr": share, "gradient": gradient},
+        driver={"delta_nfr": share},
+    )
+
+
+def build_udr_bundle_series(
+    values: Sequence[float],
+    *,
+    start_timestamp: float = 0.0,
+    step: float = 0.1,
+    sense_index: float = 0.8,
+) -> list[EPIBundle]:
+    """Produce a sequence of bundles mirroring uniform delta ratio samples."""
+
+    bundles: list[EPIBundle] = []
+    timestamp = start_timestamp
+    for value in values:
+        bundles.append(
+            build_epi_bundle(
+                timestamp=timestamp,
+                delta_nfr=value,
+                sense_index=sense_index,
+                delta_nfr_proj_longitudinal=value,
+                tyres={"delta_nfr": value},
+                suspension={"delta_nfr": value},
+                chassis={"delta_nfr": value},
+                brakes={"delta_nfr": value},
+                transmission={"delta_nfr": value},
+                track={"delta_nfr": value},
+                driver={"delta_nfr": value},
+            )
+        )
+        timestamp += step
+    return bundles
+
+
+def build_rich_bundle(
+    *,
+    timestamp: float,
+    delta_nfr: float = 2.0,
+    sense_index: float = 0.85,
+    yaw_rate: float = 0.1,
+    travel_front: float = 0.04,
+    travel_rear: float = 0.04,
+    temps: tuple[float, float, float, float] = (82.0, 81.5, 79.5, 79.0),
+    mu_front: tuple[float, float] = (1.25, 1.05),
+    mu_rear: tuple[float, float] = (1.15, 0.95),
+) -> EPIBundle:
+    """Bundle capturing a rich snapshot of telemetry context."""
+
+    share = delta_nfr / 6
+    return build_epi_bundle(
+        timestamp=timestamp,
+        delta_nfr=delta_nfr,
+        sense_index=sense_index,
+        tyres={
+            "delta_nfr": share,
+            "mu_eff_front": mu_front[0],
+            "mu_eff_rear": mu_rear[0],
+            "mu_eff_front_lateral": mu_front[0],
+            "mu_eff_front_longitudinal": mu_front[1],
+            "mu_eff_rear_lateral": mu_rear[0],
+            "mu_eff_rear_longitudinal": mu_rear[1],
+            "tyre_temp_fl": temps[0],
+            "tyre_temp_fr": temps[1],
+            "tyre_temp_rl": temps[2],
+            "tyre_temp_rr": temps[3],
+        },
+        suspension={
+            "delta_nfr": share,
+            "travel_front": travel_front,
+            "travel_rear": travel_rear,
+        },
+        chassis={"delta_nfr": share, "yaw_rate": yaw_rate},
+        brakes={"delta_nfr": share},
+        transmission={"delta_nfr": share, "throttle": 0.4, "gear": 4, "speed": 140.0},
+        track={"delta_nfr": share, "yaw": 0.0},
+        driver={"delta_nfr": share, "steer": 0.1, "throttle": 0.5, "style_index": sense_index},
+    )
+
+
+__all__ = [
+    "build_epi_bundle",
+    "build_balanced_bundle",
+    "build_epi_nodes",
+    "build_support_bundle",
+    "build_operator_bundle",
+    "build_axis_bundle",
+    "build_udr_bundle_series",
+    "build_rich_bundle",
+]

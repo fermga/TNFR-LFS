@@ -46,6 +46,7 @@ from tnfr_lfs.core.operators import tyre_balance_controller
 
 from tests.helpers import (
     BASE_NU_F,
+    build_axis_bundle,
     build_goal,
     build_microsector,
     build_epi_bundle,
@@ -53,6 +54,7 @@ from tests.helpers import (
     build_parallel_window_metrics,
     build_steering_bundle,
     build_steering_record,
+    build_udr_bundle_series,
 )
 def _brake_headroom_microsector(
     index: int,
@@ -94,54 +96,6 @@ def _brake_headroom_microsector(
         context_factors={},
         sample_context_factors={},
     )
-
-
-def _udr_bundle_series(values: Sequence[float], *, si: float = 0.8) -> Sequence[EPIBundle]:
-    bundles: list[EPIBundle] = []
-    for index, value in enumerate(values):
-        bundles.append(
-            build_epi_bundle(
-                timestamp=index * 0.1,
-                delta_nfr=value,
-                sense_index=si,
-                delta_nfr_proj_longitudinal=value,
-                tyres={"delta_nfr": value},
-                suspension={"delta_nfr": value},
-                chassis={"delta_nfr": value},
-                brakes={"delta_nfr": value},
-                transmission={"delta_nfr": value},
-                track={"delta_nfr": value},
-                driver={"delta_nfr": value},
-            )
-        )
-    return bundles
-
-
-def _axis_bundle(
-    delta_nfr: float,
-    long_component: float,
-    lat_component: float,
-    *,
-    si: float = 0.8,
-    gradient: float = 0.0,
-) -> EPIBundle:
-    share = delta_nfr / 7.0
-    return build_epi_bundle(
-        timestamp=0.0,
-        delta_nfr=delta_nfr,
-        sense_index=si,
-        delta_nfr_proj_longitudinal=long_component,
-        delta_nfr_proj_lateral=lat_component,
-        tyres={"delta_nfr": share},
-        suspension={"delta_nfr": share},
-        chassis={"delta_nfr": share},
-        brakes={"delta_nfr": share},
-        transmission={"delta_nfr": share},
-        track={"delta_nfr": share, "gradient": gradient},
-        driver={"delta_nfr": share},
-    )
-
-
 def _udr_goal(phase: str = "apex", target_delta: float = 0.2) -> Goal:
     return build_goal(
         phase,
@@ -675,7 +629,7 @@ def test_recommendation_engine_suppresses_when_quiet_sequence():
         )
         for i in range(3)
     ]
-    bundles = _udr_bundle_series([0.05, 0.04, 0.03, 0.02, 0.01])
+    bundles = build_udr_bundle_series([0.05, 0.04, 0.03, 0.02, 0.01])
     engine = RecommendationEngine(rules=[])
     recommendations = engine.generate(bundles, microsectors)
     assert len(recommendations) == 1
@@ -1523,7 +1477,7 @@ def test_detune_ratio_rule_emits_modal_guidance() -> None:
 
 def test_useful_dissonance_rule_reinforces_rear_when_udr_high(car_track_thresholds):
     values = [1.4, 1.5, 1.3]
-    results = _udr_bundle_series(values)
+    results = build_udr_bundle_series(values)
     goal = _udr_goal("apex", target_delta=0.2)
     microsector = _udr_microsector(goal, udr=0.8, sample_count=len(results))
 
@@ -1545,7 +1499,7 @@ def test_useful_dissonance_rule_reinforces_rear_when_udr_high(car_track_threshol
 
 def test_useful_dissonance_rule_softens_axle_when_udr_low(car_track_thresholds):
     values = [1.1, 1.2, 1.05]
-    results = _udr_bundle_series(values)
+    results = build_udr_bundle_series(values)
     goal = _udr_goal("apex", target_delta=0.2)
     microsector = _udr_microsector(goal, udr=0.1, sample_count=len(results))
 
@@ -1563,7 +1517,7 @@ def test_useful_dissonance_rule_softens_axle_when_udr_low(car_track_thresholds):
     assert any("soften front" in message for message in messages)
 
     # Oversteer scenario should target the rear axle.
-    oversteer_results = _udr_bundle_series([-1.2, -1.3, -1.1])
+    oversteer_results = build_udr_bundle_series([-1.2, -1.3, -1.1])
     oversteer_goal = _udr_goal("apex", target_delta=0.0)
     oversteer_microsector = _udr_microsector(
         oversteer_goal,
@@ -1627,9 +1581,9 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
         include_cphi=False,
     )
     results = [
-        _axis_bundle(0.6, 0.5, 0.1),
-        _axis_bundle(0.58, 0.46, 0.12),
-        _axis_bundle(0.62, 0.52, 0.1),
+        build_axis_bundle(delta_nfr=0.6, long_component=0.5, lat_component=0.1),
+        build_axis_bundle(delta_nfr=0.58, long_component=0.46, lat_component=0.12),
+        build_axis_bundle(delta_nfr=0.62, long_component=0.52, lat_component=0.1),
     ]
     thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
     context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
@@ -1690,9 +1644,24 @@ def _entry_microsector_with_gradient(goal: Goal, gradient: float) -> Microsector
 
 def _entry_results_with_gradient(gradient: float) -> Sequence[EPIBundle]:
     return [
-        _axis_bundle(0.62, 0.5, 0.1, gradient=gradient),
-        _axis_bundle(0.6, 0.5, 0.1, gradient=gradient),
-        _axis_bundle(0.58, 0.5, 0.1, gradient=gradient),
+        build_axis_bundle(
+            delta_nfr=0.62,
+            long_component=0.5,
+            lat_component=0.1,
+            gradient=gradient,
+        ),
+        build_axis_bundle(
+            delta_nfr=0.6,
+            long_component=0.5,
+            lat_component=0.1,
+            gradient=gradient,
+        ),
+        build_axis_bundle(
+            delta_nfr=0.58,
+            long_component=0.5,
+            lat_component=0.1,
+            gradient=gradient,
+        ),
     ]
 
 
@@ -1843,7 +1812,7 @@ def test_brake_headroom_rule_reduces_force_on_sustained_locking() -> None:
 
 def test_footprint_efficiency_rule_relaxes_delta_when_usage_high() -> None:
     goal = _udr_goal("apex", target_delta=0.2)
-    results = _udr_bundle_series([0.2, 0.21, 0.19])
+    results = build_udr_bundle_series([0.2, 0.21, 0.19])
     microsector = _udr_microsector(
         goal,
         udr=0.3,
@@ -1938,9 +1907,9 @@ def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
         include_cphi=False,
     )
     results = [
-        _axis_bundle(-0.32, -0.28, -0.07),
-        _axis_bundle(-0.34, -0.29, -0.06),
-        _axis_bundle(-0.31, -0.3, -0.05),
+        build_axis_bundle(delta_nfr=-0.32, long_component=-0.28, lat_component=-0.07),
+        build_axis_bundle(delta_nfr=-0.34, long_component=-0.29, lat_component=-0.06),
+        build_axis_bundle(delta_nfr=-0.31, long_component=-0.3, lat_component=-0.05),
     ]
     thresholds = ThresholdProfile(0.12, 0.12, 0.1, 0.2, 0.5)
     context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
@@ -2006,10 +1975,10 @@ def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
         include_cphi=False,
     )
     results = [
-        _axis_bundle(1.0, 0.12, 0.88),
-        _axis_bundle(0.95, 0.1, 0.85),
-        _axis_bundle(1.05, 0.14, 0.92),
-        _axis_bundle(1.0, 0.11, 0.87),
+        build_axis_bundle(delta_nfr=1.0, long_component=0.12, lat_component=0.88),
+        build_axis_bundle(delta_nfr=0.95, long_component=0.1, lat_component=0.85),
+        build_axis_bundle(delta_nfr=1.05, long_component=0.14, lat_component=0.92),
+        build_axis_bundle(delta_nfr=1.0, long_component=0.11, lat_component=0.87),
     ]
     thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
     context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
@@ -2075,7 +2044,7 @@ def test_phase_delta_rule_emits_geometry_actions_for_coherence_gap() -> None:
     )
     results = []
     for value in (0.46, 0.48, 0.44):
-        bundle = _axis_bundle(value, 0.36, 0.1)
+        bundle = build_axis_bundle(delta_nfr=value, long_component=0.36, lat_component=0.1)
         results.append(replace(bundle, coherence_index=0.32))
     thresholds = ThresholdProfile(0.2, 0.5, 0.5, 0.2, 0.5)
     context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
@@ -2139,9 +2108,9 @@ def test_phase_delta_rule_targets_front_toe_for_entry_synchrony_gap() -> None:
         include_cphi=False,
     )
     results = [
-        _axis_bundle(0.3, 0.18, 0.12),
-        _axis_bundle(0.3, 0.18, 0.12),
-        _axis_bundle(0.3, 0.18, 0.12),
+        build_axis_bundle(delta_nfr=0.3, long_component=0.18, lat_component=0.12),
+        build_axis_bundle(delta_nfr=0.3, long_component=0.18, lat_component=0.12),
+        build_axis_bundle(delta_nfr=0.3, long_component=0.18, lat_component=0.12),
     ]
     thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
     context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
@@ -2204,7 +2173,11 @@ def test_phase_delta_rule_prioritises_front_spring_with_lateral_bias() -> None:
     )
     raw_results: list[EPIBundle] = []
     for lat_component in (0.3, 0.32, 0.31, 0.29):
-        bundle = _axis_bundle(0.38, 0.07, lat_component)
+        bundle = build_axis_bundle(
+            delta_nfr=0.38,
+            long_component=0.07,
+            lat_component=lat_component,
+        )
         suspension = replace(bundle.suspension, nu_f=0.36)
         raw_results.append(replace(bundle, suspension=suspension))
     thresholds = ThresholdProfile(0.1, 0.05, 0.1, 0.2, 0.5)
@@ -2269,7 +2242,11 @@ def test_phase_delta_rule_scales_rear_spring_with_lateral_bias_and_low_frequency
     )
     bundles: list[EPIBundle] = []
     for lat_component in (0.22, 0.24, 0.23):
-        bundle = _axis_bundle(0.36, 0.05, lat_component)
+        bundle = build_axis_bundle(
+            delta_nfr=0.36,
+            long_component=0.05,
+            lat_component=lat_component,
+        )
         suspension = replace(bundle.suspension, nu_f=0.18)
         bundles.append(replace(bundle, suspension=suspension))
     thresholds = ThresholdProfile(0.1, 0.05, 0.08, 0.2, 0.5)
@@ -2330,7 +2307,11 @@ def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
     )
     results = []
     for value in (0.35, 0.33, 0.36, 0.34):
-        bundle = _axis_bundle(value, 0.14, 0.21)
+        bundle = build_axis_bundle(
+            delta_nfr=value,
+            long_component=0.14,
+            lat_component=0.21,
+        )
         results.append(replace(bundle, coherence_index=0.35))
     thresholds = ThresholdProfile(0.4, 0.3, 0.4, 0.2, 0.5)
     context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)
@@ -2397,10 +2378,10 @@ def test_phase_delta_rule_targets_rear_toe_for_exit_synchrony_gap() -> None:
         include_cphi=False,
     )
     results = [
-        _axis_bundle(0.28, 0.14, 0.14),
-        _axis_bundle(0.28, 0.14, 0.14),
-        _axis_bundle(0.28, 0.14, 0.14),
-        _axis_bundle(0.28, 0.14, 0.14),
+        build_axis_bundle(delta_nfr=0.28, long_component=0.14, lat_component=0.14),
+        build_axis_bundle(delta_nfr=0.28, long_component=0.14, lat_component=0.14),
+        build_axis_bundle(delta_nfr=0.28, long_component=0.14, lat_component=0.14),
+        build_axis_bundle(delta_nfr=0.28, long_component=0.14, lat_component=0.14),
     ]
     thresholds = ThresholdProfile(0.1, 0.1, 0.1, 0.2, 0.5)
     context = RuleContext(car_model="XFG", track_name="BL1", thresholds=thresholds)

@@ -3,7 +3,16 @@
 from .abtest import DummyBundle, build_metrics, scale_samples
 from .cli import instrument_prepare_pack_context, run_cli_in_tmp
 from .constants import BASE_NU_F, SUPPORTED_CAR_MODELS
-from .epi import build_balanced_bundle, build_epi_bundle, build_epi_nodes
+from .epi import (
+    build_axis_bundle,
+    build_balanced_bundle,
+    build_epi_bundle,
+    build_epi_nodes,
+    build_operator_bundle,
+    build_rich_bundle,
+    build_support_bundle,
+    build_udr_bundle_series,
+)
 from .microsector import build_goal, build_microsector
 from .packets import build_outgauge_packet, build_outsim_packet
 from .packs import (
@@ -63,6 +72,11 @@ __all__ = [
     "build_epi_bundle",
     "build_balanced_bundle",
     "build_epi_nodes",
+    "build_support_bundle",
+    "build_operator_bundle",
+    "build_axis_bundle",
+    "build_udr_bundle_series",
+    "build_rich_bundle",
     "build_goal",
     "build_microsector",
     "build_setup_plan",
