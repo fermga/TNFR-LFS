@@ -368,6 +368,85 @@ frequency lookups scale linearly with the number of samples. The FFT path
 remains available whenever SciPy is missing or a full spectrum is required for
 post-processing.
 
+```python
+from dataclasses import replace
+import math
+
+from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.core.spectrum import motor_input_correlations
+
+baseline = TelemetryRecord(
+    timestamp=0.0,
+    vertical_load=5000.0,
+    slip_ratio=0.0,
+    lateral_accel=0.0,
+    longitudinal_accel=0.0,
+    yaw=0.0,
+    pitch=0.0,
+    roll=0.0,
+    brake_pressure=0.0,
+    locking=0.0,
+    nfr=220.0,
+    si=0.82,
+    speed=45.0,
+    yaw_rate=0.0,
+    slip_angle=0.0,
+    steer=0.0,
+    throttle=0.6,
+    gear=4,
+    vertical_load_front=2500.0,
+    vertical_load_rear=2500.0,
+    mu_eff_front=1.0,
+    mu_eff_rear=1.0,
+    mu_eff_front_lateral=1.0,
+    mu_eff_front_longitudinal=1.0,
+    mu_eff_rear_lateral=1.0,
+    mu_eff_rear_longitudinal=1.0,
+    suspension_travel_front=0.02,
+    suspension_travel_rear=0.02,
+    suspension_velocity_front=0.0,
+    suspension_velocity_rear=0.0,
+)
+
+phase_offset = math.radians(12.0)
+
+
+def sample_at(index: int, sample_rate: float) -> TelemetryRecord:
+    t = index / sample_rate
+    steer = 0.3 * math.sin(2.0 * math.pi * 1.25 * t)
+    yaw_rate = 0.45 * math.sin(2.0 * math.pi * 1.25 * t + phase_offset)
+    return replace(
+        baseline,
+        timestamp=t,
+        steer=steer,
+        yaw_rate=yaw_rate,
+        lateral_accel=yaw_rate * 5.0,
+        longitudinal_accel=0.3 * math.cos(2.0 * math.pi * 0.5 * t),
+        throttle=0.65 + 0.1 * math.cos(2.0 * math.pi * 0.5 * t),
+        brake_pressure=max(0.0, -0.2 * math.sin(2.0 * math.pi * 0.5 * t)),
+        nfr=215.0 + 25.0 * math.sin(2.0 * math.pi * 0.4 * t),
+        si=0.8 + 0.05 * math.cos(2.0 * math.pi * 0.4 * t),
+        slip_angle=0.02 * math.sin(2.0 * math.pi * 1.25 * t),
+    )
+
+
+records = [sample_at(i, 50.0) for i in range(256)]
+correlations = motor_input_correlations(records, sample_rate=50.0, dominant_strategy="fft")
+
+steer_vs_yaw = correlations[("steer", "yaw")]
+print(f"Dominant frequency: {steer_vs_yaw.frequency:.2f} Hz")
+print(f"Phase alignment: {steer_vs_yaw.alignment:.3f}")
+print(f"Latency: {steer_vs_yaw.latency_ms:.1f} ms")
+```
+
+The :class:`~tnfr_lfs.core.spectrum.PhaseCorrelation` result exposes the
+dominant input/output bin, making the steering-to-yaw relationship in the
+example easy to interpret. ``alignment`` close to ``1.0`` indicates the chassis
+responds in phase with the steering command, while ``latency_ms`` quantifies the
+delay introduced by the yaw-rate response. A positive latency confirms the yaw
+motion lags the input, matching the injected twelve-degree offset in the sample
+records.【F:src/tnfr_lfs/core/spectrum.py†L32-L47】【F:src/tnfr_lfs/core/spectrum.py†L254-L302】
+
 ### `tnfr_lfs.core.epi.EPIExtractor`
 
 Computes :class:`tnfr_lfs.core.epi_models.EPIBundle` objects including EPI,
@@ -419,6 +498,44 @@ The :class:`DissonanceBreakdown` payload now includes the Useful Dissonance
 Ratio (UDR) through the ``useful_dissonance_ratio``/``useful_dissonance_samples``
 fields, quantifying the fraction of high yaw-acceleration samples where
 ΔNFR is already decaying.
+
+```python
+from tnfr_lfs.core.operators import (
+    emission_operator,
+    reception_operator,
+    coherence_operator,
+    orchestrate_delta_metrics,
+)
+from tnfr_lfs.core.epi import EPIExtractor
+
+# Reuse the synthetic `records` built in the spectrum example above.
+segments = [records[:128], records[128:]]
+
+objectives = emission_operator(target_delta_nfr=-15.0, target_sense_index=0.85)
+extractor = EPIExtractor()
+bundles = reception_operator(records, extractor=extractor)
+delta_trace = [bundle.delta_nfr for bundle in bundles]
+smoothed_delta = coherence_operator(delta_trace, window=5)
+
+report = orchestrate_delta_metrics(
+    segments,
+    target_delta_nfr=objectives["delta_nfr"],
+    target_sense_index=objectives["sense_index"],
+    coherence_window=5,
+)
+
+print(report["delta_nfr"], report["sense_index"])
+print(report["stages"]["coherence"]["dissonance_breakdown"].useful_dissonance_ratio)
+```
+
+The snippet chains the same helpers invoked inside
+:func:`~tnfr_lfs.core.operators.orchestrate_delta_metrics`, making each stage’s
+side-effects observable without having to inspect the returned ``"stages"``
+payload directly. ``emission_operator`` emits the target map, the reception
+stage converts telemetry into :class:`~tnfr_lfs.core.epi_models.EPIBundle`
+objects, and ``coherence_operator`` smooths the ΔNFR series before the
+orchestrator aggregates nodal, resonance, dissonance and recursive metrics for
+the whole stint.【F:src/tnfr_lfs/core/operators.py†L95-L141】【F:src/tnfr_lfs/core/operators.py†L1529-L1645】
 
 ``orchestrate_delta_metrics`` also surfaces support metrics derived from
 ``WindowMetrics``: ``support_effective`` (ΔNFR sustained by tyres and suspension
@@ -511,6 +628,27 @@ the same red/amber/green semantics without recomputing the bands.
   lists the peak/mean ΔNFR observed in the window and its ratio to the
   threshold (``delta_nfr_ratio``), while the aggregate ``SILENCE`` entry adds
   average coverage and structural density to flag low-activation latent states.
+
+```python
+from tnfr_lfs.core.segmentation import segment_microsectors
+
+microsectors = segment_microsectors(records, bundles)
+first = microsectors[0]
+
+print(first.index, first.active_phase)
+for goal in first.goals:
+    print(goal.phase, f"target ΔNFR {goal.target_delta_nfr:.1f}", goal.dominant_nodes)
+
+print("Active nodes:", first.dominant_nodes[first.active_phase])
+```
+
+Each :class:`~tnfr_lfs.core.segmentation.Microsector` exposes the phase
+objectives computed from the telemetry bundles, so a quick inspection of
+``microsector.goals`` shows the ΔNFR/Sense Index targets and the dominant
+subsystems for every entry/apex/exit slice. The ``dominant_nodes`` mapping keeps
+the per-phase node leaders readily available, making it straightforward to cross
+reference the active phase with its controlling chassis systems when diagnosing
+support events.【F:src/tnfr_lfs/core/segmentation.py†L124-L220】【F:src/tnfr_lfs/core/segmentation.py†L420-L520】
 
 ## Recommendation Engine
 
