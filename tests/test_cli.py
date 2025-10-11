@@ -21,7 +21,7 @@ from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
-from tests.helpers import DummyBundle
+from tests.helpers import DummyBundle, instrument_prepare_pack_context
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -298,101 +298,92 @@ def test_cli_analyze_accepts_raf_sample(
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    prepare_calls = {"count": 0}
+    with instrument_prepare_pack_context(monkeypatch) as prepare_calls:
+        captured_records: dict[str, list] = {}
 
-    original_prepare = workflows_module._prepare_pack_context
+        original = cli_io_module.raf_to_telemetry_records
 
-    def _instrumented_prepare(namespace, config, *, car_model):
-        prepare_calls["count"] += 1
-        return original_prepare(namespace, config, car_model=car_model)
+        def _capture_records(raf_file):
+            records = original(raf_file)
+            captured_records["records"] = records
+            return records
 
-    monkeypatch.setattr(workflows_module, "_prepare_pack_context", _instrumented_prepare)
+        monkeypatch.setattr(cli_io_module, "raf_to_telemetry_records", _capture_records)
+        monkeypatch.setattr(cli_module, "raf_to_telemetry_records", _capture_records)
 
-    captured_records: dict[str, list] = {}
+        class _StubThresholds:
+            phase_weights: Mapping[str, float] = {}
+            robustness: Mapping[str, float] | None = None
 
-    original = cli_io_module.raf_to_telemetry_records
+        from tnfr_lfs.analysis.insights import InsightsResult
 
-    def _capture_records(raf_file):
-        records = original(raf_file)
-        captured_records["records"] = records
-        return records
+        stub_insights = lambda *args, **kwargs: InsightsResult([], [], _StubThresholds(), None, {})
 
-    monkeypatch.setattr(cli_io_module, "raf_to_telemetry_records", _capture_records)
-    monkeypatch.setattr(cli_module, "raf_to_telemetry_records", _capture_records)
+        monkeypatch.setattr(workflows_module, "compute_insights", stub_insights)
+        monkeypatch.setattr(cli_module, "compute_insights", stub_insights)
 
-    class _StubThresholds:
-        phase_weights: Mapping[str, float] = {}
-        robustness: Mapping[str, float] | None = None
-
-    from tnfr_lfs.analysis.insights import InsightsResult
-
-    stub_insights = lambda *args, **kwargs: InsightsResult([], [], _StubThresholds(), None, {})
-
-    monkeypatch.setattr(workflows_module, "compute_insights", stub_insights)
-    monkeypatch.setattr(cli_module, "compute_insights", stub_insights)
-
-    monkeypatch.setattr(
-        workflows_module,
-        "orchestrate_delta_metrics",
-        lambda *args, **kwargs: {
-            "delta_nfr": 0.0,
-            "sense_index": 0.0,
-            "bundles": [],
-            "microsector_variability": [],
-            "stages": {},
-            "objectives": {},
-            "lap_sequence": [],
-        },
-    )
-    monkeypatch.setattr(cli_module, "orchestrate_delta_metrics", workflows_module.orchestrate_delta_metrics)
-
-    monkeypatch.setattr(
-        workflows_module,
-        "_generate_out_reports",
-        lambda *args, **kwargs: {},
-    )
-    monkeypatch.setattr(cli_module, "_generate_out_reports", workflows_module._generate_out_reports)
-
-    monkeypatch.setattr(
-        workflows_module,
-        "_phase_deviation_messages",
-        lambda *args, **kwargs: [],
-    )
-    monkeypatch.setattr(cli_module, "_phase_deviation_messages", workflows_module._phase_deviation_messages)
-
-    import tnfr_lfs.analysis.insights as insights_module
-
-    monkeypatch.setattr(
-        insights_module,
-        "compute_session_robustness",
-        lambda *args, **kwargs: {},
-    )
-
-    payload = json.loads(
-        run_cli(
-            [
-                "analyze",
-                str(raf_sample_path),
-                "--export",
-                "json",
-                "--target-delta",
-                "0.5",
-                "--target-si",
-                "0.75",
-            ]
+        monkeypatch.setattr(
+            workflows_module,
+            "orchestrate_delta_metrics",
+            lambda *args, **kwargs: {
+                "delta_nfr": 0.0,
+                "sense_index": 0.0,
+                "bundles": [],
+                "microsector_variability": [],
+                "stages": {},
+                "objectives": {},
+                "lap_sequence": [],
+            },
         )
-    )
+        monkeypatch.setattr(cli_module, "orchestrate_delta_metrics", workflows_module.orchestrate_delta_metrics)
 
-    assert prepare_calls["count"] == 1
+        monkeypatch.setattr(
+            workflows_module,
+            "_generate_out_reports",
+            lambda *args, **kwargs: {},
+        )
+        monkeypatch.setattr(cli_module, "_generate_out_reports", workflows_module._generate_out_reports)
 
-    assert payload["telemetry_samples"] == 9586
-    records = captured_records.get("records")
-    assert records is not None and len(records) == 9586
+        monkeypatch.setattr(
+            workflows_module,
+            "_phase_deviation_messages",
+            lambda *args, **kwargs: [],
+        )
+        monkeypatch.setattr(cli_module, "_phase_deviation_messages", workflows_module._phase_deviation_messages)
 
-    record = records[0]
-    assert record.wheel_load_fl == pytest.approx(3056.1862793, rel=1e-6)
-    assert record.wheel_longitudinal_force_rr == pytest.approx(901.4348755, rel=1e-6)
-    assert record.wheel_lateral_force_fl == pytest.approx(1046.0095215, rel=1e-6)
+        import tnfr_lfs.analysis.insights as insights_module
+
+        monkeypatch.setattr(
+            insights_module,
+            "compute_session_robustness",
+            lambda *args, **kwargs: {},
+        )
+
+        payload = json.loads(
+            run_cli(
+                [
+                    "analyze",
+                    str(raf_sample_path),
+                    "--export",
+                    "json",
+                    "--target-delta",
+                    "0.5",
+                    "--target-si",
+                    "0.75",
+                ]
+            )
+        )
+
+        assert prepare_calls["count"] == 1
+
+        assert payload["telemetry_samples"] == 9586
+        records = captured_records.get("records")
+        assert records is not None and len(records) == 9586
+
+        record = records[0]
+        assert record.wheel_load_fl == pytest.approx(3056.1862793, rel=1e-6)
+        assert record.wheel_longitudinal_force_rr == pytest.approx(901.4348755, rel=1e-6)
+        assert record.wheel_lateral_force_fl == pytest.approx(1046.0095215, rel=1e-6)
 
 
 @pytest.fixture()
@@ -680,78 +671,70 @@ def test_analyze_pipeline_json_export(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    prepare_calls = {"count": 0}
+    with instrument_prepare_pack_context(monkeypatch) as prepare_calls:
+        baseline_path = tmp_path / "baseline.jsonl"
+        run_cli([
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ])
 
-    original_prepare = workflows_module._prepare_pack_context
+        output = run_cli([
+            "analyze",
+            str(baseline_path),
+            "--export",
+            "json",
+        ])
 
-    def _instrumented_prepare(namespace, config, *, car_model):
-        prepare_calls["count"] += 1
-        return original_prepare(namespace, config, car_model=car_model)
-
-    monkeypatch.setattr(workflows_module, "_prepare_pack_context", _instrumented_prepare)
-    baseline_path = tmp_path / "baseline.jsonl"
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
-
-    output = run_cli([
-        "analyze",
-        str(baseline_path),
-        "--export",
-        "json",
-    ])
-
-    captured = capsys.readouterr()
-    payload = json.loads(output)
-    assert prepare_calls["count"] == 1
-    assert payload["car"]["abbrev"] == "XFG"
-    assert payload["tnfr_targets"]["meta"]["category"] == "road"
-    assert payload["telemetry_samples"] == 17
-    assert len(payload["microsectors"]) == 2
-    assert "microsectors" in captured.out
-    assert payload["phase_messages"]
-    assert "intermediate_metrics" in payload
-    epi_metrics = payload["intermediate_metrics"]["epi_evolution"]
-    assert len(epi_metrics["integrated"]) == len(payload["series"])
-    nodal_metrics = payload["intermediate_metrics"]["nodal_metrics"]
-    assert set(nodal_metrics["delta_by_node"]) == {"tyres", "suspension", "chassis"}
-    memory = payload["intermediate_metrics"]["sense_memory"]
-    assert len(memory["memory"]) == len(payload["series"])
-    report_paths = payload["reports"]
-    sense_path = Path(report_paths["sense_index_map"]["path"])
-    resonance_path = Path(report_paths["modal_resonance"]["path"])
-    breakdown_path = Path(report_paths["delta_breakdown"]["path"])
-    assert sense_path.exists()
-    assert resonance_path.exists()
-    assert breakdown_path.exists()
-    assert payload["reports"]["sense_index_map"]["data"]
-    resonance_data = payload["reports"]["modal_resonance"]["data"]
-    assert set(resonance_data) >= {"yaw", "roll", "pitch"}
-    for axis, axis_data in resonance_data.items():
-        assert "sample_rate" in axis_data
-        assert "total_energy" in axis_data
-        assert isinstance(axis_data.get("peaks", []), list)
-    breakdown_data = payload["reports"]["delta_breakdown"]["data"]
-    assert breakdown_data["samples"] == len(payload["series"])
-    tyres_summary = breakdown_data["per_node"]["tyres"]
-    tyres_total = sum(tyres_summary["breakdown"].values())
-    assert tyres_total == pytest.approx(tyres_summary["delta_nfr_total"], rel=1e-6, abs=1e-9)
-    coherence_entry = payload["reports"]["coherence_map"]
-    assert Path(coherence_entry["path"]).exists()
-    assert coherence_entry["data"]["microsectors"]
-    operator_entry = payload["reports"]["operator_trajectories"]
-    assert Path(operator_entry["path"]).exists()
-    assert operator_entry["data"]["events"]
-    bifurcation_entry = payload["reports"]["delta_bifurcations"]
-    assert Path(bifurcation_entry["path"]).exists()
-    assert bifurcation_entry["data"]["series"]
-    thermal_entry = payload["reports"]["tyre_thermal"]
-    assert Path(thermal_entry["path"]).exists()
-    assert "temperature" in thermal_entry["data"]
-    assert "pressure" in thermal_entry["data"]
+        captured = capsys.readouterr()
+        payload = json.loads(output)
+        assert prepare_calls["count"] == 1
+        assert payload["car"]["abbrev"] == "XFG"
+        assert payload["tnfr_targets"]["meta"]["category"] == "road"
+        assert payload["telemetry_samples"] == 17
+        assert len(payload["microsectors"]) == 2
+        assert "microsectors" in captured.out
+        assert payload["phase_messages"]
+        assert "intermediate_metrics" in payload
+        epi_metrics = payload["intermediate_metrics"]["epi_evolution"]
+        assert len(epi_metrics["integrated"]) == len(payload["series"])
+        nodal_metrics = payload["intermediate_metrics"]["nodal_metrics"]
+        assert set(nodal_metrics["delta_by_node"]) == {"tyres", "suspension", "chassis"}
+        memory = payload["intermediate_metrics"]["sense_memory"]
+        assert len(memory["memory"]) == len(payload["series"])
+        report_paths = payload["reports"]
+        sense_path = Path(report_paths["sense_index_map"]["path"])
+        resonance_path = Path(report_paths["modal_resonance"]["path"])
+        breakdown_path = Path(report_paths["delta_breakdown"]["path"])
+        assert sense_path.exists()
+        assert resonance_path.exists()
+        assert breakdown_path.exists()
+        assert payload["reports"]["sense_index_map"]["data"]
+        resonance_data = payload["reports"]["modal_resonance"]["data"]
+        assert set(resonance_data) >= {"yaw", "roll", "pitch"}
+        for axis, axis_data in resonance_data.items():
+            assert "sample_rate" in axis_data
+            assert "total_energy" in axis_data
+            assert isinstance(axis_data.get("peaks", []), list)
+        breakdown_data = payload["reports"]["delta_breakdown"]["data"]
+        assert breakdown_data["samples"] == len(payload["series"])
+        tyres_summary = breakdown_data["per_node"]["tyres"]
+        tyres_total = sum(tyres_summary["breakdown"].values())
+        assert tyres_total == pytest.approx(tyres_summary["delta_nfr_total"], rel=1e-6, abs=1e-9)
+        coherence_entry = payload["reports"]["coherence_map"]
+        assert Path(coherence_entry["path"]).exists()
+        assert coherence_entry["data"]["microsectors"]
+        operator_entry = payload["reports"]["operator_trajectories"]
+        assert Path(operator_entry["path"]).exists()
+        assert operator_entry["data"]["events"]
+        bifurcation_entry = payload["reports"]["delta_bifurcations"]
+        assert Path(bifurcation_entry["path"]).exists()
+        assert bifurcation_entry["data"]["series"]
+        thermal_entry = payload["reports"]["tyre_thermal"]
+        assert Path(thermal_entry["path"]).exists()
+        assert "temperature" in thermal_entry["data"]
+        assert "pressure" in thermal_entry["data"]
 
 
 def test_analyze_reports_note_missing_tyre_data(
@@ -808,33 +791,25 @@ def test_suggest_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    prepare_calls = {"count": 0}
+    with instrument_prepare_pack_context(monkeypatch) as prepare_calls:
+        baseline_path = tmp_path / "baseline.jsonl"
+        run_cli([
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ])
 
-    original_prepare = workflows_module._prepare_pack_context
+        output = run_cli([
+            "suggest",
+            str(baseline_path),
+            "--export",
+            "json",
+            "--car-model",
+            "FZR",
+        ])
 
-    def _instrumented_prepare(namespace, config, *, car_model):
-        prepare_calls["count"] += 1
-        return original_prepare(namespace, config, car_model=car_model)
-
-    monkeypatch.setattr(workflows_module, "_prepare_pack_context", _instrumented_prepare)
-    baseline_path = tmp_path / "baseline.jsonl"
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
-
-    output = run_cli([
-        "suggest",
-        str(baseline_path),
-        "--export",
-        "json",
-        "--car-model",
-        "FZR",
-    ])
-
-    payload = json.loads(output)
+        payload = json.loads(output)
     assert prepare_calls["count"] == 1
     if "car" in payload:
         assert isinstance(payload["car"], dict)
@@ -858,33 +833,25 @@ def test_report_generation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    prepare_calls = {"count": 0}
+    with instrument_prepare_pack_context(monkeypatch) as prepare_calls:
+        baseline_path = tmp_path / "baseline.jsonl"
+        run_cli([
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ])
 
-    original_prepare = workflows_module._prepare_pack_context
+        output = run_cli([
+            "report",
+            str(baseline_path),
+            "--export",
+            "json",
+            "--report-format",
+            "visual",
+        ])
 
-    def _instrumented_prepare(namespace, config, *, car_model):
-        prepare_calls["count"] += 1
-        return original_prepare(namespace, config, car_model=car_model)
-
-    monkeypatch.setattr(workflows_module, "_prepare_pack_context", _instrumented_prepare)
-    baseline_path = tmp_path / "baseline.jsonl"
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
-
-    output = run_cli([
-        "report",
-        str(baseline_path),
-        "--export",
-        "json",
-        "--report-format",
-        "visual",
-    ])
-
-    payload = json.loads(output)
+        payload = json.loads(output)
     assert prepare_calls["count"] == 1
     assert "delta_nfr" in payload
     assert "sense_index" in payload
