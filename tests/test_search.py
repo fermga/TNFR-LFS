@@ -20,9 +20,9 @@ from tnfr_lfs.recommender.search import (
 from tests.helpers import (
     SUPPORTED_CAR_MODELS,
     build_balanced_bundle,
-    build_epi_bundle,
     build_goal,
     build_microsector,
+    build_rich_bundle,
     preloaded_profile_manager,
 )
 
@@ -73,51 +73,6 @@ def _phase_integrals(results, microsectors) -> dict[str, float]:
             if subtotal:
                 totals[phase] = totals.get(phase, 0.0) + subtotal
     return totals
-
-
-def _rich_bundle(
-    timestamp: float,
-    *,
-    delta_nfr: float = 2.0,
-    si: float = 0.85,
-    yaw_rate: float = 0.1,
-    travel_front: float = 0.04,
-    travel_rear: float = 0.04,
-    temps: tuple[float, float, float, float] = (82.0, 81.5, 79.5, 79.0),
-    mu_front: tuple[float, float] = (1.25, 1.05),
-    mu_rear: tuple[float, float] = (1.15, 0.95),
-) -> EPIBundle:
-    share = delta_nfr / 6
-    return build_epi_bundle(
-        timestamp=timestamp,
-        delta_nfr=delta_nfr,
-        sense_index=si,
-        tyres={
-            "delta_nfr": share,
-            "mu_eff_front": mu_front[0],
-            "mu_eff_rear": mu_rear[0],
-            "mu_eff_front_lateral": mu_front[0],
-            "mu_eff_front_longitudinal": mu_front[1],
-            "mu_eff_rear_lateral": mu_rear[0],
-            "mu_eff_rear_longitudinal": mu_rear[1],
-            "tyre_temp_fl": temps[0],
-            "tyre_temp_fr": temps[1],
-            "tyre_temp_rl": temps[2],
-            "tyre_temp_rr": temps[3],
-        },
-        suspension={
-            "delta_nfr": share,
-            "travel_front": travel_front,
-            "travel_rear": travel_rear,
-        },
-        chassis={"delta_nfr": share, "yaw_rate": yaw_rate},
-        brakes={"delta_nfr": share},
-        transmission={"delta_nfr": share, "throttle": 0.4, "gear": 4, "speed": 140.0},
-        track={"delta_nfr": share, "yaw": 0.0},
-        driver={"delta_nfr": share, "steer": 0.1, "throttle": 0.5, "style_index": si},
-    )
-
-
 def _microsector() -> Microsector:
     window = (-0.2, 0.2)
     yaw_window = (-0.5, 0.5)
@@ -168,10 +123,10 @@ def _microsector() -> Microsector:
 
 def test_sci_breakdown_matches_score() -> None:
     results = [
-        _rich_bundle(0.0),
-        _rich_bundle(0.2),
-        _rich_bundle(0.4),
-        _rich_bundle(0.6),
+        build_rich_bundle(timestamp=0.0),
+        build_rich_bundle(timestamp=0.2),
+        build_rich_bundle(timestamp=0.4),
+        build_rich_bundle(timestamp=0.6),
     ]
     breakdown: dict[str, float] = {}
     score = objective_score(results, breakdown=breakdown)
@@ -182,14 +137,20 @@ def test_sci_breakdown_matches_score() -> None:
 
 def test_objective_responds_to_component_variations(monkeypatch: pytest.MonkeyPatch) -> None:
     base_series = [
-        _rich_bundle(index * 0.2) for index in range(4)
+        build_rich_bundle(timestamp=index * 0.2) for index in range(4)
     ]
     score_base = objective_score(base_series)
 
-    low_si_series = [_rich_bundle(index * 0.2, si=0.6) for index in range(4)]
+    low_si_series = [
+        build_rich_bundle(timestamp=index * 0.2, sense_index=0.6)
+        for index in range(4)
+    ]
     assert objective_score(low_si_series) < score_base
 
-    high_delta_series = [_rich_bundle(index * 0.2, delta_nfr=12.0) for index in range(4)]
+    high_delta_series = [
+        build_rich_bundle(timestamp=index * 0.2, delta_nfr=12.0)
+        for index in range(4)
+    ]
     assert objective_score(high_delta_series) < score_base
 
     original_udr = search_module.compute_useful_dissonance_stats
@@ -209,18 +170,30 @@ def test_objective_responds_to_component_variations(monkeypatch: pytest.MonkeyPa
     assert score_low_udr < score_high_udr
 
     bottoming_series = [
-        _rich_bundle(index * 0.2, travel_front=0.0, travel_rear=0.0) for index in range(4)
+        build_rich_bundle(
+            timestamp=index * 0.2,
+            travel_front=0.0,
+            travel_rear=0.0,
+        )
+        for index in range(4)
     ]
     assert objective_score(bottoming_series) < score_base
 
     aero_imbalanced_series = [
-        _rich_bundle(index * 0.2, mu_front=(1.7, 1.3), mu_rear=(0.45, 0.35))
+        build_rich_bundle(
+            timestamp=index * 0.2,
+            mu_front=(1.7, 1.3),
+            mu_rear=(0.45, 0.35),
+        )
         for index in range(4)
     ]
     assert objective_score(aero_imbalanced_series) < score_base
 
     overheated_series = [
-        _rich_bundle(index * 0.2, temps=(110.0, 109.5, 105.0, 104.5))
+        build_rich_bundle(
+            timestamp=index * 0.2,
+            temps=(110.0, 109.5, 105.0, 104.5),
+        )
         for index in range(4)
     ]
     assert objective_score(overheated_series) == score_base

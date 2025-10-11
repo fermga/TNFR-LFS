@@ -4,32 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from tnfr_lfs.core.epi_models import EPIBundle
 from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
 
-from tests.helpers import build_epi_bundle, build_telemetry_record
-
-
-def _bundle(
-    timestamp: float,
-    structural: float,
-    tyre_delta: float,
-    suspension_delta: float,
-    longitudinal_delta: float,
-    lateral_delta: float,
-    yaw_rate: float,
-) -> EPIBundle:
-    return build_epi_bundle(
-        timestamp=timestamp,
-        delta_nfr=tyre_delta + suspension_delta,
-        sense_index=0.8,
-        structural_timestamp=structural,
-        delta_nfr_proj_longitudinal=longitudinal_delta,
-        delta_nfr_proj_lateral=lateral_delta,
-        tyres={"delta_nfr": tyre_delta},
-        suspension={"delta_nfr": suspension_delta},
-        chassis={"delta_nfr": 0.0, "yaw_rate": yaw_rate},
-    )
+from tests.helpers import build_support_bundle, build_telemetry_record
 
 
 def test_window_metrics_support_efficiency_uses_structural_windows() -> None:
@@ -64,10 +41,42 @@ def test_window_metrics_support_efficiency_uses_structural_windows() -> None:
         ),
     ]
     bundles = [
-        _bundle(0.0, 0.0, 0.4, 0.3, 0.5, -0.1, 0.05),
-        _bundle(1.0, 0.4, 0.5, 0.2, 0.2, 0.3, 0.08),
-        _bundle(2.0, 0.9, -0.1, 0.4, -0.2, 0.1, 0.02),
-        _bundle(3.0, 1.5, 0.2, 0.1, 0.4, -0.2, -0.03),
+        build_support_bundle(
+            timestamp=0.0,
+            structural_timestamp=0.0,
+            tyre_delta=0.4,
+            suspension_delta=0.3,
+            longitudinal_delta=0.5,
+            lateral_delta=-0.1,
+            yaw_rate=0.05,
+        ),
+        build_support_bundle(
+            timestamp=1.0,
+            structural_timestamp=0.4,
+            tyre_delta=0.5,
+            suspension_delta=0.2,
+            longitudinal_delta=0.2,
+            lateral_delta=0.3,
+            yaw_rate=0.08,
+        ),
+        build_support_bundle(
+            timestamp=2.0,
+            structural_timestamp=0.9,
+            tyre_delta=-0.1,
+            suspension_delta=0.4,
+            longitudinal_delta=-0.2,
+            lateral_delta=0.1,
+            yaw_rate=0.02,
+        ),
+        build_support_bundle(
+            timestamp=3.0,
+            structural_timestamp=1.5,
+            tyre_delta=0.2,
+            suspension_delta=0.1,
+            longitudinal_delta=0.4,
+            lateral_delta=-0.2,
+            yaw_rate=-0.03,
+        ),
     ]
 
     metrics = compute_window_metrics(records, bundles=bundles)
