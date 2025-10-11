@@ -15,6 +15,7 @@ from tests.helpers import (
     build_outsim_payload,
     make_select_stub,
     make_wait_stub,
+    raise_gaierror,
 )
 
 
@@ -41,9 +42,6 @@ def test_outsim_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
 
 
 def test_outsim_host_resolution_failure_disables_filtering(monkeypatch) -> None:
-    def raise_gaierror(*_args: object, **_kwargs: object) -> list[object]:
-        raise socket.gaierror()
-
     monkeypatch.setattr(outsim_module.socket, "getaddrinfo", raise_gaierror)
 
     client = OutSimUDPClient(host="unresolvable", port=0, timeout=0.05, retries=1)
