@@ -35,7 +35,6 @@ jobs:
               - '.github/**'
               - 'benchmarks/**'
               - 'config/**'
-              - 'examples/**'
               - 'Makefile'
               - 'mkdocs.yml'
               - 'modifiers/**'
@@ -80,7 +79,6 @@ jobs:
   quickstart:
     needs:
       - detect-changes
-      - test
     if: >-
       github.ref == 'refs/heads/main' ||
       needs.detect-changes.outputs.examples == 'true'
