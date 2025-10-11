@@ -6,7 +6,11 @@ from .constants import BASE_NU_F, SUPPORTED_CAR_MODELS
 from .epi import build_balanced_bundle, build_epi_bundle, build_epi_nodes
 from .microsector import build_goal, build_microsector
 from .packets import build_outgauge_packet, build_outsim_packet
-from .plugins import plugin_registry_state
+from .plugins import (
+    plugin_registry_state,
+    write_plugin_manager_config,
+    write_plugin_module,
+)
 from .profile_manager import preloaded_profile_manager
 from .setup import build_minimal_setup_plan, build_native_export_plan, build_setup_plan
 from .steering import (
@@ -56,6 +60,8 @@ __all__ = [
     "build_native_export_plan",
     "build_minimal_setup_plan",
     "plugin_registry_state",
+    "write_plugin_manager_config",
+    "write_plugin_module",
     "build_outsim_packet",
     "build_outgauge_packet",
     "QueueUDPSocket",
