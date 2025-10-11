@@ -60,6 +60,7 @@ from .udp import (
     make_select_stub,
     make_wait_stub,
     pad_outgauge_field,
+    raise_gaierror,
 )
 
 __all__ = [
@@ -106,6 +107,7 @@ __all__ = [
     "build_outsim_payload",
     "make_select_stub",
     "make_wait_stub",
+    "raise_gaierror",
     "instrument_prepare_pack_context",
     "run_cli_in_tmp",
     "DummyRecord",

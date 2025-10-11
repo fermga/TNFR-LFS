@@ -11,6 +11,14 @@ from tnfr_lfs.ingestion import outsim_udp as outsim_module
 UDPPayload = bytes | tuple[bytes, tuple[str, int]]
 
 
+def raise_gaierror(*_args: object, **_kwargs: object) -> list[object]:
+    """Raise :class:`socket.gaierror` for monkeypatched ``getaddrinfo`` calls."""
+
+    import socket
+
+    raise socket.gaierror()
+
+
 class QueueUDPSocket:
     """A minimal UDP socket stub backed by a queue of payloads."""
 
