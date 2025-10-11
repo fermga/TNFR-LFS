@@ -2,24 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tnfr_lfs.plugins import (
-    PluginContract,
-    PluginMetadata,
-    TNFRPlugin,
-    register_plugin_metadata,
-)
-from tnfr_lfs.plugins.registry import _clear_registry
-
-
-@pytest.fixture(autouse=True)
-def clear_registry() -> None:
-    _clear_registry()
-    register_plugin_metadata(
-        _RegisteredPlugin,
-        operators=["coherence_operator", "emission_operator"],
-    )
-    yield
-    _clear_registry()
+from tnfr_lfs.plugins import PluginContract, PluginMetadata, TNFRPlugin
 
 
 class _RegisteredPlugin(TNFRPlugin):
@@ -44,7 +27,12 @@ def test_plugin_metadata_normalises_sequences() -> None:
     assert metadata.optional_dependencies == ("redis", "numpy")
 
 
-def test_plugin_metadata_from_plugin_uses_registry_requirements() -> None:
+def test_plugin_metadata_from_plugin_uses_registry_requirements(plugin_registry) -> None:
+    plugin_registry(
+        _RegisteredPlugin,
+        ["coherence_operator", "emission_operator"],
+    )
+
     metadata = PluginMetadata.from_plugin(
         _RegisteredPlugin,
         identifier="registered-plugin",
@@ -60,7 +48,12 @@ def test_plugin_metadata_from_plugin_uses_registry_requirements() -> None:
     assert metadata.version == "2.3.1"
 
 
-def test_plugin_contract_validates_against_registry() -> None:
+def test_plugin_contract_validates_against_registry(plugin_registry) -> None:
+    plugin_registry(
+        _RegisteredPlugin,
+        ["coherence_operator", "emission_operator"],
+    )
+
     metadata = PluginMetadata.from_plugin(
         _RegisteredPlugin,
         identifier="registered-plugin",
@@ -73,7 +66,12 @@ def test_plugin_contract_validates_against_registry() -> None:
     assert contract.metadata == metadata
 
 
-def test_plugin_contract_factory_reuses_metadata_from_plugin() -> None:
+def test_plugin_contract_factory_reuses_metadata_from_plugin(plugin_registry) -> None:
+    plugin_registry(
+        _RegisteredPlugin,
+        ["coherence_operator", "emission_operator"],
+    )
+
     contract = PluginContract.from_plugin(
         _RegisteredPlugin,
         identifier="registered-plugin",
@@ -88,7 +86,12 @@ def test_plugin_contract_factory_reuses_metadata_from_plugin() -> None:
     )
 
 
-def test_mismatched_metadata_raises_value_error() -> None:
+def test_mismatched_metadata_raises_value_error(plugin_registry) -> None:
+    plugin_registry(
+        _RegisteredPlugin,
+        ["coherence_operator", "emission_operator"],
+    )
+
     invalid_metadata = PluginMetadata(
         identifier="registered-plugin",
         version="2.3.1",

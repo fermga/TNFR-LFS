@@ -3,6 +3,7 @@
 from .abtest import DummyBundle, build_metrics, scale_samples
 from .constants import BASE_NU_F, SUPPORTED_CAR_MODELS
 from .epi import build_epi_nodes
+from .plugins import plugin_registry_state
 from .profile_manager import preloaded_profile_manager
 from .setup import build_minimal_setup_plan, build_native_export_plan, build_setup_plan
 from .steering import build_steering_bundle, build_steering_record
@@ -42,6 +43,7 @@ __all__ = [
     "build_setup_plan",
     "build_native_export_plan",
     "build_minimal_setup_plan",
+    "plugin_registry_state",
     "QueueUDPSocket",
     "pad_outgauge_field",
     "build_outgauge_payload",

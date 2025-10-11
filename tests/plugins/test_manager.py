@@ -5,19 +5,10 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from tnfr_lfs.plugins.manager import PluginManager
 from tnfr_lfs.plugins.config import PluginConfig
 from tnfr_lfs.plugins import registry
 from tnfr_lfs.plugins.base import TNFRPlugin
-
-
-@pytest.fixture(autouse=True)
-def clear_registry() -> None:
-    registry._clear_registry()
-    yield
-    registry._clear_registry()
 
 
 def _create_plugin(
