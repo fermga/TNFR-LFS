@@ -5,7 +5,6 @@ import builtins
 import json
 import sys
 import types
-from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
 
@@ -17,6 +16,7 @@ from tnfr_lfs.core.cache_settings import CacheOptions
 from tnfr_lfs.cli import common as cli_common
 from tnfr_lfs.cli import io as cli_io
 from tnfr_lfs.cli.common import CliError
+from tests.helpers import DummyRecord, build_load_parquet_args, build_persist_parquet_args
 
 
 def test_load_cli_config_promotes_legacy_cache(tmp_path: Path) -> None:
@@ -197,30 +197,11 @@ def test_load_records_parquet_requires_engine(
         cli_io._load_records(telemetry_path)
 
 
-@dataclass
-class _DummyRecord:
-    value: int
-
-
-def _build_load_parquet_args(tmp_path: Path) -> tuple[tuple[Path, ...], dict[str, object], Path | None]:
-    telemetry_path = tmp_path / "baseline.parquet"
-    telemetry_path.write_bytes(b"PAR1\x00\x00\x00PAR1")
-    return (telemetry_path,), {}, None
-
-
-def _build_persist_parquet_args(
-    tmp_path: Path,
-) -> tuple[tuple[list[_DummyRecord], Path, str], dict[str, object], Path | None]:
-    destination = tmp_path / "baseline.parquet"
-    records = [_DummyRecord(1)]
-    return (records, destination, "parquet"), {}, destination
-
-
 @pytest.mark.parametrize(
     ("target", "arguments_builder"),
     [
-        (cli_io._load_records, _build_load_parquet_args),
-        (cli_io._persist_records, _build_persist_parquet_args),
+        (cli_io._load_records, build_load_parquet_args),
+        (cli_io._persist_records, build_persist_parquet_args),
     ],
     ids=["load", "persist"],
 )
@@ -259,7 +240,7 @@ def test_persist_records_parquet_requires_engine(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     destination = tmp_path / "baseline.parquet"
-    records = [_DummyRecord(1)]
+    records = [DummyRecord(1)]
 
     original = sys.modules.pop("pandas", None)
 

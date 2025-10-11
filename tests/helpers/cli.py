@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -74,3 +75,30 @@ def run_cli_in_tmp(
         return result, capsys.readouterr()
 
     return result
+
+
+@dataclass
+class DummyRecord:
+    """Simple stand-in record used by parquet CLI tests."""
+
+    value: int
+
+
+def build_load_parquet_args(
+    tmp_path: Path,
+) -> tuple[tuple[Path, ...], dict[str, object], Path | None]:
+    """Construct arguments for invoking ``_load_records`` with parquet data."""
+
+    telemetry_path = tmp_path / "baseline.parquet"
+    telemetry_path.write_bytes(b"PAR1\x00\x00\x00PAR1")
+    return (telemetry_path,), {}, None
+
+
+def build_persist_parquet_args(
+    tmp_path: Path,
+) -> tuple[tuple[list[DummyRecord], Path, str], dict[str, object], Path | None]:
+    """Construct arguments for invoking ``_persist_records`` with parquet data."""
+
+    destination = tmp_path / "baseline.parquet"
+    records = [DummyRecord(1)]
+    return (records, destination, "parquet"), {}, destination
