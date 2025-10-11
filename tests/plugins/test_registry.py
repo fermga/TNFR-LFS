@@ -11,14 +11,6 @@ from tnfr_lfs.plugins import (
     plugin_metadata,
     register_plugin_metadata,
 )
-from tnfr_lfs.plugins.registry import _clear_registry
-
-
-@pytest.fixture(autouse=True)
-def clear_registry() -> None:
-    _clear_registry()
-    yield
-    _clear_registry()
 
 
 class _BasePlugin(TNFRPlugin):
