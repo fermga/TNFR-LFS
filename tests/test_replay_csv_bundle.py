@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 import math
 import time
 import importlib
@@ -13,9 +13,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.ingestion.offline import ReplayCSVBundleReader
 from tnfr_lfs._pack_resources import data_root
+from tests.helpers import monkeypatch_row_to_record_counter
 
 
 replay_csv_bundle = importlib.import_module(ReplayCSVBundleReader.__module__)
@@ -253,24 +253,13 @@ def test_replay_csv_to_records_reuses_cached_dataframe(monkeypatch: pytest.Monke
 def test_replay_csv_to_records_uses_cached_results(monkeypatch: pytest.MonkeyPatch) -> None:
     reader = ReplayCSVBundleReader(BUNDLE_PATH)
 
-    call_count = 0
-    original = ReplayCSVBundleReader._row_to_record
+    with monkeypatch_row_to_record_counter(monkeypatch) as counter:
+        first_records = reader.to_records()
+        first_call_count = counter.count
 
-    def _counting_row_to_record(
-        self: ReplayCSVBundleReader, row: tuple[object, ...], column_index: Mapping[str, int]
-    ) -> TelemetryRecord:
-        nonlocal call_count
-        call_count += 1
-        return original(self, row, column_index)
+        second_records = reader.to_records()
 
-    monkeypatch.setattr(ReplayCSVBundleReader, "_row_to_record", _counting_row_to_record)
-
-    first_records = reader.to_records()
-    first_call_count = call_count
-
-    second_records = reader.to_records()
-
-    assert call_count == first_call_count
+    assert counter.count == first_call_count
     assert first_records == second_records
     assert first_records is not second_records
 
@@ -278,54 +267,32 @@ def test_replay_csv_to_records_uses_cached_results(monkeypatch: pytest.MonkeyPat
 def test_replay_csv_to_records_disable_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     reader = ReplayCSVBundleReader(BUNDLE_PATH, cache_size=0)
 
-    call_count = 0
-    original = ReplayCSVBundleReader._row_to_record
+    with monkeypatch_row_to_record_counter(monkeypatch) as counter:
+        reader.to_records()
+        baseline_calls = counter.count
 
-    def _counting_row_to_record(
-        self: ReplayCSVBundleReader, row: tuple[object, ...], column_index: Mapping[str, int]
-    ) -> TelemetryRecord:
-        nonlocal call_count
-        call_count += 1
-        return original(self, row, column_index)
+        reader.to_records()
 
-    monkeypatch.setattr(ReplayCSVBundleReader, "_row_to_record", _counting_row_to_record)
-
-    reader.to_records()
-    baseline_calls = call_count
-
-    reader.to_records()
-
-    assert call_count > baseline_calls
+        assert counter.count > baseline_calls
 
 
 def test_replay_csv_clear_cache_refreshes_records(monkeypatch: pytest.MonkeyPatch) -> None:
     reader = ReplayCSVBundleReader(BUNDLE_PATH)
 
-    call_count = 0
-    original = ReplayCSVBundleReader._row_to_record
+    with monkeypatch_row_to_record_counter(monkeypatch) as counter:
+        reader.to_records()
+        baseline_calls = counter.count
 
-    def _counting_row_to_record(
-        self: ReplayCSVBundleReader, row: tuple[object, ...], column_index: Mapping[str, int]
-    ) -> TelemetryRecord:
-        nonlocal call_count
-        call_count += 1
-        return original(self, row, column_index)
+        reader.to_records()
+        assert counter.count == baseline_calls
 
-    monkeypatch.setattr(ReplayCSVBundleReader, "_row_to_record", _counting_row_to_record)
+        reader.clear_cache()
+        reader.to_records()
+        assert counter.count > baseline_calls
 
-    reader.to_records()
-    baseline_calls = call_count
-
-    reader.to_records()
-    assert call_count == baseline_calls
-
-    reader.clear_cache()
-    reader.to_records()
-    assert call_count > baseline_calls
-
-    mutation_calls = call_count
-    reader.to_records(copy=False)
-    assert call_count > mutation_calls
+        mutation_calls = counter.count
+        reader.to_records(copy=False)
+        assert counter.count > mutation_calls
 
 
 def test_replay_csv_bundle_without_time_entry_raises(tmp_path: Path) -> None:
