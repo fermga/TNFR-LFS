@@ -107,6 +107,84 @@ def build_epi_bundle(
     return EPIBundle(**bundle_kwargs)
 
 
+def build_node_bundle(
+    *,
+    timestamp: float,
+    delta_nfr_by_node: Mapping[str, float] | None = None,
+    overrides: Mapping[
+        str,
+        Mapping[str, Any]
+        | TyresNode
+        | SuspensionNode
+        | ChassisNode
+        | BrakesNode
+        | TransmissionNode
+        | TrackNode
+        | DriverNode,
+    ]
+    | None = None,
+    epi: float = 0.0,
+    delta_nfr: float | None = None,
+    sense_index: float = 0.8,
+    structural_timestamp: float | None = None,
+    delta_nfr_proj_longitudinal: float = 0.0,
+    delta_nfr_proj_lateral: float = 0.0,
+    **bundle_overrides: Any,
+) -> EPIBundle:
+    """Build an :class:`EPIBundle` using explicit per-node ΔNFR values."""
+
+    node_delta_map = dict(delta_nfr_by_node or {})
+    node_overrides = dict(overrides or {})
+
+    unknown_deltas = set(node_delta_map) - NODE_FACTORIES.keys()
+    if unknown_deltas:
+        raise KeyError(f"Unknown node names in delta map: {sorted(unknown_deltas)!r}")
+
+    unknown_overrides = set(node_overrides) - NODE_FACTORIES.keys()
+    if unknown_overrides:
+        raise KeyError(f"Unknown node names in overrides: {sorted(unknown_overrides)!r}")
+
+    nodes: dict[str, Any] = {}
+    for name in NODE_FACTORIES:
+        override_value = node_overrides.get(name)
+        delta_value = node_delta_map.get(name)
+
+        if override_value is None:
+            if delta_value is not None:
+                nodes[name] = {"delta_nfr": delta_value}
+            continue
+
+        if isinstance(override_value, Mapping):
+            data = dict(override_value)
+            if delta_value is not None:
+                data["delta_nfr"] = delta_value
+            nodes[name] = data
+            continue
+
+        if delta_value is not None:
+            raise ValueError(
+                "Cannot provide both a pre-constructed node and a delta override "
+                f"for '{name}'"
+            )
+
+        nodes[name] = override_value
+
+    bundle_kwargs: dict[str, Any] = {
+        "timestamp": timestamp,
+        "epi": epi,
+        "delta_nfr": delta_nfr,
+        "sense_index": sense_index,
+        "structural_timestamp": structural_timestamp,
+        "delta_nfr_proj_longitudinal": delta_nfr_proj_longitudinal,
+        "delta_nfr_proj_lateral": delta_nfr_proj_lateral,
+        **{name: value for name, value in nodes.items()},
+    }
+
+    bundle_kwargs.update(bundle_overrides)
+
+    return build_epi_bundle(**bundle_kwargs)
+
+
 def build_balanced_bundle(timestamp: float, delta_nfr: float, si: float) -> EPIBundle:
     """Construct a bundle that evenly distributes delta_nfr across nodes."""
 
@@ -298,6 +376,7 @@ def build_rich_bundle(
 
 __all__ = [
     "build_epi_bundle",
+    "build_node_bundle",
     "build_balanced_bundle",
     "build_epi_nodes",
     "build_support_bundle",
