@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from tnfr_lfs.cli import run_cli as _run_cli
 from tnfr_lfs.cli import workflows as workflows_module
 
 
@@ -34,3 +36,41 @@ def instrument_prepare_pack_context(
         yield calls
     finally:
         setattr(workflows_module, "_prepare_pack_context", original)
+
+
+def run_cli_in_tmp(
+    args: Sequence[str] | Iterable[str],
+    *,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str] | None = None,
+    capture_output: bool = False,
+) -> str | tuple[str, pytest.CaptureResult[str]]:
+    """Execute ``run_cli`` from within ``tmp_path``.
+
+    Parameters
+    ----------
+    args:
+        Command-line arguments to pass to :func:`tnfr_lfs.cli.run_cli`.
+    tmp_path:
+        Temporary directory that should be treated as the working directory for
+        the duration of the command invocation.
+    monkeypatch:
+        ``pytest`` fixture used to swap the process working directory.
+    capsys:
+        Optional ``pytest`` capturing fixture. Required when ``capture_output``
+        is ``True``.
+    capture_output:
+        When ``True`` the return value includes the captured stdout/stderr via
+        ``capsys.readouterr()``.
+    """
+
+    monkeypatch.chdir(tmp_path)
+    result = _run_cli(list(args))
+
+    if capture_output:
+        if capsys is None:
+            raise ValueError("capture_output=True requires providing the capsys fixture")
+        return result, capsys.readouterr()
+
+    return result

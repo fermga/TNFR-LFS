@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tnfr_lfs.cli import run_cli
+from tests.helpers import run_cli_in_tmp
 from tnfr_lfs.examples.quickstart_dataset import (
     dataset_columns,
     dataset_path,
@@ -48,15 +49,18 @@ def test_quickstart_dataset_pipeline(
 ) -> None:
     """Core quickstart commands accept the shared dataset without errors."""
 
-    monkeypatch.chdir(tmp_path)
     baseline_path = tmp_path / "baseline.jsonl"
 
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(quickstart_dataset_path),
-    ])
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(quickstart_dataset_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     if command == "baseline":
         assert baseline_path.exists()
@@ -66,7 +70,9 @@ def test_quickstart_dataset_pipeline(
     if command == "suggest":
         args.extend(["--car-model", "FZR"])
 
-    payload = json.loads(run_cli(args))
+    payload = json.loads(
+        run_cli_in_tmp(args, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    )
     assert payload
     if command == "analyze":
         assert payload["telemetry_samples"] == 17

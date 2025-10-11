@@ -21,7 +21,12 @@ from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
-from tests.helpers import DummyBundle, create_cli_config_pack, instrument_prepare_pack_context
+from tests.helpers import (
+    DummyBundle,
+    create_cli_config_pack,
+    instrument_prepare_pack_context,
+    run_cli_in_tmp,
+)
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -89,17 +94,20 @@ def test_cli_exports_helper_attributes() -> None:
 def test_baseline_simulation_jsonl(
     tmp_path: Path, capsys, synthetic_stint_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     baseline_path = tmp_path / "baseline.jsonl"
 
-    result = run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
-
-    captured = capsys.readouterr()
+    result, captured = run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        capsys=capsys,
+        capture_output=True,
+    )
     assert baseline_path.exists()
     lines = [line for line in baseline_path.read_text(encoding="utf8").splitlines() if line.strip()]
     assert len(lines) == 17
@@ -110,15 +118,17 @@ def test_baseline_simulation_jsonl(
 def test_baseline_generates_timestamped_run(
     tmp_path: Path, capsys, synthetic_stint_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    result = run_cli([
-        "baseline",
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
-
-    captured = capsys.readouterr()
+    result, captured = run_cli_in_tmp(
+        [
+            "baseline",
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        capsys=capsys,
+        capture_output=True,
+    )
     runs_dir = tmp_path / "runs"
     assert runs_dir.is_dir()
     runs = list(runs_dir.glob("*.jsonl"))
@@ -135,10 +145,9 @@ def test_baseline_simulation_accepts_optional_flags(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     output_dir = tmp_path / "custom_runs"
 
-    result = run_cli(
+    result, captured = run_cli_in_tmp(
         [
             "baseline",
             "--simulate",
@@ -154,10 +163,12 @@ def test_baseline_simulation_accepts_optional_flags(
             "--insim-keepalive",
             "2.5",
             "--force",
-        ]
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        capsys=capsys,
+        capture_output=True,
     )
-
-    captured = capsys.readouterr()
     destination = output_dir / "session.jsonl"
     assert destination.exists()
     lines = [line for line in destination.read_text(encoding="utf8").splitlines() if line.strip()]
@@ -169,8 +180,6 @@ def test_baseline_simulation_accepts_optional_flags(
 def test_baseline_overlay_uses_keepalive_and_overlay(
     tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-
     created_clients: list[dict[str, float | str]] = []
     overlay_calls: dict[str, object] = {}
 
@@ -236,16 +245,20 @@ def test_baseline_overlay_uses_keepalive_and_overlay(
     monkeypatch.setattr(workflows_module, "OverlayManager", _DummyOverlay)
     monkeypatch.setattr(workflows_module, "_capture_udp_samples", _fake_capture)
 
-    result = run_cli([
-        "baseline",
-        "--overlay",
-        "--duration",
-        "3",
-        "--insim-keepalive",
-        "1.25",
-    ])
-
-    capsys.readouterr()
+    result, _ = run_cli_in_tmp(
+        [
+            "baseline",
+            "--overlay",
+            "--duration",
+            "3",
+            "--insim-keepalive",
+            "1.25",
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        capsys=capsys,
+        capture_output=True,
+    )
     assert "No telemetry samples captured" in result
     assert created_clients and created_clients[0]["keepalive_interval"] == pytest.approx(1.25)
     assert overlay_calls.get("connected")
@@ -257,7 +270,6 @@ def test_baseline_overlay_uses_keepalive_and_overlay(
 def test_baseline_threads_configured_buffer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     config_path = tmp_path / "tnfr_lfs.toml"
     config_path.write_text("[performance]\ntelemetry_buffer_size = 12\n", encoding="utf8")
 
@@ -285,7 +297,11 @@ def test_baseline_threads_configured_buffer(
 
     monkeypatch.setattr(workflows_module, "_capture_udp_samples", _fake_capture)
 
-    result = run_cli(["baseline", "--duration", "1"])
+    result = run_cli_in_tmp(
+        ["baseline", "--duration", "1"],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     assert "No telemetry samples captured" in result
     assert captured.get("buffer_size") == 12
@@ -296,8 +312,6 @@ def test_cli_analyze_accepts_raf_sample(
     raf_sample_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-
     with instrument_prepare_pack_context(monkeypatch) as prepare_calls:
         captured_records: dict[str, list] = {}
 
@@ -360,7 +374,7 @@ def test_cli_analyze_accepts_raf_sample(
         )
 
         payload = json.loads(
-            run_cli(
+            run_cli_in_tmp(
                 [
                     "analyze",
                     str(raf_sample_path),
@@ -370,7 +384,9 @@ def test_cli_analyze_accepts_raf_sample(
                     "0.5",
                     "--target-si",
                     "0.75",
-                ]
+                ],
+                tmp_path=tmp_path,
+                monkeypatch=monkeypatch,
             )
         )
 
@@ -407,7 +423,6 @@ def test_template_command_emits_phase_presets() -> None:
 def test_compare_command_attaches_abtest(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     config_path = tmp_path / "tnfr_lfs.toml"
     config_path.write_text(
         dedent(
@@ -500,7 +515,7 @@ def test_compare_command_attaches_abtest(
         },
     )
 
-    output = run_cli(
+    output = run_cli_in_tmp(
         [
             "--config",
             str(config_path),
@@ -511,7 +526,9 @@ def test_compare_command_attaches_abtest(
             "sense_index",
             "--export",
             "json",
-        ]
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
     )
     payload = json.loads(output)
     session = payload["session"]
@@ -599,24 +616,31 @@ def test_analyze_pipeline_json_export(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     with instrument_prepare_pack_context(monkeypatch) as prepare_calls:
         baseline_path = tmp_path / "baseline.jsonl"
-        run_cli([
-            "baseline",
-            str(baseline_path),
-            "--simulate",
-            str(synthetic_stint_path),
-        ])
+        run_cli_in_tmp(
+            [
+                "baseline",
+                str(baseline_path),
+                "--simulate",
+                str(synthetic_stint_path),
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
 
-        output = run_cli([
-            "analyze",
-            str(baseline_path),
-            "--export",
-            "json",
-        ])
-
-        captured = capsys.readouterr()
+        output, captured = run_cli_in_tmp(
+            [
+                "analyze",
+                str(baseline_path),
+                "--export",
+                "json",
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+            capsys=capsys,
+            capture_output=True,
+        )
         payload = json.loads(output)
         assert prepare_calls["count"] == 1
         assert payload["car"]["abbrev"] == "XFG"
@@ -671,7 +695,6 @@ def test_analyze_reports_note_missing_tyre_data(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     truncated_path = tmp_path / "synthetic_no_tyres.csv"
     with synthetic_stint_path.open(encoding="utf8") as source, truncated_path.open(
         "w", encoding="utf8", newline=""
@@ -689,19 +712,27 @@ def test_analyze_reports_note_missing_tyre_data(
             writer.writerow({name: row[name] for name in fieldnames})
 
     baseline_path = tmp_path / "baseline.jsonl"
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(truncated_path),
-    ])
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(truncated_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
-    output = run_cli([
-        "analyze",
-        str(baseline_path),
-        "--export",
-        "json",
-    ])
+    output = run_cli_in_tmp(
+        [
+            "analyze",
+            str(baseline_path),
+            "--export",
+            "json",
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     payload = json.loads(output)
     summary_text = payload["reports"]["metrics_summary"]["data"]
@@ -719,24 +750,31 @@ def test_suggest_pipeline(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     with instrument_prepare_pack_context(monkeypatch) as prepare_calls:
         baseline_path = tmp_path / "baseline.jsonl"
-        run_cli([
-            "baseline",
-            str(baseline_path),
-            "--simulate",
-            str(synthetic_stint_path),
-        ])
+        run_cli_in_tmp(
+            [
+                "baseline",
+                str(baseline_path),
+                "--simulate",
+                str(synthetic_stint_path),
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
 
-        output = run_cli([
-            "suggest",
-            str(baseline_path),
-            "--export",
-            "json",
-            "--car-model",
-            "FZR",
-        ])
+        output = run_cli_in_tmp(
+            [
+                "suggest",
+                str(baseline_path),
+                "--export",
+                "json",
+                "--car-model",
+                "FZR",
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
 
         payload = json.loads(output)
     assert prepare_calls["count"] == 1
@@ -761,24 +799,31 @@ def test_report_generation(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     with instrument_prepare_pack_context(monkeypatch) as prepare_calls:
         baseline_path = tmp_path / "baseline.jsonl"
-        run_cli([
-            "baseline",
-            str(baseline_path),
-            "--simulate",
-            str(synthetic_stint_path),
-        ])
+        run_cli_in_tmp(
+            [
+                "baseline",
+                str(baseline_path),
+                "--simulate",
+                str(synthetic_stint_path),
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
 
-        output = run_cli([
-            "report",
-            str(baseline_path),
-            "--export",
-            "json",
-            "--report-format",
-            "visual",
-        ])
+        output = run_cli_in_tmp(
+            [
+                "report",
+                str(baseline_path),
+                "--export",
+                "json",
+                "--report-format",
+                "visual",
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
 
         payload = json.loads(output)
     assert prepare_calls["count"] == 1
@@ -806,25 +851,32 @@ def test_write_set_markdown_export(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     baseline_path = tmp_path / "baseline.jsonl"
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
-    output = run_cli([
-        "write-set",
-        str(baseline_path),
-        "--export",
-        "markdown",
-        "--car-model",
-        "FZR",
-        "--session",
-        "stint-1",
-    ])
+    output = run_cli_in_tmp(
+        [
+            "write-set",
+            str(baseline_path),
+            "--export",
+            "markdown",
+            "--car-model",
+            "FZR",
+            "--session",
+            "stint-1",
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     assert "| Change |" in output
 
@@ -834,27 +886,34 @@ def test_write_set_lfs_export(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     baseline_path = tmp_path / "baseline.jsonl"
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
-    message = run_cli([
-        "write-set",
-        str(baseline_path),
-        "--export",
-        "set",
-        "--car-model",
-        "FZR",
-        "--session",
-        "stint-1",
-        "--set-output",
-        "FZR_race",
-    ])
+    message = run_cli_in_tmp(
+        [
+            "write-set",
+            str(baseline_path),
+            "--export",
+            "set",
+            "--car-model",
+            "FZR",
+            "--session",
+            "stint-1",
+            "--set-output",
+            "FZR_race",
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     destination = tmp_path / "LFS/data/setups/FZR_race.set"
     assert destination.exists()
@@ -868,30 +927,38 @@ def test_write_set_combined_export_outputs(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     baseline_path = tmp_path / "baseline.jsonl"
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
-    capsys.readouterr()
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        capsys=capsys,
+        capture_output=True,
+    )
 
-    result = run_cli([
-        "write-set",
-        str(baseline_path),
-        "--export",
-        "set",
-        "--export",
-        "lfs-notes",
-        "--car-model",
-        "FZR",
-        "--set-output",
-        "FZR_test",
-    ])
-
-    captured = capsys.readouterr()
+    result, captured = run_cli_in_tmp(
+        [
+            "write-set",
+            str(baseline_path),
+            "--export",
+            "set",
+            "--export",
+            "lfs-notes",
+            "--car-model",
+            "FZR",
+            "--set-output",
+            "FZR_test",
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        capsys=capsys,
+        capture_output=True,
+    )
     destination = tmp_path / "LFS/data/setups/FZR_test.set"
     assert destination.exists()
     assert "Setup saved" in result
@@ -905,26 +972,33 @@ def test_write_set_lfs_rejects_invalid_name(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     baseline_path = tmp_path / "baseline.jsonl"
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     with pytest.raises(ValueError):
-        run_cli([
-            "write-set",
-            str(baseline_path),
-            "--export",
-            "set",
-            "--car-model",
-            "FZR",
-            "--set-output",
-            "bad_name",
-        ])
+        run_cli_in_tmp(
+            [
+                "write-set",
+                str(baseline_path),
+                "--export",
+                "set",
+                "--car-model",
+                "FZR",
+                "--set-output",
+                "bad_name",
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
 
 
 def test_cli_end_to_end_pipeline(
@@ -932,27 +1006,33 @@ def test_cli_end_to_end_pipeline(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     baseline_path = tmp_path / "baseline.jsonl"
-
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     analysis = json.loads(
-        run_cli([
-            "analyze",
-            str(baseline_path),
-            "--export",
-            "json",
-            "--target-delta",
-            "1.0",
-            "--target-si",
-            "0.8",
-        ])
+        run_cli_in_tmp(
+            [
+                "analyze",
+                str(baseline_path),
+                "--export",
+                "json",
+                "--target-delta",
+                "1.0",
+                "--target-si",
+                "0.8",
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
     )
 
     assert analysis["telemetry_samples"] == 17
@@ -962,16 +1042,20 @@ def test_cli_end_to_end_pipeline(
     assert analysis["phase_messages"]
 
     suggestions = json.loads(
-        run_cli([
-            "suggest",
-            str(baseline_path),
-            "--export",
-            "json",
-            "--car-model",
-            "FZR",
-            "--track",
-            "AS5",
-        ])
+        run_cli_in_tmp(
+            [
+                "suggest",
+                str(baseline_path),
+                "--export",
+                "json",
+                "--car-model",
+                "FZR",
+                "--track",
+                "AS5",
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
     )
 
     assert suggestions["car_model"] == "FZR"
@@ -985,7 +1069,6 @@ def test_configuration_defaults_are_applied(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     config_path = tmp_path / "tnfr_lfs.toml"
     config_path.write_text(
         """
@@ -1012,20 +1095,28 @@ exit = 0.2
     )
 
     baseline_path = tmp_path / "baseline.jsonl"
-    run_cli([
-        "baseline",
-        str(baseline_path),
-        "--simulate",
-        str(synthetic_stint_path),
-    ])
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     payload = json.loads(
-        run_cli([
-            "suggest",
-            str(baseline_path),
-            "--export",
-            "json",
-        ])
+        run_cli_in_tmp(
+            [
+                "suggest",
+                str(baseline_path),
+                "--export",
+                "json",
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
     )
 
     assert payload["car_model"] == "config_gt"
@@ -1159,7 +1250,6 @@ def test_profiles_persist_and_adjust(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     config_path = tmp_path / "tnfr_lfs.toml"
     config_path.write_text(
         """
@@ -1204,12 +1294,20 @@ profiles = "profiles.toml"
             values[11] = f"{min(0.99, si_value + 0.1):.6f}"
             writer.writerow(values)
 
-    run_cli(["suggest", str(baseline_path), "--export", "json"])
+    run_cli_in_tmp(
+        ["suggest", str(baseline_path), "--export", "json"],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     profiles_path = tmp_path / "profiles.toml"
     assert profiles_path.exists()
 
-    run_cli(["write-set", str(baseline_path), "--car-model", "FZR"])
+    run_cli_in_tmp(
+        ["write-set", str(baseline_path), "--car-model", "FZR"],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     def entry_weight() -> float:
         manager = ProfileManager(profiles_path)
@@ -1225,7 +1323,11 @@ profiles = "profiles.toml"
 
     before_weight = entry_weight()
 
-    run_cli(["suggest", str(improved_path), "--export", "json"])
+    run_cli_in_tmp(
+        ["suggest", str(improved_path), "--export", "json"],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
 
     after_weight = entry_weight()
     assert after_weight > before_weight
@@ -1248,13 +1350,12 @@ def test_analyze_uses_pack_root_metadata(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     baseline_path = tmp_path / "baseline.jsonl"
     pack_root = create_cli_config_pack(tmp_path / "pack")
     config_path = pack_root / "config" / "global.toml"
     pack_arg = str(pack_root)
 
-    run_cli(
+    run_cli_in_tmp(
         [
             "baseline",
             str(baseline_path),
@@ -1264,11 +1365,13 @@ def test_analyze_uses_pack_root_metadata(
             str(config_path),
             "--pack-root",
             pack_arg,
-        ]
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
     )
 
     payload = json.loads(
-        run_cli(
+        run_cli_in_tmp(
             [
                 "analyze",
                 str(baseline_path),
@@ -1278,7 +1381,9 @@ def test_analyze_uses_pack_root_metadata(
                 str(config_path),
                 "--pack-root",
                 pack_arg,
-            ]
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
         )
     )
 
