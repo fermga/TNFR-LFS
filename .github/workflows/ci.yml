@@ -30,6 +30,7 @@ jobs:
       io: ${{ steps.filter.outputs.io }}
       processing: ${{ steps.filter.outputs.processing }}
       recommender: ${{ steps.filter.outputs.recommender }}
+      plugins: ${{ steps.filter.outputs.plugins }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,7 +74,7 @@ jobs:
             cli:
               - 'src/tnfr_lfs/cli/**'
               - 'tests/test_cli*.py'
-              - 'tests/test_cli_*.py'
+              - '!tests/test_cli_osd.py'
               - 'tests/test_cli_parser.py'
             exporters:
               - 'src/tnfr_lfs/exporters/**'
@@ -95,6 +96,10 @@ jobs:
               - 'src/tnfr_lfs/recommender/**'
               - 'tests/test_recommender*.py'
               - 'tests/test_recommender_search_cache.py'
+            plugins:
+              - 'src/tnfr_lfs/plugins/**'
+              - 'tests/plugins/**'
+              - 'tests/test_cli_osd.py'
             examples:
               - 'examples/**'
 
@@ -132,6 +137,7 @@ jobs:
           CHANGED_IO: ${{ needs.detect-changes.outputs.io }}
           CHANGED_PROCESSING: ${{ needs.detect-changes.outputs.processing }}
           CHANGED_RECOMMENDER: ${{ needs.detect-changes.outputs.recommender }}
+          CHANGED_PLUGINS: ${{ needs.detect-changes.outputs.plugins }}
         run: |
           set -euo pipefail
 
@@ -150,6 +156,7 @@ jobs:
           if [[ "$CHANGED_IO" == "true" ]]; then areas+=("io"); fi
           if [[ "$CHANGED_PROCESSING" == "true" ]]; then areas+=("processing"); fi
           if [[ "$CHANGED_RECOMMENDER" == "true" ]]; then areas+=("recommender"); fi
+          if [[ "$CHANGED_PLUGINS" == "true" ]]; then areas+=("plugins"); fi
 
           if (( ${#areas[@]} != 1 )); then
             echo "args=" >> "$GITHUB_OUTPUT"
@@ -205,6 +212,12 @@ jobs:
               targets=(
                 "tests/test_recommender*.py"
                 "tests/test_recommender_search_cache.py"
+              )
+              ;;
+            plugins)
+              targets=(
+                "tests/plugins"
+                "tests/test_cli_osd.py"
               )
               ;;
             *)
