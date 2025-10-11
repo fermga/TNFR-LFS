@@ -10,6 +10,10 @@ on:
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
+  merge_group:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
 
 concurrency:
   group: ci-${{ github.ref }}
