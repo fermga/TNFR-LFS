@@ -1,7 +1,13 @@
 """Convenience re-exports for test helpers."""
 
 from .abtest import DummyBundle, build_metrics, scale_samples
-from .cli import instrument_prepare_pack_context, run_cli_in_tmp
+from .cli import (
+    DummyRecord,
+    build_load_parquet_args,
+    build_persist_parquet_args,
+    instrument_prepare_pack_context,
+    run_cli_in_tmp,
+)
 from .osd import DummyHUD, _populate_hud, _window_metrics_from_parallel_turn
 from .constants import BASE_NU_F, SUPPORTED_CAR_MODELS
 from .epi import (
@@ -102,6 +108,9 @@ __all__ = [
     "make_wait_stub",
     "instrument_prepare_pack_context",
     "run_cli_in_tmp",
+    "DummyRecord",
+    "build_load_parquet_args",
+    "build_persist_parquet_args",
     "DummyHUD",
     "_populate_hud",
     "_window_metrics_from_parallel_turn",
