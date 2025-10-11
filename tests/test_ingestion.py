@@ -32,6 +32,7 @@ from tnfr_lfs.ingestion.outsim_udp import (
 )
 from tests.helpers import (
     QueueUDPSocket,
+    append_once_on_wait,
     build_outgauge_payload,
     build_outsim_payload,
     make_wait_stub,
@@ -775,15 +776,12 @@ def test_outsim_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -
     assert packet is not None
     packet.release()
 
-    appended = False
-
-    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
-        nonlocal appended
-        if not appended:
-            payloads.append((build_outsim_payload(140), ("127.0.0.1", 4123)))
-            appended = True
-
-    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
+    fake_wait, wait_calls = make_wait_stub(
+        hook=append_once_on_wait(
+            payloads,
+            lambda: (build_outsim_payload(140), ("127.0.0.1", 4123)),
+        )
+    )
     monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
 
     start = time.perf_counter()
@@ -885,15 +883,12 @@ def test_outgauge_udp_client_flushes_pending_when_successor_arrives(monkeypatch)
     assert packet is not None
     packet.release()
 
-    appended = False
-
-    def on_wait(_sock: object, _timeout: float, _deadline: float | None) -> None:
-        nonlocal appended
-        if not appended:
-            payloads.append((build_outgauge_payload(7, 70, layout="GP"), ("127.0.0.1", 3000)))
-            appended = True
-
-    fake_wait, wait_calls = make_wait_stub(hook=on_wait)
+    fake_wait, wait_calls = make_wait_stub(
+        hook=append_once_on_wait(
+            payloads,
+            lambda: (build_outgauge_payload(7, 70, layout="GP"), ("127.0.0.1", 3000)),
+        )
+    )
     monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
 
     start = time.perf_counter()
