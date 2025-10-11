@@ -227,6 +227,104 @@ import *`` only surfaces the documented symbols:
 * `tnfr_lfs.core.delta_utils` intentionally keeps ``__all__`` empty because the
   helper is not part of the public surface.【F:tnfr_lfs/core/delta_utils.py†L8-L8】
 
+### `tnfr_lfs.core.resonance`
+
+Use :class:`tnfr_lfs.core.resonance.ModalPeak` to interpret the dominant
+frequencies extracted from a rotational axis.  Each peak records the detected
+frequency, its spectral energy and a classification flag that separates
+actionable modes from noise.【F:src/tnfr_lfs/core/resonance.py†L14-L64】  Peaks are
+labelled as ``"useful"`` when they fall in the 0.05–5 Hz window that covers the
+modal range of typical setups and they either lead the spectrum or retain at
+least half the dominant energy; all other peaks are marked as
+``"parasitic"``.【F:src/tnfr_lfs/core/resonance.py†L70-L101】
+
+:class:`tnfr_lfs.core.resonance.ModalAnalysis` aggregates the spectral
+statistics for a single yaw/roll/pitch axis, reporting the sample rate, total
+energy, the extracted peaks, the estimated excitation frequency (``nu_exc``) and
+the ``rho`` ratio between the excitation and the dominant modal
+frequency.【F:src/tnfr_lfs/core/resonance.py†L24-L109】  Values of ``rho`` close to
+``1.0`` indicate that the steering/suspension inputs are driving the same mode
+identified in the axis spectrum, while small values highlight a mismatch between
+the excitation and the structural response.
+
+:func:`tnfr_lfs.core.resonance.analyse_modal_resonance` orchestrates the full
+workflow: the helper converts a series of
+:class:`~tnfr_lfs.core.epi.TelemetryRecord` samples into per-axis spectra,
+collects the modal energy, extracts the most energetic peaks and evaluates the
+``rho`` coupling metric described above.【F:src/tnfr_lfs/core/resonance.py†L32-L109】
+
+#### Example: synthetic yaw/roll/pitch sweep
+
+The snippet below synthesises a short series of telemetry samples, evaluates the
+modal resonance and prints the dominant peak for each axis:
+
+```python
+from math import sin, tau
+
+from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.core.resonance import analyse_modal_resonance
+
+records: list[TelemetryRecord] = []
+for index in range(600):
+    timestamp = index * 0.02  # 50 Hz
+    yaw = 0.03 * sin(tau * 1.5 * timestamp)
+    roll = 0.02 * sin(tau * 3.0 * timestamp)
+    pitch = 0.01 * sin(tau * 0.5 * timestamp)
+    steer = 0.2 * sin(tau * 1.5 * timestamp)
+    front_velocity = 0.5 * sin(tau * 1.5 * timestamp + 0.1)
+    rear_velocity = 0.5 * sin(tau * 1.5 * timestamp - 0.1)
+
+    records.append(
+        TelemetryRecord(
+            timestamp=timestamp,
+            vertical_load=0.0,
+            slip_ratio=0.0,
+            lateral_accel=0.0,
+            longitudinal_accel=0.0,
+            yaw=yaw,
+            pitch=pitch,
+            roll=roll,
+            brake_pressure=0.0,
+            locking=0.0,
+            nfr=0.0,
+            si=0.0,
+            speed=0.0,
+            yaw_rate=0.0,
+            slip_angle=0.0,
+            steer=steer,
+            throttle=0.5,
+            gear=3,
+            vertical_load_front=0.0,
+            vertical_load_rear=0.0,
+            mu_eff_front=0.0,
+            mu_eff_rear=0.0,
+            mu_eff_front_lateral=0.0,
+            mu_eff_front_longitudinal=0.0,
+            mu_eff_rear_lateral=0.0,
+            mu_eff_rear_longitudinal=0.0,
+            suspension_travel_front=0.0,
+            suspension_travel_rear=0.0,
+            suspension_velocity_front=front_velocity,
+            suspension_velocity_rear=rear_velocity,
+        )
+    )
+
+analysis = analyse_modal_resonance(records)
+
+for axis, modal in analysis.items():
+    peak = modal.peaks[0] if modal.peaks else None
+    print(
+        axis,
+        f"nu_exc={modal.nu_exc:.2f} Hz",
+        f"rho={modal.rho:.2f}",
+        f"dominant={peak.frequency:.2f} Hz ({peak.classification})" if peak else "no peaks",
+    )
+```
+
+Running the script reveals how the helper reports a dominant yaw mode around
+1.5 Hz, marks roll as parasitic because its energy sits below the 50% threshold
+of the primary peak and describes the pitch response through the ``rho`` ratio.
+
 ### `tnfr_lfs.core.coherence`
 
 The coherence helpers distribute ΔNFR magnitudes to the signals that produced
