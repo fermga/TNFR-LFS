@@ -30,6 +30,7 @@ from .plugins import (
     write_plugin_manager_config,
     write_plugin_module,
 )
+from .replay_bundle import RowToRecordCounter, monkeypatch_row_to_record_counter
 from .profile_manager import preloaded_profile_manager
 from .setup import build_minimal_setup_plan, build_native_export_plan, build_setup_plan
 from .steering import (
@@ -87,6 +88,8 @@ __all__ = [
     "write_plugin_config_text",
     "write_plugin_manager_config",
     "write_plugin_module",
+    "RowToRecordCounter",
+    "monkeypatch_row_to_record_counter",
     "build_outsim_packet",
     "build_outgauge_packet",
     "QueueUDPSocket",
