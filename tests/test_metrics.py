@@ -42,8 +42,7 @@ from tnfr_lfs.core.epi_models import (
 )
 from tnfr_lfs.core.utils import normalised_entropy
 
-from tests.helpers import build_telemetry_record
-from tests.helpers.steering import build_steering_bundle
+from tests.helpers import build_steering_bundle, build_telemetry_record
 
 
 def test_record_optional_defaults_are_nan() -> None:
