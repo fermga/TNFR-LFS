@@ -232,22 +232,22 @@ import *`` only surfaces the documented symbols:
 Context-aware ΔNFR adjustments rely on two lightweight dataclasses and a loader
 that exposes the calibration factors distributed with the library.
 
-* :class:`tnfr_lfs.core.contextual_delta.ContextMatrix` encapsula los rangos de
-  curvatura, adherencia y tráfico junto con los multiplicadores mínimo/máximo y
-  las referencias empleadas para normalizar cargas o caídas de velocidad. Sus
-  métodos ``curve_factor``, ``surface_factor`` y ``traffic_factor`` devuelven el
-  multiplicador asociado a cada métrica y permiten inspeccionar el tramo activo
-  mediante ``curve_band``/``surface_band``/``traffic_band``.【F:src/tnfr_lfs/core/contextual_delta.py†L51-L109】
-* :class:`tnfr_lfs.core.contextual_delta.ContextFactors` representa el triplete
-  de factores aplicables a un ΔNFR y expone ``multiplier`` para combinar los
-  componentes en un único escalar consumido por el resto del módulo.【F:src/tnfr_lfs/core/contextual_delta.py†L35-L48】
-* :func:`tnfr_lfs.core.contextual_delta.load_context_matrix` carga la matriz
-  desde ``context_factors.toml`` (con caché en memoria), normaliza los valores
-  por pista y garantiza referencias estrictamente positivas para los términos
-  de tráfico antes de construir el :class:`~tnfr_lfs.core.contextual_delta.ContextMatrix`.【F:src/tnfr_lfs/core/contextual_delta.py†L187-L221】
-* :func:`tnfr_lfs.core.contextual_delta.apply_contextual_delta` limita el
-  multiplicador calculado a los umbrales definidos por la matriz y devuelve el
-  ΔNFR ajustado con el contexto actual.【F:src/tnfr_lfs/core/contextual_delta.py†L233-L244】
+* :class:`tnfr_lfs.core.contextual_delta.ContextMatrix` captures the curvature,
+  surface and traffic bands together with minimum/maximum multipliers and the
+  reference values used to normalise load or speed deltas. The
+  ``curve_factor``, ``surface_factor`` and ``traffic_factor`` methods return the
+  multiplier associated with each metric, while ``curve_band`` /
+  ``surface_band`` / ``traffic_band`` surface the active range label.【F:src/tnfr_lfs/core/contextual_delta.py†L51-L109】
+* :class:`tnfr_lfs.core.contextual_delta.ContextFactors` represents the factor
+  triplet applied to a ΔNFR and exposes ``multiplier`` to collapse the
+  components into a single scalar consumed by the rest of the module.【F:src/tnfr_lfs/core/contextual_delta.py†L35-L48】
+* :func:`tnfr_lfs.core.contextual_delta.load_context_matrix` loads the matrix
+  from ``context_factors.toml`` (cached in memory), normalises per-track
+  datasets and guarantees strictly positive references for traffic terms before
+  constructing the :class:`~tnfr_lfs.core.contextual_delta.ContextMatrix`.【F:src/tnfr_lfs/core/contextual_delta.py†L187-L221】
+* :func:`tnfr_lfs.core.contextual_delta.apply_contextual_delta` clamps the
+  computed multiplier to the thresholds defined by the matrix and returns the
+  ΔNFR adjusted for the current context.【F:src/tnfr_lfs/core/contextual_delta.py†L233-L244】
 
 ```python
 from tnfr_lfs.core.contextual_delta import (
@@ -256,31 +256,31 @@ from tnfr_lfs.core.contextual_delta import (
 )
 
 matrix = load_context_matrix()
-delta_nfr = 0.18  # ΔNFR sin contextualizar
+delta_nfr = 0.18  # raw ΔNFR
 factors = {"curve": 1.05, "surface": 0.95, "traffic": 1.1}
 
 contextualised = apply_contextual_delta(delta_nfr, factors, context_matrix=matrix)
-print(f"ΔNFR ajustado: {contextualised:.3f}")
+print(f"Context-aware ΔNFR: {contextualised:.3f}")
 ```
 
 ### `tnfr_lfs.core.coherence_calibration`
 
-El subsistema de coherencia mantiene historiales por jugador/coche para derivar
-baselines persistentes y rangos normales de telemetría.
+The coherence subsystem keeps per-player/car histories so it can derive
+persistent baselines and normal telemetry ranges.
 
 * :class:`tnfr_lfs.core.coherence_calibration.CoherenceCalibrationStore`
-  persiste un diccionario de :class:`~tnfr_lfs.core.coherence_calibration.CalibrationEntry`
-  indexado por ``(player_name, car_model)``, valida los parámetros de decaimiento
-  y umbrales de vueltas y se encarga de cargar/guardar el archivo TOML asociado
-  automáticamente.【F:src/tnfr_lfs/core/coherence_calibration.py†L130-L240】
-  Cada registro acumula medias suavizadas exponencialmente mediante
-  :class:`~tnfr_lfs.core.coherence_calibration.CalibrationMetric`, incrementa el
-  contador de vueltas hasta ``max_laps`` y permite recuperar un baseline sólo si
-  se ha superado ``min_laps``.【F:src/tnfr_lfs/core/coherence_calibration.py†L60-L190】
+  persists a dictionary of :class:`~tnfr_lfs.core.coherence_calibration.CalibrationEntry`
+  keyed by ``(player_name, car_model)``, validates decay and lap thresholds, and
+  automatically handles loading/saving the associated TOML file.【F:src/tnfr_lfs/core/coherence_calibration.py†L130-L240】
+  Each entry accumulates exponentially smoothed means via
+  :class:`~tnfr_lfs.core.coherence_calibration.CalibrationMetric`, increments the
+  lap counter up to ``max_laps`` and only exposes a derived baseline once
+  ``min_laps`` has been satisfied.【F:src/tnfr_lfs/core/coherence_calibration.py†L60-L190】
 * :func:`tnfr_lfs.core.coherence_calibration.CoherenceCalibrationStore.snapshot`
-  construye una :class:`tnfr_lfs.core.coherence_calibration.CalibrationSnapshot`
-  inmutable con el baseline actual y los rangos ``(mínimo, máximo)`` de cada
-  métrica, facilitando la inspección externa sin exponer el estado interno.【F:src/tnfr_lfs/core/coherence_calibration.py†L181-L272】
+  builds an immutable :class:`tnfr_lfs.core.coherence_calibration.CalibrationSnapshot`
+  carrying the current baseline and ``(minimum, maximum)`` ranges for each
+  metric, making it straightforward to inspect the calibration without exposing
+  internal state.【F:src/tnfr_lfs/core/coherence_calibration.py†L181-L272】
 
 ```python
 from tnfr_lfs.core.coherence_calibration import CoherenceCalibrationStore
@@ -288,11 +288,11 @@ from tnfr_lfs.core.epi import TelemetryRecord
 
 store = CoherenceCalibrationStore(decay=0.25, min_laps=2, max_laps=5)
 
-# Registrar un baseline calculado en otro punto de la canalización.
-baseline = TelemetryRecord()  # payload con valores por defecto
+# Record a baseline computed elsewhere in the analytics pipeline.
+baseline = TelemetryRecord()  # payload populated with default values
 store.observe_baseline("Driver 42", "fo8", baseline)
 
-# Tras acumular suficientes vueltas el snapshot expone el baseline derivado.
+# Once enough laps have been ingested the snapshot exposes the derived baseline.
 snapshot = store.snapshot("Driver 42", "fo8")
 if snapshot:
     print(snapshot.player_name, snapshot.laps)
