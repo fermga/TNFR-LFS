@@ -227,6 +227,77 @@ import *`` only surfaces the documented symbols:
 * `tnfr_lfs.core.delta_utils` intentionally keeps ``__all__`` empty because the
   helper is not part of the public surface.【F:tnfr_lfs/core/delta_utils.py†L8-L8】
 
+### `tnfr_lfs.core.contextual_delta`
+
+Context-aware ΔNFR adjustments rely on two lightweight dataclasses and a loader
+that exposes the calibration factors distributed with the library.
+
+* :class:`tnfr_lfs.core.contextual_delta.ContextMatrix` encapsula los rangos de
+  curvatura, adherencia y tráfico junto con los multiplicadores mínimo/máximo y
+  las referencias empleadas para normalizar cargas o caídas de velocidad. Sus
+  métodos ``curve_factor``, ``surface_factor`` y ``traffic_factor`` devuelven el
+  multiplicador asociado a cada métrica y permiten inspeccionar el tramo activo
+  mediante ``curve_band``/``surface_band``/``traffic_band``.【F:src/tnfr_lfs/core/contextual_delta.py†L51-L109】
+* :class:`tnfr_lfs.core.contextual_delta.ContextFactors` representa el triplete
+  de factores aplicables a un ΔNFR y expone ``multiplier`` para combinar los
+  componentes en un único escalar consumido por el resto del módulo.【F:src/tnfr_lfs/core/contextual_delta.py†L35-L48】
+* :func:`tnfr_lfs.core.contextual_delta.load_context_matrix` carga la matriz
+  desde ``context_factors.toml`` (con caché en memoria), normaliza los valores
+  por pista y garantiza referencias estrictamente positivas para los términos
+  de tráfico antes de construir el :class:`~tnfr_lfs.core.contextual_delta.ContextMatrix`.【F:src/tnfr_lfs/core/contextual_delta.py†L187-L221】
+* :func:`tnfr_lfs.core.contextual_delta.apply_contextual_delta` limita el
+  multiplicador calculado a los umbrales definidos por la matriz y devuelve el
+  ΔNFR ajustado con el contexto actual.【F:src/tnfr_lfs/core/contextual_delta.py†L233-L244】
+
+```python
+from tnfr_lfs.core.contextual_delta import (
+    apply_contextual_delta,
+    load_context_matrix,
+)
+
+matrix = load_context_matrix()
+delta_nfr = 0.18  # ΔNFR sin contextualizar
+factors = {"curve": 1.05, "surface": 0.95, "traffic": 1.1}
+
+contextualised = apply_contextual_delta(delta_nfr, factors, context_matrix=matrix)
+print(f"ΔNFR ajustado: {contextualised:.3f}")
+```
+
+### `tnfr_lfs.core.coherence_calibration`
+
+El subsistema de coherencia mantiene historiales por jugador/coche para derivar
+baselines persistentes y rangos normales de telemetría.
+
+* :class:`tnfr_lfs.core.coherence_calibration.CoherenceCalibrationStore`
+  persiste un diccionario de :class:`~tnfr_lfs.core.coherence_calibration.CalibrationEntry`
+  indexado por ``(player_name, car_model)``, valida los parámetros de decaimiento
+  y umbrales de vueltas y se encarga de cargar/guardar el archivo TOML asociado
+  automáticamente.【F:src/tnfr_lfs/core/coherence_calibration.py†L130-L240】
+  Cada registro acumula medias suavizadas exponencialmente mediante
+  :class:`~tnfr_lfs.core.coherence_calibration.CalibrationMetric`, incrementa el
+  contador de vueltas hasta ``max_laps`` y permite recuperar un baseline sólo si
+  se ha superado ``min_laps``.【F:src/tnfr_lfs/core/coherence_calibration.py†L60-L190】
+* :func:`tnfr_lfs.core.coherence_calibration.CoherenceCalibrationStore.snapshot`
+  construye una :class:`tnfr_lfs.core.coherence_calibration.CalibrationSnapshot`
+  inmutable con el baseline actual y los rangos ``(mínimo, máximo)`` de cada
+  métrica, facilitando la inspección externa sin exponer el estado interno.【F:src/tnfr_lfs/core/coherence_calibration.py†L181-L272】
+
+```python
+from tnfr_lfs.core.coherence_calibration import CoherenceCalibrationStore
+from tnfr_lfs.core.epi import TelemetryRecord
+
+store = CoherenceCalibrationStore(decay=0.25, min_laps=2, max_laps=5)
+
+# Registrar un baseline calculado en otro punto de la canalización.
+baseline = TelemetryRecord()  # payload con valores por defecto
+store.observe_baseline("Driver 42", "fo8", baseline)
+
+# Tras acumular suficientes vueltas el snapshot expone el baseline derivado.
+snapshot = store.snapshot("Driver 42", "fo8")
+if snapshot:
+    print(snapshot.player_name, snapshot.laps)
+```
+
 ### `tnfr_lfs.core.cache`
 
 `LRUCache` wraps an internal least-recently-used store so pipelines can opt into
