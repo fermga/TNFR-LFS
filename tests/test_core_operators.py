@@ -9,9 +9,14 @@ from typing import List, Mapping
 
 import pytest
 
-from tests.helpers import build_dynamic_record, build_epi_bundle
+from tests.helpers import (
+    build_dynamic_record,
+    build_epi_bundle,
+    build_goal,
+    build_microsector,
+)
 
-from tnfr_lfs.core import Goal, Microsector, TelemetryRecord, phase_synchrony_index
+from tnfr_lfs.core import Microsector, TelemetryRecord, phase_synchrony_index
 from tnfr_lfs.core.spectrum import phase_to_latency_ms
 from tnfr_lfs.core.coherence import sense_index
 from tnfr_lfs.core.contextual_delta import (
@@ -131,29 +136,6 @@ def test_delta_calculator_decomposes_lateral_component():
     assert abs(bundle.delta_nfr_proj_lateral) > abs(bundle.delta_nfr_proj_longitudinal)
 
 
-def _build_goal(phase: str, target_delta: float, *, archetype: str = "medium") -> Goal:
-    aliases = expand_phase_alias(phase)
-    actual_phase = aliases[-1] if aliases else phase
-    return Goal(
-        phase=actual_phase,
-        archetype=archetype,
-        description=f"Synthetic goal for {actual_phase}",
-        target_delta_nfr=target_delta,
-        target_sense_index=0.9,
-        nu_f_target=0.0,
-        nu_exc_target=0.0,
-        rho_target=0.0,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.9,
-        measured_phase_lag=0.0,
-        measured_phase_alignment=1.0,
-        slip_lat_window=(-0.5, 0.5),
-        slip_long_window=(-0.5, 0.5),
-        yaw_rate_window=(-0.5, 0.5),
-        dominant_nodes=("tyres",),
-    )
-
-
 def _build_microsector(
     index: int,
     entry_idx: int,
@@ -166,87 +148,27 @@ def _build_microsector(
     phase_synchrony_map: Mapping[str, float] | None = None,
     cphi_values: Mapping[str, float] | None = None,
 ) -> Microsector:
-    target_map = {
-        "entry1": 0.0,
-        "entry2": 0.0,
-        "apex3a": 0.0,
-        "apex3b": apex_target,
-        "exit4": 0.0,
-    }
-    goals = tuple(
-        _build_goal(phase, target_map.get(phase, 0.0), archetype=archetype)
-        for phase in PHASE_SEQUENCE
-    )
-    boundary_start = {
-        "entry1": entry_idx,
-        "entry2": entry_idx + 1,
-        "apex3a": apex_idx,
-        "apex3b": apex_idx + 1,
-        "exit4": exit_idx,
-    }
-    phase_boundaries = {
-        phase: (boundary_start.get(phase, entry_idx), boundary_start.get(phase, entry_idx) + 1)
-        for phase in PHASE_SEQUENCE
-    }
-    phase_samples = {phase: (phase_boundaries[phase][0],) for phase in PHASE_SEQUENCE}
-    dominant_nodes = {phase: ("tyres",) for phase in PHASE_SEQUENCE}
-    phase_weights = {phase: {} for phase in PHASE_SEQUENCE}
-    phase_lag = {phase: 0.0 for phase in PHASE_SEQUENCE}
-    phase_alignment = {phase: 1.0 for phase in PHASE_SEQUENCE}
-    if phase_synchrony_map is None:
-        phase_synchrony = {phase: 1.0 for phase in PHASE_SEQUENCE}
-    else:
-        phase_synchrony = {
+    synchrony_payload = None
+    if phase_synchrony_map is not None:
+        synchrony_payload = {
             phase: float(phase_synchrony_map.get(phase, 1.0))
             for phase in PHASE_SEQUENCE
         }
-    cphi_mapping = {
-        suffix: float(cphi_values.get(suffix, 0.7))
-        for suffix in WHEEL_SUFFIXES
-    } if cphi_values is not None else {suffix: 0.7 for suffix in WHEEL_SUFFIXES}
-    cphi_payload = {
-        "wheels": {
-            suffix: {"value": value, "components": {}}
-            for suffix, value in cphi_mapping.items()
-        },
-        "thresholds": {"red": 0.4, "amber": 0.6, "green": 0.8},
+
+    kwargs: dict[str, object] = {
+        "index": index,
+        "entry_index": entry_idx,
+        "apex_index": apex_idx,
+        "exit_index": exit_idx,
+        "support_event": support_event,
+        "archetype": archetype,
+        "apex_target": apex_target,
     }
-    filtered_measures = {
-        "thermal_load": 5000.0,
-        "style_index": 0.9,
-        "grip_rel": 1.0,
-        "cphi": cphi_payload,
-    }
-    for suffix, value in cphi_mapping.items():
-        filtered_measures[f"cphi_{suffix}"] = value
-    window_occupancy = {
-        phase: {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0}
-        for phase in PHASE_SEQUENCE
-    }
-    return Microsector(
-        index=index,
-        start_time=float(entry_idx),
-        end_time=float(exit_idx),
-        curvature=1.0,
-        brake_event=False,
-        support_event=support_event,
-        delta_nfr_signature=0.0,
-        goals=goals,
-        phase_boundaries=phase_boundaries,
-        phase_samples=phase_samples,
-        active_phase="apex",
-        dominant_nodes=dominant_nodes,
-        phase_weights=phase_weights,
-        grip_rel=1.0,
-        phase_lag=phase_lag,
-        phase_alignment=phase_alignment,
-        phase_synchrony=phase_synchrony,
-        filtered_measures=filtered_measures,
-        recursivity_trace=(),
-        last_mutation=None,
-        window_occupancy=window_occupancy,
-        operator_events={},
-    )
+    if synchrony_payload is not None:
+        kwargs["phase_synchrony"] = synchrony_payload
+    if cphi_values is not None:
+        kwargs["cphi_values"] = cphi_values
+    return build_microsector(**kwargs)
 
 
 def _build_bundle(
@@ -443,7 +365,9 @@ def test_orchestrator_respects_phase_weight_overrides():
         "apex": {"__default__": 1.0},
         "exit": {"__default__": 1.0},
     }
-    base_microsector = Microsector(
+    phases = ("entry", "apex", "exit")
+    goals = tuple(build_goal(phase, 0.0) for phase in phases)
+    base_microsector = build_microsector(
         index=0,
         start_time=records[0].timestamp,
         end_time=records[-1].timestamp,
@@ -451,29 +375,22 @@ def test_orchestrator_respects_phase_weight_overrides():
         brake_event=False,
         support_event=False,
         delta_nfr_signature=0.0,
-        goals=(
-            _build_goal("entry", 0.0),
-            _build_goal("apex", 0.0),
-            _build_goal("exit", 0.0),
-        ),
+        goals=goals,
+        phases=phases,
         phase_boundaries={"entry": (0, 2), "apex": (2, 2), "exit": (2, 2)},
         phase_samples={"entry": (0, 1), "apex": (), "exit": ()},
         active_phase="entry",
-        dominant_nodes={"entry": ("tyres",), "apex": ("tyres",), "exit": ("tyres",)},
+        dominant_nodes={phase: ("tyres",) for phase in phases},
         phase_weights=base_weights,
-        grip_rel=1.0,
-        phase_lag={"entry": 0.0, "apex": 0.0, "exit": 0.0},
-        phase_alignment={"entry": 1.0, "apex": 1.0, "exit": 1.0},
-        phase_synchrony={"entry": 1.0, "apex": 1.0, "exit": 1.0},
         filtered_measures={"thermal_load": 5200.0, "style_index": 0.9, "grip_rel": 1.0},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={
-            "entry": {"slip_lat": 0.0, "slip_long": 0.0, "yaw_rate": 0.0},
-            "apex": {"slip_lat": 0.0, "slip_long": 0.0, "yaw_rate": 0.0},
-            "exit": {"slip_lat": 0.0, "slip_long": 0.0, "yaw_rate": 0.0},
+            phase: {"slip_lat": 0.0, "slip_long": 0.0, "yaw_rate": 0.0}
+            for phase in phases
         },
-        operator_events={},
+        phase_lag={phase: 0.0 for phase in phases},
+        phase_alignment={phase: 1.0 for phase in phases},
+        phase_synchrony={phase: 1.0 for phase in phases},
+        include_cphi=False,
     )
     boosted_microsector = replace(base_microsector, phase_weights=boosted_weights)
 

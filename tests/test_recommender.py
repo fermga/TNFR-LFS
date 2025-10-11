@@ -48,6 +48,8 @@ from tnfr_lfs.core.operators import tyre_balance_controller
 
 from tests.helpers import (
     BASE_NU_F,
+    build_goal,
+    build_microsector,
     build_epi_bundle,
     build_epi_nodes,
     build_steering_bundle,
@@ -109,7 +111,7 @@ def _brake_headroom_microsector(
     peak: float,
     brake_event: bool = True,
 ) -> Microsector:
-    return Microsector(
+    return build_microsector(
         index=index,
         start_time=0.0,
         end_time=0.4,
@@ -118,12 +120,12 @@ def _brake_headroom_microsector(
         support_event=False,
         delta_nfr_signature=0.0,
         goals=(),
+        phases=(),
         phase_boundaries={},
         phase_samples={},
         active_phase="entry",
         dominant_nodes={},
         phase_weights={},
-        grip_rel=1.0,
         phase_lag={},
         phase_alignment={},
         phase_synchrony={},
@@ -134,9 +136,8 @@ def _brake_headroom_microsector(
             "brake_headroom_partial_locking": partial,
             "brake_headroom_sustained_locking": sustained,
         },
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={},
+        include_cphi=False,
         context_factors={},
         sample_context_factors={},
     )
@@ -189,18 +190,16 @@ def _axis_bundle(
 
 
 def _udr_goal(phase: str = "apex", target_delta: float = 0.2) -> Goal:
-    return Goal(
-        phase=phase,
+    return build_goal(
+        phase,
+        target_delta,
         archetype="hairpin",
         description="",
-        target_delta_nfr=target_delta,
         target_sense_index=0.85,
         nu_f_target=0.3,
         nu_exc_target=0.25,
         rho_target=0.8,
-        target_phase_lag=0.0,
         target_phase_alignment=0.9,
-        measured_phase_lag=0.0,
         measured_phase_alignment=0.9,
         slip_lat_window=(-0.3, 0.3),
         slip_long_window=(-0.3, 0.3),
@@ -224,7 +223,8 @@ def _udr_microsector(
     measures = {"udr": udr}
     if filtered_measures:
         measures.update({k: float(v) for k, v in filtered_measures.items()})
-    return Microsector(
+    phase = goal.phase
+    return build_microsector(
         index=index,
         start_time=0.0,
         end_time=sample_count * 0.1,
@@ -233,20 +233,19 @@ def _udr_microsector(
         support_event=True,
         delta_nfr_signature=goal.target_delta_nfr + 0.4,
         goals=(goal,),
-        phase_boundaries={goal.phase: boundary},
-        phase_samples={goal.phase: samples},
-        active_phase=goal.phase,
-        dominant_nodes={goal.phase: goal.dominant_nodes},
-        phase_weights={goal.phase: {"__default__": 1.0}},
-        grip_rel=1.0,
-        phase_lag={goal.phase: goal.measured_phase_lag},
-        phase_alignment={goal.phase: goal.measured_phase_alignment},
-        phase_synchrony={goal.phase: goal.measured_phase_synchrony},
+        phases=(phase,),
+        phase_boundaries={phase: boundary},
+        phase_samples={phase: samples},
+        active_phase=phase,
+        dominant_nodes={phase: goal.dominant_nodes},
+        phase_weights={phase: {"__default__": 1.0}},
+        phase_lag={phase: goal.measured_phase_lag},
+        phase_alignment={phase: goal.measured_phase_alignment},
+        phase_synchrony={phase: goal.measured_phase_synchrony},
         filtered_measures=measures,
-        recursivity_trace=(),
-        last_mutation=None,
-        window_occupancy={goal.phase: {}},
+        window_occupancy={phase: {}},
         operator_events=operator_events or {},
+        include_cphi=False,
     )
 
 
