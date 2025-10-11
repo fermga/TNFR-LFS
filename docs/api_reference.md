@@ -354,6 +354,79 @@ apply_plugin_nu_f_snapshot(plugin, final_snapshot)
 print("Plugin ν_f map:", plugin.nu_f)
 ```
 
+### `tnfr_lfs.core.epi_models`
+
+Subsystem nodes collate the metrics that the ΔNFR/EPI pipeline derives from a
+single telemetry sample.  Each dataclass exposes a consistent ``delta_nfr`` and
+``sense_index`` pair so downstream tooling can compare subsystem trends at a
+glance:
+
+* :class:`tnfr_lfs.core.epi_models.TyresNode` captures tyre-specific deltas,
+  ν_f estimates, combined load/slip contributions and a full tyre temperature
+  and pressure grid so that compounds and axle balance can be profiled from a
+  single bundle.【F:src/tnfr_lfs/core/epi_models.py†L11-L46】
+* :class:`tnfr_lfs.core.epi_models.SuspensionNode` tracks suspension travel and
+  velocities alongside the ΔNFR/EPI derivatives required to contextualise ride
+  height changes.【F:src/tnfr_lfs/core/epi_models.py†L49-L61】
+* :class:`tnfr_lfs.core.epi_models.ChassisNode` focuses on vehicle attitude by
+  exposing yaw/pitch/roll, yaw rate and the lateral/longitudinal acceleration
+  envelope that feed the natural frequency classifiers.【F:src/tnfr_lfs/core/epi_models.py†L64-L79】
+* :class:`tnfr_lfs.core.epi_models.BrakesNode` aggregates brake pressure,
+  locking ratios and temperature peaks/means so cooling strategies can be
+  evaluated without additional telemetry joins.【F:src/tnfr_lfs/core/epi_models.py†L82-L97】
+* :class:`tnfr_lfs.core.epi_models.TransmissionNode` mirrors power delivery
+  inputs such as throttle, gear selection, longitudinal load and the estimated
+  line deviation to highlight drivetrain-induced ΔNFR swings.【F:src/tnfr_lfs/core/epi_models.py†L100-L113】
+* :class:`tnfr_lfs.core.epi_models.TrackNode` records external influences like
+  axle load/velocity balance, yaw drift and gradient so surface evolution can
+  be separated from vehicle setup issues.【F:src/tnfr_lfs/core/epi_models.py†L116-L128】
+* :class:`tnfr_lfs.core.epi_models.DriverNode` links steering/throttle style to
+  ΔNFR and ν_f classifications, enabling per-driver comparisons of technique
+  against the same baseline.【F:src/tnfr_lfs/core/epi_models.py†L131-L141】
+* :class:`tnfr_lfs.core.epi_models.EPIBundle` stitches the subsystem nodes
+  together with top-level ΔNFR/EPI metrics, structural timestamps, per-node
+  breakdowns and coherence indices so dashboards can surface both aggregate
+  scores and granular diagnostics from one immutable payload.【F:src/tnfr_lfs/core/epi_models.py†L144-L169】
+
+The bundle API plugs directly into the extractors shown above.  Continuing from
+the ν_f example, the latest call to :class:`tnfr_lfs.core.epi.EPIExtractor`
+returns a fully populated :class:`~tnfr_lfs.core.epi_models.EPIBundle` that can
+be introspected immediately:
+
+```python
+from tnfr_lfs.core.epi import EPIExtractor
+from tnfr_lfs.core.epi_models import EPIBundle
+
+bundle: EPIBundle | None = None
+extractor = EPIExtractor()
+for record in records:  # records populated as in the ν_f example above
+    bundle = extractor.update(
+        record,
+        car_model=record.car_model,
+        track_name=record.track_name,
+        tyre_compound=record.tyre_compound,
+    )
+
+assert bundle is not None
+print(f"ΔNFR total: {bundle.delta_nfr:+.3f} | EPI={bundle.epi:.3f}")
+print(
+    "Tyres ⇒ ΔNFR="
+    f"{bundle.tyres.delta_nfr:+.3f}, ν_f={bundle.tyres.nu_f:.2f} Hz, μ_eff_front="
+    f"{bundle.tyres.mu_eff_front:.2f}"
+)
+print(
+    "Brakes ⇒ ΔNFR="
+    f"{bundle.brakes.delta_nfr:+.3f}, peak={bundle.brakes.brake_temp_peak:.1f} °C"
+)
+for node_name in ("suspension", "chassis", "driver"):
+    node = getattr(bundle, node_name)
+    print(f"{node_name.title()} ⇒ SI={node.sense_index:.3f}, ν_f={node.nu_f:.2f} Hz")
+
+tyre_breakdown = bundle.delta_breakdown.get("tyres", {})
+print("Tyre ΔNFR breakdown:", tyre_breakdown)
+print("Dominant ν_f classification:", bundle.nu_f_label)
+```
+
 ### `tnfr_lfs.core.archetypes`
 
 Archetype targets capture the strategic intent the segmentation and
