@@ -7,16 +7,7 @@ from pathlib import Path
 import pytest
 
 from tnfr_lfs.analysis import ABResult
-from tnfr_lfs.core.epi_models import (
-    BrakesNode,
-    ChassisNode,
-    DriverNode,
-    EPIBundle,
-    SuspensionNode,
-    TrackNode,
-    TransmissionNode,
-    TyresNode,
-)
+from tnfr_lfs.core.epi_models import EPIBundle
 from tnfr_lfs.exporters import (
     CAR_MODEL_PREFIXES,
     coherence_map_exporter,
@@ -35,23 +26,13 @@ from tnfr_lfs.exporters.setup_plan import serialise_setup_plan
 from tests.helpers import (
     BASE_NU_F,
     SUPPORTED_CAR_MODELS,
+    build_epi_nodes,
     build_native_export_plan,
     build_setup_plan,
 )
 
 
 def build_payload():
-    def build_nodes(delta_nfr: float, sense_index: float):
-        return dict(
-            tyres=TyresNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["tyres"]),
-            suspension=SuspensionNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["suspension"]),
-            chassis=ChassisNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["chassis"]),
-            brakes=BrakesNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["brakes"]),
-            transmission=TransmissionNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["transmission"]),
-            track=TrackNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["track"]),
-            driver=DriverNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["driver"]),
-        )
-
     def build_breakdown(delta_nfr: float):
         share = delta_nfr / 7
         return {
@@ -65,8 +46,22 @@ def build_payload():
         }
 
     results = [
-        EPIBundle(0.0, 0.45, -5.0, 0.82, delta_breakdown=build_breakdown(-5.0), **build_nodes(-5.0, 0.82)),
-        EPIBundle(0.1, 0.50, 10.0, 0.74, delta_breakdown=build_breakdown(10.0), **build_nodes(10.0, 0.74)),
+        EPIBundle(
+            0.0,
+            0.45,
+            -5.0,
+            0.82,
+            delta_breakdown=build_breakdown(-5.0),
+            **build_epi_nodes(-5.0, 0.82),
+        ),
+        EPIBundle(
+            0.1,
+            0.50,
+            10.0,
+            0.74,
+            delta_breakdown=build_breakdown(10.0),
+            **build_epi_nodes(10.0, 0.74),
+        ),
     ]
     return {"series": results, "meta": {"session": "FP1"}}
 
