@@ -1213,6 +1213,45 @@ health consistently. Consumers that require the historical flat keys can rely
 on :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_legacy_mapping`, which now emits
 a :class:`DeprecationWarning` because the flat keys are on a deprecation path.
 
+### `tnfr_lfs.core.operators.tyre_balance_controller`
+
+Translate consolidated CPHI metrics into ΔP/Δcamber tweaks for each axle and
+wheel. The controller inspects per-wheel health, gradient and temperature deltas
+to bias the recommended pressure steps, then scales camber changes from the
+average gradient component while keeping every adjustment within configurable
+clamps. Offsets can be injected to encode crew preferences or previously applied
+changes when re-running the controller mid-stint.【F:src/tnfr_lfs/core/operators.py†L764-L861】
+
+Tyre recommendations are returned as a frozen
+:class:`~tnfr_lfs.core.operators.TyreBalanceControlOutput`, which records the
+front/rear pressure deltas, matching camber tweaks and the per-wheel pressure
+map that already includes bias corrections derived from the CPHI temperature
+spread.【F:src/tnfr_lfs/core/operators.py†L753-L861】
+
+```python
+from tnfr_lfs.core.operators import tyre_balance_controller
+
+filtered_metrics = {
+    "cphi_fl": 0.74,
+    "cphi_fr": 0.78,
+    "cphi_rl": 0.81,
+    "cphi_rr": 0.76,
+    "cphi_fl_gradient": -0.12,
+    "cphi_fr_gradient": -0.08,
+    "cphi_rl_gradient": -0.05,
+    "cphi_rr_gradient": -0.09,
+    "cphi_fl_temp_delta": 2.4,
+    "cphi_fr_temp_delta": 1.7,
+    "cphi_rl_temp_delta": -0.4,
+    "cphi_rr_temp_delta": 0.9,
+    "d_nfr_flat": -6.5,
+}
+
+recommendations = tyre_balance_controller(filtered_metrics)
+print(recommendations.pressure_delta_front, recommendations.camber_delta_front)
+print(recommendations.per_wheel_pressure)
+```
+
 ### `tnfr_lfs.core.metrics`
 
 ``tnfr_lfs.core.metrics`` condenses ΔNFR, Sense Index and support diagnostics
