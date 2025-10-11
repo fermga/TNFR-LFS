@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from typing import Tuple
 import pytest
 from types import SimpleNamespace
 
@@ -26,87 +25,13 @@ from tnfr_lfs.core.metrics import (
 from tnfr_lfs.core.operator_detection import canonical_operator_label
 from tnfr_lfs.recommender.rules import RuleProfileObjectives
 from tnfr_lfs.core.epi import TelemetryRecord
-from tests.helpers import build_minimal_setup_plan, build_parallel_window_metrics
-
-
-def _populate_hud(records) -> TelemetryHUD:
-    hud = TelemetryHUD(car_model="FZR", track_name="AS5", plan_interval=0.0)
-    for record in records:
-        hud.append(record)
-    return hud
-
-
-class DummyHUD:
-    def __init__(self, plan: SetupPlan) -> None:
-        self._plan = plan
-        self._status = MacroStatus()
-        self._pages: Tuple[str, str, str, str] = (
-            "Page A",
-            "Page B",
-            "Page C",
-            "Apply recommendations",
-        )
-
-    def pages(self) -> Tuple[str, str, str, str]:
-        return self._pages
-
-    def plan(self) -> SetupPlan:
-        return self._plan
-
-    def update_macro_status(self, status: MacroStatus) -> None:
-        self._status = status
-        warning_prefix = "⚠️ " if getattr(status, "warnings", None) else ""
-        self._pages = (
-            self._pages[0],
-            self._pages[1],
-            self._pages[2],
-            f"{warning_prefix}Apply recommendations",
-        )
-
-
-def _window_metrics_from_parallel_turn(
-    slip_angles: tuple[tuple[float, float], ...]
-) -> WindowMetrics:
-    base_overrides = {
-        "si": 0.78,
-        "speed": 50.0,
-        "throttle": 0.45,
-        "vertical_load": 4800.0,
-        "vertical_load_front": 2400.0,
-        "vertical_load_rear": 2400.0,
-        "mu_eff_front_longitudinal": 0.96,
-        "mu_eff_rear_longitudinal": 0.94,
-    }
-    record_overrides = [{**base_overrides} for _ in slip_angles]
-    return build_parallel_window_metrics(
-        slip_angles,
-        yaw_rates=[0.52 + 0.04 * index for index in range(len(slip_angles))],
-        steer_series=[0.2 + 0.05 * index for index in range(len(slip_angles))],
-        nfr_series=[105.0 + index for index in range(len(slip_angles))],
-        timestamp_step=0.5,
-        record_overrides=record_overrides,
-    )
-
-    def pages(self) -> Tuple[str, str, str, str]:
-        return self._pages
-
-    def plan(self) -> SetupPlan | None:
-        return self._plan
-
-    def update_macro_status(self, status: MacroStatus) -> None:
-        self._status = status
-        warnings = [f"⚠️ {warning}" for warning in status.warnings if warning]
-        lines = ["Apply recommendations"]
-        if status.queue_size:
-            lines.append(f"Macro queue {status.queue_size}")
-        if warnings:
-            lines.extend(warnings)
-        self._pages = (
-            self._pages[0],
-            self._pages[1],
-            self._pages[2],
-            "\n".join(lines),
-        )
+from tests.helpers import (
+    DummyHUD,
+    _populate_hud,
+    _window_metrics_from_parallel_turn,
+    build_minimal_setup_plan,
+    build_parallel_window_metrics,
+)
 
 
 def test_osd_pages_fit_within_button_limit(synthetic_records):

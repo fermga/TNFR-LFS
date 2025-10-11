@@ -2,6 +2,7 @@
 
 from .abtest import DummyBundle, build_metrics, scale_samples
 from .cli import instrument_prepare_pack_context, run_cli_in_tmp
+from .osd import DummyHUD, _populate_hud, _window_metrics_from_parallel_turn
 from .constants import BASE_NU_F, SUPPORTED_CAR_MODELS
 from .epi import (
     build_axis_bundle,
@@ -96,6 +97,9 @@ __all__ = [
     "make_wait_stub",
     "instrument_prepare_pack_context",
     "run_cli_in_tmp",
+    "DummyHUD",
+    "_populate_hud",
+    "_window_metrics_from_parallel_turn",
     "MINIMAL_DATA_CAR",
     "PackBuilder",
     "create_cli_config_pack",
