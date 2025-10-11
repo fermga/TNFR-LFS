@@ -8,7 +8,7 @@ import pytest
 
 from tnfr_lfs.core.cache import LRUCache
 from tnfr_lfs.core.epi_models import EPIBundle
-from tnfr_lfs.core.segmentation import Goal, Microsector
+from tnfr_lfs.core.segmentation import Microsector
 from tnfr_lfs.recommender import RecommendationEngine
 import tnfr_lfs.recommender.search as search_module
 from tnfr_lfs.recommender.search import (
@@ -21,6 +21,8 @@ from tests.helpers import (
     SUPPORTED_CAR_MODELS,
     build_balanced_bundle,
     build_epi_bundle,
+    build_goal,
+    build_microsector,
     preloaded_profile_manager,
 )
 
@@ -120,30 +122,27 @@ def _microsector() -> Microsector:
     window = (-0.2, 0.2)
     yaw_window = (-0.5, 0.5)
     nodes = ("tyres", "suspension")
-    phase_samples = {
-        "entry": (0, 1),
-        "apex": (2, 3),
-        "exit": (4, 5),
-    }
-    phase_weights = {
-        "entry": {"__default__": 1.0},
-        "apex": {"__default__": 1.0},
-        "exit": {"__default__": 1.0},
-    }
-    window_occupancy = {
-        "entry": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
-        "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
-        "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
-    }
-    filtered_measures = {
-        "thermal_load": 5000.0,
-        "style_index": 0.9,
-        "grip_rel": 1.0,
-    }
-    phase_lag = {"entry": 0.0, "apex": 0.0, "exit": 0.0}
-    phase_alignment = {"entry": 1.0, "apex": 1.0, "exit": 1.0}
-    phase_synchrony = {"entry": 1.0, "apex": 1.0, "exit": 1.0}
-    return Microsector(
+    phases = ("entry", "apex", "exit")
+    goals = tuple(
+        build_goal(
+            phase,
+            0.0,
+            archetype="hairpin",
+            description="",
+            target_sense_index=0.9,
+            nu_f_target=0.2,
+            nu_exc_target=0.2,
+            rho_target=1.0,
+            target_phase_alignment=0.9,
+            measured_phase_alignment=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=nodes,
+        )
+        for phase in phases
+    )
+    return build_microsector(
         index=0,
         start_time=0.0,
         end_time=0.3,
@@ -151,80 +150,19 @@ def _microsector() -> Microsector:
         brake_event=True,
         support_event=True,
         delta_nfr_signature=2.0,
-        goals=(
-            Goal(
-                phase="entry",
-                archetype="hairpin",
-                description="",
-                target_delta_nfr=0.0,
-                target_sense_index=0.9,
-                nu_f_target=0.2,
-                nu_exc_target=0.2,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=nodes,
-            ),
-            Goal(
-                phase="apex",
-                archetype="hairpin",
-                description="",
-                target_delta_nfr=0.0,
-                target_sense_index=0.9,
-                nu_f_target=0.2,
-                nu_exc_target=0.2,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=nodes,
-            ),
-            Goal(
-                phase="exit",
-                archetype="hairpin",
-                description="",
-                target_delta_nfr=0.0,
-                target_sense_index=0.9,
-                nu_f_target=0.2,
-                nu_exc_target=0.2,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=nodes,
-            ),
-        ),
+        goals=goals,
+        phases=phases,
         phase_boundaries={"entry": (0, 2), "apex": (2, 4), "exit": (4, 6)},
-        phase_samples=phase_samples,
+        phase_samples={"entry": (0, 1), "apex": (2, 3), "exit": (4, 5)},
         active_phase="entry",
-        dominant_nodes={
-            "entry": nodes,
-            "apex": nodes,
-            "exit": nodes,
+        dominant_nodes={phase: nodes for phase in phases},
+        phase_weights={phase: {"__default__": 1.0} for phase in phases},
+        filtered_measures={"thermal_load": 5000.0, "style_index": 0.9, "grip_rel": 1.0},
+        window_occupancy={
+            phase: {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0}
+            for phase in phases
         },
-        phase_weights=phase_weights,
-        grip_rel=1.0,
-        phase_lag=phase_lag,
-        phase_alignment=phase_alignment,
-        phase_synchrony=phase_synchrony,
-        filtered_measures=filtered_measures,
-        recursivity_trace=(),
-        last_mutation=None,
-        window_occupancy=window_occupancy,
-        operator_events={},
+        include_cphi=False,
     )
 
 
