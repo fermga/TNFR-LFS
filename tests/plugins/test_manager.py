@@ -10,63 +10,18 @@ from tnfr_lfs.plugins.config import PluginConfig
 from tnfr_lfs.plugins import registry
 from tnfr_lfs.plugins.base import TNFRPlugin
 
-
-def _create_plugin(
-    tmp_path: Path,
-    module_name: str,
-    class_name: str,
-    body: str,
-) -> Path:
-    module_path = tmp_path / f"{module_name}.py"
-    module_path.write_text(
-        textwrap.dedent(
-            f"""
-            from tnfr_lfs.plugins.base import TNFRPlugin
-            from tnfr_lfs.plugins import registry
-
-            @registry.plugin_metadata(operators=[\"emission_operator\"])
-            class {class_name}(TNFRPlugin):
-                def __init__(self):
-                    super().__init__(identifier=\"{class_name.lower()}\", display_name=\"{class_name}\", version=\"1.0\")
-
-                {body}
-            """
-        )
-    )
-    return module_path
-
-
-def _write_manager_config(tmp_path: Path, plugin_dir: Path) -> Path:
-    config_path = tmp_path / "plugins.toml"
-    config_path.write_text(
-        textwrap.dedent(
-            f"""
-            [plugins]
-            auto_discover = true
-            plugin_dir = "{plugin_dir.as_posix()}"
-            max_concurrent = 0
-
-            [plugins.first]
-            enabled = true
-
-            [plugins.second]
-            enabled = true
-
-            [profiles.single]
-            plugins = ["first", "second"]
-            max_concurrent = 1
-            """
-        )
-    )
-    return config_path
+from tests.helpers import write_plugin_manager_config, write_plugin_module
 
 
 def test_discover_plugins_registers_valid_plugins(tmp_path: Path) -> None:
-    _create_plugin(
+    write_plugin_module(
         tmp_path,
         module_name="sample_plugin",
         class_name="SamplePlugin",
-        body="def analyze(self, payload):\n                    return {'status': 'ok'}",
+        body="""
+        def analyze(self, payload):
+            return {"status": "ok"}
+        """,
     )
 
     manager = PluginManager()
@@ -80,11 +35,14 @@ def test_discover_plugins_registers_valid_plugins(tmp_path: Path) -> None:
 
 
 def test_load_and_unload_plugin(tmp_path: Path) -> None:
-    _create_plugin(
+    write_plugin_module(
         tmp_path,
         module_name="loader_plugin",
         class_name="LoaderPlugin",
-        body="def analyze(self, payload):\n                    return payload",
+        body="""
+        def analyze(self, payload):
+            return payload
+        """,
     )
 
     manager = PluginManager()
@@ -99,18 +57,24 @@ def test_load_and_unload_plugin(tmp_path: Path) -> None:
 
 
 def test_execute_analysis_collects_results_and_errors(tmp_path: Path) -> None:
-    _create_plugin(
+    write_plugin_module(
         tmp_path,
         module_name="success_plugin",
         class_name="SuccessPlugin",
-        body="def analyze(self, payload):\n                    return {'value': payload['number']}",
+        body="""
+        def analyze(self, payload):
+            return {"value": payload["number"]}
+        """,
     )
 
-    _create_plugin(
+    write_plugin_module(
         tmp_path,
         module_name="failing_plugin",
         class_name="FailingPlugin",
-        body="def analyze(self, payload):\n                    raise RuntimeError('boom')",
+        body="""
+        def analyze(self, payload):
+            raise RuntimeError("boom")
+        """,
     )
 
     manager = PluginManager()
@@ -130,11 +94,14 @@ def test_execute_analysis_collects_results_and_errors(tmp_path: Path) -> None:
 
 
 def test_get_plugin_health_reports_loaded_state(tmp_path: Path) -> None:
-    _create_plugin(
+    write_plugin_module(
         tmp_path,
         module_name="health_plugin",
         class_name="HealthPlugin",
-        body="def analyze(self, payload):\n                    return {}",
+        body="""
+        def analyze(self, payload):
+            return {}
+        """,
     )
 
     manager = PluginManager()
@@ -177,21 +144,40 @@ def test_execute_analysis_respects_max_concurrent_from_config(tmp_path: Path) ->
     plugin_dir = tmp_path / "plugins"
     plugin_dir.mkdir()
 
-    _create_plugin(
+    write_plugin_module(
         plugin_dir,
         module_name="first_plugin",
         class_name="FirstPlugin",
-        body="def analyze(self, payload):\n                    return {'name': 'first'}",
+        body="""
+        def analyze(self, payload):
+            return {"name": "first"}
+        """,
     )
 
-    _create_plugin(
+    write_plugin_module(
         plugin_dir,
         module_name="second_plugin",
         class_name="SecondPlugin",
-        body="def analyze(self, payload):\n                    return {'name': 'second'}",
+        body="""
+        def analyze(self, payload):
+            return {"name": "second"}
+        """,
     )
 
-    config_path = _write_manager_config(tmp_path, plugin_dir)
+    config_path = write_plugin_manager_config(
+        tmp_path,
+        plugin_dir=plugin_dir,
+        plugins={
+            "first": {"enabled": True},
+            "second": {"enabled": True},
+        },
+        profiles={
+            "single": {
+                "plugins": ["first", "second"],
+                "max_concurrent": 1,
+            }
+        },
+    )
     config = PluginConfig(config_path)
     config.set_profile("single")
 
