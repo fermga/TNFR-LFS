@@ -22,6 +22,26 @@ pytest
 - `mypy --strict` analyses `tnfr_lfs` and the rest of the declared typing targets (including the tests and examples helper). If you need to pass the paths explicitly run `mypy --strict src tests`; note that strict analysis across the whole package takes longer than the reduced subset.
 - `pytest` runs the unit and integration test suite, including verification for the example datasets `src/tnfr_lfs/pack/data/test1.raf` and `src/tnfr_lfs/pack/data/test1.zip`.
 
+### Pre-commit hooks
+
+Install the [pre-commit](https://pre-commit.com) hooks to run Ruff, Black, and MyPy with the same
+settings defined in `pyproject.toml` before every commit:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+Update the hook revisions periodically (or whenever a contributor bumps them in a pull request)
+with:
+
+```bash
+pre-commit autoupdate
+```
+
+The CI pipeline executes the same tools, so keeping the local hooks current helps surface lint,
+formatting, and typing issues early.
+
 ### CI triggering rules
 
 The CI workflow skips documentation-only pushes and pull requests (`docs/**` and Markdown files). Any
