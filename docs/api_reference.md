@@ -965,6 +965,23 @@ integers so downstream callers can pass them directly into
 ``max_cache_size`` for quick eligibility checks when orchestration logic needs to
 branch on runtime cache state.【F:src/tnfr_lfs/core/cache_settings.py†L175-L185】
 
+```python
+from tnfr_lfs.core.cache import configure_cache
+from tnfr_lfs.core.cache_settings import CacheOptions
+
+raw_config = {"performance": {"cache_enabled": True}}
+
+options = CacheOptions.from_config(raw_config)
+normalised = options.with_defaults()
+
+if normalised.cache_enabled:
+    # Feed the normalised booleans and cache sizes into configure_cache.
+    configure_cache(
+        enable_delta_cache=normalised.enable_delta_cache,
+        nu_f_cache_size=normalised.nu_f_cache_size,
+    )
+```
+
 ### `tnfr_lfs.core.spectrum`
 
 The spectrum helpers expose consistent utilities for telemetry FFTs and
