@@ -766,6 +766,104 @@ per-wheel temperature/pressure block, HUD surfaces and exporters show the
 literal ``"no data"`` token in those fields to make it clear that LFS telemetry
 was unavailable.
 
+### `tnfr_lfs.core.structural_time`
+
+``compute_structural_timestamps`` derives a structural timeline by comparing the
+normalised derivatives of high-energy telemetry channels (brake pressure,
+throttle, yaw-rate and steer) and feeding them through a moving average window
+whose width is controlled by ``window_size``.【F:src/tnfr_lfs/core/structural_time.py†L65-L120】 The blended density inflates
+segments rich in chassis activity so that ΔNFR and operator heuristics can weigh
+busy events more heavily than coasting samples while still anchoring the first
+timestamp to either the provided ``base_timestamp`` or the earliest structural
+reference stored on the records.【F:src/tnfr_lfs/core/structural_time.py†L87-L120】
+
+Adjust ``window_size`` when you need to capture sharper activation bursts (small
+windows) or smooth out oscillations in long stints (larger windows).  Override
+``weights`` to privilege sensors that best represent the chassis state for a
+given car or track—e.g. upping brake pressure on endurance stints, or throttle
+when analysing traction events.  When the structural axis is partially missing
+or not strictly monotonic, ``resolve_time_axis`` falls back to the chronological
+``timestamp`` field if ``fallback_to_chronological`` stays enabled, ensuring
+downstream metrics still receive an ordered axis.【F:src/tnfr_lfs/core/structural_time.py†L125-L164】
+
+Both helpers integrate directly with :class:`~tnfr_lfs.core.epi.TelemetryRecord`,
+which exposes the optional ``structural_timestamp`` attribute so segmentation,
+operator pipelines and exporters can persist the denser axis once it has been
+computed.【F:src/tnfr_lfs/core/epi.py†L520-L576】  Use ``compute_structural_timestamps`` to populate that
+field and rely on ``resolve_time_axis`` whenever consumer code needs to recover
+an ordered series even if some records lost their structural markers.
+
+```python
+from dataclasses import replace
+
+from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.core.structural_time import (
+    compute_structural_timestamps,
+    resolve_time_axis,
+)
+
+
+def make_record(timestamp: float, brake: float, throttle: float, steer: float, yaw_rate: float) -> TelemetryRecord:
+    return TelemetryRecord(
+        timestamp=timestamp,
+        vertical_load=500.0,
+        slip_ratio=0.01,
+        lateral_accel=0.30,
+        longitudinal_accel=0.10,
+        yaw=0.0,
+        pitch=0.0,
+        roll=0.0,
+        brake_pressure=brake,
+        locking=0.0,
+        nfr=3.2,
+        si=0.5,
+        speed=40.0,
+        yaw_rate=yaw_rate,
+        slip_angle=0.02,
+        steer=steer,
+        throttle=throttle,
+        gear=3,
+        vertical_load_front=260.0,
+        vertical_load_rear=240.0,
+        mu_eff_front=1.2,
+        mu_eff_rear=1.1,
+        mu_eff_front_lateral=1.0,
+        mu_eff_front_longitudinal=1.0,
+        mu_eff_rear_lateral=1.0,
+        mu_eff_rear_longitudinal=1.0,
+        suspension_travel_front=0.05,
+        suspension_travel_rear=0.04,
+        suspension_velocity_front=0.0,
+        suspension_velocity_rear=0.0,
+    )
+
+
+records = [
+    make_record(0.00, brake=0.1, throttle=0.40, steer=0.05, yaw_rate=0.02),
+    make_record(0.30, brake=0.4, throttle=0.20, steer=0.10, yaw_rate=0.08),
+    make_record(0.60, brake=0.2, throttle=0.60, steer=0.02, yaw_rate=0.04),
+]
+
+structural_axis = compute_structural_timestamps(records, window_size=3)
+records_with_axis = [
+    replace(record, structural_timestamp=value)
+    for record, value in zip(records, structural_axis)
+]
+
+# Simulate a missing structural timestamp on the final sample.
+records_with_axis[-1] = replace(records_with_axis[-1], structural_timestamp=None)
+
+time_axis = resolve_time_axis(records_with_axis)
+
+print(structural_axis)
+print(time_axis)
+```
+
+The example populates ``TelemetryRecord.structural_timestamp`` and shows how
+``resolve_time_axis`` gracefully falls back to the chronological timestamps when
+one sample drops its structural marker, keeping operator and segmentation stages
+fully aligned.
+
 ### `tnfr_lfs.core.segmentation`
 
 ```
