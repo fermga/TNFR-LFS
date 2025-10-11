@@ -227,6 +227,90 @@ import *`` only surfaces the documented symbols:
 * `tnfr_lfs.core.delta_utils` intentionally keeps ``__all__`` empty because the
   helper is not part of the public surface.【F:tnfr_lfs/core/delta_utils.py†L8-L8】
 
+### `tnfr_lfs.core.coherence`
+
+The coherence helpers distribute ΔNFR magnitudes to the signals that produced
+them and collapse the resulting picture into the sense index exposed on the HUD.
+Use :func:`tnfr_lfs.core.coherence.compute_node_delta_nfr` when a subsystem emits
+multiple raw measurements—wheel loads, aero balance, slip ratios, and so on—yet
+only a single ΔNFR value is available.  The helper scales the node-level ΔNFR by
+the absolute contribution of every feature in ``feature_map`` so that the
+relative weighting remains consistent even when sign changes are handled at the
+node level.【F:src/tnfr_lfs/core/coherence.py†L16-L46】
+
+:func:`tnfr_lfs.core.coherence.sense_index` aggregates the ΔNFR map into a
+bounded ``[0, 1]`` score that punishes large deviations, prioritises subsystems
+with higher natural frequencies and discounts incoherent distributions via an
+entropy penalty.【F:src/tnfr_lfs/core/coherence.py†L58-L127】  Three keyword
+arguments control the most common tuning points:
+
+* ``w_phase`` selects the phase-dependent weighting profile.  Pass either a
+  scalar applied to every node or a mapping where the top-level keys represent
+  phases (including aliases) and the values are per-node mappings or scalars.
+  The helper resolves the entry for ``active_phase`` and multiplies each node by
+  the resulting weight.【F:src/tnfr_lfs/core/coherence.py†L74-L99】
+* ``nu_f_targets`` defines the goal natural frequencies.  When provided, the
+  targets are resolved using the same phase lookup mechanism as ``w_phase`` and
+  mapped to the currently active nodes.  The resulting gain encourages
+  convergence towards the target values and compounds with the measured
+  frequency gain applied to the ΔNFR magnitude.【F:src/tnfr_lfs/core/coherence.py†L101-L115】
+* ``entropy_lambda`` sets the strength of the entropy penalty that drives the
+  metric towards evenly distributed ΔNFR contributions.  Higher values increase
+  the penalty applied to sharply peaked distributions while keeping the final
+  score within ``[0, 1]``.【F:src/tnfr_lfs/core/coherence.py†L117-L127】
+
+```python
+from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
+
+# Each node reports a single ΔNFR but tracks different raw signals.
+feature_map_suspension = {"lateral": 0.6, "longitudinal": 0.3, "vertical": 0.1}
+feature_map_aero = {"front": 0.4, "rear": 0.8}
+
+deltas_by_node = {}
+deltas_by_node.update(
+    compute_node_delta_nfr("suspension", 0.24, feature_map_suspension)
+)
+deltas_by_node.update(
+    compute_node_delta_nfr("aero", 0.12, feature_map_aero)
+)
+
+# Natural frequencies measured for each subsystem.
+nu_f_by_node = {"suspension": 0.9, "aero": 0.3}
+
+# Phase weights favour suspension signals during entry while targeting a
+# quicker natural frequency for aero elements in the same phase.
+w_phase = {
+    "__default__": 1.0,
+    "entry": {"suspension": 1.4, "aero": 0.8},
+}
+nu_f_targets = {
+    "__default__": 0.5,
+    "entry": {"suspension": 0.8, "aero": 1.1},
+}
+
+index = sense_index(
+    delta_nfr=0.36,
+    deltas_by_node={
+        "suspension": sum(value for key, value in deltas_by_node.items() if key.startswith("suspension.")),
+        "aero": sum(value for key, value in deltas_by_node.items() if key.startswith("aero.")),
+    },
+    baseline_nfr=1.8,
+    nu_f_by_node=nu_f_by_node,
+    active_phase="entry",
+    w_phase=w_phase,
+    nu_f_targets=nu_f_targets,
+    entropy_lambda=0.2,
+)
+
+print(f"Sense index: {index:.3f}")
+```
+
+The example distributes each node's ΔNFR proportionally to its raw
+measurements, then aggregates the node-level magnitudes back into a sense index.
+Increasing ``w_phase["entry"]["suspension"]`` boosts the suspension penalty,
+while the higher ``nu_f_targets`` for aero tighten the goal multiplier and drive
+the sense index lower than a neutral configuration would.
+
 ### `tnfr_lfs.core.contextual_delta`
 
 Context-aware ΔNFR adjustments rely on two lightweight dataclasses and a loader
