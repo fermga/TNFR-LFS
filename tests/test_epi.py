@@ -7,7 +7,7 @@ from typing import Dict, Sequence
 import numpy as np
 import pytest
 
-from tests.helpers import build_frequency_record
+from tests.helpers import build_frequency_record, build_telemetry_record
 
 from tnfr_lfs.core.cache_settings import CacheOptions
 from tnfr_lfs.core import cache as cache_helpers
@@ -440,17 +440,12 @@ def test_dynamic_multipliers_vectorisation_matches_legacy(synthetic_records):
 
 
 def test_delta_nfr_by_node_emphasises_braking_signals():
-    baseline = TelemetryRecord(
+    baseline = build_telemetry_record(
         timestamp=0.0,
-        vertical_load=5000.0,
         slip_ratio=0.02,
         lateral_accel=0.5,
         longitudinal_accel=0.1,
-        yaw=0.0,
-        pitch=0.0,
-        roll=0.0,
         brake_pressure=0.1,
-        locking=0.0,
         nfr=500.0,
         si=0.85,
         speed=22.0,
@@ -469,10 +464,8 @@ def test_delta_nfr_by_node_emphasises_braking_signals():
         mu_eff_rear_longitudinal=0.82,
         suspension_travel_front=0.52,
         suspension_travel_rear=0.48,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
     )
-    sample = TelemetryRecord(
+    sample = build_telemetry_record(
         timestamp=0.1,
         vertical_load=5250.0,
         slip_ratio=0.06,
@@ -515,7 +508,7 @@ def test_delta_nfr_by_node_emphasises_braking_signals():
 
 
 def test_delta_nfr_by_node_conserves_total_with_extended_fields():
-    baseline = TelemetryRecord(
+    baseline = build_telemetry_record(
         timestamp=0.0,
         vertical_load=4800.0,
         slip_ratio=0.01,
@@ -525,7 +518,6 @@ def test_delta_nfr_by_node_conserves_total_with_extended_fields():
         pitch=0.01,
         roll=0.02,
         brake_pressure=0.05,
-        locking=0.0,
         nfr=480.0,
         si=0.9,
         speed=18.0,
@@ -544,10 +536,8 @@ def test_delta_nfr_by_node_conserves_total_with_extended_fields():
         mu_eff_rear_longitudinal=0.68,
         suspension_travel_front=0.52,
         suspension_travel_rear=0.48,
-        suspension_velocity_front=0.0,
-        suspension_velocity_rear=0.0,
     )
-    sample = TelemetryRecord(
+    sample = build_telemetry_record(
         timestamp=0.05,
         vertical_load=5050.0,
         slip_ratio=0.09,
