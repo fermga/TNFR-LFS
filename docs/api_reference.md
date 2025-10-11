@@ -227,6 +227,52 @@ import *`` only surfaces the documented symbols:
 * `tnfr_lfs.core.delta_utils` intentionally keeps ``__all__`` empty because the
   helper is not part of the public surface.【F:tnfr_lfs/core/delta_utils.py†L8-L8】
 
+### `tnfr_lfs.core.cache`
+
+`LRUCache` wraps an internal least-recently-used store so pipelines can opt into
+bounded caching while keeping ``maxsize=0`` as a valid way to disable storage at
+runtime.【F:src/tnfr_lfs/core/cache.py†L53-L95】  ``cached_delta_nfr_map`` captures
+per-record ΔNFR maps using object identifiers (and their ``reference`` links)
+while exposing immutable copies to callers, allowing repeated ΔNFR queries to
+reuse existing work until a matching record is invalidated.【F:src/tnfr_lfs/core/cache.py†L109-L134】
+``cached_dynamic_multipliers`` mirrors the behaviour for ν_f multipliers,
+stashing the latest multipliers and their evaluation frequency per
+``(car_model, history length, timestamp)`` tuple so dynamic analytics avoid
+recalculating identical windows.【F:src/tnfr_lfs/core/cache.py†L144-L185】  Use
+``configure_cache`` to toggle ΔNFR caching and resize the dynamic multiplier
+store; the helper normalises inputs, tears down caches when set to zero and
+restores defaults when omitted.【F:src/tnfr_lfs/core/cache.py†L194-L234】
+
+```python
+from tnfr_lfs.core.cache_settings import CacheOptions
+from tnfr_lfs.core.cache import configure_cache
+
+options = CacheOptions.from_config({
+    "performance": {
+        "cache_enabled": True,
+        "nu_f_cache_size": 128,
+    }
+})
+normalised = options.with_defaults()
+configure_cache(
+    enable_delta_cache=normalised.enable_delta_cache,
+    nu_f_cache_size=normalised.nu_f_cache_size,
+)
+```
+
+### `tnfr_lfs.core.cache_settings`
+
+`CacheOptions` is the immutable dataclass consumed throughout the caching
+helpers.  :meth:`CacheOptions.from_config` coerces nested ``[performance]`` or
+legacy ``[cache]`` mappings into a single payload, sanitising booleans and cache
+sizes while carrying defaults for missing entries.【F:src/tnfr_lfs/core/cache_settings.py†L23-L151】
+The :meth:`CacheOptions.with_defaults` method re-emits the options with bounded
+integers so downstream callers can pass them directly into
+:func:`tnfr_lfs.core.cache.configure_cache` via the pattern shown above.【F:src/tnfr_lfs/core/cache_settings.py†L153-L172】
+``CacheOptions`` also exposes convenience accessors like ``cache_enabled`` and
+``max_cache_size`` for quick eligibility checks when orchestration logic needs to
+branch on runtime cache state.【F:src/tnfr_lfs/core/cache_settings.py†L175-L185】
+
 ### `tnfr_lfs.core.spectrum`
 
 The spectrum helpers expose consistent utilities for telemetry FFTs and
