@@ -630,12 +630,87 @@ persistent baselines and normal telemetry ranges.
 
 ```python
 from tnfr_lfs.core.coherence_calibration import CoherenceCalibrationStore
-from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord
 
 store = CoherenceCalibrationStore(decay=0.25, min_laps=2, max_laps=5)
 
-# Record a baseline computed elsewhere in the analytics pipeline.
-baseline = TelemetryRecord()  # payload populated with default values
+# Build a handful of synthetic telemetry samples.  Populate the key load,
+# slip, acceleration and μ fields with plausible values for the car you are
+# analysing – the remaining optional channels default to ``math.nan`` when
+# omitted.  ``DeltaCalculator.derive_baseline`` averages these records to
+# produce a ready-to-use baseline payload.
+records = [
+    TelemetryRecord(
+        timestamp=0.0,
+        vertical_load=3900.0,
+        slip_ratio=0.02,
+        lateral_accel=14.5,
+        longitudinal_accel=-1.2,
+        yaw=0.01,
+        pitch=0.002,
+        roll=-0.008,
+        brake_pressure=0.0,
+        locking=0.0,
+        nfr=0.68,
+        si=0.74,
+        speed=58.0,
+        yaw_rate=0.12,
+        slip_angle=0.03,
+        steer=0.08,
+        throttle=0.62,
+        gear=3,
+        vertical_load_front=2100.0,
+        vertical_load_rear=1800.0,
+        mu_eff_front=2.2,
+        mu_eff_rear=2.1,
+        mu_eff_front_lateral=1.9,
+        mu_eff_front_longitudinal=1.6,
+        mu_eff_rear_lateral=1.8,
+        mu_eff_rear_longitudinal=1.5,
+        suspension_travel_front=0.042,
+        suspension_travel_rear=0.038,
+        suspension_velocity_front=0.004,
+        suspension_velocity_rear=0.006,
+        car_model="fo8",
+        track_name="SO1",
+    ),
+    TelemetryRecord(
+        timestamp=0.1,
+        vertical_load=4020.0,
+        slip_ratio=0.015,
+        lateral_accel=15.1,
+        longitudinal_accel=-0.9,
+        yaw=0.015,
+        pitch=0.001,
+        roll=-0.006,
+        brake_pressure=0.1,
+        locking=0.02,
+        nfr=0.7,
+        si=0.77,
+        speed=60.5,
+        yaw_rate=0.14,
+        slip_angle=0.028,
+        steer=0.075,
+        throttle=0.66,
+        gear=3,
+        vertical_load_front=2150.0,
+        vertical_load_rear=1870.0,
+        mu_eff_front=2.25,
+        mu_eff_rear=2.12,
+        mu_eff_front_lateral=1.95,
+        mu_eff_front_longitudinal=1.64,
+        mu_eff_rear_lateral=1.84,
+        mu_eff_rear_longitudinal=1.53,
+        suspension_travel_front=0.045,
+        suspension_travel_rear=0.04,
+        suspension_velocity_front=0.005,
+        suspension_velocity_rear=0.007,
+        car_model="fo8",
+        track_name="SO1",
+    ),
+]
+
+baseline = DeltaCalculator.derive_baseline(records)
 store.observe_baseline("Driver 42", "fo8", baseline)
 
 # Once enough laps have been ingested the snapshot exposes the derived baseline.
