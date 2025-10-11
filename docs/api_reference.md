@@ -272,6 +272,45 @@ window_metrics = compute_window_metrics([sample])
 print(window_metrics.si, window_metrics.delta_nfr_std)
 ```
 
+### `tnfr_lfs.core.delta_utils`
+
+The delta utilities currently expose :func:`distribute_weighted_delta`, a
+helper that apportions a ΔNFR ``delta`` across named ``signals``.  The function
+normalises each signal to a floating-point weight, discarding non-finite values
+and treating magnitudes below ``min_signal`` as zero-strength contributors.  If
+the accumulated weight is not finite or falls below ``min_total`` the helper
+falls back to an even split over the surviving keys, ensuring the caller still
+receives a complete mapping even when the telemetry lacks contrast.【F:src/tnfr_lfs/core/delta_utils.py†L11-L55】
+
+```python
+from tnfr_lfs.core.delta_utils import distribute_weighted_delta
+
+# Signals can be any mapping; weak entries get zeroed by min_signal while the
+# min_total guard triggers a uniform fallback when the aggregate is too small.
+signals = {
+    "front": 0.6,
+    "rear": 0.3,
+    "suspicious": float("nan"),  # dropped from the distribution
+    "neutral": 1e-5,  # treated as zero-strength when min_signal > value
+}
+
+weighted = distribute_weighted_delta(
+    delta=-0.9,
+    signals=signals,
+    min_total=0.5,
+    min_signal=1e-4,
+)
+print(weighted)  # -> {'front': -0.6, 'rear': -0.3, 'neutral': 0.0}
+
+# With insufficient aggregate magnitude the helper falls back to an even split.
+fallback = distribute_weighted_delta(
+    delta=0.75,
+    signals={"front": 1e-6, "rear": 0.0},
+    min_total=0.1,
+)
+print(fallback)  # -> {'front': 0.375, 'rear': 0.375}
+```
+
 ### `tnfr_lfs.core.epi`
 
 Natural frequency helpers complement the ΔNFR/EPI extractors by exposing
