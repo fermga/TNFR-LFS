@@ -107,6 +107,24 @@ def build_epi_bundle(
     return EPIBundle(**bundle_kwargs)
 
 
+def build_balanced_bundle(timestamp: float, delta_nfr: float, si: float) -> EPIBundle:
+    """Construct a bundle that evenly distributes delta_nfr across nodes."""
+
+    share = delta_nfr / 6
+    return build_epi_bundle(
+        timestamp=timestamp,
+        delta_nfr=delta_nfr,
+        sense_index=si,
+        tyres={"delta_nfr": share},
+        suspension={"delta_nfr": share},
+        chassis={"delta_nfr": share},
+        brakes={"delta_nfr": share},
+        transmission={"delta_nfr": share},
+        track={"delta_nfr": share},
+        driver={"delta_nfr": share},
+    )
+
+
 def build_epi_nodes(delta_nfr: float, sense_index: float):
     """Create a mapping of EPI nodes using shared baseline constants."""
     share = delta_nfr / 7
@@ -128,5 +146,4 @@ def build_epi_nodes(delta_nfr: float, sense_index: float):
         "driver": DriverNode(delta_nfr=share, sense_index=sense_index, nu_f=BASE_NU_F["driver"]),
     }
 
-
-__all__ = ["build_epi_bundle", "build_epi_nodes"]
+__all__ = ["build_epi_bundle", "build_balanced_bundle", "build_epi_nodes"]

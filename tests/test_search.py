@@ -17,7 +17,12 @@ from tnfr_lfs.recommender.search import (
     evaluate_candidate,
     objective_score,
 )
-from tests.helpers import SUPPORTED_CAR_MODELS, build_epi_bundle, preloaded_profile_manager
+from tests.helpers import (
+    SUPPORTED_CAR_MODELS,
+    build_balanced_bundle,
+    build_epi_bundle,
+    preloaded_profile_manager,
+)
 
 def test_decision_space_includes_parallel_steer_controls() -> None:
     space = DEFAULT_DECISION_LIBRARY["XFG"]
@@ -66,22 +71,6 @@ def _phase_integrals(results, microsectors) -> dict[str, float]:
             if subtotal:
                 totals[phase] = totals.get(phase, 0.0) + subtotal
     return totals
-
-
-def _build_bundle(timestamp: float, delta_nfr: float, si: float) -> EPIBundle:
-    share = delta_nfr / 6
-    return build_epi_bundle(
-        timestamp=timestamp,
-        delta_nfr=delta_nfr,
-        sense_index=si,
-        tyres={"delta_nfr": share},
-        suspension={"delta_nfr": share},
-        chassis={"delta_nfr": share},
-        brakes={"delta_nfr": share},
-        transmission={"delta_nfr": share},
-        track={"delta_nfr": share},
-        driver={"delta_nfr": share},
-    )
 
 
 def _rich_bundle(
@@ -301,12 +290,12 @@ def test_objective_responds_to_component_variations(monkeypatch: pytest.MonkeyPa
 
 def test_objective_penalises_delta_nfr_integral():
     results = [
-        _build_bundle(0.0, delta_nfr=8.0, si=0.6),
-        _build_bundle(0.1, delta_nfr=6.0, si=0.62),
-        _build_bundle(0.2, delta_nfr=-5.0, si=0.65),
-        _build_bundle(0.3, delta_nfr=-4.0, si=0.66),
-        _build_bundle(0.4, delta_nfr=3.0, si=0.68),
-        _build_bundle(0.5, delta_nfr=2.0, si=0.69),
+        build_balanced_bundle(0.0, delta_nfr=8.0, si=0.6),
+        build_balanced_bundle(0.1, delta_nfr=6.0, si=0.62),
+        build_balanced_bundle(0.2, delta_nfr=-5.0, si=0.65),
+        build_balanced_bundle(0.3, delta_nfr=-4.0, si=0.66),
+        build_balanced_bundle(0.4, delta_nfr=3.0, si=0.68),
+        build_balanced_bundle(0.5, delta_nfr=2.0, si=0.69),
     ]
     microsector = _microsector()
     score_with_micro = objective_score(results, [microsector])
@@ -317,12 +306,12 @@ def test_objective_penalises_delta_nfr_integral():
 @pytest.mark.parametrize("car_model", SUPPORTED_CAR_MODELS)
 def test_setup_planner_converges_and_respects_bounds(car_model: str):
     baseline = [
-        _build_bundle(0.0, delta_nfr=10.0, si=0.55),
-        _build_bundle(0.1, delta_nfr=8.0, si=0.56),
-        _build_bundle(0.2, delta_nfr=6.0, si=0.58),
-        _build_bundle(0.3, delta_nfr=5.5, si=0.59),
-        _build_bundle(0.4, delta_nfr=5.0, si=0.60),
-        _build_bundle(0.5, delta_nfr=4.5, si=0.61),
+        build_balanced_bundle(0.0, delta_nfr=10.0, si=0.55),
+        build_balanced_bundle(0.1, delta_nfr=8.0, si=0.56),
+        build_balanced_bundle(0.2, delta_nfr=6.0, si=0.58),
+        build_balanced_bundle(0.3, delta_nfr=5.5, si=0.59),
+        build_balanced_bundle(0.4, delta_nfr=5.0, si=0.60),
+        build_balanced_bundle(0.5, delta_nfr=4.5, si=0.61),
     ]
     microsector = _microsector()
 
@@ -403,12 +392,12 @@ def test_setup_planner_converges_and_respects_bounds(car_model: str):
 
 def test_setup_planner_reports_consistent_sensitivities():
     baseline = [
-        _build_bundle(0.0, delta_nfr=10.0, si=0.55),
-        _build_bundle(0.1, delta_nfr=8.0, si=0.56),
-        _build_bundle(0.2, delta_nfr=6.0, si=0.58),
-        _build_bundle(0.3, delta_nfr=5.5, si=0.59),
-        _build_bundle(0.4, delta_nfr=5.0, si=0.60),
-        _build_bundle(0.5, delta_nfr=4.5, si=0.61),
+        build_balanced_bundle(0.0, delta_nfr=10.0, si=0.55),
+        build_balanced_bundle(0.1, delta_nfr=8.0, si=0.56),
+        build_balanced_bundle(0.2, delta_nfr=6.0, si=0.58),
+        build_balanced_bundle(0.3, delta_nfr=5.5, si=0.59),
+        build_balanced_bundle(0.4, delta_nfr=5.0, si=0.60),
+        build_balanced_bundle(0.5, delta_nfr=4.5, si=0.61),
     ]
     microsector = _microsector()
 
@@ -535,8 +524,8 @@ def test_setup_planner_reports_consistent_sensitivities():
 
 def test_setup_planner_rejects_unknown_car_model():
     baseline = [
-        _build_bundle(0.0, delta_nfr=5.0, si=0.6),
-        _build_bundle(0.1, delta_nfr=4.8, si=0.61),
+        build_balanced_bundle(0.0, delta_nfr=5.0, si=0.6),
+        build_balanced_bundle(0.1, delta_nfr=4.8, si=0.61),
     ]
     planner = SetupPlanner()
     with pytest.raises(ValueError):
@@ -566,9 +555,9 @@ def test_setup_planner_consults_profile_jacobian(tmp_path: Path) -> None:
     optimiser = RecordingOptimiser()
     planner = SetupPlanner(recommendation_engine=engine, optimiser=optimiser)
     baseline = [
-        _build_bundle(0.0, delta_nfr=5.0, si=0.6),
-        _build_bundle(0.1, delta_nfr=4.9, si=0.61),
-        _build_bundle(0.2, delta_nfr=4.7, si=0.62),
+        build_balanced_bundle(0.0, delta_nfr=5.0, si=0.6),
+        build_balanced_bundle(0.1, delta_nfr=4.9, si=0.61),
+        build_balanced_bundle(0.2, delta_nfr=4.7, si=0.62),
     ]
 
     planner.plan(baseline, (), car_model=car_model, track_name=track)
@@ -593,9 +582,9 @@ def test_decision_spaces_include_gearing_sliders():
 def test_evaluate_candidate_evicts_lru_entries() -> None:
     space = DEFAULT_DECISION_LIBRARY["XFG"]
     baseline = [
-        _build_bundle(0.0, delta_nfr=6.0, si=0.55),
-        _build_bundle(0.1, delta_nfr=5.5, si=0.56),
-        _build_bundle(0.2, delta_nfr=5.0, si=0.57),
+        build_balanced_bundle(0.0, delta_nfr=6.0, si=0.55),
+        build_balanced_bundle(0.1, delta_nfr=5.5, si=0.56),
+        build_balanced_bundle(0.2, delta_nfr=5.0, si=0.57),
     ]
     call_count = 0
 
