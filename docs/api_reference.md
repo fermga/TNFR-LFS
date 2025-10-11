@@ -227,6 +227,51 @@ import *`` only surfaces the documented symbols:
 * `tnfr_lfs.core.delta_utils` intentionally keeps ``__all__`` empty because the
   helper is not part of the public surface.【F:tnfr_lfs/core/delta_utils.py†L8-L8】
 
+Importing directly from :mod:`tnfr_lfs.core` keeps notebooks and pipelines
+decoupled from the internal module layout.  The re-exports mirror the stable
+surface described above, so a single import line is enough to pull the primary
+dataclasses and helpers that orchestrate ΔNFR analytics.
+
+```python
+from tnfr_lfs.core import TelemetryRecord, compute_window_metrics
+
+sample = TelemetryRecord(
+    timestamp=0.0,
+    vertical_load=4_000.0,
+    slip_ratio=0.0,
+    lateral_accel=1.2,
+    longitudinal_accel=0.8,
+    yaw=0.0,
+    pitch=0.0,
+    roll=0.0,
+    brake_pressure=0.1,
+    locking=0.0,
+    nfr=0.5,
+    si=0.6,
+    speed=45.0,
+    yaw_rate=0.02,
+    slip_angle=0.01,
+    steer=0.1,
+    throttle=0.7,
+    gear=3,
+    vertical_load_front=1_800.0,
+    vertical_load_rear=2_200.0,
+    mu_eff_front=0.9,
+    mu_eff_rear=0.95,
+    mu_eff_front_lateral=0.88,
+    mu_eff_front_longitudinal=0.9,
+    mu_eff_rear_lateral=0.93,
+    mu_eff_rear_longitudinal=0.96,
+    suspension_travel_front=0.03,
+    suspension_travel_rear=0.04,
+    suspension_velocity_front=0.0,
+    suspension_velocity_rear=0.0,
+)
+
+window_metrics = compute_window_metrics([sample])
+print(window_metrics.si, window_metrics.delta_nfr_std)
+```
+
 ### `tnfr_lfs.core.epi`
 
 Natural frequency helpers complement the ΔNFR/EPI extractors by exposing
