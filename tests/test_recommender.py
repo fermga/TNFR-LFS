@@ -46,7 +46,7 @@ from tnfr_lfs.recommender.rules import (
 )
 from tnfr_lfs.core.operators import tyre_balance_controller
 
-from tests.helpers import BASE_NU_F
+from tests.helpers import BASE_NU_F, build_epi_nodes
 from tests.helpers.steering import build_steering_bundle, build_steering_record
 def _parallel_window_metrics(
     slip_angles: Sequence[tuple[float, float]],
@@ -889,21 +889,10 @@ def test_aero_coherence_rule_respects_low_speed_window() -> None:
 
 
 def test_recommendation_engine_detects_anomalies(car_track_thresholds):
-    def build_nodes(delta_nfr: float, sense_index: float):
-        return dict(
-            tyres=TyresNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["tyres"]),
-            suspension=SuspensionNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["suspension"]),
-            chassis=ChassisNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["chassis"]),
-            brakes=BrakesNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["brakes"]),
-            transmission=TransmissionNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["transmission"]),
-            track=TrackNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["track"]),
-            driver=DriverNode(delta_nfr=delta_nfr / 7, sense_index=sense_index, nu_f=BASE_NU_F["driver"]),
-        )
-
     results = [
-        EPIBundle(timestamp=0.0, epi=0.4, delta_nfr=15.0, sense_index=0.55, **build_nodes(15.0, 0.55)),
-        EPIBundle(timestamp=0.1, epi=0.5, delta_nfr=-12.0, sense_index=0.50, **build_nodes(-12.0, 0.50)),
-        EPIBundle(timestamp=0.2, epi=0.6, delta_nfr=2.0, sense_index=0.90, **build_nodes(2.0, 0.90)),
+        EPIBundle(timestamp=0.0, epi=0.4, delta_nfr=15.0, sense_index=0.55, **build_epi_nodes(15.0, 0.55)),
+        EPIBundle(timestamp=0.1, epi=0.5, delta_nfr=-12.0, sense_index=0.50, **build_epi_nodes(-12.0, 0.50)),
+        EPIBundle(timestamp=0.2, epi=0.6, delta_nfr=2.0, sense_index=0.90, **build_epi_nodes(2.0, 0.90)),
     ]
     engine = RecommendationEngine(threshold_library=car_track_thresholds)
     recommendations = engine.generate(results)
