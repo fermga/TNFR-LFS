@@ -43,6 +43,15 @@ def plugin_registry_state(
         _clear_registry()
 
 
+def write_plugin_config_text(base_directory: Path, content: str) -> Path:
+    """Write a ``plugins.toml`` file with the provided ``content``."""
+
+    base_directory.mkdir(parents=True, exist_ok=True)
+    config_path = base_directory / "plugins.toml"
+    config_path.write_text(textwrap.dedent(content))
+    return config_path
+
+
 def write_plugin_module(
     directory: Path,
     *,

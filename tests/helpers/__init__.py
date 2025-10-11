@@ -8,6 +8,7 @@ from .microsector import build_goal, build_microsector
 from .packets import build_outgauge_packet, build_outsim_packet
 from .plugins import (
     plugin_registry_state,
+    write_plugin_config_text,
     write_plugin_manager_config,
     write_plugin_module,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "build_native_export_plan",
     "build_minimal_setup_plan",
     "plugin_registry_state",
+    "write_plugin_config_text",
     "write_plugin_manager_config",
     "write_plugin_module",
     "build_outsim_packet",
