@@ -227,6 +227,170 @@ import *`` only surfaces the documented symbols:
 * `tnfr_lfs.core.delta_utils` intentionally keeps ``__all__`` empty because the
   helper is not part of the public surface.【F:tnfr_lfs/core/delta_utils.py†L8-L8】
 
+### `tnfr_lfs.core.archetypes`
+
+Archetype targets capture the strategic intent the segmentation and
+recommendation pipelines expect for each corner profile.  The module ships a
+read-only :data:`~tnfr_lfs.core.archetypes.DEFAULT_ARCHETYPE_PHASE_TARGETS`
+mapping covering hairpins, chicanes, medium- and high-speed archetypes and a
+lightweight accessor named :func:`~tnfr_lfs.core.archetypes.archetype_phase_targets`
+that falls back to the medium archetype for unknown keys.【F:src/tnfr_lfs/core/archetypes.py†L9-L91】
+
+```python
+from tnfr_lfs.core.archetypes import archetype_phase_targets
+
+targets = archetype_phase_targets("hairpin")
+apex_targets = targets["apex"]
+apex_targets.nu_f  # -> 0.55
+```
+
+The targets feed the microsector segmentation heuristics documented in
+:mod:`tnfr_lfs.core.segmentation` and are reused by the recommendation engine
+when synthesising coaching prompts—see :doc:`setup_plan` for an end-to-end
+overview.
+
+### `tnfr_lfs.core.constants`
+
+Utility constants centralise the canonical wheel identifiers and their derived
+telemetry field names so that ingestion, segmentation and recommendation code
+agree on a consistent naming scheme.【F:src/tnfr_lfs/core/constants.py†L9-L39】  The
+immutable dictionaries (``MappingProxyType``) include wheel labels as well as
+tyre/brake temperature and pressure keys.
+
+```python
+from tnfr_lfs.core.constants import (
+    BRAKE_TEMPERATURE_MEAN_KEYS,
+    TEMPERATURE_MEAN_KEYS,
+    WHEEL_LABELS,
+)
+
+WHEEL_LABELS["fl"]  # -> "FL"
+TEMPERATURE_MEAN_KEYS["rr"]  # -> "tyre_temp_rr"
+BRAKE_TEMPERATURE_MEAN_KEYS["fr"]  # -> "brake_temp_fr"
+```
+
+### `tnfr_lfs.core.dissonance`
+
+The dissonance helpers quantify whether ΔNFR is improving during high yaw
+energy intervals—an important signal when diagnosing OZ operator opportunities
+or quiet segments flagged by :func:`tnfr_lfs.core.operator_detection.detect_silence`.
+:func:`~tnfr_lfs.core.dissonance.compute_useful_dissonance_stats` compares ΔNFR
+gradients against yaw acceleration and returns a tuple of useful sample counts
+and their ratio.【F:src/tnfr_lfs/core/dissonance.py†L18-L66】  The
+``YAW_ACCELERATION_THRESHOLD`` constant exposes the default 0.5 rad/s² cut-off.
+
+```python
+from tnfr_lfs.core.dissonance import compute_useful_dissonance_stats
+
+timestamps = [0.0, 0.1, 0.2, 0.3]
+delta_nfr = [20.0, 18.0, 14.0, 11.0]
+yaw_rate = [0.0, 0.08, 0.26, 0.5]
+
+useful, energetic, ratio = compute_useful_dissonance_stats(
+    timestamps,
+    delta_nfr,
+    yaw_rate,
+)
+ratio  # -> 1.0 when ΔNFR decreases during high yaw acceleration
+```
+
+### `tnfr_lfs.core.operator_detection`
+
+Operator detectors sweep :class:`~tnfr_lfs.core.epi.TelemetryRecord` sequences
+and emit structured events whenever lateral support (AL), oversteer (OZ),
+ideal-line deviations (IL) or structural silence conditions appear.  Normalise
+operator identifiers with :func:`~tnfr_lfs.core.operator_detection.canonical_operator_label`
+or :func:`~tnfr_lfs.core.operator_detection.normalize_structural_operator_identifier`
+before presenting them to the driver.【F:src/tnfr_lfs/core/operator_detection.py†L1-L293】
+
+```python
+from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.core.operator_detection import detect_al, detect_oz
+
+samples = [
+    TelemetryRecord(
+        timestamp=index * 0.05,
+        vertical_load=620.0,
+        slip_ratio=0.0,
+        lateral_accel=1.8,
+        longitudinal_accel=0.2,
+        yaw=0.0,
+        pitch=0.0,
+        roll=0.0,
+        brake_pressure=0.0,
+        locking=0.0,
+        nfr=42.0,
+        si=0.78,
+        speed=45.0,
+        yaw_rate=0.22,
+        slip_angle=0.16,
+        steer=0.05,
+        throttle=0.6,
+        gear=3,
+        vertical_load_front=320.0,
+        vertical_load_rear=300.0,
+        mu_eff_front=0.0,
+        mu_eff_rear=0.0,
+        mu_eff_front_lateral=0.0,
+        mu_eff_front_longitudinal=0.0,
+        mu_eff_rear_lateral=0.0,
+        mu_eff_rear_longitudinal=0.0,
+        suspension_travel_front=0.01,
+        suspension_travel_rear=0.02,
+        suspension_velocity_front=0.0,
+        suspension_velocity_rear=0.0,
+    )
+    for index in range(10)
+]
+
+al_events = detect_al(samples)
+oz_events = detect_oz(samples, slip_threshold=0.12, yaw_threshold=0.2)
+```
+
+The resulting dictionaries can be merged into the microsector segmentation
+output described in :mod:`tnfr_lfs.core.segmentation` or forwarded to the
+recommendation engine so that nudges and prompts appear alongside the ΔNFR/SI
+metrics.  Refer to :doc:`examples` for a complete ingestion → detection →
+recommendation workflow.
+
+### `tnfr_lfs.core.phases`
+
+Phase helpers coordinate the legacy entry/apex/exit grouping used throughout the
+segmentation stack with the more granular phase identifiers expected by the HUD
+and recommendation workflows.【F:src/tnfr_lfs/core/phases.py†L1-L76】  Use
+:func:`~tnfr_lfs.core.phases.replicate_phase_aliases` when migrating historical
+payloads so that ``{"entry": ...}`` dictionaries also expose ``entry1`` and
+``entry2`` values.  :func:`~tnfr_lfs.core.phases.expand_phase_alias` returns the
+concrete phases associated with a legacy alias, while
+:func:`~tnfr_lfs.core.phases.phase_family` reports the canonical family.  The
+helpers keep legacy dashboards compatible with the microsector segmentation
+output and the recommendation engine described in :doc:`setup_plan`.
+
+```python
+from statistics import mean
+
+from tnfr_lfs.core.phases import replicate_phase_aliases
+
+raw = {"entry1": 0.42, "entry2": 0.38, "apex3a": 0.55}
+expanded = replicate_phase_aliases(raw, combine=mean)
+expanded["entry"]  # -> 0.4 (mean of entry1 and entry2)
+```
+
+### `tnfr_lfs.core.utils`
+
+Shared utilities currently expose :func:`~tnfr_lfs.core.utils.normalised_entropy`,
+which computes the Shannon entropy of a sequence while normalising the result to
+``[0, 1]``.【F:src/tnfr_lfs/core/utils.py†L1-L42】  The helper ignores non-numeric,
+non-finite and non-positive values so it can operate directly on raw telemetry
+weights.
+
+```python
+from tnfr_lfs.core.utils import normalised_entropy
+
+normalised_entropy([1.0, 1.0, 1.0])  # -> 1.0 (uniform distribution)
+normalised_entropy([3.0, 0.5, 0.5])  # -> 0.79...
+```
+
 ### `tnfr_lfs.core.resonance`
 
 Use :class:`tnfr_lfs.core.resonance.ModalPeak` to interpret the dominant
