@@ -9,7 +9,7 @@ from typing import List, Mapping
 
 import pytest
 
-from tests.helpers import build_dynamic_record
+from tests.helpers import build_dynamic_record, build_epi_bundle
 
 from tnfr_lfs.core import Goal, Microsector, TelemetryRecord, phase_synchrony_index
 from tnfr_lfs.core.spectrum import phase_to_latency_ms
@@ -257,18 +257,13 @@ def _build_bundle(
     yaw_rate: float = 0.0,
 ) -> EPIBundle:
     delta_value = tyre_delta if delta_nfr is None else delta_nfr
-    return EPIBundle(
+    return build_epi_bundle(
         timestamp=timestamp,
-        epi=0.0,
         delta_nfr=delta_value,
         sense_index=0.9,
-        tyres=TyresNode(delta_nfr=tyre_delta, sense_index=0.9),
-        suspension=SuspensionNode(delta_nfr=delta_value, sense_index=0.9),
-        chassis=ChassisNode(delta_nfr=delta_value, sense_index=0.9, yaw_rate=yaw_rate),
-        brakes=BrakesNode(delta_nfr=0.0, sense_index=0.9),
-        transmission=TransmissionNode(delta_nfr=0.0, sense_index=0.9),
-        track=TrackNode(delta_nfr=0.0, sense_index=0.9),
-        driver=DriverNode(delta_nfr=0.0, sense_index=0.9),
+        tyres={"delta_nfr": tyre_delta},
+        suspension={"delta_nfr": delta_value},
+        chassis={"delta_nfr": delta_value, "yaw_rate": yaw_rate},
     )
 
 

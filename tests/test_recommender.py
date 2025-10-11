@@ -46,7 +46,7 @@ from tnfr_lfs.recommender.rules import (
 )
 from tnfr_lfs.core.operators import tyre_balance_controller
 
-from tests.helpers import BASE_NU_F, build_epi_nodes
+from tests.helpers import BASE_NU_F, build_epi_bundle, build_epi_nodes
 from tests.helpers.steering import build_steering_bundle, build_steering_record
 def _parallel_window_metrics(
     slip_angles: Sequence[tuple[float, float]],
@@ -140,37 +140,19 @@ def _brake_headroom_microsector(
 def _udr_bundle_series(values: Sequence[float], *, si: float = 0.8) -> Sequence[EPIBundle]:
     bundles: list[EPIBundle] = []
     for index, value in enumerate(values):
-        nodes = dict(
-            tyres=TyresNode(delta_nfr=value, sense_index=si, nu_f=BASE_NU_F["tyres"]),
-            suspension=SuspensionNode(
-                delta_nfr=value,
-                sense_index=si,
-                nu_f=BASE_NU_F["suspension"],
-            ),
-            chassis=ChassisNode(
-                delta_nfr=value,
-                sense_index=si,
-                nu_f=BASE_NU_F["chassis"],
-                yaw_rate=0.0,
-            ),
-            brakes=BrakesNode(delta_nfr=value, sense_index=si, nu_f=BASE_NU_F["brakes"]),
-            transmission=TransmissionNode(
-                delta_nfr=value,
-                sense_index=si,
-                nu_f=BASE_NU_F["transmission"],
-            ),
-            track=TrackNode(delta_nfr=value, sense_index=si, nu_f=BASE_NU_F["track"]),
-            driver=DriverNode(delta_nfr=value, sense_index=si, nu_f=BASE_NU_F["driver"]),
-        )
         bundles.append(
-            EPIBundle(
+            build_epi_bundle(
                 timestamp=index * 0.1,
-                epi=0.0,
                 delta_nfr=value,
-                delta_nfr_proj_longitudinal=value,
-                delta_nfr_proj_lateral=0.0,
                 sense_index=si,
-                **nodes,
+                delta_nfr_proj_longitudinal=value,
+                tyres={"delta_nfr": value},
+                suspension={"delta_nfr": value},
+                chassis={"delta_nfr": value},
+                brakes={"delta_nfr": value},
+                transmission={"delta_nfr": value},
+                track={"delta_nfr": value},
+                driver={"delta_nfr": value},
             )
         )
     return bundles
@@ -185,40 +167,19 @@ def _axis_bundle(
     gradient: float = 0.0,
 ) -> EPIBundle:
     share = delta_nfr / 7.0
-    nodes = dict(
-        tyres=TyresNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["tyres"]),
-        suspension=SuspensionNode(
-            delta_nfr=share,
-            sense_index=si,
-            nu_f=BASE_NU_F["suspension"],
-        ),
-        chassis=ChassisNode(
-            delta_nfr=share,
-            sense_index=si,
-            nu_f=BASE_NU_F["chassis"],
-        ),
-        brakes=BrakesNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["brakes"]),
-        transmission=TransmissionNode(
-            delta_nfr=share,
-            sense_index=si,
-            nu_f=BASE_NU_F["transmission"],
-        ),
-        track=TrackNode(
-            delta_nfr=share,
-            sense_index=si,
-            nu_f=BASE_NU_F["track"],
-            gradient=gradient,
-        ),
-        driver=DriverNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["driver"]),
-    )
-    return EPIBundle(
+    return build_epi_bundle(
         timestamp=0.0,
-        epi=0.0,
         delta_nfr=delta_nfr,
+        sense_index=si,
         delta_nfr_proj_longitudinal=long_component,
         delta_nfr_proj_lateral=lat_component,
-        sense_index=si,
-        **nodes,
+        tyres={"delta_nfr": share},
+        suspension={"delta_nfr": share},
+        chassis={"delta_nfr": share},
+        brakes={"delta_nfr": share},
+        transmission={"delta_nfr": share},
+        track={"delta_nfr": share, "gradient": gradient},
+        driver={"delta_nfr": share},
     )
 
 
