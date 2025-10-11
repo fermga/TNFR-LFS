@@ -22,6 +22,13 @@ jobs:
     outputs:
       core: ${{ steps.filter.outputs.core }}
       examples: ${{ steps.filter.outputs.examples }}
+      analysis: ${{ steps.filter.outputs.analysis }}
+      cli: ${{ steps.filter.outputs.cli }}
+      exporters: ${{ steps.filter.outputs.exporters }}
+      ingestion: ${{ steps.filter.outputs.ingestion }}
+      io: ${{ steps.filter.outputs.io }}
+      processing: ${{ steps.filter.outputs.processing }}
+      recommender: ${{ steps.filter.outputs.recommender }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,6 +37,9 @@ jobs:
       - id: filter
         uses: dorny/paths-filter@v3
         with:
+          # Each filter below mirrors a logical product area. When adding a
+          # module or a new test file, update the relevant glob so the
+          # downstream pytest selection remains accurate.
           filters: |
             core:
               - '.github/**'
@@ -43,6 +53,35 @@ jobs:
               - 'tnfr_lfs.toml'
               - 'src/tnfr_lfs/**'
               - 'typing_targets/**'
+            analysis:
+              - 'src/tnfr_lfs/analysis/**'
+              - 'tests/test_analysis_*.py'
+              - 'tests/analysis/**'
+            cli:
+              - 'src/tnfr_lfs/cli/**'
+              - 'tests/test_cli*.py'
+              - 'tests/test_cli_*.py'
+              - 'tests/test_cli_parser.py'
+            exporters:
+              - 'src/tnfr_lfs/exporters/**'
+              - 'tests/test_*exporter*.py'
+              - 'tests/test_replay_csv_bundle.py'
+            ingestion:
+              - 'src/tnfr_lfs/ingestion/**'
+              - 'tests/test_ingestion.py'
+              - 'tests/ingestion/**'
+            io:
+              - 'src/tnfr_lfs/io/**'
+              - 'tests/test_io_*.py'
+              - 'tests/test_cli_io.py'
+            processing:
+              - 'src/tnfr_lfs/processing.py'
+              - 'src/tnfr_lfs/processing/**'
+              - 'tests/test_processing.py'
+            recommender:
+              - 'src/tnfr_lfs/recommender/**'
+              - 'tests/test_recommender*.py'
+              - 'tests/test_recommender_search_cache.py'
             examples:
               - 'examples/**'
 
@@ -68,8 +107,109 @@ jobs:
         run: ruff check .
       - name: Mypy
         run: mypy --strict
+      - name: Determine pytest target selection
+        id: pytest-targets
+        env:
+          ON_MAIN: ${{ github.ref == 'refs/heads/main' }}
+          CHANGED_ANALYSIS: ${{ needs.detect-changes.outputs.analysis }}
+          CHANGED_CLI: ${{ needs.detect-changes.outputs.cli }}
+          CHANGED_EXPORTERS: ${{ needs.detect-changes.outputs.exporters }}
+          CHANGED_INGESTION: ${{ needs.detect-changes.outputs.ingestion }}
+          CHANGED_IO: ${{ needs.detect-changes.outputs.io }}
+          CHANGED_PROCESSING: ${{ needs.detect-changes.outputs.processing }}
+          CHANGED_RECOMMENDER: ${{ needs.detect-changes.outputs.recommender }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$ON_MAIN" == "true" ]]; then
+            echo "args=" >> "$GITHUB_OUTPUT"
+            echo "summary=main branch -> run full suite" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          areas=()
+          if [[ "$CHANGED_ANALYSIS" == "true" ]]; then areas+=("analysis"); fi
+          if [[ "$CHANGED_CLI" == "true" ]]; then areas+=("cli"); fi
+          if [[ "$CHANGED_EXPORTERS" == "true" ]]; then areas+=("exporters"); fi
+          if [[ "$CHANGED_INGESTION" == "true" ]]; then areas+=("ingestion"); fi
+          if [[ "$CHANGED_IO" == "true" ]]; then areas+=("io"); fi
+          if [[ "$CHANGED_PROCESSING" == "true" ]]; then areas+=("processing"); fi
+          if [[ "$CHANGED_RECOMMENDER" == "true" ]]; then areas+=("recommender"); fi
+
+          if (( ${#areas[@]} != 1 )); then
+            echo "args=" >> "$GITHUB_OUTPUT"
+            if (( ${#areas[@]} == 0 )); then
+              echo "summary=no targeted area detected -> run full suite" >> "$GITHUB_OUTPUT"
+            else
+              echo "summary=multiple areas (${areas[*]}) -> run full suite" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          case "${areas[0]}" in
+            analysis)
+              targets=("tests/test_analysis_*.py" "tests/analysis")
+              ;;
+            cli)
+              targets=(
+                "tests/test_cli.py"
+                "tests/test_cli_*.py"
+                "tests/test_cli_parser.py"
+              )
+              ;;
+            exporters)
+              targets=(
+                "tests/test_*exporter*.py"
+                "tests/test_replay_csv_bundle.py"
+              )
+              ;;
+            ingestion)
+              targets=("tests/test_ingestion.py" "tests/ingestion")
+              ;;
+            io)
+              targets=("tests/test_io_*.py" "tests/test_cli_io.py")
+              ;;
+            processing)
+              targets=("tests/test_processing.py")
+              ;;
+            recommender)
+              targets=(
+                "tests/test_recommender*.py"
+                "tests/test_recommender_search_cache.py"
+              )
+              ;;
+            *)
+              targets=()
+              ;;
+          esac
+
+          if (( ${#targets[@]} == 0 )); then
+            echo "args=" >> "$GITHUB_OUTPUT"
+            echo "summary=${areas[0]} has no explicit target -> run full suite" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "args=${targets[*]}" >> "$GITHUB_OUTPUT"
+          echo "summary=targeted run for ${areas[0]} -> ${targets[*]}" >> "$GITHUB_OUTPUT"
+
       - name: Pytest
-        run: pytest --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing
+        env:
+          PYTEST_TARGET_ARGS: ${{ steps.pytest-targets.outputs.args }}
+          PYTEST_SELECTION_SUMMARY: ${{ steps.pytest-targets.outputs.summary }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "$PYTEST_SELECTION_SUMMARY" ]]; then
+            echo "$PYTEST_SELECTION_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [[ -z "$PYTEST_TARGET_ARGS" ]]; then
+            echo "Running full pytest suite"
+            pytest --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing
+          else
+            echo "Running targeted pytest selection: $PYTEST_TARGET_ARGS"
+            pytest --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing $PYTEST_TARGET_ARGS
+          fi
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
