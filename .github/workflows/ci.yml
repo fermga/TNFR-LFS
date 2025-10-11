@@ -83,6 +83,10 @@ jobs:
             ingestion:
               - 'src/tnfr_lfs/ingestion/**'
               - 'tests/test_ingestion.py'
+              - 'tests/test_outgauge_udp.py'
+              - 'tests/test_outsim_udp.py'
+              - 'tests/test_insim.py'
+              - 'tests/test_track_loader.py'
               - 'tests/ingestion/**'
             io:
               - 'src/tnfr_lfs/io/**'
@@ -200,7 +204,14 @@ jobs:
                 )
                 ;;
               ingestion)
-                area_targets=("tests/test_ingestion.py" "tests/ingestion")
+                area_targets=(
+                  "tests/test_ingestion.py"
+                  "tests/test_outgauge_udp.py"
+                  "tests/test_outsim_udp.py"
+                  "tests/test_insim.py"
+                  "tests/test_track_loader.py"
+                  "tests/ingestion"
+                )
                 ;;
               io)
                 area_targets=("tests/test_io_*.py" "tests/test_cli_io.py")
