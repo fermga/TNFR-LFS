@@ -6,18 +6,18 @@ import pytest
 
 from tnfr_lfs.analysis.robustness import compute_session_robustness
 
-from test_search import _build_bundle
+from tests.helpers import build_balanced_bundle
 
 
 @pytest.fixture
 def multi_lap_session() -> tuple[Sequence, Sequence[int]]:
     bundles = [
-        _build_bundle(0.0, 1.0, 0.80),
-        _build_bundle(0.1, 2.0, 0.82),
-        _build_bundle(0.2, 3.0, 0.78),
-        _build_bundle(0.3, 1.5, 0.90),
-        _build_bundle(0.4, 1.5, 0.90),
-        _build_bundle(0.5, 1.5, 0.90),
+        build_balanced_bundle(0.0, 1.0, 0.80),
+        build_balanced_bundle(0.1, 2.0, 0.82),
+        build_balanced_bundle(0.2, 3.0, 0.78),
+        build_balanced_bundle(0.3, 1.5, 0.90),
+        build_balanced_bundle(0.4, 1.5, 0.90),
+        build_balanced_bundle(0.5, 1.5, 0.90),
     ]
     lap_indices = [0, 0, 0, 1, 1, 1]
     return bundles, lap_indices
