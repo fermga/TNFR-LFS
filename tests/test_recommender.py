@@ -281,25 +281,19 @@ def test_recommendation_engine_uses_session_weights() -> None:
 
 
 def test_tyre_balance_rule_generates_guidance():
-    goal = Goal(
-        phase="apex",
-        archetype="medium",
+    goal = build_goal(
+        "apex",
+        0.4,
         description="",
-        target_delta_nfr=0.4,
-        target_sense_index=0.9,
         nu_f_target=0.25,
         nu_exc_target=0.25,
         rho_target=1.0,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.9,
-        measured_phase_lag=0.0,
         measured_phase_alignment=0.88,
         slip_lat_window=(-0.4, 0.4),
         slip_long_window=(-0.3, 0.3),
         yaw_rate_window=(-0.5, 0.5),
-        dominant_nodes=("tyres",),
     )
-    microsector = Microsector(
+    microsector = build_microsector(
         index=5,
         start_time=0.0,
         end_time=0.4,
@@ -307,13 +301,13 @@ def test_tyre_balance_rule_generates_guidance():
         brake_event=False,
         support_event=False,
         delta_nfr_signature=0.5,
+        phases=("apex",),
         goals=(goal,),
         phase_boundaries={"apex": (0, 4)},
         phase_samples={"apex": (0, 1, 2, 3)},
         active_phase="apex",
         dominant_nodes={"apex": ("tyres",)},
         phase_weights={"apex": {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={"apex": 0.0},
         phase_alignment={"apex": 0.9},
         phase_synchrony={"apex": goal.measured_phase_synchrony},
@@ -323,10 +317,9 @@ def test_tyre_balance_rule_generates_guidance():
             "grip_rel": 1.0,
             "d_nfr_flat": -0.32,
         },
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={"apex": {}},
         operator_events={},
+        include_cphi=False,
     )
     thresholds = ThresholdProfile(
         entry_delta_tolerance=0.6,
@@ -868,7 +861,48 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     }
     phase_lag = {"entry": 0.0, "apex": 0.0, "exit": 0.0}
     phase_alignment = {"entry": 1.0, "apex": 1.0, "exit": 1.0}
-    microsector = Microsector(
+    goals = (
+        build_goal(
+            "entry",
+            entry_target,
+            archetype="hairpin",
+            description="",
+            nu_f_target=0.25,
+            nu_exc_target=0.25,
+            rho_target=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=entry_nodes,
+        ),
+        build_goal(
+            "apex",
+            apex_target,
+            archetype="hairpin",
+            description="",
+            nu_f_target=0.25,
+            nu_exc_target=0.25,
+            rho_target=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=apex_nodes,
+        ),
+        build_goal(
+            "exit",
+            exit_target,
+            archetype="hairpin",
+            description="",
+            nu_f_target=0.25,
+            nu_exc_target=0.25,
+            rho_target=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=exit_nodes,
+        ),
+    )
+    microsector = build_microsector(
         index=3,
         start_time=0.0,
         end_time=0.6,
@@ -876,62 +910,8 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
         brake_event=True,
         support_event=True,
         delta_nfr_signature=0.0,
-        goals=(
-            Goal(
-                phase="entry",
-                archetype="hairpin",
-                description="",
-                target_delta_nfr=entry_target,
-                target_sense_index=0.9,
-                nu_f_target=0.25,
-                nu_exc_target=0.25,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=entry_nodes,
-            ),
-            Goal(
-                phase="apex",
-                archetype="hairpin",
-                description="",
-                target_delta_nfr=apex_target,
-                target_sense_index=0.9,
-                nu_f_target=0.25,
-                nu_exc_target=0.25,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=apex_nodes,
-            ),
-            Goal(
-                phase="exit",
-                archetype="hairpin",
-                description="",
-                target_delta_nfr=exit_target,
-                target_sense_index=0.9,
-                nu_f_target=0.25,
-                nu_exc_target=0.25,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=exit_nodes,
-            ),
-        ),
+        phases=("entry", "apex", "exit"),
+        goals=goals,
         phase_boundaries={
             "entry": (0, 2),
             "apex": (2, 4),
@@ -945,14 +925,12 @@ def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
             "exit": exit_nodes,
         },
         phase_weights=phase_weights,
-        grip_rel=1.0,
         phase_lag=phase_lag,
         phase_alignment=phase_alignment,
         filtered_measures=filtered_measures,
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy=window_occupancy,
         operator_events={},
+        include_cphi=False,
     )
 
     results = [
@@ -1157,7 +1135,48 @@ def test_track_specific_profile_tightens_entry_threshold():
         "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
         "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
     }
-    microsector = Microsector(
+    goals = (
+        build_goal(
+            "entry",
+            0.0,
+            archetype="hairpin",
+            description="",
+            nu_f_target=0.25,
+            nu_exc_target=0.25,
+            rho_target=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=nodes,
+        ),
+        build_goal(
+            "apex",
+            0.2,
+            archetype="hairpin",
+            description="",
+            nu_f_target=0.25,
+            nu_exc_target=0.25,
+            rho_target=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=nodes,
+        ),
+        build_goal(
+            "exit",
+            -0.1,
+            archetype="hairpin",
+            description="",
+            nu_f_target=0.25,
+            nu_exc_target=0.25,
+            rho_target=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=nodes,
+        ),
+    )
+    microsector = build_microsector(
         index=4,
         start_time=0.0,
         end_time=0.6,
@@ -1165,62 +1184,8 @@ def test_track_specific_profile_tightens_entry_threshold():
         brake_event=True,
         support_event=True,
         delta_nfr_signature=0.0,
-        goals=(
-            Goal(
-                phase="entry",
-                archetype="hairpin",
-                description="",
-                target_delta_nfr=0.0,
-                target_sense_index=0.9,
-                nu_f_target=0.25,
-                nu_exc_target=0.25,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=nodes,
-            ),
-            Goal(
-                phase="apex",
-                archetype="hairpin",
-                description="",
-                target_delta_nfr=0.2,
-                target_sense_index=0.9,
-                nu_f_target=0.25,
-                nu_exc_target=0.25,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=nodes,
-            ),
-            Goal(
-                phase="exit",
-                archetype="hairpin",
-                description="",
-                target_delta_nfr=-0.1,
-                target_sense_index=0.9,
-                nu_f_target=0.25,
-                nu_exc_target=0.25,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=nodes,
-            ),
-        ),
+        phases=("entry", "apex", "exit"),
+        goals=goals,
         phase_boundaries={
             "entry": (0, 2),
             "apex": (2, 4),
@@ -1242,14 +1207,12 @@ def test_track_specific_profile_tightens_entry_threshold():
             "apex": {"__default__": 1.0},
             "exit": {"__default__": 1.0},
         },
-        grip_rel=1.0,
         phase_lag=phase_lag,
         phase_alignment=phase_alignment,
         filtered_measures=filtered_measures,
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy=window_occupancy,
         operator_events={},
+        include_cphi=False,
     )
 
     results = [
@@ -1302,7 +1265,48 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
     exit_nodes = ("transmission",)
     phase_lag = {"entry": 0.0, "apex": 0.0, "exit": 0.0}
     phase_alignment = {"entry": 1.0, "apex": 1.0, "exit": 1.0}
-    microsector = Microsector(
+    goals = (
+        build_goal(
+            "entry",
+            0.0,
+            archetype="transition",
+            description="",
+            nu_f_target=0.1,
+            nu_exc_target=0.1,
+            rho_target=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=("tyres",),
+        ),
+        build_goal(
+            "apex",
+            0.1,
+            archetype="transition",
+            description="",
+            nu_f_target=0.15,
+            nu_exc_target=0.15,
+            rho_target=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=("suspension",),
+        ),
+        build_goal(
+            "exit",
+            -0.05,
+            archetype="traction",
+            description="",
+            nu_f_target=0.2,
+            nu_exc_target=0.2,
+            rho_target=1.0,
+            slip_lat_window=window,
+            slip_long_window=window,
+            yaw_rate_window=yaw_window,
+            dominant_nodes=exit_nodes,
+        ),
+    )
+    microsector = build_microsector(
         index=7,
         start_time=0.0,
         end_time=0.6,
@@ -1310,62 +1314,8 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
         brake_event=False,
         support_event=False,
         delta_nfr_signature=0.0,
-        goals=(
-            Goal(
-                phase="entry",
-                archetype="transition",
-                description="",
-                target_delta_nfr=0.0,
-                target_sense_index=0.9,
-                nu_f_target=0.1,
-                nu_exc_target=0.1,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=("tyres",),
-            ),
-            Goal(
-                phase="apex",
-                archetype="transition",
-                description="",
-                target_delta_nfr=0.1,
-                target_sense_index=0.9,
-                nu_f_target=0.15,
-                nu_exc_target=0.15,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=("suspension",),
-            ),
-            Goal(
-                phase="exit",
-                archetype="traction",
-                description="",
-                target_delta_nfr=-0.05,
-                target_sense_index=0.9,
-                nu_f_target=0.2,
-                nu_exc_target=0.2,
-                rho_target=1.0,
-                target_phase_lag=0.0,
-                target_phase_alignment=0.9,
-                measured_phase_lag=0.0,
-                measured_phase_alignment=1.0,
-                slip_lat_window=window,
-                slip_long_window=window,
-                yaw_rate_window=yaw_window,
-                dominant_nodes=exit_nodes,
-            ),
-        ),
+        phases=("entry", "apex", "exit"),
+        goals=goals,
         phase_boundaries={
             "entry": (0, 2),
             "apex": (2, 4),
@@ -1387,7 +1337,6 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
             "apex": {"__default__": 1.0},
             "exit": {"__default__": 1.0},
         },
-        grip_rel=1.0,
         phase_lag=phase_lag,
         phase_alignment=phase_alignment,
         filtered_measures={
@@ -1395,14 +1344,13 @@ def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
             "style_index": 0.9,
             "grip_rel": 1.0,
         },
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={
             "entry": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
             "apex": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
             "exit": {"slip_lat": 100.0, "slip_long": 100.0, "yaw_rate": 100.0},
         },
         operator_events={},
+        include_cphi=False,
     )
 
     results = [
@@ -1466,17 +1414,15 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
         )
 
     results = [_bundle(1.5, 0.0), _bundle(1.55, 0.1)]
-    goal = Goal(
-        phase="apex",
+    goal = build_goal(
+        "apex",
+        0.2,
         archetype="hairpin",
         description="",
-        target_delta_nfr=0.2,
         target_sense_index=0.88,
         nu_f_target=0.25,
-                nu_exc_target=0.25,
-                rho_target=1.0,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.9,
+        nu_exc_target=0.25,
+        rho_target=1.0,
         measured_phase_lag=0.6,
         measured_phase_alignment=-0.4,
         slip_lat_window=(-0.3, 0.3),
@@ -1484,7 +1430,7 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
         yaw_rate_window=(-0.3, 0.3),
         dominant_nodes=("suspension",),
     )
-    microsector = Microsector(
+    microsector = build_microsector(
         index=12,
         start_time=0.0,
         end_time=0.2,
@@ -1492,20 +1438,19 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
         brake_event=False,
         support_event=False,
         delta_nfr_signature=0.4,
+        phases=("apex",),
         goals=(goal,),
         phase_boundaries={"apex": (0, 2)},
         phase_samples={"apex": (0, 1)},
         active_phase="apex",
         dominant_nodes={"apex": ("suspension",)},
         phase_weights={"apex": {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={"apex": 0.6},
         phase_alignment={"apex": -0.4},
         filtered_measures={"thermal_load": 5000.0, "style_index": 0.8},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={"apex": {"slip_lat": 75.0, "slip_long": 70.0, "yaw_rate": 68.0}},
         operator_events={},
+        include_cphi=False,
     )
 
     recommendations = list(rule.evaluate(results, [microsector], context=context))
@@ -1519,18 +1464,15 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
 
 
 def test_detune_ratio_rule_emits_modal_guidance() -> None:
-    goal = Goal(
-        phase="apex",
+    goal = build_goal(
+        "apex",
+        0.3,
         archetype="hairpin",
         description="",
-        target_delta_nfr=0.3,
         target_sense_index=0.85,
         nu_f_target=0.28,
         nu_exc_target=0.22,
         rho_target=0.78,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.9,
-        measured_phase_lag=0.0,
         measured_phase_alignment=0.9,
         slip_lat_window=(-0.3, 0.3),
         slip_long_window=(-0.3, 0.3),
@@ -1538,7 +1480,7 @@ def test_detune_ratio_rule_emits_modal_guidance() -> None:
         dominant_nodes=("suspension", "chassis"),
         detune_ratio_weights={"longitudinal": 0.7, "lateral": 0.3},
     )
-    microsector = Microsector(
+    microsector = build_microsector(
         index=4,
         start_time=0.0,
         end_time=0.4,
@@ -1546,14 +1488,13 @@ def test_detune_ratio_rule_emits_modal_guidance() -> None:
         brake_event=False,
         support_event=True,
         delta_nfr_signature=0.4,
+        phases=("apex",),
         goals=(goal,),
         phase_boundaries={"apex": (0, 3)},
         phase_samples={"apex": (0, 1, 2)},
         active_phase="apex",
         dominant_nodes={"apex": ("suspension",)},
         phase_weights={"apex": {"__default__": 1.0}},
-        grip_rel=1.1,
-        phase_lag={"apex": 0.0},
         phase_alignment={"apex": 0.9},
         filtered_measures={
             "thermal_load": 5200.0,
@@ -1564,10 +1505,9 @@ def test_detune_ratio_rule_emits_modal_guidance() -> None:
             "rho": 0.55,
             "d_nfr_res": 0.9,
         },
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={"apex": {"slip_lat": 80.0, "slip_long": 78.0, "yaw_rate": 72.0}},
         operator_events={},
+        include_cphi=False,
     )
 
     engine = RecommendationEngine(rules=[DetuneRatioRule(priority=42)])
@@ -1646,17 +1586,14 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
         priority=10,
         reference_key="braking",
     )
-    goal = Goal(
-        phase="entry1",
+    goal = build_goal(
+        "entry1",
+        0.1,
         archetype="braking",
         description="",
-        target_delta_nfr=0.1,
-        target_sense_index=0.9,
         nu_f_target=0.25,
         nu_exc_target=0.2,
         rho_target=1.0,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.9,
         measured_phase_lag=0.25,
         measured_phase_alignment=0.85,
         slip_lat_window=(-0.3, 0.3),
@@ -1667,7 +1604,7 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
         target_delta_nfr_lat=0.02,
         delta_axis_weights={"longitudinal": 0.75, "lateral": 0.25},
     )
-    microsector = Microsector(
+    microsector = build_microsector(
         index=1,
         start_time=0.0,
         end_time=0.3,
@@ -1675,20 +1612,19 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
         brake_event=True,
         support_event=False,
         delta_nfr_signature=0.4,
+        phases=("entry1",),
         goals=(goal,),
         phase_boundaries={"entry1": (0, 3)},
         phase_samples={"entry1": (0, 1, 2)},
         active_phase="entry1",
         dominant_nodes={"entry1": ("brakes",)},
         phase_weights={"entry1": {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={"entry1": 0.25},
         phase_alignment={"entry1": 0.82},
         filtered_measures={},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={"entry1": {}},
         operator_events={},
+        include_cphi=False,
     )
     results = [
         _axis_bundle(0.6, 0.5, 0.1),
@@ -1706,17 +1642,14 @@ def test_phase_delta_rule_prioritises_brake_bias_for_longitudinal_axis() -> None
 
 
 def _entry_goal_with_gradient(gradient: float) -> Goal:
-    return Goal(
-        phase="entry1",
+    return build_goal(
+        "entry1",
+        0.2,
         archetype="braking",
         description="",
-        target_delta_nfr=0.2,
-        target_sense_index=0.9,
         nu_f_target=0.25,
         nu_exc_target=0.2,
         rho_target=1.0,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.9,
         measured_phase_lag=0.25,
         measured_phase_alignment=0.86,
         slip_lat_window=(-0.3, 0.3),
@@ -1731,7 +1664,7 @@ def _entry_goal_with_gradient(gradient: float) -> Goal:
 
 
 def _entry_microsector_with_gradient(goal: Goal, gradient: float) -> Microsector:
-    return Microsector(
+    return build_microsector(
         index=3,
         start_time=0.0,
         end_time=0.45,
@@ -1739,20 +1672,19 @@ def _entry_microsector_with_gradient(goal: Goal, gradient: float) -> Microsector
         brake_event=True,
         support_event=False,
         delta_nfr_signature=0.6,
+        phases=(goal.phase,),
         goals=(goal,),
         phase_boundaries={goal.phase: (0, 3)},
         phase_samples={goal.phase: (0, 1, 2)},
         active_phase=goal.phase,
         dominant_nodes={goal.phase: goal.dominant_nodes},
         phase_weights={goal.phase: {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={goal.phase: goal.measured_phase_lag},
         phase_alignment={goal.phase: goal.measured_phase_alignment},
         filtered_measures={"gradient": gradient},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={goal.phase: {}},
         operator_events={},
+        include_cphi=False,
     )
 
 
@@ -1948,17 +1880,15 @@ def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
         priority=12,
         reference_key="braking",
     )
-    goal = Goal(
-        phase="entry1",
+    goal = build_goal(
+        "entry1",
+        0.3,
         archetype="braking",
         description="",
-        target_delta_nfr=0.3,
         target_sense_index=0.85,
         nu_f_target=0.28,
         nu_exc_target=0.22,
         rho_target=1.0,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.9,
         measured_phase_lag=0.1,
         measured_phase_alignment=0.82,
         slip_lat_window=(-0.3, 0.3),
@@ -1985,7 +1915,7 @@ def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
             },
         ),
     }
-    microsector = Microsector(
+    microsector = build_microsector(
         index=4,
         start_time=0.0,
         end_time=0.4,
@@ -1993,20 +1923,19 @@ def test_phase_delta_rule_brake_bias_uses_operator_events() -> None:
         brake_event=True,
         support_event=True,
         delta_nfr_signature=0.42,
+        phases=("entry1",),
         goals=(goal,),
         phase_boundaries={"entry1": (0, 3)},
         phase_samples={"entry1": (0, 1, 2)},
         active_phase="entry1",
         dominant_nodes={"entry1": ("brakes", "tyres")},
         phase_weights={"entry1": {"__default__": 1.0}},
-        grip_rel=0.95,
         phase_lag={"entry1": 0.1},
         phase_alignment={"entry1": 0.8},
         filtered_measures={},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={"entry1": {}},
         operator_events=operator_events,
+        include_cphi=False,
     )
     results = [
         _axis_bundle(-0.32, -0.28, -0.07),
@@ -2035,17 +1964,15 @@ def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
         priority=20,
         reference_key="antiroll",
     )
-    goal = Goal(
-        phase="apex3a",
+    goal = build_goal(
+        "apex3a",
+        0.05,
         archetype="hairpin",
         description="",
-        target_delta_nfr=0.05,
         target_sense_index=0.88,
         nu_f_target=0.3,
         nu_exc_target=0.25,
         rho_target=0.9,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.92,
         measured_phase_lag=-0.22,
         measured_phase_alignment=0.75,
         slip_lat_window=(-0.25, 0.25),
@@ -2056,7 +1983,7 @@ def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
         target_delta_nfr_lat=0.06,
         delta_axis_weights={"longitudinal": 0.2, "lateral": 0.8},
     )
-    microsector = Microsector(
+    microsector = build_microsector(
         index=2,
         start_time=0.0,
         end_time=0.3,
@@ -2064,20 +1991,19 @@ def test_phase_delta_rule_prioritises_sway_bar_for_lateral_axis() -> None:
         brake_event=False,
         support_event=True,
         delta_nfr_signature=0.3,
+        phases=("apex3a",),
         goals=(goal,),
         phase_boundaries={"apex3a": (0, 4)},
         phase_samples={"apex3a": (0, 1, 2, 3)},
         active_phase="apex3a",
         dominant_nodes={"apex3a": ("suspension", "chassis")},
         phase_weights={"apex3a": {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={"apex3a": -0.22},
         phase_alignment={"apex3a": 0.74},
         filtered_measures={},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={"apex3a": {}},
         operator_events={},
+        include_cphi=False,
     )
     results = [
         _axis_bundle(1.0, 0.12, 0.88),
@@ -2108,17 +2034,14 @@ def test_phase_delta_rule_emits_geometry_actions_for_coherence_gap() -> None:
         priority=14,
         reference_key="braking",
     )
-    goal = Goal(
-        phase="entry",
+    goal = build_goal(
+        "entry",
+        0.2,
         archetype="tight",
         description="",
-        target_delta_nfr=0.2,
-        target_sense_index=0.9,
         nu_f_target=0.28,
         nu_exc_target=0.22,
         rho_target=1.0,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.9,
         measured_phase_lag=0.18,
         measured_phase_alignment=0.62,
         slip_lat_window=(-0.3, 0.3),
@@ -2128,7 +2051,7 @@ def test_phase_delta_rule_emits_geometry_actions_for_coherence_gap() -> None:
         target_delta_nfr_long=0.15,
         target_delta_nfr_lat=0.05,
     )
-    microsector = Microsector(
+    microsector = build_microsector(
         index=9,
         start_time=0.0,
         end_time=0.3,
@@ -2136,20 +2059,19 @@ def test_phase_delta_rule_emits_geometry_actions_for_coherence_gap() -> None:
         brake_event=True,
         support_event=False,
         delta_nfr_signature=0.25,
+        phases=("entry",),
         goals=(goal,),
         phase_boundaries={"entry": (0, 3)},
         phase_samples={"entry": (0, 1, 2)},
         active_phase="entry",
         dominant_nodes={"entry": ("suspension", "tyres")},
         phase_weights={"entry": {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={"entry": 0.18},
         phase_alignment={"entry": 0.62},
         filtered_measures={"coherence_index": 0.32},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={"entry_a": {}},
         operator_events={},
+        include_cphi=False,
     )
     results = []
     for value in (0.46, 0.48, 0.44):
@@ -2174,17 +2096,15 @@ def test_phase_delta_rule_targets_front_toe_for_entry_synchrony_gap() -> None:
         priority=12,
         reference_key="braking",
     )
-    goal = Goal(
-        phase="entry1",
+    goal = build_goal(
+        "entry1",
+        0.3,
         archetype="braking",
         description="",
-        target_delta_nfr=0.3,
         target_sense_index=0.9,
         nu_f_target=0.28,
         nu_exc_target=0.22,
         rho_target=1.0,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.92,
         measured_phase_lag=0.25,
         measured_phase_alignment=0.6,
         slip_lat_window=(-0.3, 0.3),
@@ -2195,7 +2115,7 @@ def test_phase_delta_rule_targets_front_toe_for_entry_synchrony_gap() -> None:
         target_delta_nfr_lat=0.12,
     )
     samples = tuple(range(3))
-    microsector = Microsector(
+    microsector = build_microsector(
         index=6,
         start_time=0.0,
         end_time=0.3,
@@ -2203,21 +2123,20 @@ def test_phase_delta_rule_targets_front_toe_for_entry_synchrony_gap() -> None:
         brake_event=True,
         support_event=False,
         delta_nfr_signature=0.3,
+        phases=(goal.phase,),
         goals=(goal,),
         phase_boundaries={goal.phase: (0, 3)},
         phase_samples={goal.phase: samples},
         active_phase=goal.phase,
         dominant_nodes={goal.phase: goal.dominant_nodes},
         phase_weights={goal.phase: {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={goal.phase: goal.measured_phase_lag},
         phase_alignment={goal.phase: goal.measured_phase_alignment},
         phase_synchrony={goal.phase: goal.measured_phase_synchrony},
         filtered_measures={},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={goal.phase: {}},
         operator_events={},
+        include_cphi=False,
     )
     results = [
         _axis_bundle(0.3, 0.18, 0.12),
@@ -2243,17 +2162,14 @@ def test_phase_delta_rule_prioritises_front_spring_with_lateral_bias() -> None:
         priority=22,
         reference_key="antiroll",
     )
-    goal = Goal(
-        phase="apex",
+    goal = build_goal(
+        "apex",
+        0.25,
         archetype="medium",
         description="",
-        target_delta_nfr=0.25,
-        target_sense_index=0.9,
         nu_f_target=0.28,
         nu_exc_target=0.23,
         rho_target=0.9,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.88,
         measured_phase_lag=0.12,
         measured_phase_alignment=0.8,
         slip_lat_window=(-0.4, 0.4),
@@ -2264,7 +2180,7 @@ def test_phase_delta_rule_prioritises_front_spring_with_lateral_bias() -> None:
         target_delta_nfr_lat=0.18,
     )
     samples = tuple(range(4))
-    microsector = Microsector(
+    microsector = build_microsector(
         index=12,
         start_time=0.0,
         end_time=0.4,
@@ -2272,20 +2188,19 @@ def test_phase_delta_rule_prioritises_front_spring_with_lateral_bias() -> None:
         brake_event=False,
         support_event=True,
         delta_nfr_signature=0.32,
+        phases=(goal.phase,),
         goals=(goal,),
         phase_boundaries={goal.phase: (0, len(samples))},
         phase_samples={goal.phase: samples},
         active_phase=goal.phase,
         dominant_nodes={goal.phase: goal.dominant_nodes},
         phase_weights={goal.phase: {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={goal.phase: goal.measured_phase_lag},
         phase_alignment={goal.phase: goal.measured_phase_alignment},
         filtered_measures={},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={goal.phase: {}},
         operator_events={},
+        include_cphi=False,
     )
     raw_results: list[EPIBundle] = []
     for lat_component in (0.3, 0.32, 0.31, 0.29):
@@ -2311,17 +2226,15 @@ def test_phase_delta_rule_scales_rear_spring_with_lateral_bias_and_low_frequency
         priority=24,
         reference_key="differential",
     )
-    goal = Goal(
-        phase="exit",
+    goal = build_goal(
+        "exit",
+        0.3,
         archetype="medium",
         description="",
-        target_delta_nfr=0.3,
         target_sense_index=0.88,
         nu_f_target=0.26,
         nu_exc_target=0.2,
         rho_target=0.85,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.86,
         measured_phase_lag=0.08,
         measured_phase_alignment=0.81,
         slip_lat_window=(-0.4, 0.4),
@@ -2332,7 +2245,7 @@ def test_phase_delta_rule_scales_rear_spring_with_lateral_bias_and_low_frequency
         target_delta_nfr_lat=0.14,
     )
     sample_indices = tuple(range(3))
-    microsector = Microsector(
+    microsector = build_microsector(
         index=14,
         start_time=0.0,
         end_time=0.3,
@@ -2340,20 +2253,19 @@ def test_phase_delta_rule_scales_rear_spring_with_lateral_bias_and_low_frequency
         brake_event=False,
         support_event=False,
         delta_nfr_signature=0.34,
+        phases=(goal.phase,),
         goals=(goal,),
         phase_boundaries={goal.phase: (0, len(sample_indices))},
         phase_samples={goal.phase: sample_indices},
         active_phase=goal.phase,
         dominant_nodes={goal.phase: goal.dominant_nodes},
         phase_weights={goal.phase: {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={goal.phase: goal.measured_phase_lag},
         phase_alignment={goal.phase: goal.measured_phase_alignment},
         filtered_measures={},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={goal.phase: {}},
         operator_events={},
+        include_cphi=False,
     )
     bundles: list[EPIBundle] = []
     for lat_component in (0.22, 0.24, 0.23):
@@ -2378,17 +2290,15 @@ def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
         priority=24,
         reference_key="antiroll",
     )
-    goal = Goal(
-        phase="apex",
+    goal = build_goal(
+        "apex",
+        0.15,
         archetype="hairpin",
         description="",
-        target_delta_nfr=0.15,
         target_sense_index=0.88,
         nu_f_target=0.32,
         nu_exc_target=0.27,
         rho_target=0.9,
-        target_phase_lag=0.0,
-        target_phase_alignment=0.92,
         measured_phase_lag=0.21,
         measured_phase_alignment=0.66,
         slip_lat_window=(-0.3, 0.3),
@@ -2396,7 +2306,7 @@ def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
         yaw_rate_window=(-0.4, 0.4),
         dominant_nodes=("suspension", "tyres"),
     )
-    microsector = Microsector(
+    microsector = build_microsector(
         index=6,
         start_time=0.0,
         end_time=0.4,
@@ -2404,20 +2314,19 @@ def test_phase_node_rule_prioritises_geometry_with_alignment_gap() -> None:
         brake_event=False,
         support_event=True,
         delta_nfr_signature=0.3,
+        phases=("apex",),
         goals=(goal,),
         phase_boundaries={"apex": (0, 4)},
         phase_samples={"apex": (0, 1, 2, 3)},
         active_phase="apex",
         dominant_nodes={"apex": ("suspension", "tyres")},
         phase_weights={"apex": {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={"apex": 0.21},
         phase_alignment={"apex": 0.66},
         filtered_measures={"coherence_index": 0.35},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={"apex_r": {}},
         operator_events={},
+        include_cphi=False,
     )
     results = []
     for value in (0.35, 0.33, 0.36, 0.34):
@@ -2443,11 +2352,11 @@ def test_phase_delta_rule_targets_rear_toe_for_exit_synchrony_gap() -> None:
         priority=16,
         reference_key="differential",
     )
-    goal = Goal(
-        phase="exit",
+    goal = build_goal(
+        "exit",
+        0.28,
         archetype="medium",
         description="",
-        target_delta_nfr=0.28,
         target_sense_index=0.88,
         nu_f_target=0.3,
         nu_exc_target=0.24,
@@ -2464,7 +2373,7 @@ def test_phase_delta_rule_targets_rear_toe_for_exit_synchrony_gap() -> None:
         target_delta_nfr_lat=0.14,
     )
     samples = tuple(range(4))
-    microsector = Microsector(
+    microsector = build_microsector(
         index=11,
         start_time=0.0,
         end_time=0.4,
@@ -2472,21 +2381,20 @@ def test_phase_delta_rule_targets_rear_toe_for_exit_synchrony_gap() -> None:
         brake_event=False,
         support_event=True,
         delta_nfr_signature=0.28,
+        phases=(goal.phase,),
         goals=(goal,),
         phase_boundaries={goal.phase: (0, 4)},
         phase_samples={goal.phase: samples},
         active_phase=goal.phase,
         dominant_nodes={goal.phase: goal.dominant_nodes},
         phase_weights={goal.phase: {"__default__": 1.0}},
-        grip_rel=1.0,
         phase_lag={goal.phase: goal.measured_phase_lag},
         phase_alignment={goal.phase: goal.measured_phase_alignment},
         phase_synchrony={goal.phase: goal.measured_phase_synchrony},
         filtered_measures={},
-        recursivity_trace=(),
-        last_mutation=None,
         window_occupancy={goal.phase: {}},
         operator_events={},
+        include_cphi=False,
     )
     results = [
         _axis_bundle(0.28, 0.14, 0.14),
