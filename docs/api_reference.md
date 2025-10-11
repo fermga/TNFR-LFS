@@ -1286,6 +1286,96 @@ dominant-axis helpers), while ``aero_balance_drift`` tracks rake and μ deltas p
 speed range so the setup planner can distinguish aero map changes from
 mechanical balance shifts.【F:src/tnfr_lfs/core/metrics.py†L262-L340】【F:src/tnfr_lfs/core/metrics.py†L1650-L1735】
 
+#### ``phase_synchrony_index``
+
+``phase_synchrony_index(lag, alignment)`` blends the absolute phase lag and the
+alignment cosine into a stable synchrony indicator in ``[0, 1]``.  Provide the
+lag (in radians) between the reference and measured signals plus the cosine of
+their alignment and the helper will weight alignment (60%) against lag (40%)
+after normalising both ranges, gracefully handling missing or non-finite
+values.【F:src/tnfr_lfs/core/metrics.py†L221-L241】
+
+```python
+from tnfr_lfs.core.metrics import phase_synchrony_index
+
+lag = 0.18  # ~10° of delay
+alignment = 0.92  # well aligned cosine
+synchrony = phase_synchrony_index(lag, alignment)
+print(f"Synchrony score: {synchrony:.2f}")
+```
+
+#### ``compute_aero_coherence``
+
+``compute_aero_coherence(records, bundles, *, low_speed_threshold,
+high_speed_threshold, imbalance_tolerance)`` evaluates how μ-derived ΔNFR
+contributions shift between the front and rear axles across low, medium and high
+speed bands.  Pass the windowed telemetry ``records`` (or leave it empty when
+bundles expose transmission speeds), plus an ``EPIBundle`` series enriched with
+``delta_breakdown`` mappings.  Optional thresholds control the speed bands and
+the imbalance tolerance used to synthesise textual guidance.【F:src/tnfr_lfs/core/metrics.py†L2636-L2782】
+
+```python
+from types import SimpleNamespace
+
+from tnfr_lfs.core.metrics import compute_aero_coherence
+
+records = [SimpleNamespace(speed=value) for value in (32.0, 46.0, 58.0)]
+bundles = [
+    SimpleNamespace(
+        delta_breakdown={
+            "front": {"mu_eff_front": 1.4},
+            "rear": {"mu_eff_rear": 1.1},
+        },
+        transmission=SimpleNamespace(speed=32.0),
+    ),
+    SimpleNamespace(
+        delta_breakdown={
+            "front": {"mu_eff_front": 0.6},
+            "rear": {"mu_eff_rear": 1.5},
+        },
+        transmission=SimpleNamespace(speed=58.0),
+    ),
+]
+
+aero = compute_aero_coherence(records, bundles)
+print(aero.high_speed.total.front, aero.high_speed.total.rear)
+print(aero.guidance)
+```
+
+#### ``resolve_aero_mechanical_coherence``
+
+``resolve_aero_mechanical_coherence(coherence_index, aero, *, suspension_deltas,
+tyre_deltas, target_delta_nfr, target_mechanical_ratio, target_aero_imbalance,
+rake_velocity_profile, ackermann_parallel_index,
+ackermann_parallel_samples)`` fuses aero balance, suspension movement and tyre
+support into a single coherence score in ``[0, 1]``.  Start from the coherence
+index emitted by the EPI extractor, feed the computed ``AeroCoherence`` summary
+and supply any available suspension/tyre deltas, target ΔNFR and rake/steering
+profiles.  The helper weights mechanical vs. aero support, penalises imbalance
+and rewards consistent body control when extra telemetry is provided.【F:src/tnfr_lfs/core/metrics.py†L2785-L2952】
+
+```python
+from tnfr_lfs.core.metrics import (
+    compute_aero_coherence,
+    resolve_aero_mechanical_coherence,
+)
+
+# Reuse the aero coherence computed above and enrich it with suspension data.
+suspension_deltas = [0.018, 0.021, 0.015]
+tyre_deltas = [0.008, 0.012]
+aero_mech = resolve_aero_mechanical_coherence(
+    coherence_index=0.76,
+    aero=aero,
+    suspension_deltas=suspension_deltas,
+    tyre_deltas=tyre_deltas,
+    target_delta_nfr=0.35,
+    rake_velocity_profile=[(0.9, 12)],
+    ackermann_parallel_index=0.11,
+    ackermann_parallel_samples=20,
+)
+print(f"Aero-mechanical coherence: {aero_mech:.2f}")
+```
+
 When ``compute_window_metrics`` receives an ``EPIBundle`` series it reuses the
 smoothed ΔNFR derivative from the extractor, improving Useful Dissonance Ratio
 and ``epi_derivative_abs`` calculations.  Without bundles the function derives
