@@ -29,7 +29,7 @@ from tnfr_lfs.core.contextual_delta import (
     resolve_context_from_bundle,
     resolve_context_from_record,
 )
-from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
+from tnfr_lfs.core.epi import TelemetryRecord, _ackermann_parallel_delta
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -42,7 +42,11 @@ from tnfr_lfs.core.epi_models import (
 )
 from tnfr_lfs.core.utils import normalised_entropy
 
-from tests.helpers import build_steering_bundle, build_telemetry_record
+from tests.helpers import (
+    build_parallel_window_metrics,
+    build_steering_bundle,
+    build_telemetry_record,
+)
 
 
 def test_record_optional_defaults_are_nan() -> None:
@@ -143,44 +147,23 @@ def test_ackermann_parallel_delta_ignores_low_yaw_rate() -> None:
 
 
 def test_compute_window_metrics_tracks_ackermann_overshoot() -> None:
-    records = [
-        build_telemetry_record(
-            0.0,
-            100.0,
-            yaw_rate=0.52,
-            steer=0.18,
-            slip_angle=0.04,
-            slip_angle_fl=0.09,
-            slip_angle_fr=0.01,
-        ),
-        build_telemetry_record(
-            0.5,
-            101.0,
-            yaw_rate=0.55,
-            steer=0.24,
-            slip_angle=0.035,
-            slip_angle_fl=0.07,
-            slip_angle_fr=0.02,
-        ),
-        build_telemetry_record(
-            1.0,
-            99.0,
-            yaw_rate=0.58,
-            steer=0.3,
-            slip_angle=0.03,
-            slip_angle_fl=0.045,
-            slip_angle_fr=0.025,
-        ),
+    slip_angles = [(0.09, 0.01), (0.07, 0.02), (0.045, 0.025)]
+    record_overrides = [
+        {"slip_angle": 0.04},
+        {"slip_angle": 0.035},
+        {"slip_angle": 0.03},
     ]
-    baseline = DeltaCalculator.derive_baseline(records)
-    ackermann_values = [
-        _ackermann_parallel_delta(record, baseline) for record in records
-    ]
-    bundles = [
-        build_steering_bundle(record, ackermann)
-        for record, ackermann in zip(records, ackermann_values)
-    ]
-    metrics = compute_window_metrics(records, bundles=bundles)
+    metrics, _records, _bundles, ackermann_values, _baseline = (
+        build_parallel_window_metrics(
+            slip_angles,
+            yaw_rates=[0.52, 0.55, 0.58],
+            steer_series=[0.18, 0.24, 0.3],
+            nfr_series=[100.0, 101.0, 99.0],
+            timestamp_step=0.5,
+            record_overrides=record_overrides,
+            return_components=True,
+        )
+    )
     expected_overshoot = sum(abs(value) for value in ackermann_values) / len(
         ackermann_values
     )
