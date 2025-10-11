@@ -757,6 +757,128 @@ health consistently. Consumers that require the historical flat keys can rely
 on :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_legacy_mapping`, which now emits
 a :class:`DeprecationWarning` because the flat keys are on a deprecation path.
 
+### `tnfr_lfs.core.metrics`
+
+``tnfr_lfs.core.metrics`` condenses ΔNFR, Sense Index and support diagnostics
+for a telemetry window. :func:`~tnfr_lfs.core.metrics.compute_window_metrics`
+accepts ordered :class:`~tnfr_lfs.core.epi.TelemetryRecord` samples (plus
+optional phase windows and precomputed :class:`~tnfr_lfs.core.epi_models.EPIBundle`
+series) and returns a :class:`~tnfr_lfs.core.metrics.WindowMetrics` snapshot
+with phase-aligned gradients, structural support ratios, entropy summaries and
+motor-input correlations.【F:src/tnfr_lfs/core/metrics.py†L980-L1104】【F:src/tnfr_lfs/core/metrics.py†L1208-L1320】
+
+``WindowMetrics`` aggregates the window averages, ΔNFR spreads and per-phase
+decompositions used by the HUD/CLI.  The dataclass enumerates support-efficiency
+metrics (``support_effective`` and ``load_support_ratio``), structural expansion
+markers for longitudinal and lateral axes, entropy values
+(``delta_nfr_entropy``/``node_entropy`` plus per-phase maps), the Useful
+Dissonance Ratio, steering budgets and the motor-input correlations exposed by
+the HUD.  It also exposes brake headroom, aerodynamics aggregates, nodal ΔNFR
+variance and the absolute EPI derivative used to qualify bundles.【F:src/tnfr_lfs/core/metrics.py†L813-L922】【F:src/tnfr_lfs/core/metrics.py†L936-L1018】
+
+The tyre-health view is provided by ``WindowMetrics.cphi``, which returns a
+:class:`~tnfr_lfs.core.metrics.CPHIReport`.  Each report bundles per-wheel
+:class:`~tnfr_lfs.core.metrics.CPHIWheel` values, component breakdowns and the
+shared :class:`~tnfr_lfs.core.metrics.CPHIThresholds` traffic-light scheme, and
+offers compatibility helpers such as :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_dict`
+and :meth:`~tnfr_lfs.core.metrics.CPHIReport.as_legacy_mapping` for exporters on
+the deprecation path.【F:src/tnfr_lfs/core/metrics.py†L312-L360】【F:src/tnfr_lfs/core/metrics.py†L466-L553】
+
+Aerodynamic cues combine ``WindowMetrics.aero_coherence`` and
+``WindowMetrics.aero_balance_drift``.  :class:`~tnfr_lfs.core.metrics.AeroCoherence`
+splits front/rear load deltas into low/medium/high speed bins (including
+dominant-axis helpers), while ``aero_balance_drift`` tracks rake and μ deltas per
+speed range so the setup planner can distinguish aero map changes from
+mechanical balance shifts.【F:src/tnfr_lfs/core/metrics.py†L262-L340】【F:src/tnfr_lfs/core/metrics.py†L1650-L1735】
+
+When ``compute_window_metrics`` receives an ``EPIBundle`` series it reuses the
+smoothed ΔNFR derivative from the extractor, improving Useful Dissonance Ratio
+and ``epi_derivative_abs`` calculations.  Without bundles the function derives
+gradients from the raw window and still populates the same interface, falling
+back to chronological timestamps whenever the structural axis is not
+available.【F:src/tnfr_lfs/core/metrics.py†L980-L1040】【F:src/tnfr_lfs/core/metrics.py†L1041-L1104】
+
+```python
+from dataclasses import replace
+from math import cos, pi, sin
+
+from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
+from tnfr_lfs.core.metrics import compute_window_metrics
+
+baseline = TelemetryRecord(
+    timestamp=0.0,
+    vertical_load=4200.0,
+    slip_ratio=0.02,
+    lateral_accel=5.0,
+    longitudinal_accel=0.6,
+    yaw=0.05,
+    pitch=0.01,
+    roll=0.02,
+    brake_pressure=0.35,
+    locking=0.05,
+    nfr=210.0,
+    si=0.78,
+    speed=62.0,
+    yaw_rate=0.18,
+    slip_angle=0.03,
+    steer=0.11,
+    throttle=0.62,
+    gear=4,
+    vertical_load_front=2080.0,
+    vertical_load_rear=2120.0,
+    mu_eff_front=1.24,
+    mu_eff_rear=1.18,
+    mu_eff_front_lateral=1.09,
+    mu_eff_front_longitudinal=1.18,
+    mu_eff_rear_lateral=1.04,
+    mu_eff_rear_longitudinal=1.12,
+    suspension_travel_front=0.045,
+    suspension_travel_rear=0.052,
+    suspension_velocity_front=0.012,
+    suspension_velocity_rear=-0.009,
+)
+
+
+def sample_at(step: int) -> TelemetryRecord:
+    t = step * 0.12
+    return replace(
+        baseline,
+        timestamp=t,
+        nfr=210.0 + 18.0 * sin(2.0 * pi * 0.35 * t),
+        si=0.78 + 0.04 * cos(2.0 * pi * 0.35 * t),
+        yaw_rate=0.18 + 0.05 * sin(2.0 * pi * 0.55 * t),
+        slip_angle=0.03 + 0.01 * sin(2.0 * pi * 0.5 * t),
+        steer=0.11 + 0.015 * sin(2.0 * pi * 0.4 * t),
+        throttle=0.62 + 0.08 * cos(2.0 * pi * 0.2 * t),
+        brake_pressure=0.35 + 0.1 * max(0.0, sin(2.0 * pi * 0.15 * t)),
+        vertical_load_front=2060.0 + 160.0 * sin(2.0 * pi * 0.25 * t),
+        vertical_load_rear=2140.0 - 160.0 * sin(2.0 * pi * 0.25 * t),
+    )
+
+
+window = [sample_at(i) for i in range(48)]
+
+plain_metrics = compute_window_metrics(window)
+bundles = EPIExtractor().extract(window)
+bundle_metrics = compute_window_metrics(window, bundles=bundles)
+
+print(f"UDR without bundles: {plain_metrics.useful_dissonance_ratio:.3f}")
+print(f"UDR with bundles:    {bundle_metrics.useful_dissonance_ratio:.3f}")
+print(
+    f"Front-left CPHI: {bundle_metrics.cphi['fl'].value:.2f}",
+    f"Brake↔ΔNFR correlation: {bundle_metrics.brake_longitudinal_correlation:.3f}",
+    f"Throttle↔ΔNFR correlation: {bundle_metrics.throttle_longitudinal_correlation:.3f}",
+)
+```
+
+The synthetic window mimics a medium-speed cornering stint. Passing ``bundles``
+lets the metrics reuse the smoothed ΔNFR derivative produced by
+:class:`~tnfr_lfs.core.epi.EPIExtractor`, which typically raises the Useful
+Dissonance Ratio because it filters single-sample spikes.  The ``cphi`` report
+exposes each wheel’s contact-patch score alongside the shared thresholds, while
+the brake/throttle correlations summarise how strongly driver inputs explain the
+longitudinal ΔNFR variation in the analysed window.【F:src/tnfr_lfs/core/metrics.py†L520-L553】【F:src/tnfr_lfs/core/metrics.py†L813-L898】
+
 When the ``operator_state`` shared by ``segment_microsectors`` is supplied, the
 orchestrator adds the ``network_memory`` field and a mirror in
 ``sense_memory["network"]`` with the per-session memory
