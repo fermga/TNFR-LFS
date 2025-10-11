@@ -4,19 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from tnfr_lfs.core.epi_models import (
-    BrakesNode,
-    ChassisNode,
-    DriverNode,
-    EPIBundle,
-    SuspensionNode,
-    TrackNode,
-    TransmissionNode,
-    TyresNode,
-)
+from tnfr_lfs.core.epi_models import EPIBundle
 from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
 
-from tests.helpers import build_telemetry_record
+from tests.helpers import build_epi_bundle, build_telemetry_record
 
 
 def _bundle(
@@ -28,21 +19,16 @@ def _bundle(
     lateral_delta: float,
     yaw_rate: float,
 ) -> EPIBundle:
-    return EPIBundle(
+    return build_epi_bundle(
         timestamp=timestamp,
-        epi=0.0,
         delta_nfr=tyre_delta + suspension_delta,
         sense_index=0.8,
-        tyres=TyresNode(delta_nfr=tyre_delta, sense_index=0.8),
-        suspension=SuspensionNode(delta_nfr=suspension_delta, sense_index=0.8),
-        chassis=ChassisNode(delta_nfr=0.0, sense_index=0.8, yaw_rate=yaw_rate),
-        brakes=BrakesNode(delta_nfr=0.0, sense_index=0.8),
-        transmission=TransmissionNode(delta_nfr=0.0, sense_index=0.8),
-        track=TrackNode(delta_nfr=0.0, sense_index=0.8),
-        driver=DriverNode(delta_nfr=0.0, sense_index=0.8),
         structural_timestamp=structural,
         delta_nfr_proj_longitudinal=longitudinal_delta,
         delta_nfr_proj_lateral=lateral_delta,
+        tyres={"delta_nfr": tyre_delta},
+        suspension={"delta_nfr": suspension_delta},
+        chassis={"delta_nfr": 0.0, "yaw_rate": yaw_rate},
     )
 
 

@@ -7,16 +7,7 @@ from pathlib import Path
 import pytest
 
 from tnfr_lfs.core.cache import LRUCache
-from tnfr_lfs.core.epi_models import (
-    BrakesNode,
-    ChassisNode,
-    DriverNode,
-    EPIBundle,
-    SuspensionNode,
-    TrackNode,
-    TransmissionNode,
-    TyresNode,
-)
+from tnfr_lfs.core.epi_models import EPIBundle
 from tnfr_lfs.core.segmentation import Goal, Microsector
 from tnfr_lfs.recommender import RecommendationEngine
 import tnfr_lfs.recommender.search as search_module
@@ -26,7 +17,7 @@ from tnfr_lfs.recommender.search import (
     evaluate_candidate,
     objective_score,
 )
-from tests.helpers import BASE_NU_F, SUPPORTED_CAR_MODELS, preloaded_profile_manager
+from tests.helpers import SUPPORTED_CAR_MODELS, build_epi_bundle, preloaded_profile_manager
 
 def test_decision_space_includes_parallel_steer_controls() -> None:
     space = DEFAULT_DECISION_LIBRARY["XFG"]
@@ -79,19 +70,17 @@ def _phase_integrals(results, microsectors) -> dict[str, float]:
 
 def _build_bundle(timestamp: float, delta_nfr: float, si: float) -> EPIBundle:
     share = delta_nfr / 6
-    tyre_node = TyresNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["tyres"])
-    return EPIBundle(
+    return build_epi_bundle(
         timestamp=timestamp,
-        epi=0.0,
         delta_nfr=delta_nfr,
         sense_index=si,
-        tyres=tyre_node,
-        suspension=SuspensionNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["suspension"]),
-        chassis=ChassisNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["chassis"]),
-        brakes=BrakesNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["brakes"]),
-        transmission=TransmissionNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["transmission"]),
-        track=TrackNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["track"]),
-        driver=DriverNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["driver"]),
+        tyres={"delta_nfr": share},
+        suspension={"delta_nfr": share},
+        chassis={"delta_nfr": share},
+        brakes={"delta_nfr": share},
+        transmission={"delta_nfr": share},
+        track={"delta_nfr": share},
+        driver={"delta_nfr": share},
     )
 
 
@@ -108,64 +97,33 @@ def _rich_bundle(
     mu_rear: tuple[float, float] = (1.15, 0.95),
 ) -> EPIBundle:
     share = delta_nfr / 6
-    tyres = TyresNode(
-        delta_nfr=share,
-        sense_index=si,
-        nu_f=BASE_NU_F["tyres"],
-        mu_eff_front=mu_front[0],
-        mu_eff_rear=mu_rear[0],
-        mu_eff_front_lateral=mu_front[0],
-        mu_eff_front_longitudinal=mu_front[1],
-        mu_eff_rear_lateral=mu_rear[0],
-        mu_eff_rear_longitudinal=mu_rear[1],
-        tyre_temp_fl=temps[0],
-        tyre_temp_fr=temps[1],
-        tyre_temp_rl=temps[2],
-        tyre_temp_rr=temps[3],
-    )
-    suspension = SuspensionNode(
-        delta_nfr=share,
-        sense_index=si,
-        nu_f=BASE_NU_F["suspension"],
-        travel_front=travel_front,
-        travel_rear=travel_rear,
-    )
-    chassis = ChassisNode(
-        delta_nfr=share,
-        sense_index=si,
-        nu_f=BASE_NU_F["chassis"],
-        yaw_rate=yaw_rate,
-    )
-    brakes = BrakesNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["brakes"])
-    transmission = TransmissionNode(
-        delta_nfr=share,
-        sense_index=si,
-        nu_f=BASE_NU_F["transmission"],
-        throttle=0.4,
-        gear=4,
-        speed=140.0,
-    )
-    track = TrackNode(delta_nfr=share, sense_index=si, nu_f=BASE_NU_F["track"], yaw=0.0)
-    driver = DriverNode(
-        delta_nfr=share,
-        sense_index=si,
-        nu_f=BASE_NU_F["driver"],
-        steer=0.1,
-        throttle=0.5,
-        style_index=si,
-    )
-    return EPIBundle(
+    return build_epi_bundle(
         timestamp=timestamp,
-        epi=0.0,
         delta_nfr=delta_nfr,
         sense_index=si,
-        tyres=tyres,
-        suspension=suspension,
-        chassis=chassis,
-        brakes=brakes,
-        transmission=transmission,
-        track=track,
-        driver=driver,
+        tyres={
+            "delta_nfr": share,
+            "mu_eff_front": mu_front[0],
+            "mu_eff_rear": mu_rear[0],
+            "mu_eff_front_lateral": mu_front[0],
+            "mu_eff_front_longitudinal": mu_front[1],
+            "mu_eff_rear_lateral": mu_rear[0],
+            "mu_eff_rear_longitudinal": mu_rear[1],
+            "tyre_temp_fl": temps[0],
+            "tyre_temp_fr": temps[1],
+            "tyre_temp_rl": temps[2],
+            "tyre_temp_rr": temps[3],
+        },
+        suspension={
+            "delta_nfr": share,
+            "travel_front": travel_front,
+            "travel_rear": travel_rear,
+        },
+        chassis={"delta_nfr": share, "yaw_rate": yaw_rate},
+        brakes={"delta_nfr": share},
+        transmission={"delta_nfr": share, "throttle": 0.4, "gear": 4, "speed": 140.0},
+        track={"delta_nfr": share, "yaw": 0.0},
+        driver={"delta_nfr": share, "steer": 0.1, "throttle": 0.5, "style_index": si},
     )
 
 
