@@ -25,10 +25,13 @@ pytest
 ### Pre-commit hooks
 
 Install the [pre-commit](https://pre-commit.com) hooks to run Ruff, Black, and MyPy with the same
-settings defined in `pyproject.toml` before every commit:
+settings defined in `pyproject.toml` before every commit. The `dev` extra already provides the
+`pre-commit` executable, so re-use the development install command and then enable the hooks:
 
 ```bash
-pip install pre-commit
+pip install .[dev]
+# or, for editable workflows
+pip install -e .[dev]
 pre-commit install
 ```
 
