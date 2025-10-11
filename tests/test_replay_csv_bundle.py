@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 from collections.abc import Callable
 import math
 import time
@@ -15,7 +14,12 @@ import pytest
 
 from tnfr_lfs.ingestion.offline import ReplayCSVBundleReader
 from tnfr_lfs._pack_resources import data_root
-from tests.helpers import monkeypatch_row_to_record_counter
+from tests.helpers import (
+    is_numeric_series,
+    is_numeric_value,
+    monkeypatch_row_to_record_counter,
+    read_reference_rows,
+)
 
 
 replay_csv_bundle = importlib.import_module(ReplayCSVBundleReader.__module__)
@@ -24,22 +28,6 @@ replay_csv_bundle = importlib.import_module(ReplayCSVBundleReader.__module__)
 DATA_DIR = data_root()
 BUNDLE_PATH = DATA_DIR / "test1.zip"
 REFERENCE_CSV_DIR = DATA_DIR / "csv"
-
-
-def _read_reference_rows(name: str, limit: int = 5) -> list[tuple[float, float]]:
-    path = REFERENCE_CSV_DIR / name
-    rows: list[tuple[float, float]] = []
-    with path.open(newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            rows.append((float(row["d"]), float(row["test1"])))
-            if len(rows) >= limit:
-                break
-    return rows
-
-
-def _is_numeric_series(series: pd.Series) -> bool:
-    return pd.api.types.is_numeric_dtype(series)
 
 
 def test_replay_csv_dataframe_contains_key_columns() -> None:
@@ -75,7 +63,7 @@ def test_replay_csv_dataframe_contains_key_columns() -> None:
     assert lateral_force_rr_column in available_columns
 
     for column in required_columns | {lateral_force_rr_column}:
-        assert _is_numeric_series(frame[column])
+        assert is_numeric_series(frame[column])
 
 
 def test_replay_csv_aliases_normalised_with_expected_values() -> None:
@@ -100,7 +88,7 @@ def test_replay_csv_aliases_normalised_with_expected_values() -> None:
 
     for column, (csv_name, transform) in alias_expectations.items():
         assert column in frame.columns
-        reference_rows = _read_reference_rows(csv_name)
+        reference_rows = read_reference_rows(REFERENCE_CSV_DIR / csv_name)
         actual_rows = list(
             frame[["distance", column]].head(len(reference_rows)).itertuples(index=False, name=None)
         )
@@ -182,15 +170,6 @@ def test_replay_csv_dataframe_matches_legacy_coercion() -> None:
         # Allow for some noise while still ensuring the refactor is not slower.
         assert new_time <= legacy_time * 2.0
 
-def _is_numeric(value: object) -> bool:
-    if isinstance(value, bool):  # Guard against bool being subclass of int.
-        return False
-    if isinstance(value, (int, float)):
-        numeric = float(value)
-        return math.isfinite(numeric) or math.isnan(numeric)
-    return False
-
-
 def test_replay_csv_records_align_with_dataframe() -> None:
     reader = ReplayCSVBundleReader(BUNDLE_PATH)
     frame = reader.to_dataframe()
@@ -225,7 +204,7 @@ def test_replay_csv_records_align_with_dataframe() -> None:
             if field == "gear":
                 assert isinstance(value, int)
             else:
-                assert _is_numeric(value)
+                assert is_numeric_value(value)
 
 
 def test_replay_csv_to_records_reuses_cached_dataframe(monkeypatch: pytest.MonkeyPatch) -> None:

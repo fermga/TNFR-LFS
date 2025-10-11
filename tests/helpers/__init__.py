@@ -60,7 +60,16 @@ _MODULE_EXPORTS: Tuple[Tuple[str, Iterable[str]], ...] = (
             "write_plugin_module",
         ),
     ),
-    ("replay_bundle", ("RowToRecordCounter", "monkeypatch_row_to_record_counter")),
+    (
+        "replay_bundle",
+        (
+            "RowToRecordCounter",
+            "is_numeric_series",
+            "is_numeric_value",
+            "monkeypatch_row_to_record_counter",
+            "read_reference_rows",
+        ),
+    ),
     (
         "packets",
         (
@@ -183,7 +192,13 @@ if TYPE_CHECKING:
         write_plugin_module,
     )
     from .profile_manager import preloaded_profile_manager
-    from .replay_bundle import RowToRecordCounter, monkeypatch_row_to_record_counter
+    from .replay_bundle import (
+        RowToRecordCounter,
+        is_numeric_series,
+        is_numeric_value,
+        monkeypatch_row_to_record_counter,
+        read_reference_rows,
+    )
     from .setup import (
         build_minimal_setup_plan,
         build_native_export_plan,
