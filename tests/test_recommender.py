@@ -7,16 +7,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 from statistics import mean
 
-from tnfr_lfs.core.epi_models import (
-    BrakesNode,
-    ChassisNode,
-    DriverNode,
-    EPIBundle,
-    SuspensionNode,
-    TrackNode,
-    TransmissionNode,
-    TyresNode,
-)
+from tnfr_lfs.core.epi_models import EPIBundle
 from collections.abc import Mapping
 
 from tnfr_lfs.core.segmentation import Goal, Microsector
@@ -49,8 +40,8 @@ from tests.helpers import (
     build_axis_bundle,
     build_goal,
     build_microsector,
-    build_epi_bundle,
     build_epi_nodes,
+    build_node_bundle,
     build_parallel_window_metrics,
     build_steering_bundle,
     build_steering_record,
@@ -770,19 +761,21 @@ def test_recommendation_engine_detects_anomalies(car_track_thresholds):
 
 def test_phase_specific_rules_triggered_with_microsectors(car_track_thresholds):
     def build_bundle(timestamp: float, delta_nfr: float, sense_index: float, tyre_delta: float) -> EPIBundle:
-        tyre_node = TyresNode(delta_nfr=tyre_delta, sense_index=sense_index, nu_f=BASE_NU_F["tyres"])
-        return EPIBundle(
+        node_deltas = {
+            "tyres": tyre_delta,
+            "suspension": delta_nfr / 2,
+            "chassis": delta_nfr / 2,
+            "brakes": delta_nfr / 2,
+            "transmission": delta_nfr / 2,
+            "track": delta_nfr / 2,
+            "driver": delta_nfr / 2,
+        }
+        return build_node_bundle(
             timestamp=timestamp,
             epi=0.5,
             delta_nfr=delta_nfr,
             sense_index=sense_index,
-            tyres=tyre_node,
-            suspension=SuspensionNode(delta_nfr=delta_nfr / 2, sense_index=sense_index, nu_f=BASE_NU_F["suspension"]),
-            chassis=ChassisNode(delta_nfr=delta_nfr / 2, sense_index=sense_index, nu_f=BASE_NU_F["chassis"]),
-            brakes=BrakesNode(delta_nfr=delta_nfr / 2, sense_index=sense_index, nu_f=BASE_NU_F["brakes"]),
-            transmission=TransmissionNode(delta_nfr=delta_nfr / 2, sense_index=sense_index, nu_f=BASE_NU_F["transmission"]),
-            track=TrackNode(delta_nfr=delta_nfr / 2, sense_index=sense_index, nu_f=BASE_NU_F["track"]),
-            driver=DriverNode(delta_nfr=delta_nfr / 2, sense_index=sense_index, nu_f=BASE_NU_F["driver"]),
+            delta_nfr_by_node=node_deltas,
         )
 
     entry_target = 1.0
@@ -1035,43 +1028,22 @@ def test_threshold_profile_exposes_phase_weights():
 
 def test_track_specific_profile_tightens_entry_threshold():
     def build_bundle(index: int, delta_nfr: float, sense_index: float = 0.9) -> EPIBundle:
-        tyre_node = TyresNode(delta_nfr=delta_nfr / 2, sense_index=sense_index, nu_f=BASE_NU_F["tyres"])
-        return EPIBundle(
+        quarter = delta_nfr / 4
+        node_deltas = {
+            "tyres": delta_nfr / 2,
+            "suspension": quarter,
+            "chassis": quarter,
+            "brakes": quarter,
+            "transmission": quarter,
+            "track": quarter,
+            "driver": quarter,
+        }
+        return build_node_bundle(
             timestamp=index * 0.1,
             epi=0.5,
             delta_nfr=delta_nfr,
             sense_index=sense_index,
-            tyres=tyre_node,
-            suspension=SuspensionNode(
-                delta_nfr=delta_nfr / 4,
-                sense_index=sense_index,
-                nu_f=BASE_NU_F["suspension"],
-            ),
-            chassis=ChassisNode(
-                delta_nfr=delta_nfr / 4,
-                sense_index=sense_index,
-                nu_f=BASE_NU_F["chassis"],
-            ),
-            brakes=BrakesNode(
-                delta_nfr=delta_nfr / 4,
-                sense_index=sense_index,
-                nu_f=BASE_NU_F["brakes"],
-            ),
-            transmission=TransmissionNode(
-                delta_nfr=delta_nfr / 4,
-                sense_index=sense_index,
-                nu_f=BASE_NU_F["transmission"],
-            ),
-            track=TrackNode(
-                delta_nfr=delta_nfr / 4,
-                sense_index=sense_index,
-                nu_f=BASE_NU_F["track"],
-            ),
-            driver=DriverNode(
-                delta_nfr=delta_nfr / 4,
-                sense_index=sense_index,
-                nu_f=BASE_NU_F["driver"],
-            ),
+            delta_nfr_by_node=node_deltas,
         )
 
     window = (-0.05, 0.05)
@@ -1196,22 +1168,22 @@ def test_track_specific_profile_tightens_entry_threshold():
 
 def test_node_operator_rule_responds_to_nu_f_excess(car_track_thresholds):
     def build_bundle(timestamp: float, transmission_nu_f: float) -> EPIBundle:
-        return EPIBundle(
+        node_deltas = {
+            "tyres": 0.15,
+            "suspension": 0.15,
+            "chassis": 0.15,
+            "brakes": 0.15,
+            "transmission": 0.15,
+            "track": 0.15,
+            "driver": 0.15,
+        }
+        return build_node_bundle(
             timestamp=timestamp,
             epi=0.5,
             delta_nfr=0.3,
             sense_index=0.92,
-            tyres=TyresNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["tyres"]),
-            suspension=SuspensionNode(
-                delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["suspension"]
-            ),
-            chassis=ChassisNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["chassis"]),
-            brakes=BrakesNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["brakes"]),
-            transmission=TransmissionNode(
-                delta_nfr=0.15, sense_index=0.92, nu_f=transmission_nu_f
-            ),
-            track=TrackNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["track"]),
-            driver=DriverNode(delta_nfr=0.15, sense_index=0.92, nu_f=BASE_NU_F["driver"]),
+            delta_nfr_by_node=node_deltas,
+            overrides={"transmission": {"nu_f": transmission_nu_f}},
         )
 
     window = (-0.05, 0.05)
@@ -1351,20 +1323,22 @@ def test_phase_node_rule_flips_with_phase_misalignment(car_track_thresholds) -> 
     )
 
     def _bundle(nu_f: float, timestamp: float) -> EPIBundle:
-        return EPIBundle(
+        node_deltas = {
+            "tyres": 0.2,
+            "suspension": 0.4,
+            "chassis": 0.2,
+            "brakes": 0.05,
+            "transmission": 0.05,
+            "track": 0.05,
+            "driver": 0.05,
+        }
+        return build_node_bundle(
             timestamp=timestamp,
             epi=0.0,
             delta_nfr=0.8,
             sense_index=0.82,
-            tyres=TyresNode(delta_nfr=0.2, sense_index=0.82, nu_f=BASE_NU_F["tyres"]),
-            suspension=SuspensionNode(delta_nfr=0.4, sense_index=0.82, nu_f=nu_f),
-            chassis=ChassisNode(delta_nfr=0.2, sense_index=0.82, nu_f=BASE_NU_F["chassis"]),
-            brakes=BrakesNode(delta_nfr=0.05, sense_index=0.82, nu_f=BASE_NU_F["brakes"]),
-            transmission=TransmissionNode(
-                delta_nfr=0.05, sense_index=0.82, nu_f=BASE_NU_F["transmission"]
-            ),
-            track=TrackNode(delta_nfr=0.05, sense_index=0.82, nu_f=BASE_NU_F["track"]),
-            driver=DriverNode(delta_nfr=0.05, sense_index=0.82, nu_f=BASE_NU_F["driver"]),
+            delta_nfr_by_node=node_deltas,
+            overrides={"suspension": {"nu_f": nu_f}},
         )
 
     results = [_bundle(1.5, 0.0), _bundle(1.55, 0.1)]
