@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import socket
+import time
 from collections import deque
-from typing import Callable, Deque, Iterable, List
+from typing import Any, Awaitable, Callable, Deque, Iterable, List, Sequence
+
+import pytest
+from _pytest.monkeypatch import MonkeyPatch
 
 from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
 from tnfr_lfs.ingestion import outsim_udp as outsim_module
@@ -116,6 +122,71 @@ def make_wait_stub(
     return fake_wait, timeouts
 
 
+def _resolve_payload_spec(
+    payload_factory: Callable[..., UDPPayload],
+    spec: Any,
+) -> UDPPayload:
+    """Build a UDP payload from ``spec`` using ``payload_factory``.
+
+    ``spec`` may be a mapping of keyword arguments, a sequence of positional
+    arguments, or a single positional argument for the factory.
+    """
+
+    if isinstance(spec, dict):
+        return payload_factory(**spec)
+    if isinstance(spec, Sequence) and not isinstance(spec, (bytes, bytearray, str)):
+        return payload_factory(*spec)
+    return payload_factory(spec)
+
+
+def build_payload_batch(
+    payload_factory: Callable[..., UDPPayload],
+    specs: Iterable[Any],
+) -> list[UDPPayload]:
+    """Return a list of payloads constructed from ``specs``."""
+
+    return [_resolve_payload_spec(payload_factory, spec) for spec in specs]
+
+
+def enqueue_payloads(
+    queue: Deque[UDPPayload],
+    payload_factory: Callable[..., UDPPayload],
+    specs: Iterable[Any],
+) -> None:
+    """Append a series of payloads constructed from ``specs`` to ``queue``."""
+
+    queue.extend(build_payload_batch(payload_factory, specs))
+
+
+def patch_udp_client_socket(
+    monkeypatch: MonkeyPatch,
+    client: Any,
+    *,
+    address: tuple[str, int] = ("127.0.0.1", 0),
+) -> QueueUDPSocket:
+    """Replace ``client``'s socket with :class:`QueueUDPSocket`."""
+
+    fake_socket = QueueUDPSocket(address=address)
+    original_socket = client._socket
+    monkeypatch.setattr(client, "_socket", fake_socket)
+    original_socket.close()
+    return fake_socket
+
+
+def patch_wait_for_read_ready(
+    monkeypatch: MonkeyPatch,
+    module: Any,
+    *,
+    hook: WaitHook | None = None,
+    return_value: bool = True,
+) -> list[float]:
+    """Replace ``module.wait_for_read_ready`` with a controllable stub."""
+
+    fake_wait, timeouts = make_wait_stub(hook=hook, return_value=return_value)
+    monkeypatch.setattr(module, "wait_for_read_ready", fake_wait)
+    return timeouts
+
+
 def extend_queue_on_wait(
     queue: Deque[UDPPayload],
     iterable_factory: Callable[[], Iterable[UDPPayload]],
@@ -146,6 +217,198 @@ def append_once_on_wait(
         return None
 
     return on_wait
+
+
+def assert_udp_batch_drained(
+    monkeypatch: MonkeyPatch,
+    *,
+    client_factory: Callable[[], Any],
+    module: Any,
+    payload_factory: Callable[..., UDPPayload],
+    batch_specs: Iterable[Any],
+    expected_values: list[Any],
+    value_extractor: Callable[[Any], Any],
+    address: tuple[str, int] = ("127.0.0.1", 0),
+    release_packets: bool = False,
+) -> None:
+    """Assert that a UDP client drains a queued batch after a wait call."""
+
+    client = client_factory()
+    timeout = client._timeout
+    fake_socket = patch_udp_client_socket(monkeypatch, client, address=address)
+    hook = extend_queue_on_wait(
+        fake_socket.queue,
+        lambda: build_payload_batch(payload_factory, batch_specs),
+    )
+    wait_calls = patch_wait_for_read_ready(monkeypatch, module, hook=hook)
+
+    try:
+        packets = [client.recv() for _ in range(len(expected_values))]
+    finally:
+        client.close()
+
+    extracted = [value_extractor(packet) for packet in packets if packet is not None]
+    assert extracted == expected_values
+    if release_packets:
+        for packet in packets:
+            if packet is not None:
+                packet.release()
+    assert wait_calls, "wait_for_read_ready should record at least one call"
+    assert wait_calls[0] == pytest.approx(timeout, rel=0.1)
+
+
+def assert_udp_pending_flush(
+    monkeypatch: MonkeyPatch,
+    *,
+    client_factory: Callable[[], Any],
+    module: Any,
+    payload_factory: Callable[..., UDPPayload],
+    first_spec: Any,
+    successor_spec: Any,
+    appended_spec: Any,
+    expected_first: Any,
+    expected_second: Any,
+    value_extractor: Callable[[Any], Any],
+    max_elapsed: float,
+    address: tuple[str, int] = ("127.0.0.1", 0),
+    release_packets: bool = False,
+) -> None:
+    """Assert that a pending packet flushes quickly when a successor arrives."""
+
+    client = client_factory()
+    fake_socket = patch_udp_client_socket(monkeypatch, client, address=address)
+    enqueue_payloads(fake_socket.queue, payload_factory, [first_spec])
+
+    try:
+        first_packet = client.recv()
+        assert first_packet is not None
+        assert value_extractor(first_packet) == expected_first
+        if release_packets:
+            first_packet.release()
+
+        enqueue_payloads(fake_socket.queue, payload_factory, [successor_spec])
+        hook = append_once_on_wait(
+            fake_socket.queue,
+            lambda: _resolve_payload_spec(payload_factory, appended_spec),
+        )
+        wait_calls = patch_wait_for_read_ready(monkeypatch, module, hook=hook)
+
+        start = time.perf_counter()
+        next_packet = client.recv()
+        elapsed = time.perf_counter() - start
+        assert next_packet is not None
+        assert value_extractor(next_packet) == expected_second
+        assert elapsed < max_elapsed
+        if release_packets:
+            next_packet.release()
+        assert wait_calls, "wait_for_read_ready should be invoked during flush"
+    finally:
+        client.close()
+
+
+def assert_udp_isolated_flush(
+    monkeypatch: MonkeyPatch,
+    *,
+    client_factory: Callable[[], Any],
+    module: Any,
+    payload_factory: Callable[..., UDPPayload],
+    first_spec: Any,
+    second_spec: Any,
+    expected_first: Any,
+    expected_second: Any,
+    value_extractor: Callable[[Any], Any],
+    address: tuple[str, int] = ("127.0.0.1", 0),
+    release_packets: bool = False,
+    max_elapsed_ms: float = 10.0,
+    max_wait_timeout: float = 0.012,
+) -> None:
+    """Assert that an isolated pending packet flushes quickly by default."""
+
+    client = client_factory()
+    fake_socket = patch_udp_client_socket(monkeypatch, client, address=address)
+    wait_calls = patch_wait_for_read_ready(
+        monkeypatch,
+        module,
+        return_value=False,
+    )
+
+    try:
+        enqueue_payloads(fake_socket.queue, payload_factory, [first_spec])
+        first_packet = client.recv()
+        assert first_packet is not None
+        assert value_extractor(first_packet) == expected_first
+        if release_packets:
+            first_packet.release()
+
+        enqueue_payloads(fake_socket.queue, payload_factory, [second_spec])
+        start = time.perf_counter()
+        second_packet = client.recv()
+        elapsed_ms = (time.perf_counter() - start) * 1_000
+        assert second_packet is not None
+        assert value_extractor(second_packet) == expected_second
+        assert elapsed_ms < max_elapsed_ms
+        if release_packets:
+            second_packet.release()
+        assert wait_calls, "wait_for_read_ready should be consulted for pending packet"
+        assert wait_calls[0] <= max_wait_timeout
+    finally:
+        client.close()
+
+
+async def assert_async_udp_reordering(
+    *,
+    client_factory: Callable[[], Awaitable[Any]],
+    payload_factory: Callable[..., UDPPayload],
+    send_specs: Iterable[Any],
+    expected_values: list[Any],
+    value_extractor: Callable[[Any], Any],
+    release_packets: bool = False,
+) -> None:
+    """Assert that an async UDP client reorders packets delivered out of order."""
+
+    client = await client_factory()
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sender.bind(("127.0.0.1", 0))
+    try:
+        _, port = client.address
+        target = ("127.0.0.1", port)
+        await asyncio.sleep(0)
+        for spec in send_specs:
+            sender.sendto(_resolve_payload_spec(payload_factory, spec), target)
+
+        results = []
+        for _ in range(len(expected_values)):
+            packet = await client.recv()
+            if packet is not None:
+                results.append(packet)
+
+        assert [value_extractor(packet) for packet in results] == expected_values
+        stats = client.statistics
+        assert stats["delivered"] == len(expected_values)
+        assert stats["reordered"] >= 1
+        if release_packets:
+            for packet in results:
+                packet.release()
+    finally:
+        sender.close()
+        await client.close()
+
+
+async def assert_async_client_close_wakes(
+    *,
+    client_factory: Callable[[], Awaitable[Any]],
+) -> None:
+    """Assert that awaiting receivers wake when an async UDP client closes."""
+
+    client = await client_factory()
+    try:
+        recv_task = asyncio.create_task(client.recv())
+        await asyncio.sleep(0)
+        await client.close()
+        with pytest.raises(RuntimeError):
+            await recv_task
+    finally:
+        await client.close()
 
 
 def pad_outgauge_field(value: str, size: int, *, encoding: str = "latin-1") -> bytes:

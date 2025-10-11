@@ -13,13 +13,15 @@ from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
 from tnfr_lfs.ingestion.live import OutGaugePacket
 from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
 from tests.helpers import (
-    QueueUDPSocket,
-    append_once_on_wait,
+    assert_async_client_close_wakes,
+    assert_async_udp_reordering,
+    assert_udp_batch_drained,
+    assert_udp_isolated_flush,
+    assert_udp_pending_flush,
     build_outgauge_payload,
-    extend_queue_on_wait,
     make_select_stub,
-    make_wait_stub,
     pad_outgauge_field,
+    patch_udp_client_socket,
     raise_gaierror,
 )
 
@@ -77,10 +79,7 @@ def test_outgauge_packet_parses_extended_datagram_identifiers() -> None:
 def test_outgauge_recv_returns_quickly_when_socket_idle(monkeypatch) -> None:
     client = OutGaugeUDPClient(timeout=0.05, retries=5)
     fake_select, call_args = make_select_stub()
-    fake_socket = QueueUDPSocket()
-    original_socket = client._socket
-    monkeypatch.setattr(client, "_socket", fake_socket)
-    original_socket.close()
+    patch_udp_client_socket(monkeypatch, client)
     monkeypatch.setattr("tnfr_lfs.ingestion._socket_poll.select.select", fake_select)
 
     start = time.perf_counter()
@@ -119,149 +118,83 @@ def test_outgauge_host_resolution_failure_disables_filtering(monkeypatch) -> Non
 
 
 def test_outgauge_recv_drains_batch_after_wait(monkeypatch) -> None:
-    client = OutGaugeUDPClient(timeout=0.05, retries=5)
-
-    fake_socket = QueueUDPSocket(address=("127.0.0.1", 3000))
-    original_socket = client._socket
-    monkeypatch.setattr(client, "_socket", fake_socket)
-    original_socket.close()
-
-    fake_wait, wait_calls = make_wait_stub(
-        hook=extend_queue_on_wait(
-            fake_socket.queue,
-            lambda: [
-                build_outgauge_payload(packet_id, time_value, layout="LYT")
-                for packet_id, time_value in ((5, 50), (6, 60), (7, 70))
-            ],
-        )
+    assert_udp_batch_drained(
+        monkeypatch,
+        client_factory=lambda: OutGaugeUDPClient(timeout=0.05, retries=5),
+        module=outgauge_module,
+        payload_factory=build_outgauge_payload,
+        batch_specs=[
+            {"packet_id": 5, "time_value": 50, "layout": "LYT"},
+            {"packet_id": 6, "time_value": 60, "layout": "LYT"},
+            {"packet_id": 7, "time_value": 70, "layout": "LYT"},
+        ],
+        expected_values=[5, 6, 7],
+        value_extractor=lambda packet: packet.packet_id,
+        address=("127.0.0.1", 3000),
+        release_packets=True,
     )
-    monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
-
-    try:
-        packets = [client.recv() for _ in range(3)]
-    finally:
-        client.close()
-
-    assert [packet.packet_id for packet in packets if packet] == [5, 6, 7]
-    for packet in packets:
-        if packet is not None:
-            packet.release()
-    assert wait_calls
-    assert wait_calls[0] == pytest.approx(client._timeout, rel=0.1)
 
 
 def test_outgauge_pending_packet_flushes_when_successor_arrives(monkeypatch) -> None:
-    client = OutGaugeUDPClient(port=0, timeout=0.2, retries=2, reorder_grace=0.5)
-
-    fake_socket = QueueUDPSocket(address=("127.0.0.1", 3000))
-    original_socket = client._socket
-    monkeypatch.setattr(client, "_socket", fake_socket)
-    original_socket.close()
-
-    fake_socket.queue.append(build_outgauge_payload(5, 50, layout="LYT"))
-    packet = client.recv()
-    assert packet is not None
-    assert packet.packet_id == 5
-    packet.release()
-
-    fake_socket.queue.append(build_outgauge_payload(6, 60, layout="LYT"))
-    fake_wait, wait_calls = make_wait_stub(
-        hook=append_once_on_wait(
-            fake_socket.queue,
-            lambda: build_outgauge_payload(7, 70, layout="LYT"),
-        )
+    assert_udp_pending_flush(
+        monkeypatch,
+        client_factory=lambda: OutGaugeUDPClient(
+            port=0, timeout=0.2, retries=2, reorder_grace=0.5
+        ),
+        module=outgauge_module,
+        payload_factory=build_outgauge_payload,
+        first_spec={"packet_id": 5, "time_value": 50, "layout": "LYT"},
+        successor_spec={"packet_id": 6, "time_value": 60, "layout": "LYT"},
+        appended_spec={"packet_id": 7, "time_value": 70, "layout": "LYT"},
+        expected_first=5,
+        expected_second=6,
+        value_extractor=lambda packet: packet.packet_id,
+        max_elapsed=0.2,
+        address=("127.0.0.1", 3000),
+        release_packets=True,
     )
-    monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
-
-    start = time.perf_counter()
-    next_packet = client.recv()
-    elapsed = time.perf_counter() - start
-
-    try:
-        assert next_packet is not None
-        assert next_packet.packet_id == 6
-        assert elapsed < 0.2
-        assert wait_calls
-    finally:
-        if next_packet is not None:
-            next_packet.release()
-        client.close()
 
 
 def test_outgauge_isolated_packet_flushes_under_10ms_by_default(monkeypatch) -> None:
-    client = OutGaugeUDPClient(port=0, timeout=0.2, retries=1)
-
-    fake_socket = QueueUDPSocket(address=("127.0.0.1", 3000))
-    original_socket = client._socket
-    monkeypatch.setattr(client, "_socket", fake_socket)
-    original_socket.close()
-
-    fake_wait, wait_calls = make_wait_stub(return_value=False)
-    monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
-
-    fake_socket.queue.append(build_outgauge_payload(7, 70, layout="LYT"))
-    first = client.recv()
-    assert first is not None
-    assert first.packet_id == 7
-    first.release()
-
-    fake_socket.queue.append(build_outgauge_payload(8, 90, layout="LYT"))
-    start = time.perf_counter()
-    second = client.recv()
-    elapsed_ms = (time.perf_counter() - start) * 1_000
-
-    try:
-        assert second is not None
-        assert second.packet_id == 8
-        assert elapsed_ms < 10.0
-        assert wait_calls, "wait_for_read_ready should be consulted for pending packet"
-        assert wait_calls[0] <= 0.012
-    finally:
-        if second is not None:
-            second.release()
-        client.close()
+    assert_udp_isolated_flush(
+        monkeypatch,
+        client_factory=lambda: OutGaugeUDPClient(port=0, timeout=0.2, retries=1),
+        module=outgauge_module,
+        payload_factory=build_outgauge_payload,
+        first_spec={"packet_id": 7, "time_value": 70, "layout": "LYT"},
+        second_spec={"packet_id": 8, "time_value": 90, "layout": "LYT"},
+        expected_first=7,
+        expected_second=8,
+        value_extractor=lambda packet: packet.packet_id,
+        address=("127.0.0.1", 3000),
+        release_packets=True,
+    )
 
 
 def test_async_outgauge_client_recovers_out_of_order_packets() -> None:
     async def runner() -> None:
-        client = await AsyncOutGaugeUDPClient.create(port=0, reorder_grace=0.1, timeout=0.5)
-        sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sender.bind(("127.0.0.1", 0))
-        try:
-            _, port = client.address
-            target = ("127.0.0.1", port)
-            await asyncio.sleep(0)
-            sender.sendto(build_outgauge_payload(5, 50, layout="LYT"), target)
-            sender.sendto(build_outgauge_payload(7, 70, layout="LYT"), target)
-            sender.sendto(build_outgauge_payload(6, 60, layout="LYT"), target)
-            results = []
-            for _ in range(3):
-                packet = await client.recv()
-                if packet is not None:
-                    results.append(packet)
-            assert [packet.packet_id for packet in results] == [5, 6, 7]
-            stats = client.statistics
-            assert stats["delivered"] == 3
-            assert stats["reordered"] >= 1
-            for packet in results:
-                packet.release()
-        finally:
-            sender.close()
-            await client.close()
+        await assert_async_udp_reordering(
+            client_factory=lambda: AsyncOutGaugeUDPClient.create(
+                port=0, reorder_grace=0.1, timeout=0.5
+            ),
+            payload_factory=build_outgauge_payload,
+            send_specs=[
+                {"packet_id": 5, "time_value": 50, "layout": "LYT"},
+                {"packet_id": 7, "time_value": 70, "layout": "LYT"},
+                {"packet_id": 6, "time_value": 60, "layout": "LYT"},
+            ],
+            expected_values=[5, 6, 7],
+            value_extractor=lambda packet: packet.packet_id,
+            release_packets=True,
+        )
 
     asyncio.run(runner())
 
 
 def test_async_outgauge_client_wakes_waiters_on_close() -> None:
     async def runner() -> None:
-        client = await AsyncOutGaugeUDPClient.create(port=0, timeout=0.2)
-        try:
-            recv_task = asyncio.create_task(client.recv())
-            await asyncio.sleep(0)
-            await client.close()
-            with pytest.raises(RuntimeError):
-                await recv_task
-        finally:
-            await client.close()
+        await assert_async_client_close_wakes(
+            client_factory=lambda: AsyncOutGaugeUDPClient.create(port=0, timeout=0.2)
+        )
 
     asyncio.run(runner())
