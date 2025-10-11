@@ -1,7 +1,7 @@
 """Convenience re-exports for test helpers."""
 
 from .abtest import DummyBundle, build_metrics, scale_samples
-from .cli import instrument_prepare_pack_context
+from .cli import instrument_prepare_pack_context, run_cli_in_tmp
 from .constants import BASE_NU_F, SUPPORTED_CAR_MODELS
 from .epi import build_balanced_bundle, build_epi_bundle, build_epi_nodes
 from .microsector import build_goal, build_microsector
@@ -81,6 +81,7 @@ __all__ = [
     "make_select_stub",
     "make_wait_stub",
     "instrument_prepare_pack_context",
+    "run_cli_in_tmp",
     "MINIMAL_DATA_CAR",
     "PackBuilder",
     "create_cli_config_pack",
