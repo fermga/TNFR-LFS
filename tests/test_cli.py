@@ -21,7 +21,7 @@ from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
-from tests.helpers.abtest import DummyBundle
+from tests.helpers import DummyBundle
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]

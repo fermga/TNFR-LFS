@@ -27,8 +27,11 @@ from tnfr_lfs.core.metrics import (
 from tnfr_lfs.core.operator_detection import canonical_operator_label
 from tnfr_lfs.recommender.rules import RuleProfileObjectives
 from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
-from tests.helpers import build_minimal_setup_plan
-from tests.helpers.steering import build_steering_bundle, build_steering_record
+from tests.helpers import (
+    build_minimal_setup_plan,
+    build_steering_bundle,
+    build_steering_record,
+)
 
 
 def _populate_hud(records) -> TelemetryHUD:
