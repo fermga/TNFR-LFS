@@ -14,6 +14,7 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
+      matrix: ${{ steps.generate.outputs.matrix }}
       core: ${{ steps.filter.outputs.core }}
       core_pkg: ${{ steps.filter.outputs.core_pkg }}
       examples: ${{ steps.filter.outputs.examples }}
@@ -33,80 +34,79 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+      - name: Generate test areas
+        id: generate
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          try:
+              import yaml
+          except ModuleNotFoundError:
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "pyyaml"])
+              import yaml
+
+          data = yaml.safe_load(Path(".github/test-areas.yml").read_text(encoding="utf-8"))
+          areas = data.get("areas", [])
+
+          filters = {}
+          matrix = []
+          for area in areas:
+              name = area["name"]
+              filters[name] = area.get("filter_globs", [])
+
+              include = area.get("include_in_matrix")
+              pytest_args = area.get("pytest_args")
+              if include is None:
+                  include = pytest_args is not None
+              if not include:
+                  continue
+
+              args = pytest_args or []
+              if isinstance(args, str):
+                  args = [args]
+
+              matrix.append(
+                  {
+                      "area": name,
+                      "display_name": area.get("display_name", name),
+                      "pytest_args": " ".join(args),
+                      "run": area.get("run_output", name),
+                  }
+              )
+
+          matrix.append(
+              {
+                  "area": "full",
+                  "display_name": "full",
+                  "pytest_args": "",
+                  "run": "full_suite_on_main",
+              }
+          )
+
+          filters_yaml = yaml.safe_dump(filters, sort_keys=False)
+          matrix_json = json.dumps(matrix, separators=(",", ":"))
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              fh.write("filters<<EOF\n")
+              fh.write(filters_yaml)
+              if not filters_yaml.endswith("\n"):
+                  fh.write("\n")
+              fh.write("EOF\n")
+              fh.write(f"matrix={matrix_json}\n")
+          PY
       - id: filter
         uses: dorny/paths-filter@v3
         with:
-          # Each filter below mirrors a logical product area. When adding a
-          # module or a new test file, update the relevant glob here (and in the
-          # test matrix below) so the downstream pytest selection remains
-          # accurate.
-          filters: |
-            core:
-              - '.github/**'
-              - 'benchmarks/**'
-              - 'config/**'
-              - 'Makefile'
-              - 'mkdocs.yml'
-              - 'modifiers/**'
-              - 'pyproject.toml'
-              - 'tests/**'
-              - 'tnfr_lfs.toml'
-              - 'src/tnfr_lfs/**'
-              - 'typing_targets/**'
-            examples:
-              - 'examples/**'
-            docs:
-              - 'docs/**'
-              - '**/*.md'
-            analysis:
-              - 'src/tnfr_lfs/analysis/**'
-              - 'tests/test_analysis_*.py'
-              - 'tests/analysis/**'
-            core_pkg:
-              - 'src/tnfr_lfs/core/**'
-              - 'tests/test_core_*.py'
-              - 'tests/test_coherence*.py'
-              - 'tests/test_contextual_delta.py'
-              - 'tests/test_metrics.py'
-              - 'tests/test_operator_detection.py'
-              - 'tests/test_phase_alias_deprecations.py'
-              - 'tests/test_resonance.py'
-              - 'tests/test_segmentation.py'
-              - 'tests/test_structural_time.py'
-              - 'tests/test_epi.py'
-            cli:
-              - 'src/tnfr_lfs/cli/**'
-              - 'tests/test_cli*.py'
-              - '!tests/test_cli_osd.py'
-              - 'tests/test_cli_parser.py'
-            exporters:
-              - 'src/tnfr_lfs/exporters/**'
-              - 'tests/test_*exporter*.py'
-              - 'tests/test_replay_csv_bundle.py'
-            ingestion:
-              - 'src/tnfr_lfs/ingestion/**'
-              - 'tests/test_ingestion.py'
-              - 'tests/test_outgauge_udp.py'
-              - 'tests/test_outsim_udp.py'
-              - 'tests/test_insim.py'
-              - 'tests/test_track_loader.py'
-              - 'tests/ingestion/**'
-            io:
-              - 'src/tnfr_lfs/io/**'
-              - 'tests/test_io_*.py'
-              - 'tests/test_cli_io.py'
-            processing:
-              - 'src/tnfr_lfs/processing.py'
-              - 'src/tnfr_lfs/processing/**'
-              - 'tests/test_processing.py'
-            recommender:
-              - 'src/tnfr_lfs/recommender/**'
-              - 'tests/test_recommender*.py'
-              - 'tests/test_recommender_search_cache.py'
-            plugins:
-              - 'src/tnfr_lfs/plugins/**'
-              - 'tests/plugins/**'
-              - 'tests/test_cli_osd.py'
+          # Each filter mirrors a logical product area sourced from
+          # .github/test-areas.yml so updating that file keeps detection and
+          # pytest selection aligned.
+          filters: ${{ steps.generate.outputs.filters }}
       - name: Determine pytest selection
         id: determine-pytest
         env:
@@ -131,80 +131,10 @@ jobs:
 
   test:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.should_run_tests == 'true' && matrix.run == 'true' }}
+    if: ${{ needs.detect-changes.outputs.should_run_tests == 'true' && needs.detect-changes.outputs[matrix.run] == 'true' }}
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        include:
-          - area: analysis
-            display_name: analysis
-            pytest_args: >-
-              tests/test_analysis_*.py
-              tests/analysis
-            run: ${{ needs.detect-changes.outputs.analysis }}
-          - area: core_pkg
-            display_name: core
-            pytest_args: >-
-              tests/test_core_*.py
-              tests/test_coherence*.py
-              tests/test_contextual_delta.py
-              tests/test_metrics.py
-              tests/test_operator_detection.py
-              tests/test_phase_alias_deprecations.py
-              tests/test_resonance.py
-              tests/test_segmentation.py
-              tests/test_structural_time.py
-              tests/test_epi.py
-            run: ${{ needs.detect-changes.outputs.core_pkg }}
-          - area: cli
-            display_name: cli
-            pytest_args: >-
-              tests/test_cli.py
-              tests/test_cli_*.py
-              tests/test_cli_parser.py
-            run: ${{ needs.detect-changes.outputs.cli }}
-          - area: exporters
-            display_name: exporters
-            pytest_args: >-
-              tests/test_*exporter*.py
-              tests/test_replay_csv_bundle.py
-            run: ${{ needs.detect-changes.outputs.exporters }}
-          - area: ingestion
-            display_name: ingestion
-            pytest_args: >-
-              tests/test_ingestion.py
-              tests/test_outgauge_udp.py
-              tests/test_outsim_udp.py
-              tests/test_insim.py
-              tests/test_track_loader.py
-              tests/ingestion
-            run: ${{ needs.detect-changes.outputs.ingestion }}
-          - area: io
-            display_name: io
-            pytest_args: >-
-              tests/test_io_*.py
-              tests/test_cli_io.py
-            run: ${{ needs.detect-changes.outputs.io }}
-          - area: processing
-            display_name: processing
-            pytest_args: tests/test_processing.py
-            run: ${{ needs.detect-changes.outputs.processing }}
-          - area: recommender
-            display_name: recommender
-            pytest_args: >-
-              tests/test_recommender*.py
-              tests/test_recommender_search_cache.py
-            run: ${{ needs.detect-changes.outputs.recommender }}
-          - area: plugins
-            display_name: plugins
-            pytest_args: >-
-              tests/plugins
-              tests/test_cli_osd.py
-            run: ${{ needs.detect-changes.outputs.plugins }}
-          - area: full
-            display_name: full
-            pytest_args: ''
-            run: ${{ needs.detect-changes.outputs.full_suite_on_main }}
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
         with:
