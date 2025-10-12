@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from tnfr_lfs.core.metrics import CPHIReport, CPHIWheel, CPHIWheelComponents
@@ -18,16 +20,13 @@ def _pick_legacy_alias() -> tuple[str, tuple[str, ...]]:
     return alias, phases
 
 
-def test_expand_phase_alias_warns_for_legacy_alias() -> None:
+@pytest.mark.parametrize("phase_resolver", (expand_phase_alias, phase_family))
+def test_phase_resolvers_warn_for_legacy_alias(
+    phase_resolver: Callable[[str], object]
+) -> None:
     alias, _ = _pick_legacy_alias()
     with pytest.warns(DeprecationWarning):
-        expand_phase_alias(alias)
-
-
-def test_phase_family_warns_for_legacy_alias() -> None:
-    alias, _ = _pick_legacy_alias()
-    with pytest.warns(DeprecationWarning):
-        phase_family(alias)
+        phase_resolver(alias)
 
 
 def test_replicate_phase_aliases_warns_when_alias_generated() -> None:

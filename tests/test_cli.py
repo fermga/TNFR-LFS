@@ -5,7 +5,7 @@ import itertools
 import json
 import re
 import argparse
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from textwrap import dedent
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,6 +34,65 @@ try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
 except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreters
     import tomli as tomllib  # type: ignore
+
+
+@pytest.fixture
+def prepare_diagnose_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Callable[[Mapping[str, tuple[bool, str]] | None], Path]:
+    def _prepare(stub_overrides: Mapping[str, tuple[bool, str]] | None = None) -> Path:
+        lfs_root = tmp_path / "LFS"
+        cfg_dir = lfs_root / "cfg"
+        cfg_dir.mkdir(parents=True)
+        cfg_path = cfg_dir / "cfg.txt"
+        cfg_path.write_text(
+            """\
+OutSim Mode 1
+OutSim IP 127.0.0.1
+OutSim Port 4123
+OutGauge Mode 1
+OutGauge IP 127.0.0.1
+OutGauge Port 3000
+InSim IP 127.0.0.1
+InSim Port 29999
+""",
+            encoding="utf8",
+        )
+
+        defaults: dict[str, tuple[bool, str]] = {
+            "_outsim_ping": (True, "OutSim responded"),
+            "_outgauge_ping": (True, "OutGauge responded"),
+            "_insim_handshake": (True, "InSim responded"),
+            "_check_setups_directory": (True, "Permissions ok"),
+        }
+        if stub_overrides:
+            defaults.update(stub_overrides)
+
+        for module in (cli_module, workflows_module):
+            monkeypatch.setattr(
+                module,
+                "_outsim_ping",
+                lambda host, port, timeout, result=defaults["_outsim_ping"]: result,
+            )
+            monkeypatch.setattr(
+                module,
+                "_outgauge_ping",
+                lambda host, port, timeout, result=defaults["_outgauge_ping"]: result,
+            )
+            monkeypatch.setattr(
+                module,
+                "_insim_handshake",
+                lambda host, port, timeout, result=defaults["_insim_handshake"]: result,
+            )
+            monkeypatch.setattr(
+                module,
+                "_check_setups_directory",
+                lambda path, result=defaults["_check_setups_directory"]: result,
+            )
+
+        return cfg_path
+
+    return _prepare
 
 
 def test_run_cli_dispatches_registered_handler(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1519,107 +1578,33 @@ track = "AS5"
     )
     assert (tmp_path / "profiles.toml").exists()
 
-
-def test_diagnose_reports_missing_udp_response(
-    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    lfs_root = tmp_path / "LFS"
-    cfg_dir = lfs_root / "cfg"
-    cfg_dir.mkdir(parents=True)
-    cfg_path = cfg_dir / "cfg.txt"
-    cfg_path.write_text(
-        """
-OutSim Mode 1
-OutSim IP 127.0.0.1
-OutSim Port 4123
-OutGauge Mode 1
-OutGauge IP 127.0.0.1
-OutGauge Port 3000
-InSim IP 127.0.0.1
-InSim Port 29999
-""",
-        encoding="utf8",
-    )
-
-    for module in (cli_module, workflows_module):
-        monkeypatch.setattr(
-            module,
+@pytest.mark.parametrize(
+    ("failing_stub", "stub_result", "expected_message"),
+    (
+        (
             "_outsim_ping",
-            lambda host, port, timeout: (
-                False,
-                "No response from OutSim 127.0.0.1:4123 after 0.05s",
-            ),
-        )
-        monkeypatch.setattr(
-            module,
-            "_outgauge_ping",
-            lambda host, port, timeout: (True, "OutGauge responded"),
-        )
-        monkeypatch.setattr(
-            module,
-            "_insim_handshake",
-            lambda host, port, timeout: (True, "InSim responded"),
-        )
-        monkeypatch.setattr(
-            module,
+            (False, "No response from OutSim 127.0.0.1:4123 after 0.05s"),
+            "No response from OutSim",
+        ),
+        (
             "_check_setups_directory",
-            lambda path: (True, "Permissions ok"),
-        )
+            (False, "No write permissions in setups"),
+            "No write permissions",
+        ),
+    ),
+)
+def test_diagnose_reports_errors(
+    failing_stub: str,
+    stub_result: tuple[bool, str],
+    expected_message: str,
+    capsys,
+    prepare_diagnose_environment: Callable[[Mapping[str, tuple[bool, str]] | None], Path],
+) -> None:
+    cfg_path = prepare_diagnose_environment({failing_stub: stub_result})
 
     with pytest.raises(SystemExit) as excinfo:
         run_cli(["diagnose", str(cfg_path)])
 
     captured = capsys.readouterr()
-    assert "No response from OutSim" in captured.err
-    assert "No response from OutSim" in str(excinfo.value.__cause__)
-
-
-def test_diagnose_reports_permission_error(
-    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    lfs_root = tmp_path / "LFS"
-    cfg_dir = lfs_root / "cfg"
-    cfg_dir.mkdir(parents=True)
-    cfg_path = cfg_dir / "cfg.txt"
-    cfg_path.write_text(
-        """
-OutSim Mode 1
-OutSim IP 127.0.0.1
-OutSim Port 4123
-OutGauge Mode 1
-OutGauge IP 127.0.0.1
-OutGauge Port 3000
-InSim IP 127.0.0.1
-InSim Port 29999
-""",
-        encoding="utf8",
-    )
-
-    for module in (cli_module, workflows_module):
-        monkeypatch.setattr(
-            module,
-            "_outsim_ping",
-            lambda host, port, timeout: (True, "OutSim responded"),
-        )
-        monkeypatch.setattr(
-            module,
-            "_outgauge_ping",
-            lambda host, port, timeout: (True, "OutGauge responded"),
-        )
-        monkeypatch.setattr(
-            module,
-            "_insim_handshake",
-            lambda host, port, timeout: (True, "InSim responded"),
-        )
-        monkeypatch.setattr(
-            module,
-            "_check_setups_directory",
-            lambda path: (False, "No write permissions in setups"),
-        )
-
-    with pytest.raises(SystemExit) as excinfo:
-        run_cli(["diagnose", str(cfg_path)])
-
-    captured = capsys.readouterr()
-    assert "No write permissions" in captured.err
-    assert "No write permissions" in str(excinfo.value.__cause__)
+    assert expected_message in captured.err
+    assert expected_message in str(excinfo.value.__cause__)

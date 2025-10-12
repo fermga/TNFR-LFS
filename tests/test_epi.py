@@ -66,14 +66,6 @@ def test_should_use_delta_cache_defaults_to_global_state():
     assert cache_helpers.should_use_delta_cache(None)
 
 
-def test_should_use_delta_cache_honours_override():
-    options = CacheOptions(enable_delta_cache=False, nu_f_cache_size=64, telemetry_cache_size=1)
-    assert not cache_helpers.should_use_delta_cache(options)
-
-    enabled = CacheOptions(enable_delta_cache=True, nu_f_cache_size=64, telemetry_cache_size=1)
-    assert cache_helpers.should_use_delta_cache(enabled)
-
-
 def test_should_use_dynamic_cache_defaults_to_global_state():
     cache_helpers.configure_cache(nu_f_cache_size=0)
     assert not cache_helpers.should_use_dynamic_cache(None)
@@ -82,12 +74,44 @@ def test_should_use_dynamic_cache_defaults_to_global_state():
     assert cache_helpers.should_use_dynamic_cache(None)
 
 
-def test_should_use_dynamic_cache_honours_override():
-    disabled = CacheOptions(enable_delta_cache=True, nu_f_cache_size=0, telemetry_cache_size=1)
-    assert not cache_helpers.should_use_dynamic_cache(disabled)
-
-    enabled = CacheOptions(enable_delta_cache=False, nu_f_cache_size=8, telemetry_cache_size=1)
-    assert cache_helpers.should_use_dynamic_cache(enabled)
+@pytest.mark.parametrize(
+    ("cache_resolver", "disabled_options", "enabled_options"),
+    (
+        (
+            cache_helpers.should_use_delta_cache,
+            CacheOptions(
+                enable_delta_cache=False,
+                nu_f_cache_size=64,
+                telemetry_cache_size=1,
+            ),
+            CacheOptions(
+                enable_delta_cache=True,
+                nu_f_cache_size=64,
+                telemetry_cache_size=1,
+            ),
+        ),
+        (
+            cache_helpers.should_use_dynamic_cache,
+            CacheOptions(
+                enable_delta_cache=True,
+                nu_f_cache_size=0,
+                telemetry_cache_size=1,
+            ),
+            CacheOptions(
+                enable_delta_cache=False,
+                nu_f_cache_size=8,
+                telemetry_cache_size=1,
+            ),
+        ),
+    ),
+)
+def test_cache_usage_honours_overrides(
+    cache_resolver,
+    disabled_options: CacheOptions,
+    enabled_options: CacheOptions,
+) -> None:
+    assert not cache_resolver(disabled_options)
+    assert cache_resolver(enabled_options)
 
 
 def _synthetic_frequency_series(

@@ -374,18 +374,17 @@ def test_udp_client_preserves_extended_payload_for_fusion(
         client.close()
 
 
-def test_outsim_udp_client_allows_remote_host_binding() -> None:
-    client = OutSimUDPClient(host="203.0.113.1", port=0)
-    try:
-        host, port = client.address
-        assert host == "0.0.0.0"
-        assert port > 0
-    finally:
-        client.close()
-
-
-def test_outgauge_udp_client_allows_remote_host_binding() -> None:
-    client = OutGaugeUDPClient(host="198.51.100.1", port=0)
+@pytest.mark.parametrize(
+    ("client_cls", "remote_host"),
+    (
+        (OutSimUDPClient, "203.0.113.1"),
+        (OutGaugeUDPClient, "198.51.100.1"),
+    ),
+)
+def test_udp_client_allows_remote_host_binding(
+    client_cls: type[OutSimUDPClient | OutGaugeUDPClient], remote_host: str
+) -> None:
+    client = client_cls(host=remote_host, port=0)
     try:
         host, port = client.address
         assert host == "0.0.0.0"
