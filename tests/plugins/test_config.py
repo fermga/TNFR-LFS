@@ -2,13 +2,84 @@
 
 from __future__ import annotations
 
+import copy
 import textwrap
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+try:  # pragma: no cover - Python < 3.11 fallback
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore[no-redef]
+
 from tnfr_lfs.plugins.config import PluginConfig, PluginConfigError
-from tests.helpers import write_plugin_config_text
+from tests.helpers import build_plugin_config_mapping, write_plugin_config_text
+
+
+def test_plugin_config_from_pyproject_block() -> None:
+    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    raw_data = tomllib.loads(pyproject_path.read_text())
+    tool_section = raw_data.get("tool", {})
+    plugin_root = tool_section.get("tnfr_lfs", {})
+
+    plugins_table = copy.deepcopy(plugin_root.get("plugins", {}))
+    mapping: dict[str, Any] = {"plugins": plugins_table}
+
+    profiles_table = plugin_root.get("profiles")
+    if profiles_table:
+        mapping["profiles"] = copy.deepcopy(profiles_table)
+
+    config = PluginConfig.from_mapping(mapping, source=pyproject_path)
+
+    assert config.auto_discover is True
+    assert config.plugin_dir == (pyproject_path.parent / "plugins").resolve()
+
+    config.set_profile("practice")
+    assert config.active_profile == "practice"
+    assert config.max_concurrent == 2
+
+    exporter = config.get_plugin_config("exporter")
+    assert exporter["targets"] == ["html"]
+    assert exporter["path"] == "out/practice-dashboard.html"
+    assert exporter["template"] == "docs/templates/practice.html"
+
+    config.set_profile("racing")
+    assert set(config.enabled_plugins()) == {"telemetry", "exporter", "relay"}
+
+    mapping["plugins"]["telemetry"]["flush_interval"] = "3s"
+    config.reload_config()
+    config.set_profile(None)
+    telemetry = config.get_plugin_config("telemetry")
+    assert telemetry["flush_interval"] == "3s"
+
+
+def test_reload_config_from_mapping_applies_updates(tmp_path: Path) -> None:
+    mapping = build_plugin_config_mapping(
+        auto_discover=False,
+        plugin_dir="plugins",
+        plugins={"telemetry": {"enabled": True, "buffer_seconds": 10}},
+    )
+
+    source = tmp_path / "pyproject.toml"
+    config = PluginConfig.from_mapping(mapping, source=source)
+
+    assert config.auto_discover is False
+    assert config.plugin_dir == (source.parent / "plugins").resolve()
+
+    telemetry = config.get_plugin_config("telemetry")
+    assert telemetry["buffer_seconds"] == 10
+
+    mapping["plugins"]["telemetry"]["buffer_seconds"] = 5
+    config.reload_config()
+    updated = config.get_plugin_config("telemetry")
+    assert updated["buffer_seconds"] == 5
+
+
+def test_from_mapping_requires_plugins_table(tmp_path: Path) -> None:
+    with pytest.raises(PluginConfigError):
+        PluginConfig.from_mapping({}, source=tmp_path / "pyproject.toml")
 
 
 def test_plugin_config_loads_and_merges_global_settings(tmp_path: Path) -> None:

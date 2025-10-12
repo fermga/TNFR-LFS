@@ -80,6 +80,71 @@ python_version = "3.9"
 files = ["src", "tests"]
 warn_unused_configs = true
 
+[tool.tnfr_lfs.plugins]
+auto_discover = true
+plugin_dir = "plugins"
+max_concurrent = 4
+
+[tool.tnfr_lfs.plugins.telemetry]
+enabled = true
+entry_point = "tnfr_lfs.plugins.telemetry:TelemetryPlugin"
+buffer_seconds = 15
+flush_interval = "5s"
+
+[tool.tnfr_lfs.plugins.telemetry.transport]
+protocol = "udp"
+host = "127.0.0.1"
+port = 3000
+
+[tool.tnfr_lfs.plugins.exporter]
+enabled = true
+entry_point = "tnfr_lfs.plugins.exporter:ExporterPlugin"
+targets = ["jsonl", "html"]
+flush_on_shutdown = true
+
+[tool.tnfr_lfs.plugins.exporter.jsonl]
+path = "out/telemetry.jsonl"
+mode = "append"
+
+[tool.tnfr_lfs.plugins.exporter.html]
+path = "out/dashboard.html"
+template = "docs/templates/dashboard.html"
+
+[tool.tnfr_lfs.plugins.relay]
+enabled = false
+entry_point = "tnfr_lfs.plugins.relay:RelayPlugin"
+channel = "zeromq"
+bind = "tcp://127.0.0.1:6000"
+
+[tool.tnfr_lfs.profiles.racing]
+max_concurrent = 4
+plugins = ["telemetry", "exporter", "relay"]
+
+[tool.tnfr_lfs.profiles.racing.telemetry]
+flush_interval = "1s"
+
+[tool.tnfr_lfs.profiles.racing.exporter]
+targets = ["jsonl"]
+flush_on_shutdown = false
+
+[tool.tnfr_lfs.profiles.racing.relay]
+enabled = true
+channel = "zeromq"
+bind = "tcp://0.0.0.0:6000"
+
+[tool.tnfr_lfs.profiles.practice]
+max_concurrent = 2
+plugins = ["telemetry", "exporter"]
+
+[tool.tnfr_lfs.profiles.practice.telemetry]
+buffer_seconds = 30
+flush_interval = "10s"
+
+[tool.tnfr_lfs.profiles.practice.exporter]
+targets = ["html"]
+path = "out/practice-dashboard.html"
+template = "docs/templates/practice.html"
+
 [tool.setuptools.package-data]
 "tnfr_lfs.data" = ["*.toml", "playbooks/*.toml"]
 "tnfr_lfs.resources" = [
@@ -90,9 +155,6 @@ warn_unused_configs = true
     "modifiers/*",
     "modifiers/**/*",
 ]
-
-[tool.setuptools.data-files]
-"share/tnfr_lfs/config" = ["config/plugins.toml"]
 
 [tool.semantic_release]
 branch = "main"
