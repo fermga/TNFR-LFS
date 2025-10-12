@@ -34,65 +34,17 @@ reports under `examples/out/`.
 
 ## Quickstart
 
-### Prerequisites
-
-- Python 3.9 or newer on `PATH`.
-- Scientific dependencies: `numpy>=1.24,<2.0` and `pandas>=1.5,<3.0`.
-- Telemetry samples shipped with the repo. The quickstart resolves them
-  automatically via `tnfr_lfs.examples.quickstart_dataset.dataset_path()`. Place
-  custom bundles under `src/tnfr_lfs/resources/data/` or override the helper if
-  you need different inputs.
-
-### Install dependencies
-
-```bash
-# Minimal environment to run the CLI and examples
-pip install .
-
-# Full development environment (linters, mypy, pytest)
-pip install .[dev]
-
-# Optional dominant-frequency acceleration (SciPy Goertzel helper)
-pip install .[spectral]
-
-# Makefile shortcuts
-make install      # base dependencies only
-make dev-install  # base + development tooling
-```
-
-Prefer an editable install? Run `pip install -e .` and combine extras as
-needed (for example, `pip install -e .[dev]`).
-
-### Execute the end-to-end flow
-
-```bash
-make quickstart
-```
-
-This invokes `examples/quickstart.sh` to generate artefacts in `examples/out/`.
-The script loads the packaged dataset through
-`tnfr_lfs.examples.quickstart_dataset.dataset_path()`, so no manual copying is
-required for the bundled samples.
-
-Explore the [Examples gallery](docs/examples.md) for additional runnable
-scripts that demonstrate ingestion, exporting and recommendation workflows.
-
-> **API note:** Live (`OutSim`/`OutGauge`/`InSim`) and offline (RAF, Replay
-> Analyzer, profiles) ingestion helpers live under the consolidated
-> `tnfr_lfs.ingestion` namespace. The package re-exports the RAF and Replay
-> Analyzer utilities available via `tnfr_lfs.ingestion.offline`, alongside the
-> streaming helpers (for example `tnfr_lfs.ingestion.live`). Use these modules
-> to wire capture pipelines directly into the analytics stack.
+Kick the tyres with `make quickstart`, which runs the bundled scenario and
+writes reports to `examples/out/`. The [installation guide](docs/index.md#installation)
+covers prerequisites, dependency extras and how the dataset helper resolves the
+sample telemetry before the script executes.
 
 ## Telemetry overview
 
-TNFR × LFS reads exclusively from native Live for Speed broadcasters. Enable
-OutSim/OutGauge/Insim in the simulator and consult the
-[telemetry guide](docs/telemetry.md) for the complete signal breakdown and brake
-thermal proxy details. Developers wiring direct UDP ingest pipelines can jump to
-the [`TelemetryFusion` API reference](docs/reference/autoapi/tnfr_lfs/ingestion/fusion/index.md#telemetryfusion)
-to see how OutSim/OutGauge packets are combined and how calibration packs slot
-into the workflow.
+Native Live for Speed broadcasters power every metric in the toolkit. The
+[telemetry requirements](docs/index.md#telemetry-requirements) section walks
+through the OutSim/OutGauge configuration, extended payload flags and the
+fusion layer used by the CLI and HUD.
 
 ## Benchmarks
 
@@ -110,33 +62,14 @@ with the [CLI deep dive](docs/cli_deep_dive.md) alongside the primary
 
 ## Documentation
 
-The complete documentation lives under `docs/` and is published with MkDocs.
-
-- Install the documentation toolchain (MkDocs, plugins, and AutoAPI) with:
-
-  ```bash
-  pip install .[dev]
-  ```
-
-- [`docs/DESIGN.md`](docs/DESIGN.md): textual summary of the TNFR operations manual.
-- [`docs/cli.md`](docs/cli.md): command-line interface guide.
-- [`docs/setup_equivalences.md`](docs/setup_equivalences.md): link TNFR metrics to
-  setup adjustments.
-- The CLI reads all defaults from the `[tool.tnfr_lfs]` table in
-  `pyproject.toml`.  Plugin discovery and profile data live under the nested
-  `[tool.tnfr_lfs.plugins]` and `[tool.tnfr_lfs.profiles]` tables, so updating
-  the project configuration is enough to keep the runtime and documentation in
-  sync.
+Find the complete manual—including CLI guides, API references and workflow
+walkthroughs—in the [MkDocs portal](docs/index.md#resources).
 
 ## Branding and relationship with the theory
 
-- **TNFR** refers solely to the original theory: the conceptual framework that
-  defines the EPI, the ΔNFR/ΔSi metrics and the resonant principles.
-- **TNFR × LFS** identifies the software toolkit that implements and automates
-  those principles.
-- The CLI (`tnfr_lfs`), Python modules (`tnfr_lfs`) and configuration tables
-  (the `[tool.tnfr_lfs]` block in `pyproject.toml`) retain their respective
-  naming conventions for compatibility.
+Read the [branding and terminology](docs/index.md#branding-and-terminology)
+section to understand how the theory, toolkit and configuration namespaces stay
+aligned.
 
 ## Development
 
