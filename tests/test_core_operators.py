@@ -14,6 +14,7 @@ from tests.helpers import (
     build_goal,
     build_microsector,
     build_operator_bundle,
+    clone_protocol_series,
 )
 
 from tnfr_lfs.core import Microsector, TelemetryRecord, phase_synchrony_index
@@ -51,6 +52,7 @@ from tnfr_lfs.core.operators import (
     dissonance_operator,
     _aggregate_operator_events,
     _stage_coherence,
+    _stage_epi_evolution,
     evolve_epi,
     emission_operator,
     mutation_operator,
@@ -136,6 +138,68 @@ def test_delta_calculator_decomposes_lateral_component():
         rel=1e-6,
     )
     assert abs(bundle.delta_nfr_proj_lateral) > abs(bundle.delta_nfr_proj_longitudinal)
+
+
+def test_stage_epi_evolution_accepts_protocol_samples():
+    first = build_dynamic_record(
+        timestamp=0.0,
+        vertical_load=4050.0,
+        slip_ratio=0.03,
+        lateral_accel=0.6,
+        longitudinal_accel=0.25,
+        nfr=5.0,
+        si=0.78,
+        throttle=0.4,
+        steer=0.1,
+        yaw_rate=0.12,
+    )
+    second = replace(
+        first,
+        timestamp=0.1,
+        slip_ratio=0.06,
+        lateral_accel=0.95,
+        longitudinal_accel=0.35,
+        nfr=6.2,
+        si=0.8,
+        throttle=0.45,
+        steer=0.18,
+        yaw_rate=0.2,
+        reference=first,
+    )
+    third = replace(
+        second,
+        timestamp=0.2,
+        slip_ratio=0.08,
+        lateral_accel=1.1,
+        longitudinal_accel=0.5,
+        nfr=7.1,
+        si=0.82,
+        throttle=0.48,
+        steer=0.22,
+        yaw_rate=0.28,
+        reference=second,
+    )
+
+    records = [first, second, third]
+
+    expected = _stage_epi_evolution(records)
+    protocol_records = clone_protocol_series(records)
+    result = _stage_epi_evolution(protocol_records)
+
+    assert result.keys() == expected.keys()
+
+    for series_key in ("integrated", "derivative"):
+        assert len(result[series_key]) == len(expected[series_key])
+        for actual, reference in zip(result[series_key], expected[series_key]):
+            assert actual == pytest.approx(reference)
+
+    for node_map_key in ("per_node_integrated", "per_node_derivative"):
+        assert result[node_map_key].keys() == expected[node_map_key].keys()
+        for node, reference_series in expected[node_map_key].items():
+            actual_series = result[node_map_key][node]
+            assert len(actual_series) == len(reference_series)
+            for actual, reference in zip(actual_series, reference_series):
+                assert actual == pytest.approx(reference)
 
 
 def _build_microsector(
