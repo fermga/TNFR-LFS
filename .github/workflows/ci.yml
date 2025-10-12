@@ -17,6 +17,7 @@ jobs:
       matrix: ${{ steps.generate.outputs.matrix }}
       changes: ${{ steps.filter.outputs.changes }}
       full_suite_on_main: ${{ steps.determine-pytest.outputs.full_suite_on_main }}
+      run_full_suite: ${{ steps.determine-pytest.outputs.run_full_suite }}
       should_run_tests: ${{ steps.determine-pytest.outputs.should_run_tests }}
     steps:
       - uses: actions/checkout@v4
@@ -107,14 +108,20 @@ jobs:
           import json
           import os
 
-          changes = json.loads(os.environ["CHANGED_AREAS"])
+          raw_changes = json.loads(os.environ["CHANGED_AREAS"])
+          if isinstance(raw_changes, dict):
+              changes = [name for name, changed in raw_changes.items() if changed]
+          else:
+              changes = list(raw_changes)
           is_main = os.environ["IS_MAIN"].lower() == "true"
 
-          full_suite = is_main and not changes
-          should_run = full_suite or bool(changes)
+          run_full_suite = not changes
+          full_suite = is_main and run_full_suite
+          should_run = run_full_suite or bool(changes)
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
               fh.write(f"full_suite_on_main={'true' if full_suite else 'false'}\n")
+              fh.write(f"run_full_suite={'true' if run_full_suite else 'false'}\n")
               fh.write(f"should_run_tests={'true' if should_run else 'false'}\n")
           PY
 
@@ -125,7 +132,13 @@ jobs:
       ${{
         needs.detect-changes.outputs.should_run_tests == 'true' &&
         (
-          (matrix.run == 'full_suite_on_main' && needs.detect-changes.outputs.full_suite_on_main == 'true') ||
+          (
+            matrix.run == 'full_suite_on_main' &&
+            (
+              needs.detect-changes.outputs.full_suite_on_main == 'true' ||
+              needs.detect-changes.outputs.run_full_suite == 'true'
+            )
+          ) ||
           contains(fromJson(needs.detect-changes.outputs.changes), matrix.run) ||
           contains(fromJson(needs.detect-changes.outputs.changes), matrix.area)
         )
