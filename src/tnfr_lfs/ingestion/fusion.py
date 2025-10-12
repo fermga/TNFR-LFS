@@ -14,7 +14,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from .._pack_resources import pack_root
+from ..resources import pack_root
 from ..analysis.brake_thermal import (
     BrakeThermalConfig,
     BrakeThermalEstimator,

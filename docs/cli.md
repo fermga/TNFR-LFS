@@ -350,7 +350,7 @@ Creates a setup plan by blending the optimisation-aware search module
 with the rule engine.  The resulting payload follows the
 ``tnfr_lfs.exporters.setup_plan.SetupPlan`` schema, including:
 
-When the CLI has access to a configuration pack (``paths.pack_root`` or
+When the CLI has access to a configuration pack (``resources.pack_root`` or
 ``--pack-root``) the JSON payload embeds the vehicle metadata and pack
 objectives under ``car`` and ``tnfr_targets`` respectively.
 

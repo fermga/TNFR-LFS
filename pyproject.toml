@@ -81,7 +81,7 @@ warn_unused_configs = true
 
 [tool.setuptools.package-data]
 "tnfr_lfs.data" = ["*.toml", "playbooks/*.toml"]
-"tnfr_lfs.pack" = [
+"tnfr_lfs.resources" = [
     "data/*",
     "data/**/*",
     "config/*",

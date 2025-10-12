@@ -9,7 +9,7 @@ The repository ships `tnfr_lfs.toml` as a ready-to-use template mirroring the
 options described in the [CLI guide](cli.md). Copy it to
 `~/.config/tnfr_lfs.toml` or to your project root to customise OutSim/OutGauge/
 InSim ports, initial car/track presets and ΔNFR limits per phase. Packs can also
-be resolved at runtime by pointing `paths.pack_root` to a directory that contains
+be resolved at runtime by pointing `resources.pack_root` to a directory that contains
 `config/global.toml`, `data/cars` and `data/profiles`—the CLI then embeds the
 selected pack metadata in every JSON export.
 

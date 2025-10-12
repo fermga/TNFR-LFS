@@ -5,7 +5,7 @@ engine to produce actionable changes that match the TNFR × LFS heuristics. The
 CLI exposes the workflow through the `write-set` subcommand, which reads a
 baseline capture, resolves the car/track profile and emits the consolidated plan
 through the configured exporter.【F:docs/cli.md†L343-L374】 When the command is
-run with a configuration pack (`--pack-root` or `paths.pack_root`), the payload
+run with a configuration pack (`--pack-root` or `resources.pack_root`), the payload
 also embeds the vehicle metadata and the TNFR objectives associated with the
 pack so that downstream automations inherit the context of the captured
 stint.【F:docs/cli.md†L363-L369】

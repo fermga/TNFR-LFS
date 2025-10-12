@@ -92,7 +92,7 @@ def run_cli(args: Optional[Sequence[str]] = None) -> str:
         dest="pack_root",
         type=Path,
         default=None,
-        help="Root directory of a TNFR × LFS pack overriding paths.pack_root.",
+        help="Root directory of a TNFR × LFS pack overriding resources.pack_root.",
     )
     config_parser.add_argument(
         "--log-level",

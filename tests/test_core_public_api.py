@@ -16,6 +16,8 @@ MODULE_PUBLIC_EXPORTS: dict[str, set[str]] = {
         "NaturalFrequencySettings",
         "DeltaCalculator",
         "delta_nfr_by_node",
+        "apply_plugin_nu_f_snapshot",
+        "resolve_plugin_nu_f",
     },
     "tnfr_lfs.core.epi_models": {"EPIBundle"},
     "tnfr_lfs.core.coherence": {"compute_node_delta_nfr", "sense_index"},

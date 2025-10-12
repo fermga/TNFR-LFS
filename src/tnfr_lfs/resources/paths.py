@@ -1,6 +1,6 @@
-from __future__ import annotations
+"""Helpers to locate bundled TNFR × LFS resources."""
 
-"""Helpers to locate packaged TNFR × LFS resources."""
+from __future__ import annotations
 
 from importlib import resources
 from pathlib import Path
@@ -8,8 +8,8 @@ from typing import Iterable
 
 __all__ = ["pack_root", "data_root", "modifiers_root", "set_pack_root_override"]
 
-_FALLBACK_PACK_ROOT = Path(__file__).resolve().parent / "pack"
-_PACKAGES: tuple[str, ...] = ("tnfr_lfs.pack",)
+_FALLBACK_PACK_ROOT = Path(__file__).resolve().parent
+_PACKAGES: tuple[str, ...] = ("tnfr_lfs.resources", "tnfr_lfs.pack")
 
 _PACK_ROOT: Path | None = None
 _DATA_ROOT: Path | None = None
@@ -27,7 +27,8 @@ def _iter_candidate_roots() -> Iterable[Path]:
             package_path = Path(resources.files(package_name))
         except ModuleNotFoundError:
             continue
-        yield package_path
+        else:
+            yield package_path
 
     yield _FALLBACK_PACK_ROOT
 
