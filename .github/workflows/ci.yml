@@ -121,7 +121,15 @@ jobs:
 
   test:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.should_run_tests == 'true' && ((matrix.run == 'full_suite_on_main' && needs.detect-changes.outputs.full_suite_on_main == 'true') || (matrix.run != 'full_suite_on_main' && contains(fromJson(needs.detect-changes.outputs.changes), matrix.run))) }}
+    if: >-
+      ${{
+        needs.detect-changes.outputs.should_run_tests == 'true' &&
+        (
+          (matrix.run == 'full_suite_on_main' && needs.detect-changes.outputs.full_suite_on_main == 'true') ||
+          contains(fromJson(needs.detect-changes.outputs.changes), matrix.run) ||
+          contains(fromJson(needs.detect-changes.outputs.changes), matrix.area)
+        )
+      }}
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
