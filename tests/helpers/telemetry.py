@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
+from typing import Any, Sequence
 
 from tnfr_lfs.core.epi import TelemetryRecord
 
@@ -40,6 +40,50 @@ _DEFAULT_TELEMETRY_RECORD = TelemetryRecord(
     suspension_velocity_front=0.0,
     suspension_velocity_rear=0.0,
 )
+
+
+class ProtocolTelemetrySample:
+    """Concrete :class:`SupportsTelemetrySample` implementation for tests."""
+
+    def __init__(self, source: TelemetryRecord) -> None:
+        for field in TelemetryRecord.__dataclass_fields__:
+            setattr(self, field, getattr(source, field))
+        self.reference: "ProtocolTelemetrySample" | None = None
+
+
+def clone_protocol_sample(
+    record: TelemetryRecord,
+    *,
+    reference: "ProtocolTelemetrySample" | None = None,
+) -> ProtocolTelemetrySample:
+    """Clone ``record`` into a :class:`ProtocolTelemetrySample`."""
+
+    sample = ProtocolTelemetrySample(record)
+    sample.reference = reference
+    return sample
+
+
+def clone_protocol_series(
+    records: Sequence[TelemetryRecord],
+) -> list[ProtocolTelemetrySample]:
+    """Return protocol-compatible clones for ``records`` preserving references."""
+
+    mapping: dict[int, ProtocolTelemetrySample] = {}
+    clones: list[ProtocolTelemetrySample] = []
+    for record in records:
+        sample = ProtocolTelemetrySample(record)
+        clones.append(sample)
+        mapping[id(record)] = sample
+
+    for record, sample in zip(records, clones):
+        reference = getattr(record, "reference", None)
+        if reference is None:
+            sample.reference = None
+            continue
+        cloned_reference = mapping.get(id(reference))
+        sample.reference = cloned_reference
+
+    return clones
 
 
 def build_telemetry_record(*args: Any, **overrides: Any) -> TelemetryRecord:

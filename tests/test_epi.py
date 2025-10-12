@@ -7,7 +7,12 @@ from typing import Dict, Sequence
 import numpy as np
 import pytest
 
-from tests.helpers import build_frequency_record, build_telemetry_record
+from tests.helpers import (
+    ProtocolTelemetrySample,
+    build_frequency_record,
+    build_telemetry_record,
+    clone_protocol_series,
+)
 
 from tnfr_lfs.core.cache_settings import CacheOptions
 from tnfr_lfs.core import cache as cache_helpers
@@ -21,6 +26,7 @@ from tnfr_lfs.core.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
+from tnfr_lfs.core.interfaces import SupportsTelemetrySample
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -577,6 +583,45 @@ def test_delta_nfr_by_node_conserves_total_with_extended_fields():
     assert node_deltas["suspension"] != pytest.approx(0.0)
 
 
+def test_delta_nfr_by_node_accepts_protocol_samples():
+    baseline = build_telemetry_record(
+        timestamp=1.0,
+        nfr=420.0,
+        slip_ratio=0.02,
+        lateral_accel=0.6,
+        longitudinal_accel=0.3,
+        throttle=0.55,
+        yaw_rate=0.1,
+        steer=0.12,
+    )
+    record = build_telemetry_record(
+        timestamp=1.1,
+        nfr=436.0,
+        slip_ratio=0.08,
+        lateral_accel=1.1,
+        longitudinal_accel=0.5,
+        throttle=0.4,
+        yaw_rate=0.32,
+        steer=0.35,
+        reference=baseline,
+    )
+
+    expected = delta_nfr_by_node(record)
+
+    protocol_baseline = ProtocolTelemetrySample(baseline)
+    protocol_baseline.reference = protocol_baseline
+    protocol_record = ProtocolTelemetrySample(record)
+    protocol_record.reference = protocol_baseline
+
+    assert isinstance(protocol_record, SupportsTelemetrySample)
+
+    actual = delta_nfr_by_node(protocol_record)
+
+    assert actual.keys() == expected.keys()
+    for node in expected:
+        assert actual[node] == pytest.approx(expected[node], rel=1e-9, abs=1e-9)
+
+
 def test_epi_extractor_creates_structured_nodes(synthetic_bundles, synthetic_records):
     assert len(synthetic_bundles) == 17
     pivot = synthetic_bundles[5]
@@ -715,6 +760,47 @@ def test_natural_frequency_analysis_converges_to_dominant_signal():
     if driver_steps:
         max_step = max(driver_steps)
         assert max_step < base_reference["driver"] * 0.6
+
+
+def test_resolve_nu_f_by_node_accepts_protocol_samples():
+    history = [
+        build_frequency_record(0.00, steer=0.10, throttle=0.50, brake=0.15, suspension=0.03),
+        build_frequency_record(0.05, steer=0.18, throttle=0.62, brake=0.10, suspension=0.04),
+        build_frequency_record(0.10, steer=0.22, throttle=0.58, brake=0.12, suspension=0.05),
+    ]
+    record = build_frequency_record(
+        0.15,
+        steer=0.28,
+        throttle=0.65,
+        brake=0.08,
+        suspension=0.06,
+        reference=history[-1],
+    )
+
+    expected = resolve_nu_f_by_node(record, history=history, car_model="proto")
+
+    protocol_history = clone_protocol_series(history)
+    protocol_record = ProtocolTelemetrySample(record)
+    protocol_record.reference = protocol_history[-1]
+
+    snapshot = resolve_nu_f_by_node(
+        protocol_record,
+        history=protocol_history,
+        car_model="proto",
+    )
+
+    assert isinstance(protocol_record, SupportsTelemetrySample)
+
+    assert snapshot.by_node.keys() == expected.by_node.keys()
+    for node in expected.by_node:
+        assert snapshot.by_node[node] == pytest.approx(
+            expected.by_node[node], rel=1e-6, abs=1e-6
+        )
+    assert snapshot.dominant_frequency == pytest.approx(expected.dominant_frequency)
+    assert snapshot.classification == expected.classification
+    assert snapshot.category == expected.category
+    assert snapshot.target_band == expected.target_band
+    assert snapshot.coherence_index == pytest.approx(expected.coherence_index)
 
 
 def test_delta_nfr_cache_reuses_result(monkeypatch):

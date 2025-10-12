@@ -7,7 +7,17 @@ from collections import deque
 from dataclasses import dataclass, field
 from collections.abc import Mapping as MappingABC
 from statistics import mean
-from typing import Deque, Dict, List, Mapping, Optional, Sequence, Tuple, TYPE_CHECKING
+from typing import (
+    Callable,
+    Deque,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    TYPE_CHECKING,
+)
 
 import numpy as np
 
@@ -34,6 +44,7 @@ from .epi_models import (
     TransmissionNode,
     TyresNode,
 )
+from .interfaces import SupportsTelemetrySample
 from .phases import expand_phase_alias, phase_family
 from ..plugins import TNFRPlugin
 
@@ -66,6 +77,9 @@ DEFAULT_PHASE_WEIGHTS: Mapping[str, float] = {"__default__": 1.0}
 
 _AVERAGE_NU_F = sum(NU_F_NODE_DEFAULTS.values()) / float(len(NU_F_NODE_DEFAULTS))
 _MISSING_FLOAT = float("nan")
+
+
+SampleFactory = Callable[..., SupportsTelemetrySample]
 
 
 @dataclass(frozen=True)
@@ -146,7 +160,7 @@ class NaturalFrequencyAnalyzer:
         cache_options: "CacheOptions" | None = None,
     ) -> None:
         self.settings = settings or NaturalFrequencySettings()
-        self._history: Deque[TelemetryRecord] = deque()
+        self._history: Deque[SupportsTelemetrySample] = deque()
         self._smoothed: Dict[str, float] = {}
         self._last_car: str | None = None
         self._last_snapshot: NaturalFrequencySnapshot | None = None
@@ -166,7 +180,7 @@ class NaturalFrequencyAnalyzer:
 
     def update(
         self,
-        record: TelemetryRecord,
+        record: SupportsTelemetrySample,
         base_map: Mapping[str, float],
         *,
         car_model: str | None = None,
@@ -177,10 +191,10 @@ class NaturalFrequencyAnalyzer:
 
     def compute_from_history(
         self,
-        history: Sequence[TelemetryRecord],
+        history: Sequence[SupportsTelemetrySample],
         base_map: Mapping[str, float],
         *,
-        record: TelemetryRecord | None = None,
+        record: SupportsTelemetrySample | None = None,
         car_model: str | None = None,
     ) -> NaturalFrequencySnapshot:
         if self._dynamic_cache_active():
@@ -194,7 +208,7 @@ class NaturalFrequencyAnalyzer:
         mapping, dominant_frequency = self._resolve(base_map, car_model)
         return self._build_snapshot(mapping, dominant_frequency, car_model)
 
-    def _append_record(self, record: TelemetryRecord) -> None:
+    def _append_record(self, record: SupportsTelemetrySample) -> None:
         self._history.append(record)
         max_window = max(self.settings.max_window_seconds, self.settings.min_window_seconds)
         while (
@@ -700,7 +714,7 @@ def _ackermann_parallel_delta(record: TelemetryRecord, baseline: TelemetryRecord
 
 
 def _node_feature_contributions(
-    record: TelemetryRecord, baseline: TelemetryRecord
+    record: SupportsTelemetrySample, baseline: SupportsTelemetrySample
 ) -> Dict[str, Dict[str, float]]:
     slip_delta = _abs_delta(record.slip_ratio, baseline.slip_ratio)
     slip_angle_delta = abs(_angle_difference(record.slip_angle, baseline.slip_angle))
@@ -800,8 +814,8 @@ def _node_feature_contributions(
 
 
 def _axis_signal_components(
-    record: TelemetryRecord,
-    baseline: TelemetryRecord,
+    record: SupportsTelemetrySample,
+    baseline: SupportsTelemetrySample,
     feature_contributions: Mapping[str, Mapping[str, float]],
 ) -> Dict[str, float]:
     """Partition feature signals into longitudinal and lateral components."""
@@ -841,7 +855,7 @@ def _distribute_node_delta(
     return distribute_weighted_delta(delta_nfr, node_signals)
 
 
-def _delta_nfr_by_node_uncached(record: TelemetryRecord) -> Dict[str, float]:
+def _delta_nfr_by_node_uncached(record: SupportsTelemetrySample) -> Dict[str, float]:
     baseline = record.reference or record
     delta_nfr = record.nfr - baseline.nfr
     feature_contributions = _node_feature_contributions(record, baseline)
@@ -852,7 +866,7 @@ def _delta_nfr_by_node_uncached(record: TelemetryRecord) -> Dict[str, float]:
 
 
 def delta_nfr_by_node(
-    record: TelemetryRecord,
+    record: SupportsTelemetrySample,
     *,
     cache_options: "CacheOptions" | None = None,
 ) -> Mapping[str, float]:
@@ -900,7 +914,7 @@ def _phase_weight(
 
 
 def _base_nu_f_map(
-    record: TelemetryRecord,
+    record: SupportsTelemetrySample,
     *,
     phase: str | None = None,
     phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
@@ -925,11 +939,11 @@ def _base_nu_f_map(
 
 
 def resolve_nu_f_by_node(
-    record: TelemetryRecord,
+    record: SupportsTelemetrySample,
     *,
     phase: str | None = None,
     phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
-    history: Sequence[TelemetryRecord] | None = None,
+    history: Sequence[SupportsTelemetrySample] | None = None,
     car_model: str | None = None,
     analyzer: NaturalFrequencyAnalyzer | None = None,
     settings: NaturalFrequencySettings | None = None,
@@ -983,11 +997,11 @@ def apply_plugin_nu_f_snapshot(
 
 def resolve_plugin_nu_f(
     plugin: TNFRPlugin,
-    record: TelemetryRecord,
+    record: SupportsTelemetrySample,
     *,
     phase: str | None = None,
     phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
-    history: Sequence[TelemetryRecord] | None = None,
+    history: Sequence[SupportsTelemetrySample] | None = None,
     car_model: str | None = None,
     analyzer: NaturalFrequencyAnalyzer | None = None,
     settings: NaturalFrequencySettings | None = None,
@@ -1370,8 +1384,35 @@ class DeltaCalculator:
     """Compute delta metrics relative to a baseline."""
 
     @staticmethod
-    def derive_baseline(records: Sequence[TelemetryRecord]) -> TelemetryRecord:
+    def _resolve_sample_factory(
+        prototype: SupportsTelemetrySample, sample_factory: SampleFactory | None
+    ) -> SampleFactory:
+        if sample_factory is not None:
+            return sample_factory
+
+        sample_type = type(prototype)
+
+        def _default_factory(**payload: object) -> SupportsTelemetrySample:
+            try:
+                return sample_type(**payload)  # type: ignore[call-arg]
+            except TypeError:
+                return TelemetryRecord(**payload)
+
+        return _default_factory
+
+    @staticmethod
+    def derive_baseline(
+        records: Sequence[SupportsTelemetrySample],
+        *,
+        sample_factory: SampleFactory | None = None,
+    ) -> SupportsTelemetrySample:
         """Return a synthetic baseline record representing the average state."""
+
+        if not records:
+            raise ValueError("Cannot derive baseline without telemetry samples")
+
+        prototype = records[0]
+        factory = DeltaCalculator._resolve_sample_factory(prototype, sample_factory)
 
         # Collate the continuous telemetry channels into a single NumPy array so
         # the baseline statistics can be obtained with a single vectorised
@@ -1426,28 +1467,38 @@ class DeltaCalculator:
         gear_values = np.fromiter((record.gear for record in records), dtype=float)
         baseline_kwargs["gear"] = int(np.rint(np.mean(gear_values, axis=0)))
 
-        return TelemetryRecord(
-            timestamp=records[0].timestamp,
-            structural_timestamp=(
-                records[0].structural_timestamp
-                if getattr(records[0], "structural_timestamp", None) is not None
-                else records[0].timestamp
-            ),
-            car_model=getattr(records[0], "car_model", None),
-            track_name=getattr(records[0], "track_name", None),
-            tyre_compound=getattr(records[0], "tyre_compound", None),
+        structural_timestamp = getattr(prototype, "structural_timestamp", None)
+        if structural_timestamp is None or not math.isfinite(structural_timestamp):
+            structural_timestamp = getattr(prototype, "timestamp", 0.0)
+
+        payload: Dict[str, object] = {
+            "timestamp": float(getattr(prototype, "timestamp", 0.0)),
+            "structural_timestamp": float(structural_timestamp),
             **baseline_kwargs,
-        )
+        }
+
+        for optional_field in ("car_model", "track_name", "tyre_compound"):
+            if hasattr(prototype, optional_field):
+                payload[optional_field] = getattr(prototype, optional_field)
+
+        try:
+            baseline = factory(**payload)
+        except TypeError:
+            baseline = TelemetryRecord(**payload)
+        return baseline
 
     @staticmethod
     def resolve_baseline(
-        records: Sequence[TelemetryRecord],
+        records: Sequence[SupportsTelemetrySample],
         *,
         calibration: "CoherenceCalibrationStore" | None = None,
         player_name: str | None = None,
         car_model: str | None = None,
-    ) -> TelemetryRecord:
-        baseline = DeltaCalculator.derive_baseline(records)
+        sample_factory: SampleFactory | None = None,
+    ) -> SupportsTelemetrySample:
+        baseline = DeltaCalculator.derive_baseline(
+            records, sample_factory=sample_factory
+        )
         if calibration is None or not player_name or not car_model:
             return baseline
         resolved = calibration.baseline_for(player_name, car_model, baseline)
@@ -1456,8 +1507,8 @@ class DeltaCalculator:
 
     @staticmethod
     def compute_bundle(
-        record: TelemetryRecord,
-        baseline: TelemetryRecord,
+        record: SupportsTelemetrySample,
+        baseline: SupportsTelemetrySample,
         epi_value: float,
         *,
         prev_integrated_epi: Optional[float] = None,

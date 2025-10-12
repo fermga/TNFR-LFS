@@ -61,6 +61,7 @@ from .interfaces import (
     SupportsEPIBundle,
     SupportsMicrosector,
     SupportsSuspensionNode,
+    SupportsTelemetrySample,
     SupportsTyresNode,
 )
 from ..plugins import TNFRPlugin
@@ -1459,7 +1460,7 @@ def _stage_nodal_metrics(bundles: Sequence[SupportsEPIBundle]) -> Dict[str, obje
 
 
 def _stage_epi_evolution(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     phase_assignments: Mapping[int, str] | None = None,
     phase_weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]] | None = None,

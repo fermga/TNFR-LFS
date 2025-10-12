@@ -15,17 +15,20 @@ _MODULE_EXPORTS: Tuple[Tuple[str, Iterable[str]], ...] = (
             "build_steering_record",
         ),
     ),
-    (
-        "telemetry",
         (
-            "build_calibration_record",
-            "build_contextual_delta_record",
-            "build_dynamic_record",
-            "build_frequency_record",
-            "build_resonance_record",
-            "build_telemetry_record",
+            "telemetry",
+            (
+                "build_calibration_record",
+                "build_contextual_delta_record",
+                "build_dynamic_record",
+                "build_frequency_record",
+                "build_resonance_record",
+                "build_telemetry_record",
+                "clone_protocol_sample",
+                "clone_protocol_series",
+                "ProtocolTelemetrySample",
+            ),
         ),
-    ),
     ("abtest", ("DummyBundle", "build_metrics", "scale_samples")),
     ("constants", ("BASE_NU_F", "SUPPORTED_CAR_MODELS")),
     (
@@ -264,4 +267,7 @@ if TYPE_CHECKING:
         build_frequency_record,
         build_resonance_record,
         build_telemetry_record,
+        clone_protocol_sample,
+        clone_protocol_series,
+        ProtocolTelemetrySample,
     )
