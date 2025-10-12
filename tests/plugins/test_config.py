@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from tnfr_lfs.plugins.config import PluginConfig, PluginConfigError
+from tnfr_lfs.plugins.template import render_plugins_template
 from tests.helpers import build_plugin_config_mapping, write_plugin_config_text
 
 
@@ -38,6 +39,59 @@ def test_plugin_config_from_pyproject_block(
     config.set_profile(None)
     telemetry = config.get_plugin_config("telemetry")
     assert telemetry["flush_interval"] == "3s"
+
+
+def test_from_project_matches_mapping(tmp_path: Path) -> None:
+    mapping = build_plugin_config_mapping(
+        auto_discover=True,
+        plugin_dir="plugins",
+        max_concurrent=4,
+        enabled=["telemetry"],
+        plugins={
+            "telemetry": {
+                "entry_point": "pkg.telemetry:Plugin",
+                "buffer_seconds": 10,
+            },
+            "exporter": {
+                "enabled": False,
+                "entry_point": "pkg.exporter:Plugin",
+            },
+        },
+        profiles={
+            "practice": {
+                "plugins": ["telemetry"],
+                "telemetry": {"enabled": True, "buffer_seconds": 5},
+            }
+        },
+    )
+
+    template_lines = render_plugins_template(mapping).strip().splitlines()
+    pyproject_lines = [
+        f"[tool.tnfr_lfs.{line[1:-1]}]" if line.startswith("[") else line
+        for line in template_lines
+    ]
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text("\n".join(pyproject_lines) + "\n")
+
+    config_from_project = PluginConfig.from_project(
+        pyproject_path, default_profile="practice"
+    )
+    config_from_mapping = PluginConfig.from_mapping(
+        mapping, default_profile="practice", source=pyproject_path
+    )
+
+    assert config_from_project.active_profile == config_from_mapping.active_profile
+    assert config_from_project.auto_discover == config_from_mapping.auto_discover
+    assert config_from_project.max_concurrent == config_from_mapping.max_concurrent
+    assert config_from_project.plugin_dir == config_from_mapping.plugin_dir
+    assert set(config_from_project.enabled_plugins()) == set(
+        config_from_mapping.enabled_plugins()
+    )
+
+    for plugin_name in ("telemetry", "exporter"):
+        assert config_from_project.get_plugin_config(
+            plugin_name
+        ) == config_from_mapping.get_plugin_config(plugin_name)
 
 
 def test_reference_template_matches_canonical_configuration(

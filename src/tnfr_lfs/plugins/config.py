@@ -7,12 +7,15 @@ import logging
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, MutableMapping
+from typing import Any, Callable, Dict, Mapping, MutableMapping, Sequence
 
 try:  # pragma: no cover - Python < 3.11 fallback
     import tomllib  # type: ignore[attr-defined]
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
+
+
+from tnfr_lfs.configuration import load_project_plugins_config
 
 
 logger = logging.getLogger(__name__)
@@ -97,6 +100,34 @@ class PluginConfig:
 
         source_path = Path(source) if source is not None else Path("<memory>")
         return cls(source_path, default_profile=default_profile, _injected_data=data)
+
+    @classmethod
+    def from_project(
+        cls,
+        pyproject_path: Path | None = None,
+        *,
+        default_profile: str | None = None,
+        legacy_candidates: Sequence[Path] | None = None,
+    ) -> "PluginConfig":
+        """Construct a configuration from ``pyproject.toml`` metadata."""
+
+        if pyproject_path is None:
+            pyproject_path = Path.cwd()
+
+        loaded = load_project_plugins_config(
+            pyproject_path, legacy_candidates=legacy_candidates
+        )
+        if loaded is None:
+            raise PluginConfigError(
+                "Unable to locate '[tool.tnfr_lfs.plugins]' in project configuration"
+            )
+
+        mapping, source_path = loaded
+        return cls.from_mapping(
+            mapping,
+            default_profile=default_profile,
+            source=source_path,
+        )
 
     @property
     def path(self) -> Path:
