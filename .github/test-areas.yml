@@ -121,10 +121,14 @@ areas:
       - 'tests/test_cli*.py'
       - '!tests/test_cli_osd.py'
       - 'tests/test_cli_parser.py'
+      - 'tests/test_playbook_rules.py'
+      - 'tests/test_session.py'
     pytest_args:
       - tests/test_cli.py
       - tests/test_cli_io.py
       - tests/test_cli_parser.py
+      - tests/test_playbook_rules.py
+      - tests/test_session.py
   - name: exporters
     display_name: exporters
     filter_globs:
