@@ -445,10 +445,12 @@ through ``PluginConfig.from_project`` so you can manage your plugin inventory,
 discovery rules (``plugin_dir``) and concurrency limits without materialising a
 separate ``plugins.toml`` file.  Profiles continue to live alongside the table
 as ``[tool.tnfr_lfs.profiles.<name>]`` entries, letting you activate exporters,
-UDP bridges or relay workers selectively (the ``racing``/``practice`` profiles
-ship as references).  ``python -m tnfr_lfs.plugins.template`` can still render a
-standalone configuration for external tooling, but the CLI itself always reads
-from ``pyproject.toml``.
+UDP bridges or relay workers selectively.  Shared plugin knobs now live under
+``[tool.tnfr_lfs.profiles.base]`` so derived profiles can declare only their
+overrides by setting ``extends = "base"`` (the bundled ``racing`` and
+``practice`` presets follow that pattern).  ``python -m
+tnfr_lfs.plugins.template`` can still render a standalone configuration for
+external tooling, but the CLI itself always reads from ``pyproject.toml``.
 
 ### Brake thermal proxy modes
 

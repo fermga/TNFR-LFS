@@ -32,6 +32,7 @@ class _ProfileData:
     settings: Dict[str, Any]
     plugins: tuple[str, ...] | None
     overrides: Dict[str, Dict[str, Any]]
+    extends: tuple[str, ...] = ()
 
 
 class PluginConfig:
@@ -351,6 +352,7 @@ class PluginConfig:
         settings.setdefault("max_concurrent", 0)
 
         profiles_data = self._parse_profiles(data.get("profiles"), plugin_configs)
+        profiles_data = self._resolve_profile_inheritance(profiles_data)
 
         # Ensure the global enabled list only references known plugins
         unknown_globally_enabled = globally_enabled - set(plugin_configs.keys())
@@ -381,6 +383,20 @@ class PluginConfig:
                     f"Profile '{profile_name}' must be represented as a table"
                 )
 
+            extends_field = profile_data.get("extends")
+            if extends_field is None:
+                extends: tuple[str, ...] = ()
+            elif isinstance(extends_field, str):
+                extends = (extends_field,)
+            elif isinstance(extends_field, list) and all(
+                isinstance(item, str) for item in extends_field
+            ):
+                extends = tuple(extends_field)
+            else:
+                raise PluginConfigError(
+                    f"'[profiles.{profile_name}].extends' must be a string or an array of profile names"
+                )
+
             plugins_field = profile_data.get("plugins")
             plugins: tuple[str, ...] | None
             if plugins_field is None:
@@ -396,7 +412,7 @@ class PluginConfig:
             overrides: Dict[str, Dict[str, Any]] = {}
 
             for key, value in profile_data.items():
-                if key == "plugins":
+                if key in {"plugins", "extends"}:
                     continue
 
                 if isinstance(value, MutableMapping):
@@ -435,9 +451,74 @@ class PluginConfig:
                         f"'[profiles.{profile_name}.{plugin}].enabled' must be a boolean"
                     )
 
-            profiles[profile_name] = _ProfileData(settings=settings, plugins=plugins, overrides=overrides)
+            profiles[profile_name] = _ProfileData(
+                settings=settings,
+                plugins=plugins,
+                overrides=overrides,
+                extends=extends,
+            )
 
         return profiles
+
+    def _resolve_profile_inheritance(
+        self, profiles: Dict[str, _ProfileData]
+    ) -> Dict[str, _ProfileData]:
+        """Resolve ``extends`` relationships among profiles."""
+
+        resolved: Dict[str, _ProfileData] = {}
+        resolving: set[str] = set()
+
+        def resolve(profile_name: str) -> _ProfileData:
+            if profile_name in resolved:
+                return resolved[profile_name]
+
+            if profile_name in resolving:
+                raise PluginConfigError(
+                    f"Circular inheritance detected while resolving profile '{profile_name}'"
+                )
+
+            resolving.add(profile_name)
+            profile = profiles[profile_name]
+
+            merged_settings: Dict[str, Any] = {}
+            merged_plugins: tuple[str, ...] | None = None
+            merged_overrides: Dict[str, Dict[str, Any]] = {}
+
+            for parent_name in profile.extends:
+                if parent_name not in profiles:
+                    raise PluginConfigError(
+                        f"Profile '{profile_name}' extends unknown profile '{parent_name}'"
+                    )
+                parent = resolve(parent_name)
+                merged_settings = self._merge_dicts(merged_settings, parent.settings)
+                if parent.plugins is not None:
+                    merged_plugins = parent.plugins
+                for plugin_name, override in parent.overrides.items():
+                    merged_overrides[plugin_name] = copy.deepcopy(override)
+
+            merged_settings = self._merge_dicts(merged_settings, profile.settings)
+            if profile.plugins is not None:
+                merged_plugins = profile.plugins
+
+            for plugin_name, override in profile.overrides.items():
+                base_override = merged_overrides.get(plugin_name, {})
+                merged_overrides[plugin_name] = self._merge_dicts(base_override, override)
+
+            resolving.remove(profile_name)
+
+            resolved_profile = _ProfileData(
+                settings=merged_settings,
+                plugins=merged_plugins,
+                overrides=merged_overrides,
+                extends=(),
+            )
+            resolved[profile_name] = resolved_profile
+            return resolved_profile
+
+        for name in profiles:
+            resolve(name)
+
+        return resolved
 
     def _resolve_setting(self, key: str, default: Any) -> Any:
         value = self._settings.get(key, default)
