@@ -21,7 +21,7 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from statistics import mean, pstdev
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple, cast
 
 from .epi import (
     DEFAULT_PHASE_WEIGHTS,
@@ -53,7 +53,13 @@ from .operator_detection import (
     detect_silence,
     silence_event_payloads,
 )
-from .operators import mutation_operator, recursivity_operator
+from .operators import (
+    RecursivityMicroStateSnapshot,
+    RecursivityOperatorResult,
+    RecursivityStateRoot,
+    mutation_operator,
+    recursivity_operator,
+)
 from .phases import (
     LEGACY_PHASE_MAP,
     PHASE_SEQUENCE,
@@ -258,7 +264,7 @@ def segment_microsectors(
     records: Sequence[TelemetryRecord],
     bundles: Sequence[EPIBundle],
     *,
-    operator_state: MutableMapping[str, Dict[str, Dict[str, object]]] | None = None,
+    operator_state: MutableMapping[str, Mapping[str, object]] | None = None,
     recursion_decay: float = 0.4,
     mutation_thresholds: Mapping[str, float] | None = None,
     phase_weight_overrides: Mapping[str, Mapping[str, float] | float] | None = None,
@@ -303,10 +309,15 @@ def segment_microsectors(
     context_matrix = load_context_matrix()
     bundle_list = list(bundles)
     microsectors: List[Microsector] = []
-    rec_state_root: MutableMapping[str, Dict[str, object]] | None = None
+    rec_state_root: RecursivityStateRoot | None = None
     mutation_state: MutableMapping[str, Dict[str, object]] | None = None
     if operator_state is not None:
-        rec_state_root = operator_state.setdefault("recursivity", {})
+        rec_state_root = cast(
+            RecursivityStateRoot,
+            operator_state.setdefault(
+                "recursivity", cast(RecursivityStateRoot, {})
+            ),
+        )
         mutation_state = operator_state.setdefault("mutation", {})
     thresholds = mutation_thresholds or {}
     phase_assignments: Dict[int, PhaseLiteral] = {}
@@ -855,13 +866,16 @@ def segment_microsectors(
             }
             measures.update(brake_temperatures)
             measures.update(brake_temperature_std)
-            rec_info = recursivity_operator(
+            # The recursivity operator returns a structured payload describing
+            # the live session and the current microsector snapshot.
+            rec_info: RecursivityOperatorResult = recursivity_operator(
                 rec_state_root,
                 session_components,
                 str(index),
                 measures,
                 decay=recursion_decay,
             )
+            rec_phase = rec_info["phase"] or active_goal.phase
             entropy_value = _estimate_entropy(records, start, end)
             triggers = {
                 "microsector_id": str(index),
@@ -871,7 +885,7 @@ def segment_microsectors(
                 "entropy": entropy_value,
                 "style_index": rec_info["filtered"].get("style_index", avg_si),
                 "style_reference": avg_si,
-                "phase": rec_info.get("phase", active_goal.phase),
+                "phase": rec_phase,
                 "dynamic_conditions": brake_event or support_event,
             }
             mutation_info = mutation_operator(
@@ -908,10 +922,10 @@ def segment_microsectors(
                     },
                     decay=recursion_decay,
                 )
-            micro_state_entry = rec_info.get("state", {})
+            micro_state_entry: RecursivityMicroStateSnapshot = rec_info["state"]
             filtered_snapshot = {
                 key: float(value)
-                for key, value in (micro_state_entry.get("filtered", {}) or {}).items()
+                for key, value in micro_state_entry["filtered"].items()
                 if isinstance(value, (int, float))
             }
             filtered_measures.update(filtered_snapshot)
@@ -960,7 +974,7 @@ def segment_microsectors(
                     )
                     for trace_key, trace_value in trace_entry.items()
                 }
-                for trace_entry in micro_state_entry.get("trace", ())
+                for trace_entry in micro_state_entry["trace"]
             )
             mutation_details = {
                 key: (
