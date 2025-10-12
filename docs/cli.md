@@ -440,12 +440,16 @@ the remaining caches, including the setup recommender.
 
 When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config/global.toml`` together with ``data/cars`` and ``data/profiles``) the CLI resolves car metadata and TNFR objectives from that bundle. The ``--pack-root`` flag overrides the configured value for a single invocation.
 
-Plugin scaffolding ships with the repository under ``config/plugins.toml``.  The
-file documents the discovery rules (``plugin_dir``), execution limits and
-per-plugin flags used by the CLI helpers.  Copy it to your own configuration
-packs when you want to toggle exporters, UDP bridges or relay workers per
-profile (``profiles.racing`` and ``profiles.practice`` illustrate typical
-overrides).
+Plugin scaffolding now lives in ``pyproject.toml`` under the
+``[tool.tnfr_lfs.plugins]`` table.  The block mirrors the legacy
+``config/plugins.toml`` template, so you can edit your plugin inventory,
+discovery rules (``plugin_dir``) and concurrency limits without keeping a
+separate file.  Profiles continue to live alongside that table as
+``[tool.tnfr_lfs.profiles.<name>]`` entries, letting you activate exporters,
+UDP bridges or relay workers selectively (the ``racing``/``practice`` profiles
+ship as references).  The original ``config/plugins.toml`` remains in the
+repository purely as a sample should you prefer copying the layout into custom
+configuration packs.
 
 ### Brake thermal proxy modes
 

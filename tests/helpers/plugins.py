@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -50,6 +51,44 @@ def write_plugin_config_text(base_directory: Path, content: str) -> Path:
     config_path = base_directory / "plugins.toml"
     config_path.write_text(textwrap.dedent(content))
     return config_path
+
+
+def build_plugin_config_mapping(
+    *,
+    auto_discover: bool = True,
+    plugin_dir: str | Path | None = None,
+    max_concurrent: int = 0,
+    enabled: Sequence[str] | None = None,
+    plugins: Mapping[str, Mapping[str, Any]] | None = None,
+    profiles: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Construct an in-memory representation of ``plugins.toml`` data."""
+
+    plugin_settings: dict[str, Any] = {
+        "auto_discover": auto_discover,
+        "max_concurrent": max_concurrent,
+    }
+
+    if plugin_dir is not None:
+        plugin_settings["plugin_dir"] = (
+            plugin_dir.as_posix() if isinstance(plugin_dir, Path) else plugin_dir
+        )
+
+    if enabled is not None:
+        plugin_settings["enabled"] = list(enabled)
+
+    if plugins:
+        for name, settings in plugins.items():
+            plugin_settings[name] = copy.deepcopy(dict(settings))
+
+    mapping: dict[str, Any] = {"plugins": plugin_settings}
+
+    if profiles:
+        mapping["profiles"] = {
+            name: copy.deepcopy(dict(settings)) for name, settings in profiles.items()
+        }
+
+    return mapping
 
 
 def write_plugin_module(
@@ -179,23 +218,18 @@ def write_plugin_manager_config(
         The path to the generated TOML configuration.
     """
 
-    plugins_table: dict[str, Any] = {
-        "auto_discover": auto_discover,
-        "max_concurrent": max_concurrent,
-    }
-    if plugin_dir is not None:
-        plugins_table["plugin_dir"] = plugin_dir.as_posix()
-    if plugins:
-        for name, settings in plugins.items():
-            plugins_table[name] = dict(settings)
-
-    profiles_table: dict[str, Any] | None = None
-    if profiles:
-        profiles_table = {name: dict(settings) for name, settings in profiles.items()}
+    mapping = build_plugin_config_mapping(
+        auto_discover=auto_discover,
+        plugin_dir=plugin_dir,
+        max_concurrent=max_concurrent,
+        plugins=plugins,
+        profiles=profiles,
+    )
 
     lines: list[str] = []
-    _emit_toml_table(lines, "plugins", plugins_table)
+    _emit_toml_table(lines, "plugins", mapping["plugins"])
 
+    profiles_table = mapping.get("profiles")
     if profiles_table:
         if lines and lines[-1] != "":
             lines.append("")

@@ -70,6 +70,7 @@ _MODULE_EXPORTS: Tuple[Tuple[str, Iterable[str]], ...] = (
         (
             "plugin_registry_state",
             "write_plugin_config_text",
+            "build_plugin_config_mapping",
             "write_plugin_manager_config",
             "write_plugin_module",
         ),

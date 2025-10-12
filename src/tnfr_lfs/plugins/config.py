@@ -7,7 +7,7 @@ import logging
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, MutableMapping
+from typing import Any, Callable, Dict, Mapping, MutableMapping
 
 try:  # pragma: no cover - Python < 3.11 fallback
     import tomllib  # type: ignore[attr-defined]
@@ -34,7 +34,13 @@ class _ProfileData:
 class PluginConfig:
     """Load, validate and expose plugin configuration information."""
 
-    def __init__(self, path: str | Path, *, default_profile: str | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        default_profile: str | None = None,
+        _injected_data: Mapping[str, Any] | None = None,
+    ) -> None:
         self._path = Path(path)
         self._lock = threading.RLock()
         self._raw: Dict[str, Any] = {}
@@ -43,6 +49,20 @@ class PluginConfig:
         self._profiles: Dict[str, _ProfileData] = {}
         self._globally_enabled: set[str] = set()
         self._active_profile: str | None = None
+        self._injected_data: Mapping[str, Any] | None = _injected_data
+        self._data_loader: Callable[[], Dict[str, Any]] = self._read_file
+        self._uses_injected_data = _injected_data is not None
+
+        if self._uses_injected_data:
+            self._data_loader = self._load_injected_data
+
+        if self._uses_injected_data:
+            if self._path == Path("<memory>"):
+                self._source_description = "in-memory mapping"
+            else:
+                self._source_description = f"in-memory mapping ({self._path})"
+        else:
+            self._source_description = f"'{self._path}'"
 
         self.reload_config(initial=True)
 
@@ -52,6 +72,32 @@ class PluginConfig:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+    @classmethod
+    def from_mapping(
+        cls,
+        data: Mapping[str, Any],
+        *,
+        default_profile: str | None = None,
+        source: str | Path | None = None,
+    ) -> "PluginConfig":
+        """Construct a configuration instance from ``data``.
+
+        Parameters
+        ----------
+        data:
+            Mapping containing the configuration structure as if it were parsed
+            from ``plugins.toml``.
+        default_profile:
+            Optional profile name to activate after validation.
+        source:
+            Optional path describing the origin of ``data``. When provided it is
+            used for relative path resolution (``plugin_dir``) and logging. If
+            omitted, a placeholder ``"<memory>"`` path is used.
+        """
+
+        source_path = Path(source) if source is not None else Path("<memory>")
+        return cls(source_path, default_profile=default_profile, _injected_data=data)
+
     @property
     def path(self) -> Path:
         """Return the resolved configuration file path."""
@@ -130,10 +176,12 @@ class PluginConfig:
 
         with self._lock:
             try:
-                new_raw = self._read_file()
+                new_raw = self._data_loader()
                 new_settings, new_plugins, new_profiles, new_enabled = self._validate(new_raw)
             except PluginConfigError:
-                logger.exception("Failed to parse plugin configuration from '%s'", self._path)
+                logger.exception(
+                    "Failed to parse plugin configuration from %s", self._source_description
+                )
                 if initial:
                     raise
                 return
@@ -151,7 +199,7 @@ class PluginConfig:
                 )
                 self._active_profile = None
 
-            logger.info("Reloaded plugin configuration from '%s'", self._path)
+            logger.info("Reloaded plugin configuration from %s", self._source_description)
 
     def get_plugin_config(self, plugin_name: str) -> Dict[str, Any]:
         """Return the merged configuration for ``plugin_name`` respecting profiles."""
@@ -204,6 +252,15 @@ class PluginConfig:
                 return tomllib.load(stream)
         except (OSError, tomllib.TOMLDecodeError) as exc:  # type: ignore[attr-defined]
             raise PluginConfigError("Unable to load plugin configuration") from exc
+
+    def _load_injected_data(self) -> Dict[str, Any]:
+        if self._injected_data is None:
+            raise PluginConfigError("Injected configuration is not available")
+
+        if not isinstance(self._injected_data, Mapping):
+            raise PluginConfigError("Injected configuration must be a mapping")
+
+        return copy.deepcopy(dict(self._injected_data))
 
     def _validate(
         self, data: Mapping[str, Any]
