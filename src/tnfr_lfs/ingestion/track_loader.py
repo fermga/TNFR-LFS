@@ -14,7 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 from .._pack_resources import data_root, modifiers_root
-from ..utils.immutables import _freeze_dict, _freeze_value
+from ..common.immutables import _freeze_dict, _freeze_value
 
 
 _DATA_ROOT = data_root()

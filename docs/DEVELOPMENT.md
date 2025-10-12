@@ -53,6 +53,18 @@ type-check, and test jobs. The `make quickstart` pipeline executes on merges to 
 `examples/` tree changes, so example scenarios stay covered without running the heavier simulation for
 purely editorial branches.
 
+
+## Module layout
+
+Utility helpers previously grouped under `tnfr_lfs.utils` now live in themed packages. Import from the new locations to avoid deprecation warnings and future breakage:
+
+- `tnfr_lfs.common.immutables` for immutable container helpers.
+- `tnfr_lfs.logging.config` for logging configuration helpers.
+- `tnfr_lfs.math.conversions` for numeric coercion utilities.
+- `tnfr_lfs.visualization.sparkline` for sparkline rendering.
+
+The legacy `tnfr_lfs.utils` package remains as a compatibility shim that re-exports these modules while emitting `DeprecationWarning`. Update imports in new code to the themed packages.
+
 ## Reference dataset
 
 The quickstart flow and the integration tests depend on the capture `src/tnfr_lfs/pack/data/test1.raf` and on the bundle `src/tnfr_lfs/pack/data/test1.zip` exported from Replay Analyzer. Both artefacts live inside the packaged resources (`tnfr_lfs._pack_resources.data_root()`) and contain real Live for Speed telemetry, serving as reference datasets for the binary ingestion flows, regression tests, and CLI tutorials.

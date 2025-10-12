@@ -21,7 +21,7 @@ from ..analysis.brake_thermal import (
     merge_brake_config,
 )
 from ..core.epi import EPIExtractor, EPIBundle, TelemetryRecord
-from ..utils.numeric import _safe_float
+from ..math.conversions import _safe_float
 from .outsim_udp import OutSimPacket, OutSimWheelState
 from .outgauge_udp import OutGaugePacket
 
