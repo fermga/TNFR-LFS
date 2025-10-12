@@ -10,6 +10,7 @@ from textwrap import dedent
 from pathlib import Path
 from types import SimpleNamespace
 
+import logging
 import pytest
 
 from tnfr_lfs.cli import compare as compare_module
@@ -814,6 +815,40 @@ def test_analyze_pipeline_json_export(
         assert Path(thermal_entry["path"]).exists()
         assert "temperature" in thermal_entry["data"]
         assert "pressure" in thermal_entry["data"]
+
+
+def test_analyze_debug_logging_safe(
+    tmp_path: Path,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline_path = tmp_path / "baseline.jsonl"
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(baseline_path),
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+
+    original_level = workflows_module.logger.level
+    workflows_module.logger.setLevel(logging.DEBUG)
+    try:
+        result = run_cli_in_tmp(
+            [
+                "analyze",
+                str(baseline_path),
+            ],
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+        )
+    finally:
+        workflows_module.logger.setLevel(original_level)
+
+    assert isinstance(result, str)
 
 
 def test_analyze_reports_note_missing_tyre_data(

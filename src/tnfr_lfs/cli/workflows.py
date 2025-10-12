@@ -2591,13 +2591,14 @@ def _handle_analyze(namespace: argparse.Namespace, *, config: Mapping[str, Any])
     pack_root = pack_context.pack_root
     track_selection = resolve_track_argument(None, config, pack_root=pack_root)
     track_name = track_selection.name or default_track_name(config)
+    track_session = getattr(track_selection, "session", None)
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
             "Resolved track context",
             extra={
                 "car_model": car_model,
                 "track_name": track_name,
-                "has_session": track_selection.session is not None,
+                "has_session": track_session is not None,
             },
         )
     profiles_ctx = pack_context.profiles_ctx
