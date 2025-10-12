@@ -51,11 +51,11 @@ def test_brake_thermal_estimator_heats_and_cools() -> None:
 def test_telemetry_fusion_uses_packaged_resources(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from tnfr_lfs import _pack_resources
+    from tnfr_lfs import resources
 
     pack_root = create_brake_thermal_pack(tmp_path / "pack")
 
-    _pack_resources.set_pack_root_override(pack_root)
+    resources.set_pack_root_override(pack_root)
     ingestion_mod = importlib.import_module("tnfr_lfs.ingestion.live")
     fusion_mod = importlib.import_module(ingestion_mod.TelemetryFusion.__module__)
     importlib.reload(fusion_mod)
@@ -68,7 +68,7 @@ def test_telemetry_fusion_uses_packaged_resources(
     try:
         ingestion_module.TelemetryFusion()  # should locate packaged resources without cwd data
     finally:
-        _pack_resources.set_pack_root_override(None)
+        resources.set_pack_root_override(None)
         importlib.reload(fusion_mod)
 def test_fusion_brake_proxy_fills_missing_outgauge(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TNFR_LFS_BRAKE_THERMAL", raising=False)

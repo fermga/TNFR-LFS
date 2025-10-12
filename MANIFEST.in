@@ -1,4 +1,4 @@
-recursive-include src/tnfr_lfs/pack/data *
-recursive-include src/tnfr_lfs/pack/config *
-recursive-include src/tnfr_lfs/pack/modifiers *
+recursive-include src/tnfr_lfs/resources/data *
+recursive-include src/tnfr_lfs/resources/config *
+recursive-include src/tnfr_lfs/resources/modifiers *
 include config/plugins.toml

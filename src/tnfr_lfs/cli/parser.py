@@ -55,7 +55,7 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         default=None,
         help=(
             "Root directory of a TNFR × LFS pack containing config/ and data/. "
-            "Overrides paths.pack_root."
+            "Overrides resources.pack_root."
         ),
     )
     parser.add_argument(

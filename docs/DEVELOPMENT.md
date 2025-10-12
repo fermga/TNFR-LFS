@@ -20,7 +20,7 @@ pytest
 
 - `ruff` enforces the code-style and cleanliness rules defined in `pyproject.toml`.
 - `mypy --strict` analyses `tnfr_lfs` and the rest of the declared typing targets (including the tests and examples helper). If you need to pass the paths explicitly run `mypy --strict src tests`; note that strict analysis across the whole package takes longer than the reduced subset.
-- `pytest` runs the unit and integration test suite, including verification for the example datasets `src/tnfr_lfs/pack/data/test1.raf` and `src/tnfr_lfs/pack/data/test1.zip`.
+- `pytest` runs the unit and integration test suite, including verification for the example datasets `src/tnfr_lfs/resources/data/test1.raf` and `src/tnfr_lfs/resources/data/test1.zip`.
 
 ### Pre-commit hooks
 
@@ -67,7 +67,7 @@ The legacy `tnfr_lfs.utils` package remains as a compatibility shim that re-expo
 
 ## Reference dataset
 
-The quickstart flow and the integration tests depend on the capture `src/tnfr_lfs/pack/data/test1.raf` and on the bundle `src/tnfr_lfs/pack/data/test1.zip` exported from Replay Analyzer. Both artefacts live inside the packaged resources (`tnfr_lfs._pack_resources.data_root()`) and contain real Live for Speed telemetry, serving as reference datasets for the binary ingestion flows, regression tests, and CLI tutorials.
+The quickstart flow and the integration tests depend on the capture `src/tnfr_lfs/resources/data/test1.raf` and on the bundle `src/tnfr_lfs/resources/data/test1.zip` exported from Replay Analyzer. Both artefacts live inside the packaged resources (`tnfr_lfs.resources.data_root()`) and contain real Live for Speed telemetry, serving as reference datasets for the binary ingestion flows, regression tests, and CLI tutorials.
 
 ## Performance regression benchmark
 
@@ -82,7 +82,7 @@ python -m benchmarks.delta_cache_benchmark
 make benchmark-delta-cache
 ```
 
-The script loads `src/tnfr_lfs/pack/data/test1.zip` through `ReplayCSVBundleReader`, iterates over the telemetry,
+The script loads `src/tnfr_lfs/resources/data/test1.zip` through `ReplayCSVBundleReader`, iterates over the telemetry,
 and times ΔNFR and ν_f computations with the caches disabled versus the same workload with the
 LRU layers warm.【F:benchmarks/delta_cache_benchmark.py†L1-L174】 The default configuration processes
 128 samples twice per run (three measured repeats) and currently reports ≈0.0106 s per uncached pass

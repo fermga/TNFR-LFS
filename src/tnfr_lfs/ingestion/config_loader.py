@@ -14,7 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
 
-from .._pack_resources import data_root
+from ..resources import data_root
 from ..core.cache_settings import CacheOptions
 from ..common.immutables import _freeze_dict, _freeze_value
 

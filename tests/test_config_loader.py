@@ -22,7 +22,7 @@ from tnfr_lfs.ingestion.config_loader import (
     resolve_targets,
     _deep_merge,
 )
-from tnfr_lfs._pack_resources import data_root
+from tnfr_lfs.resources import data_root
 from tests.helpers import MINIMAL_DATA_CAR, create_config_pack, pack_builder
 
 
@@ -121,13 +121,13 @@ def test_parse_cache_options_supports_legacy_cache_section() -> None:
 
 
 def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
-    from tnfr_lfs import _pack_resources
+    from tnfr_lfs import resources
 
     builder = pack_builder(tmp_path / "pack")
     builder.add_config("")
     builder.ensure_dir("data")
 
-    _pack_resources.set_pack_root_override(builder.root)
+    resources.set_pack_root_override(builder.root)
     config_loader_module = importlib.import_module("tnfr_lfs.ingestion.config_loader")
     try:
         config_loader = importlib.reload(config_loader_module)
@@ -137,17 +137,17 @@ def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
         assert options.recommender_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
         assert options.telemetry_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
     finally:
-        _pack_resources.set_pack_root_override(None)
+        resources.set_pack_root_override(None)
         importlib.reload(config_loader_module)
 
 
 def test_load_cars_uses_packaged_resources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from tnfr_lfs import _pack_resources
+    from tnfr_lfs import resources
 
     builder = pack_builder(tmp_path / "pack")
     builder.add_car("AAA", MINIMAL_DATA_CAR, in_data=True)
 
-    _pack_resources.set_pack_root_override(builder.root)
+    resources.set_pack_root_override(builder.root)
     config_loader_module = importlib.import_module("tnfr_lfs.ingestion.config_loader")
     config_loader = importlib.reload(config_loader_module)
 
@@ -157,7 +157,7 @@ def test_load_cars_uses_packaged_resources(monkeypatch: pytest.MonkeyPatch, tmp_
     try:
         cars = config_loader.load_cars()
     finally:
-        _pack_resources.set_pack_root_override(None)
+        resources.set_pack_root_override(None)
         importlib.reload(config_loader_module)
 
     assert set(cars) == {"AAA"}

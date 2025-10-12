@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tnfr_lfs._pack_resources import data_root
+from tnfr_lfs.resources import data_root
 
 _DATASET_NAME = "BL1_XFG_baseline.csv"
 

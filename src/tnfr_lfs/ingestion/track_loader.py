@@ -13,7 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
 
-from .._pack_resources import data_root, modifiers_root
+from ..resources import data_root, modifiers_root
 from ..common.immutables import _freeze_dict, _freeze_value
 
 

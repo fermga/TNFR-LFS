@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from tnfr_lfs.ingestion.offline import ReplayCSVBundleReader
-from tnfr_lfs._pack_resources import data_root
+from tnfr_lfs.resources import data_root
 from tests.helpers import (
     is_numeric_series,
     is_numeric_value,

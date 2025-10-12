@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
-from tnfr_lfs._pack_resources import data_root
+from tnfr_lfs.resources import data_root
 from tnfr_lfs.core.cache import (
     clear_delta_cache,
     clear_dynamic_cache,

@@ -4,10 +4,10 @@ quickstart:
 	./examples/quickstart.sh
 
 install:
-        pip install .
+	pip install .
 
 dev-install:
-        pip install .[dev]
+	pip install .[dev]
 
 benchmark-delta-cache:
 	python -m benchmarks.delta_cache_benchmark
