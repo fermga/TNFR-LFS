@@ -26,8 +26,30 @@ jobs:
       recommender: ${{ steps.filter.outputs.recommender }}
       plugins: ${{ steps.filter.outputs.plugins }}
       docs: ${{ steps.filter.outputs.docs }}
-      pytest_matrix: ${{ steps.pytest-matrix.outputs.matrix }}
-      pytest_summary: ${{ steps.pytest-matrix.outputs.summary }}
+      pytest_any: ${{
+        steps.filter.outputs.analysis == 'true' ||
+        steps.filter.outputs.core_pkg == 'true' ||
+        steps.filter.outputs.cli == 'true' ||
+        steps.filter.outputs.exporters == 'true' ||
+        steps.filter.outputs.ingestion == 'true' ||
+        steps.filter.outputs.io == 'true' ||
+        steps.filter.outputs.processing == 'true' ||
+        steps.filter.outputs.recommender == 'true' ||
+        steps.filter.outputs.plugins == 'true'
+      }}
+      pytest_full: ${{
+        github.ref == 'refs/heads/main' || (
+          steps.filter.outputs.analysis != 'true' &&
+          steps.filter.outputs.core_pkg != 'true' &&
+          steps.filter.outputs.cli != 'true' &&
+          steps.filter.outputs.exporters != 'true' &&
+          steps.filter.outputs.ingestion != 'true' &&
+          steps.filter.outputs.io != 'true' &&
+          steps.filter.outputs.processing != 'true' &&
+          steps.filter.outputs.recommender != 'true' &&
+          steps.filter.outputs.plugins != 'true'
+        )
+      }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -107,131 +129,80 @@ jobs:
               - 'docs/**'
               - '**/*.md'
 
-      - name: Generate pytest matrix
-        id: pytest-matrix
-        env:
-          ON_MAIN: ${{ github.ref == 'refs/heads/main' }}
-          CHANGED_CORE: ${{ steps.filter.outputs.core_pkg }}
-          CHANGED_ANALYSIS: ${{ steps.filter.outputs.analysis }}
-          CHANGED_CLI: ${{ steps.filter.outputs.cli }}
-          CHANGED_EXPORTERS: ${{ steps.filter.outputs.exporters }}
-          CHANGED_INGESTION: ${{ steps.filter.outputs.ingestion }}
-          CHANGED_IO: ${{ steps.filter.outputs.io }}
-          CHANGED_PROCESSING: ${{ steps.filter.outputs.processing }}
-          CHANGED_RECOMMENDER: ${{ steps.filter.outputs.recommender }}
-          CHANGED_PLUGINS: ${{ steps.filter.outputs.plugins }}
-        run: |
-          python <<'PY'
-          import json
-          import os
-
-          area_flags = {
-              "analysis": os.getenv("CHANGED_ANALYSIS") == "true",
-              "core": os.getenv("CHANGED_CORE") == "true",
-              "cli": os.getenv("CHANGED_CLI") == "true",
-              "exporters": os.getenv("CHANGED_EXPORTERS") == "true",
-              "ingestion": os.getenv("CHANGED_INGESTION") == "true",
-              "io": os.getenv("CHANGED_IO") == "true",
-              "processing": os.getenv("CHANGED_PROCESSING") == "true",
-              "recommender": os.getenv("CHANGED_RECOMMENDER") == "true",
-              "plugins": os.getenv("CHANGED_PLUGINS") == "true",
-          }
-
-          area_to_targets = {
-              "analysis": [
-                  "tests/test_analysis_*.py",
-                  "tests/analysis",
-              ],
-              "core": [
-                  "tests/test_core_*.py",
-                  "tests/test_coherence*.py",
-                  "tests/test_contextual_delta.py",
-                  "tests/test_metrics.py",
-                  "tests/test_operator_detection.py",
-                  "tests/test_phase_alias_deprecations.py",
-                  "tests/test_resonance.py",
-                  "tests/test_segmentation.py",
-                  "tests/test_structural_time.py",
-                  "tests/test_epi.py",
-              ],
-              "cli": [
-                  "tests/test_cli.py",
-                  "tests/test_cli_*.py",
-                  "tests/test_cli_parser.py",
-              ],
-              "exporters": [
-                  "tests/test_*exporter*.py",
-                  "tests/test_replay_csv_bundle.py",
-              ],
-              "ingestion": [
-                  "tests/test_ingestion.py",
-                  "tests/test_outgauge_udp.py",
-                  "tests/test_outsim_udp.py",
-                  "tests/test_insim.py",
-                  "tests/test_track_loader.py",
-                  "tests/ingestion",
-              ],
-              "io": [
-                  "tests/test_io_*.py",
-                  "tests/test_cli_io.py",
-              ],
-              "processing": [
-                  "tests/test_processing.py",
-              ],
-              "recommender": [
-                  "tests/test_recommender*.py",
-                  "tests/test_recommender_search_cache.py",
-              ],
-              "plugins": [
-                  "tests/plugins",
-                  "tests/test_cli_osd.py",
-              ],
-          }
-
-          on_main = os.getenv("ON_MAIN") == "true"
-          selected_areas = [area for area, changed in area_flags.items() if changed]
-
-          includes = []
-          summary_lines = []
-
-          if on_main:
-              includes.append({"area": "full", "pytest_args": ""})
-              summary_lines.append("main branch -> run full suite")
-          elif not selected_areas:
-              includes.append({"area": "full", "pytest_args": ""})
-              summary_lines.append("no targeted area detected -> run full suite")
-          else:
-              for area in selected_areas:
-                  targets = area_to_targets.get(area, [])
-                  if targets:
-                      args = " ".join(targets)
-                      includes.append({"area": area, "pytest_args": args})
-                      summary_lines.append(f"{area} -> {args}")
-                  else:
-                      summary_lines.append(f"{area} -> no explicit targets; run full suite")
-
-              if not includes:
-                  includes.append({"area": "full", "pytest_args": ""})
-                  summary_lines.append("areas with no explicit targets -> run full suite")
-
-          matrix = {"include": includes}
-
-          output_path = os.environ["GITHUB_OUTPUT"]
-          with open(output_path, "a", encoding="utf-8") as fh:
-              fh.write(f"matrix={json.dumps(matrix)}\n")
-              fh.write("summary<<EOF\n")
-              fh.write("\n".join(summary_lines) + "\n")
-              fh.write("EOF\n")
-          PY
 
   test:
     needs: detect-changes
     if: >-
-      needs.detect-changes.outputs.core == 'true' ||
-      github.ref == 'refs/heads/main'
+      (needs.detect-changes.outputs.pytest_full == 'true' ||
+      needs.detect-changes.outputs.pytest_any == 'true') &&
+      matrix.enabled
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJson(needs.detect-changes.outputs.pytest_matrix) }}
+      matrix:
+        include:
+          # When adding a new pytest area:
+          #   1. Declare the matching filter above so dorny/paths-filter exposes an output.
+          #   2. Add a single include entry here with the area name, pytest args, and enable check.
+          # This keeps change detection and matrix expansion in sync without duplicating logic elsewhere.
+          - area: full
+            pytest_args: ""
+            enabled: ${{ needs.detect-changes.outputs.pytest_full == 'true' }}
+          - area: analysis
+            pytest_args: >-
+              tests/test_analysis_*.py
+              tests/analysis
+            enabled: ${{ needs.detect-changes.outputs.analysis == 'true' }}
+          - area: core
+            pytest_args: >-
+              tests/test_core_*.py
+              tests/test_coherence*.py
+              tests/test_contextual_delta.py
+              tests/test_metrics.py
+              tests/test_operator_detection.py
+              tests/test_phase_alias_deprecations.py
+              tests/test_resonance.py
+              tests/test_segmentation.py
+              tests/test_structural_time.py
+              tests/test_epi.py
+            enabled: ${{ needs.detect-changes.outputs.core_pkg == 'true' }}
+          - area: cli
+            pytest_args: >-
+              tests/test_cli.py
+              tests/test_cli_*.py
+              tests/test_cli_parser.py
+            enabled: ${{ needs.detect-changes.outputs.cli == 'true' }}
+          - area: exporters
+            pytest_args: >-
+              tests/test_*exporter*.py
+              tests/test_replay_csv_bundle.py
+            enabled: ${{ needs.detect-changes.outputs.exporters == 'true' }}
+          - area: ingestion
+            pytest_args: >-
+              tests/test_ingestion.py
+              tests/test_outgauge_udp.py
+              tests/test_outsim_udp.py
+              tests/test_insim.py
+              tests/test_track_loader.py
+              tests/ingestion
+            enabled: ${{ needs.detect-changes.outputs.ingestion == 'true' }}
+          - area: io
+            pytest_args: >-
+              tests/test_io_*.py
+              tests/test_cli_io.py
+            enabled: ${{ needs.detect-changes.outputs.io == 'true' }}
+          - area: processing
+            pytest_args: tests/test_processing.py
+            enabled: ${{ needs.detect-changes.outputs.processing == 'true' }}
+          - area: recommender
+            pytest_args: >-
+              tests/test_recommender*.py
+              tests/test_recommender_search_cache.py
+            enabled: ${{ needs.detect-changes.outputs.recommender == 'true' }}
+          - area: plugins
+            pytest_args: >-
+              tests/plugins
+              tests/test_cli_osd.py
+            enabled: ${{ needs.detect-changes.outputs.plugins == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -249,13 +220,15 @@ jobs:
       - name: Mypy
         run: mypy --strict
       - name: Publish pytest selection
-        if: ${{ strategy.job-index == 0 && needs.detect-changes.outputs.pytest_summary != '' }}
         env:
-          PYTEST_SELECTION_SUMMARY: ${{ needs.detect-changes.outputs.pytest_summary }}
+          PYTEST_ARGS: ${{ matrix.pytest_args }}
+          PYTEST_AREA: ${{ matrix.area }}
         run: |
-          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
-          ${PYTEST_SELECTION_SUMMARY}
-          EOF
+          if [[ -z "$PYTEST_ARGS" ]]; then
+            echo "* **${PYTEST_AREA}** → full suite" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "* **${PYTEST_AREA}** → ${PYTEST_ARGS}" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Pytest
         env:
           PYTEST_ARGS: ${{ matrix.pytest_args }}
