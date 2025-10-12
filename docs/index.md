@@ -24,32 +24,79 @@ clients and fusion helpers end-to-end.【F:tests/test_ingestion.py†L1-L376】
 
 ## Installation
 
-Install the toolkit (including its scientific dependencies
-`numpy>=1.24,<2.0` and `pandas>=1.5,<3.0`) with:
+TNFR × LFS targets Python 3.9+ environments with the scientific stack that
+supports the analytics pipeline.
+
+### Prerequisites
+
+- Python 3.9 or later available on ``PATH``.
+- ``numpy>=1.24,<2.0`` and ``pandas>=1.5,<3.0``.
+- The bundled telemetry samples (or your own datasets) placed under
+  ``src/tnfr_lfs/resources/data/`` when you need to override the defaults.
+
+### Environment setup
+
+The minimal setup installs the CLI and examples:
+
+```bash
+pip install .
+```
+
+Add the developer tooling with extras when you need the full verification flow:
 
 ```bash
 pip install .[dev]
 ```
 
-If your environment cannot consume pre-built wheels, ensure build tools for
-NumPy and pandas are available before running the verification pipeline.
+Optional extras such as ``spectral`` enable the Goertzel helper used in the
+benchmark suite:
+
+```bash
+pip install .[spectral]
+```
+
+Reusable Makefile targets mirror those commands for convenience:
+
+```bash
+make install      # base dependencies only
+make dev-install  # base + development tooling
+```
+
+Editable installs are supported via ``pip install -e .``; combine extras as
+needed, for example ``pip install -e .[dev]`` when you want to iterate on the
+codebase.
+
+### Quickstart workflow
+
+Run the end-to-end example with:
+
+```bash
+make quickstart
+```
+
+The target delegates to ``examples/quickstart.sh``. It resolves the packaged
+dataset through
+``tnfr_lfs.examples.quickstart_dataset.dataset_path()`` so the artefacts under
+``examples/out/`` are generated without manual file management. Explore the
+Examples gallery for additional runnable automation scripts.
 
 ## Telemetry requirements
 
-All TNFR metrics (`ΔNFR`, the nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)` and related
-indicators) are derived from the Live for Speed OutSim/OutGauge telemetry
-streams; the toolkit does not synthesise additional inputs. Enable both
-UDP broadcasters and extend OutSim with `OutSim Opts ff` in `cfg.txt`
-(or run `/outsim Opts ff` before `/outsim 1 …`) so the UDP packets
-include the player identifier, driver inputs and the four-wheel block
-that feeds the telemetry fusion layer.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】
-Likewise, enable the extended OutGauge payload (via `OutGauge Opts …` in
-`cfg.txt` or `/outgauge Opts …`) so the simulator transmits tyre
-temperatures, their three-layer profile and pressures; set at least the
-`OG_EXT_TYRE_TEMP`, `OG_EXT_TYRE_PRESS` and `OG_EXT_BRAKE_TEMP` flags so the
-20-float block (inner/middle/outer layers, pressure ring and brake discs)
-is broadcast. Otherwise the HUD and CLI will surface those entries as “no
-data”.【F:tnfr_lfs/ingestion/fusion.py†L594-L657】
+All TNFR metrics (``ΔNFR``, the nodal projections ``∇NFR∥``/``∇NFR⊥``, ``ν_f``,
+``C(t)`` and related indicators) are derived from the native Live for Speed
+OutSim/OutGauge telemetry; the toolkit never fabricates inputs. The
+``docs/telemetry.md`` guide expands on the signal breakdown and how
+calibration packs integrate with the analytics stack. Enable both UDP
+broadcasters and extend OutSim with ``OutSim Opts ff`` in ``cfg.txt`` (or run
+``/outsim Opts ff`` before ``/outsim 1 …``) so the packets include the player
+identifier, driver inputs and the four-wheel block that feeds the telemetry
+fusion layer.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】 Likewise, enable the
+extended OutGauge payload (via ``OutGauge Opts …`` in ``cfg.txt`` or
+``/outgauge Opts …``) so the simulator transmits tyre temperatures, their
+three-layer profile and pressures; set at least the ``OG_EXT_TYRE_TEMP``,
+``OG_EXT_TYRE_PRESS`` and ``OG_EXT_BRAKE_TEMP`` flags so the 20-float block
+(inner/middle/outer layers, pressure ring and brake discs) is broadcast.
+Otherwise the HUD and CLI surface those entries as “no data”.【F:tnfr_lfs/ingestion/fusion.py†L594-L657】
 
 !!! note "Brake temperature estimation"
     Live for Speed only publishes real brake temperatures when the extended OutGauge payload is enabled; otherwise the stream exposes `0 °C` placeholders. TNFR × LFS consumes those native readings whenever they arrive and seamlessly falls back to the brake thermal proxy to keep fade metrics alive, integrating brake work and convective cooling until fresh data shows up again.【F:tnfr_lfs/ingestion/fusion.py†L248-L321】【F:tnfr_lfs/ingestion/fusion.py†L1064-L1126】
@@ -114,19 +161,27 @@ aerodynamic imbalance).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 
 ## Branding and terminology
 
-- **TNFR theory** describes the conceptual framework and vocabulary.
-- **TNFR × LFS toolkit** is the software package documented in this
-  site; it contains the CLI, Python modules and exporter pipelines.
-- Identifiers that use underscores (e.g. `tnfr_lfs`) coexist with
-  configuration templates declared under `[tool.tnfr_lfs]` inside
-  `pyproject.toml` to preserve compatibility with existing scripts.
+- **TNFR theory** is the conceptual framework that formalises the EPI and
+  ΔNFR/ΔSi metrics.
+- **TNFR × LFS toolkit** identifies the software implementation that automates
+  those principles inside Live for Speed.
+- The CLI (``tnfr_lfs``), Python package (``tnfr_lfs``) and configuration
+  tables (the ``[tool.tnfr_lfs]`` block in ``pyproject.toml``) intentionally
+  retain their respective names for compatibility with existing workflows.
 
 ## Resources
 
-- [API Reference](api_reference.md)
-  - [Window metrics & tyre health](api_reference.md#tnfr_lfscoremetrics)
-- [Command Line Interface](cli.md)
-- [Tutorials](tutorials.md)
-- [Setup equivalences](setup_equivalences.md)
-- [Preset workflow](presets.md)
-- [Brake thermal proxy](brake_thermal_proxy.md)
+- [Documentation index](index.md) – MkDocs entry point for the full manual.
+- [Beginner quickstart](tutorials.md) – installation walkthrough and dataset
+  primer.
+- [Advanced workflows](advanced_workflows.md) – Pareto sweeps, robustness
+  checks and A/B comparisons.
+- [API reference](api_reference.md) – module-level documentation.
+- [Examples gallery](examples.md) – automation scripts under ``examples/``.
+- [CLI guide](cli.md) – command-line usage and configuration templates.
+- [Setup equivalences](setup_equivalences.md) – map TNFR metrics to setup
+  adjustments.
+- [Preset workflow](presets.md) – shareable configurations and HUD layouts.
+- [Brake thermal proxy](brake_thermal_proxy.md) – details of the brake fade
+  model.
+- [Design notes](DESIGN.md) – textual summary of the TNFR operations manual.
