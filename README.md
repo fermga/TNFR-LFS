@@ -15,11 +15,12 @@ sessions, and surface setup recommendations without leaving the paddock.
 
 ## Getting started
 
-Follow the [beginner quickstart](docs/tutorials.md#1-install-the-toolkit) for
-the step-by-step walkthrough covering installation choices, telemetry setup,
-and the quickstart workflow. The README surfaces the highlights; the
-documentation is the definitive reference for commands, configuration, and
-troubleshooting details.
+For the complete onboarding walkthrough—including environment preparation,
+telemetry configuration, and the first capture run—head to the
+[beginner quickstart](docs/tutorials.md#1-install-the-toolkit). A condensed
+summary of the workflow also lives in the
+[documentation index](docs/index.md#quickstart-overview) so you can jump back
+to the relevant step without duplicating content in the README.
 
 ## Learn more
 
