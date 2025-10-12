@@ -10,7 +10,7 @@ from typing import Literal
 
 import numpy as np
 
-from .epi import TelemetryRecord
+from .interfaces import SupportsTelemetrySample
 
 try:  # pragma: no cover - SciPy is optional
     from scipy.signal import goertzel as _SCIPY_GOERTZEL
@@ -217,7 +217,7 @@ def _dominant_frequency_goertzel(
 
 
 def _extract_series(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     attributes: Sequence[str],
 ) -> list[float]:
     samples: list[float] = []
@@ -252,7 +252,7 @@ def _has_variation(samples: Sequence[float]) -> bool:
 
 
 def motor_input_correlations(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     controls: Mapping[str, Sequence[str]] | None = None,
     responses: Mapping[str, Sequence[str]] | None = None,
@@ -300,7 +300,7 @@ def motor_input_correlations(
     return results
 
 
-def estimate_sample_rate(records: Sequence[TelemetryRecord]) -> float:
+def estimate_sample_rate(records: Sequence[SupportsTelemetrySample]) -> float:
     """Estimate the sampling frequency of ``records`` in Hertz."""
 
     deltas: List[float] = []
@@ -431,7 +431,7 @@ def _normalise(values: Sequence[float]) -> List[float]:
 
 
 def phase_alignment(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     steer_series: Iterable[float] | None = None,
     response_series: Iterable[float] | None = None,

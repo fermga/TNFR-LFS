@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence
 
-from .epi import TelemetryRecord
+from .interfaces import SupportsTelemetrySample
 from .spectrum import detrend, estimate_sample_rate, power_spectrum
 
 __all__ = ["ModalPeak", "ModalAnalysis", "analyse_modal_resonance"]
@@ -35,7 +35,7 @@ class ModalAnalysis:
 AxisSeries = Dict[str, List[float]]
 
 
-def _extract_axis_series(records: Sequence[TelemetryRecord]) -> AxisSeries:
+def _extract_axis_series(records: Sequence[SupportsTelemetrySample]) -> AxisSeries:
     series: AxisSeries = {"yaw": [], "roll": [], "pitch": []}
     for record in records:
         series["yaw"].append(float(record.yaw))
@@ -55,7 +55,7 @@ def _normalise(values: Sequence[float]) -> List[float]:
     return [value / scale for value in detrended]
 
 
-def _excitation_series(records: Sequence[TelemetryRecord]) -> List[float]:
+def _excitation_series(records: Sequence[SupportsTelemetrySample]) -> List[float]:
     steer = _normalise([float(record.steer) for record in records])
     front = _normalise(
         [float(record.suspension_velocity_front) for record in records]
@@ -77,9 +77,9 @@ def _excitation_series(records: Sequence[TelemetryRecord]) -> List[float]:
 
 
 def estimate_excitation_frequency(
-    records: Sequence[TelemetryRecord], sample_rate: float | None = None
+    records: Sequence[SupportsTelemetrySample], sample_rate: float | None = None
 ) -> float:
-    """Return the dominant excitation frequency extracted from steer/suspension."""
+    """Return the dominant excitation frequency from :class:`SupportsTelemetrySample` data."""
 
     if not records:
         return 0.0
@@ -126,11 +126,11 @@ def _extract_peaks(
 
 
 def analyse_modal_resonance(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     max_peaks: int = 3,
 ) -> Dict[str, ModalAnalysis]:
-    """Compute modal energy for yaw/roll/pitch axes."""
+    """Compute modal energy for yaw/roll/pitch axes from telemetry-like sequences."""
 
     sample_rate = estimate_sample_rate(records)
     axis_series = _extract_axis_series(records)

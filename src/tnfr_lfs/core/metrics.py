@@ -18,9 +18,13 @@ from .contextual_delta import (
     resolve_context_from_record,
 )
 from .dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
-from .epi import TelemetryRecord, delta_nfr_by_node
-from .epi_models import EPIBundle
-from .interfaces import SupportsContextBundle, SupportsContextRecord
+from .epi import delta_nfr_by_node
+from .interfaces import (
+    SupportsContextBundle,
+    SupportsContextRecord,
+    SupportsEPIBundle,
+    SupportsTelemetrySample,
+)
 from .phases import replicate_phase_aliases
 from .spectrum import (
     PhaseCorrelation,
@@ -151,7 +155,7 @@ def _normalised_weights(weights: Mapping[str, float]) -> dict[str, float]:
 
 
 def _aggregate_node_delta(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     indices: Sequence[int] | None = None,
 ) -> dict[str, float]:
     """Return absolute ΔNFR contributions aggregated per node."""
@@ -178,7 +182,7 @@ def _aggregate_node_delta(
 
 
 def _phase_delta_distribution(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     phase_windows: Mapping[str, Sequence[int]] | None,
 ) -> tuple[dict[str, float], float]:
     """Return the phase-normalised ΔNFR profile and its entropy."""
@@ -204,7 +208,7 @@ def _phase_delta_distribution(
 
 
 def _phase_node_entropy_map(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     phase_windows: Mapping[str, Sequence[int]] | None,
 ) -> dict[str, float]:
     """Return the per-phase Shannon entropy of nodal ΔNFR distributions."""
@@ -976,10 +980,10 @@ def _compute_bumpstop_histogram(
 
 
 def compute_window_metrics(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     phase_indices: Sequence[int] | Mapping[str, Sequence[int]] | None = None,
-    bundles: Sequence[EPIBundle] | None = None,
+    bundles: Sequence[SupportsEPIBundle] | None = None,
     fallback_to_chronological: bool = True,
     objectives: object | None = None,
 ) -> WindowMetrics:
@@ -988,12 +992,14 @@ def compute_window_metrics(
     Parameters
     ----------
     records:
-        Ordered window of :class:`TelemetryRecord` samples. Entries must satisfy
-        :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord` when contextual
-        weighting is applied.
+        Ordered window of telemetry samples implementing
+        :class:`~tnfr_lfs.core.interfaces.SupportsTelemetrySample`. Entries
+        must also satisfy :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord`
+        when contextual weighting is applied.
     bundles:
-        Optional precomputed :class:`~tnfr_lfs.core.epi_models.EPIBundle` series
-        matching ``records``. Each bundle must adhere to
+        Optional precomputed insight series implementing
+        :class:`~tnfr_lfs.core.interfaces.SupportsEPIBundle` and matching
+        ``records``. Each bundle must adhere to
         :class:`~tnfr_lfs.core.interfaces.SupportsContextBundle` so the node
         metrics remain accessible to the contextual helpers.
     fallback_to_chronological:
@@ -1095,7 +1101,7 @@ def compute_window_metrics(
     ] = []
 
     def _compute_brake_headroom(
-        samples: Sequence[TelemetryRecord],
+        samples: Sequence[SupportsTelemetrySample],
     ) -> BrakeHeadroom:
         decel_values: list[float] = []
         locking_values: list[float] = []
@@ -1927,7 +1933,7 @@ def compute_window_metrics(
         if len(exit_window) <= 1:
             return 0.0, 1.0
 
-        def _gear_ratio(record: TelemetryRecord) -> float | None:
+        def _gear_ratio(record: SupportsTelemetrySample) -> float | None:
             try:
                 rpm_value = float(getattr(record, "rpm", 0.0))
                 speed_value = float(getattr(record, "speed", 0.0))
@@ -2642,8 +2648,8 @@ def compute_window_metrics(
 
 
 def compute_aero_coherence(
-    records: Sequence[TelemetryRecord],
-    bundles: Sequence[EPIBundle] | None = None,
+    records: Sequence[SupportsTelemetrySample],
+    bundles: Sequence[SupportsEPIBundle] | None = None,
     *,
     low_speed_threshold: float = 35.0,
     high_speed_threshold: float = 50.0,
@@ -2652,7 +2658,8 @@ def compute_aero_coherence(
     """Compute aero balance deltas at low and high speed.
 
     The helper inspects ΔNFR contributions attributed to μ_eff front/rear terms
-    in the :class:`~tnfr_lfs.core.epi_models.EPIBundle.delta_breakdown` payload.
+    in the :attr:`~tnfr_lfs.core.interfaces.SupportsEPIBundle.delta_breakdown`
+    payload.
     When the optional ``bundles`` sequence is not provided or lacks breakdown
     data the function gracefully returns a neutral :class:`AeroCoherence`
     instance with zero samples.
@@ -2961,7 +2968,7 @@ def resolve_aero_mechanical_coherence(
 
 
 def _segment_gradients(
-    records: Sequence[TelemetryRecord], *, segments: int, fallback_to_chronological: bool = True
+    records: Sequence[SupportsTelemetrySample], *, segments: int, fallback_to_chronological: bool = True
 ) -> tuple[float, ...]:
     parts = _split_records(records, segments)
     context_matrix = load_context_matrix()
@@ -2976,14 +2983,14 @@ def _segment_gradients(
 
 
 def _split_records(
-    records: Sequence[TelemetryRecord], segments: int
-) -> list[Sequence[TelemetryRecord]]:
+    records: Sequence[SupportsTelemetrySample], segments: int
+) -> list[Sequence[SupportsTelemetrySample]]:
     length = len(records)
     if length == 0:
         return [tuple()] * segments
 
     base, remainder = divmod(length, segments)
-    slices: list[Sequence[TelemetryRecord]] = []
+    slices: list[Sequence[SupportsTelemetrySample]] = []
     index = 0
     for segment_index in range(segments):
         size = base + (1 if segment_index < remainder else 0)
@@ -2997,7 +3004,7 @@ def _split_records(
 
 
 def _gradient(
-    records: Iterable[TelemetryRecord],
+    records: Iterable[SupportsTelemetrySample],
     *,
     fallback_to_chronological: bool = True,
     context_matrix: ContextMatrix,

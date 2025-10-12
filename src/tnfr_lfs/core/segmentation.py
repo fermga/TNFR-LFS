@@ -1,7 +1,7 @@
 """Microsector segmentation utilities.
 
 This module analyses the stream of telemetry samples together with the
-corresponding :class:`~tnfr_lfs.core.epi_models.EPIBundle` instances to
+corresponding :class:`~tnfr_lfs.core.interfaces.SupportsEPIBundle` instances to
 derive microsectors and their tactical goals.  The segmentation is
 performed using three simple heuristics inspired by motorsport
 engineering practice:
@@ -27,11 +27,9 @@ from .epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
     NaturalFrequencyAnalyzer,
-    TelemetryRecord,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from .epi_models import EPIBundle
 from .contextual_delta import (
     ContextFactors,
     ContextMatrix,
@@ -41,7 +39,12 @@ from .contextual_delta import (
     resolve_microsector_context,
     resolve_series_context,
 )
-from .interfaces import SupportsContextBundle, SupportsContextRecord
+from .interfaces import (
+    SupportsContextBundle,
+    SupportsContextRecord,
+    SupportsEPIBundle,
+    SupportsTelemetrySample,
+)
 from .metrics import (
     compute_window_metrics,
     phase_synchrony_index,
@@ -98,8 +101,8 @@ PhaseLiteral = str
 
 
 def _resolve_session_components(
-    records: Sequence[TelemetryRecord],
-    baseline: TelemetryRecord,
+    records: Sequence[SupportsTelemetrySample],
+    baseline: SupportsTelemetrySample,
 ) -> tuple[str, str, str]:
     """Return the (car, track, compound) tuple used to scope recursivity state."""
 
@@ -261,8 +264,8 @@ def _merge_phase_indices(sequences: Sequence[Tuple[int, ...]]) -> Tuple[int, ...
 
 
 def segment_microsectors(
-    records: Sequence[TelemetryRecord],
-    bundles: Sequence[EPIBundle],
+    records: Sequence[SupportsTelemetrySample],
+    bundles: Sequence[SupportsEPIBundle],
     *,
     operator_state: MutableMapping[str, Mapping[str, object]] | None = None,
     recursion_decay: float = 0.4,
@@ -274,12 +277,13 @@ def segment_microsectors(
     Parameters
     ----------
     records:
-        Telemetry samples in chronological order. Each instance must satisfy the
-        :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord` protocol so the
+        Telemetry samples in chronological order. Each instance must implement
+        :class:`~tnfr_lfs.core.interfaces.SupportsTelemetrySample` and satisfy
+        :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord` so the
         contextual weighting heuristics can access the required signals.
     bundles:
-        Computed :class:`~tnfr_lfs.core.epi_models.EPIBundle` for the same
-        timestamps as ``records``. Every bundle must implement the
+        Computed :class:`~tnfr_lfs.core.interfaces.SupportsEPIBundle` entries for
+        the same timestamps as ``records``. Every bundle must also implement the
         :class:`~tnfr_lfs.core.interfaces.SupportsContextBundle` contract.
 
     Returns
@@ -1221,15 +1225,15 @@ def segment_microsectors(
 
 
 def _recompute_bundles(
-    records: Sequence[TelemetryRecord],
-    bundles: Sequence[EPIBundle],
-    baseline: TelemetryRecord,
+    records: Sequence[SupportsTelemetrySample],
+    bundles: Sequence[SupportsEPIBundle],
+    baseline: SupportsTelemetrySample,
     phase_assignments: Mapping[int, PhaseLiteral],
     weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]],
     goal_nu_f_lookup: Mapping[int, Mapping[str, float] | float] | None = None,
-) -> List[EPIBundle]:
+) -> List[SupportsEPIBundle]:
     analyzer = NaturalFrequencyAnalyzer()
-    recomputed: List[EPIBundle] = []
+    recomputed: List[SupportsEPIBundle] = []
     prev_integrated: float | None = None
     prev_timestamp = records[0].timestamp if records else 0.0
     prev_structural = (
@@ -1280,7 +1284,7 @@ def _recompute_bundles(
 
 
 def _estimate_entropy(
-    records: Sequence[TelemetryRecord], start: int, end: int
+    records: Sequence[SupportsTelemetrySample], start: int, end: int
 ) -> float:
     node_weights: Dict[str, float] = defaultdict(float)
     for index in range(start, end + 1):
@@ -1302,7 +1306,7 @@ def _estimate_entropy(
     return min(1.0, entropy / max_entropy)
 
 
-def _identify_corner_segments(records: Sequence[TelemetryRecord]) -> List[Tuple[int, int]]:
+def _identify_corner_segments(records: Sequence[SupportsTelemetrySample]) -> List[Tuple[int, int]]:
     segments: List[Tuple[int, int]] = []
     start_index: int | None = None
     for idx, record in enumerate(records):
@@ -1319,7 +1323,7 @@ def _identify_corner_segments(records: Sequence[TelemetryRecord]) -> List[Tuple[
 
 
 def _compute_phase_boundaries(
-    records: Sequence[TelemetryRecord], start: int, end: int
+    records: Sequence[SupportsTelemetrySample], start: int, end: int
 ) -> Dict[PhaseLiteral, Tuple[int, int]]:
     idx_range = range(start, end + 1)
     entry_idx = min(idx_range, key=lambda i: records[i].longitudinal_accel)
@@ -1375,12 +1379,12 @@ def _compute_phase_boundaries(
     return ordered
 
 
-def _detect_support_event(records: Sequence[TelemetryRecord]) -> bool:
+def _detect_support_event(records: Sequence[SupportsTelemetrySample]) -> bool:
     loads = [record.vertical_load for record in records]
     return max(loads) - min(loads) >= SUPPORT_THRESHOLD
 
 
-def _direction_changes(records: Sequence[TelemetryRecord]) -> int:
+def _direction_changes(records: Sequence[SupportsTelemetrySample]) -> int:
     last_sign = 0
     changes = 0
     for record in records:
@@ -1409,7 +1413,7 @@ def _classify_archetype(
     return ARCHETYPE_MEDIUM
 
 
-def _compute_yaw_rate(records: Sequence[TelemetryRecord], index: int) -> float:
+def _compute_yaw_rate(records: Sequence[SupportsTelemetrySample], index: int) -> float:
     if index <= 0 or index >= len(records):
         return 0.0
     current = records[index]
@@ -1446,8 +1450,8 @@ def _window(values: Sequence[float], scale: float, minimum: float = 0.01) -> Tup
 
 def _build_goals(
     archetype: str,
-    bundles: Sequence[EPIBundle],
-    records: Sequence[TelemetryRecord],
+    bundles: Sequence[SupportsEPIBundle],
+    records: Sequence[SupportsTelemetrySample],
     boundaries: Mapping[PhaseLiteral, Tuple[int, int]],
     *,
     context_matrix: ContextMatrix | None = None,
@@ -1682,7 +1686,7 @@ def _build_goals(
 
 
 def _initial_phase_weight_map(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]],
 ) -> Dict[PhaseLiteral, Dict[str, float]]:
     weights: Dict[PhaseLiteral, Dict[str, float]] = {}
@@ -1790,7 +1794,7 @@ def _blend_phase_weight_map(
 def _compute_window_occupancy(
     goals: Sequence[Goal],
     phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]],
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
 ) -> Dict[PhaseLiteral, Dict[str, float]]:
     def _percentage(values: Sequence[float], window: Tuple[float, float]) -> float:
         if not values:
@@ -1899,8 +1903,8 @@ def detect_quiet_microsector_streaks(
 
 def _adjust_phase_weights_with_dominance(
     specs: Sequence[Dict[str, object]],
-    bundles: Sequence[EPIBundle],
-    records: Sequence[TelemetryRecord],
+    bundles: Sequence[SupportsEPIBundle],
+    records: Sequence[SupportsTelemetrySample],
     *,
     context_matrix: ContextMatrix,
     sample_context: Sequence[ContextFactors],

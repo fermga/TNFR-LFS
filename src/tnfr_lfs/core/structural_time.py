@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Mapping, Sequence
 
-from .epi import TelemetryRecord
+from .interfaces import SupportsTelemetrySample
 
 __all__ = ["compute_structural_timestamps", "resolve_time_axis"]
 
@@ -36,7 +36,9 @@ def _coerce_float(value: object) -> float | None:
     return numeric
 
 
-def _resolve_feature_series(records: Sequence[TelemetryRecord], feature: str) -> list[float]:
+def _resolve_feature_series(
+    records: Sequence[SupportsTelemetrySample], feature: str
+) -> list[float]:
     series: list[float] = []
     for record in records:
         numeric = _coerce_float(getattr(record, feature, 0.0))
@@ -63,7 +65,7 @@ def _window_average(values: Sequence[float], index: int, window_size: int) -> fl
 
 
 def compute_structural_timestamps(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     window_size: int = 5,
     weights: Mapping[str, float] | None = None,
