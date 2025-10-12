@@ -34,6 +34,7 @@ dev = [
     "mkdocs>=1.5.0",
     "mkdocs-static-i18n>=1.2.0",
     "mkdocs-macros-plugin>=1.0.5",
+    "mkdocs-autoapi>=0.4.0",
 ]
 benchmark = [
     "pytest-benchmark>=4.0.0",
