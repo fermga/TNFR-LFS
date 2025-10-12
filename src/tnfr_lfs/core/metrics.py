@@ -20,10 +20,14 @@ from .contextual_delta import (
 from .dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
 from .epi import delta_nfr_by_node
 from .interfaces import (
+    SupportsChassisNode,
     SupportsContextBundle,
     SupportsContextRecord,
+    SupportsDriverNode,
     SupportsEPIBundle,
+    SupportsSuspensionNode,
     SupportsTelemetrySample,
+    SupportsTyresNode,
 )
 from .phases import replicate_phase_aliases
 from .spectrum import (
@@ -1527,50 +1531,53 @@ def compute_window_metrics(
             )
             for bundle, factors in zip(bundles, bundle_context)
         ]
-        yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
-        steer_series = [float(getattr(bundle.driver, "steer", 0.0)) for bundle in bundles]
-        epi_values = [abs(float(getattr(bundle, "dEPI_dt", 0.0))) for bundle in bundles]
+        tyre_nodes: list[SupportsTyresNode] = [bundle.tyres for bundle in bundles]
+        suspension_nodes: list[SupportsSuspensionNode] = [
+            bundle.suspension for bundle in bundles
+        ]
+        chassis_nodes: list[SupportsChassisNode] = [bundle.chassis for bundle in bundles]
+        driver_nodes: list[SupportsDriverNode] = [bundle.driver for bundle in bundles]
+
+        yaw_rates = [node.yaw_rate for node in chassis_nodes]
+        steer_series = [float(node.steer) for node in driver_nodes]
+        epi_values = [abs(float(bundle.dEPI_dt)) for bundle in bundles]
         if epi_values:
             epi_abs_derivative = mean(epi_values)
         support_samples = [
-            max(0.0, float(bundle.tyres.delta_nfr))
-            + max(0.0, float(bundle.suspension.delta_nfr))
-            for bundle in bundles
+            max(0.0, float(tyre.delta_nfr)) + max(0.0, float(suspension.delta_nfr))
+            for tyre, suspension in zip(tyre_nodes, suspension_nodes)
         ]
-        suspension_series = [
-            float(getattr(bundle.suspension, "delta_nfr", 0.0)) for bundle in bundles
-        ]
-        tyre_series = [float(getattr(bundle.tyres, "delta_nfr", 0.0)) for bundle in bundles]
+        suspension_series = [float(node.delta_nfr) for node in suspension_nodes]
+        tyre_series = [float(node.delta_nfr) for node in tyre_nodes]
         front_travel_series = [
-            float(getattr(bundle.suspension, "travel_front", 0.0)) for bundle in bundles
+            float(node.travel_front) for node in suspension_nodes
         ]
         rear_travel_series = [
-            float(getattr(bundle.suspension, "travel_rear", 0.0)) for bundle in bundles
+            float(node.travel_rear) for node in suspension_nodes
         ]
         front_velocity_series = [
-            float(getattr(bundle.suspension, "velocity_front", 0.0)) for bundle in bundles
+            float(node.velocity_front) for node in suspension_nodes
         ]
         rear_velocity_series = [
-            float(getattr(bundle.suspension, "velocity_rear", 0.0)) for bundle in bundles
+            float(node.velocity_rear) for node in suspension_nodes
         ]
         front_mu_lat_series = [
-            float(getattr(bundle.tyres, "mu_eff_front_lateral", 0.0)) for bundle in bundles
+            float(node.mu_eff_front_lateral) for node in tyre_nodes
         ]
         front_mu_long_series = [
-            float(getattr(bundle.tyres, "mu_eff_front_longitudinal", 0.0))
-            for bundle in bundles
+            float(node.mu_eff_front_longitudinal) for node in tyre_nodes
         ]
         rear_mu_lat_series = [
-            float(getattr(bundle.tyres, "mu_eff_rear_lateral", 0.0)) for bundle in bundles
+            float(node.mu_eff_rear_lateral) for node in tyre_nodes
         ]
         rear_mu_long_series = [
-            float(getattr(bundle.tyres, "mu_eff_rear_longitudinal", 0.0)) for bundle in bundles
+            float(node.mu_eff_rear_longitudinal) for node in tyre_nodes
         ]
         longitudinal_series = [
-            float(getattr(bundle, "delta_nfr_proj_longitudinal", 0.0)) for bundle in bundles
+            float(bundle.delta_nfr_proj_longitudinal) for bundle in bundles
         ]
         lateral_series = [
-            float(getattr(bundle, "delta_nfr_proj_lateral", 0.0)) for bundle in bundles
+            float(bundle.delta_nfr_proj_lateral) for bundle in bundles
         ]
         if primary_phase_indices:
             ackermann_samples = [
