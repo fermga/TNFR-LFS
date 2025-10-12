@@ -14,7 +14,8 @@ produces.
 **Required inputs:**
 
 - `tnfr_lfs` available on `PYTHONPATH` (e.g., `pip install -e .` from the repo
-  root).
+  root, or set `PYTHONPATH=src` because the package lives under
+  `src/tnfr_lfs`).
 - Sample telemetry resolved with
   ``python -c "from tnfr_lfs.examples.quickstart_dataset import dataset_path; print(dataset_path())"``
   (included in the repository).
@@ -23,7 +24,7 @@ produces.
 **Run it**
 
 ```bash
-PYTHONPATH=. bash examples/quickstart.sh
+PYTHONPATH=src bash examples/quickstart.sh
 ```
 
 **Expected output**
@@ -45,15 +46,15 @@ invoking the CLI.
 
 **Required inputs:**
 
-- `tnfr_lfs` importable (install the package or run with `PYTHONPATH=.` from the
-  repository root).
+- `tnfr_lfs` importable (install the package or run with `PYTHONPATH=src` from
+  the repository root because the package lives under `src/tnfr_lfs`).
 - The script ships with a small legacy-format telemetry snippet; replace it with
   your own OutSim CSV if you want to analyse a full stint.
 
 **Run it**
 
 ```bash
-PYTHONPATH=. python examples/ingest_and_recommend.py
+PYTHONPATH=src python examples/ingest_and_recommend.py
 ```
 
 **Expected output**
@@ -78,14 +79,15 @@ CSV exporter to persist calculated series for downstream analysis.
 
 **Required inputs:**
 
-- `tnfr_lfs` importable (install the package or run with `PYTHONPATH=.`).
+- `tnfr_lfs` importable (install the package or run with `PYTHONPATH=src` so the
+  interpreter can find `src/tnfr_lfs`).
 - Inline telemetry sample with the legacy OutSim header (customise `DATA` for
   your own runs).
 
 **Run it**
 
 ```bash
-PYTHONPATH=. python examples/export_to_csv.py
+PYTHONPATH=src python examples/export_to_csv.py
 ```
 
 **Expected output**
