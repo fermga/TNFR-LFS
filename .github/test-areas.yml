@@ -98,6 +98,7 @@ areas:
     filter_globs:
       - 'src/tnfr_lfs/core/**'
       - 'tests/test_core_*.py'
+      - 'tests/test_acceptance_pipeline.py'
       - 'tests/test_coherence*.py'
       - 'tests/test_contextual_delta.py'
       - 'tests/test_metrics.py'
@@ -109,6 +110,7 @@ areas:
       - 'tests/test_epi.py'
     pytest_args:
       - tests/test_core_*.py
+      - tests/test_acceptance_pipeline.py
       - tests/test_coherence*.py
       - tests/test_contextual_delta.py
       - tests/test_metrics.py
