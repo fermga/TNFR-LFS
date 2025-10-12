@@ -154,37 +154,6 @@ bind = "tcp://127.0.0.1:6000"
 plugins = ["telemetry", "exporter", "relay"]
 max_concurrent = 4
 
-[tool.tnfr_lfs.profiles.base.telemetry]
-enabled = true
-entry_point = "tnfr_lfs.plugins.telemetry:TelemetryPlugin"
-buffer_seconds = 15
-flush_interval = "5s"
-
-[tool.tnfr_lfs.profiles.base.telemetry.transport]
-protocol = "udp"
-host = "127.0.0.1"
-port = 3000
-
-[tool.tnfr_lfs.profiles.base.exporter]
-enabled = true
-entry_point = "tnfr_lfs.plugins.exporter:ExporterPlugin"
-targets = ["jsonl", "html"]
-flush_on_shutdown = true
-
-[tool.tnfr_lfs.profiles.base.exporter.jsonl]
-path = "out/telemetry.jsonl"
-mode = "append"
-
-[tool.tnfr_lfs.profiles.base.exporter.html]
-path = "out/dashboard.html"
-template = "docs/templates/dashboard.html"
-
-[tool.tnfr_lfs.profiles.base.relay]
-enabled = false
-entry_point = "tnfr_lfs.plugins.relay:RelayPlugin"
-channel = "zeromq"
-bind = "tcp://127.0.0.1:6000"
-
 [tool.tnfr_lfs.profiles.racing]
 extends = "base"
 
@@ -197,7 +166,6 @@ flush_on_shutdown = false
 
 [tool.tnfr_lfs.profiles.racing.relay]
 enabled = true
-channel = "zeromq"
 bind = "tcp://0.0.0.0:6000"
 
 [tool.tnfr_lfs.profiles.practice]
