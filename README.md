@@ -122,11 +122,12 @@ The complete documentation lives under `docs/` and is published with MkDocs.
 - [`docs/cli.md`](docs/cli.md): command-line interface guide.
 - [`docs/setup_equivalences.md`](docs/setup_equivalences.md): link TNFR metrics to
   setup adjustments.
-- [`config/plugins.toml`](config/plugins.toml): optional legacy template generated
-  from `pyproject.toml` via `python -m tnfr_lfs.plugins.template --output
-  config/plugins.toml`.  The runtime now reads plugin discovery and profile
-  settings directly from `[tool.tnfr_lfs.plugins]`, so generate the file when you
-  need to ship a standalone example or integrate with older tooling.
+- [`tnfr_lfs.toml`](tnfr_lfs.toml) and [`config/plugins.toml`](config/plugins.toml):
+  legacy artefacts regenerated from `pyproject.toml` with `tnfr_lfs config sync`
+  (or the older `python -m tnfr_lfs.plugins.template --output config/plugins.toml`
+  helper).  The runtime reads discovery and profile data directly from
+  `[tool.tnfr_lfs]`; avoid editing the generated files by hand because the sync
+  command overwrites them.
 
 ## Branding and relationship with the theory
 

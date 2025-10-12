@@ -25,6 +25,7 @@ from tnfr_lfs.configuration import (
     canonical_cli_config_block,
     canonical_cli_config_legacy_text,
 )
+from tnfr_lfs.plugins.template import canonical_plugins_template
 from tests.helpers import (
     DummyBundle,
     create_cli_config_pack,
@@ -138,6 +139,62 @@ def test_run_cli_prefers_pyproject_config(
     assert performance_cfg["cache_enabled"] is False
     assert performance_cfg["nu_f_cache_size"] == 0
     assert performance_cfg["max_cache_size"] == 0
+
+
+def test_config_sync_regenerates_legacy_and_plugins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pyproject_source = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text(pyproject_source.read_text(encoding="utf8"), encoding="utf8")
+
+    result = run_cli_in_tmp(["config", "sync"], tmp_path=tmp_path, monkeypatch=monkeypatch)
+
+    legacy_path = tmp_path / "tnfr_lfs.toml"
+    plugins_path = tmp_path / "config" / "plugins.toml"
+    assert legacy_path.exists()
+    assert plugins_path.exists()
+    assert legacy_path.read_text(encoding="utf8") == canonical_cli_config_legacy_text(pyproject_path)
+    assert (
+        plugins_path.read_text(encoding="utf8")
+        == canonical_plugins_template(pyproject_path)
+    )
+    assert "Legacy configuration written to" in result
+
+
+def test_config_sync_honours_output_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    source_pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    pyproject_path = project_root / "pyproject.toml"
+    pyproject_path.write_text(source_pyproject.read_text(encoding="utf8"), encoding="utf8")
+
+    output_dir = tmp_path / "artifacts"
+    result = run_cli_in_tmp(
+        [
+            "config",
+            "sync",
+            "--project-root",
+            str(project_root),
+            "--output-dir",
+            str(output_dir),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+
+    legacy_path = output_dir / "tnfr_lfs.toml"
+    plugins_path = output_dir / "config" / "plugins.toml"
+    assert legacy_path.exists()
+    assert plugins_path.exists()
+    assert legacy_path.read_text(encoding="utf8") == canonical_cli_config_legacy_text(pyproject_path)
+    assert (
+        plugins_path.read_text(encoding="utf8")
+        == canonical_plugins_template(pyproject_path)
+    )
+    assert str(legacy_path) in result
 
 
 def test_run_cli_requires_telemetry_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
