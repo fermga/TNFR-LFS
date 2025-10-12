@@ -13,7 +13,7 @@ nav:
       - Advanced workflows: advanced_workflows.md
       - Command line interface: cli.md
   - Reference:
-      - Reference introduction: api_reference.md
+      - How the API is organised: api_reference.md
       - API Index: reference/autoapi/index.md
       - Design manual: DESIGN.md
       - Development workflow: DEVELOPMENT.md
