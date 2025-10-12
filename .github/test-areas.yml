@@ -1,138 +1,133 @@
-{
-  "areas": [
-    {
-      "name": "analysis",
-      "filter_globs": [
-        "src/tnfr_lfs/analysis/**",
-        "tests/test_analysis_*.py",
-        "tests/analysis/**"
-      ],
-      "pytest_args": [
-        "tests/test_analysis_*.py",
-        "tests/analysis"
-      ]
-    },
-    {
-      "name": "core_pkg",
-      "display_name": "core",
-      "filter_globs": [
-        "src/tnfr_lfs/core/**",
-        "tests/test_core_*.py",
-        "tests/test_coherence*.py",
-        "tests/test_contextual_delta.py",
-        "tests/test_metrics.py",
-        "tests/test_operator_detection.py",
-        "tests/test_phase_alias_deprecations.py",
-        "tests/test_resonance.py",
-        "tests/test_segmentation.py",
-        "tests/test_structural_time.py",
-        "tests/test_epi.py"
-      ],
-      "pytest_args": [
-        "tests/test_core_*.py",
-        "tests/test_coherence*.py",
-        "tests/test_contextual_delta.py",
-        "tests/test_metrics.py",
-        "tests/test_operator_detection.py",
-        "tests/test_phase_alias_deprecations.py",
-        "tests/test_resonance.py",
-        "tests/test_segmentation.py",
-        "tests/test_structural_time.py",
-        "tests/test_epi.py"
-      ]
-    },
-    {
-      "name": "cli",
-      "filter_globs": [
-        "src/tnfr_lfs/cli/**",
-        "tests/test_cli*.py",
-        "!tests/test_cli_osd.py",
-        "tests/test_cli_parser.py"
-      ],
-      "pytest_args": [
-        "tests/test_cli.py",
-        "tests/test_cli_*.py",
-        "tests/test_cli_parser.py"
-      ]
-    },
-    {
-      "name": "exporters",
-      "filter_globs": [
-        "src/tnfr_lfs/exporters/**",
-        "tests/test_*exporter*.py",
-        "tests/test_replay_csv_bundle.py"
-      ],
-      "pytest_args": [
-        "tests/test_*exporter*.py",
-        "tests/test_replay_csv_bundle.py"
-      ]
-    },
-    {
-      "name": "ingestion",
-      "filter_globs": [
-        "src/tnfr_lfs/ingestion/**",
-        "tests/test_ingestion.py",
-        "tests/test_outgauge_udp.py",
-        "tests/test_outsim_udp.py",
-        "tests/test_insim.py",
-        "tests/test_track_loader.py",
-        "tests/ingestion/**"
-      ],
-      "pytest_args": [
-        "tests/test_ingestion.py",
-        "tests/test_outgauge_udp.py",
-        "tests/test_outsim_udp.py",
-        "tests/test_insim.py",
-        "tests/test_track_loader.py",
-        "tests/ingestion"
-      ]
-    },
-    {
-      "name": "io",
-      "filter_globs": [
-        "src/tnfr_lfs/io/**",
-        "tests/test_io_*.py",
-        "tests/test_cli_io.py"
-      ],
-      "pytest_args": [
-        "tests/test_io_*.py",
-        "tests/test_cli_io.py"
-      ]
-    },
-    {
-      "name": "processing",
-      "filter_globs": [
-        "src/tnfr_lfs/processing.py",
-        "src/tnfr_lfs/processing/**",
-        "tests/test_processing.py"
-      ],
-      "pytest_args": [
-        "tests/test_processing.py"
-      ]
-    },
-    {
-      "name": "recommender",
-      "filter_globs": [
-        "src/tnfr_lfs/recommender/**",
-        "tests/test_recommender*.py",
-        "tests/test_recommender_search_cache.py"
-      ],
-      "pytest_args": [
-        "tests/test_recommender*.py",
-        "tests/test_recommender_search_cache.py"
-      ]
-    },
-    {
-      "name": "plugins",
-      "filter_globs": [
-        "src/tnfr_lfs/plugins/**",
-        "tests/plugins/**",
-        "tests/test_cli_osd.py"
-      ],
-      "pytest_args": [
-        "tests/plugins",
-        "tests/test_cli_osd.py"
-      ]
-    }
-  ]
-}
+areas:
+  - name: core
+    display_name: core
+    filter_globs:
+      - '.github/**'
+      - 'benchmarks/**'
+      - 'config/**'
+      - 'Makefile'
+      - 'mkdocs.yml'
+      - 'modifiers/**'
+      - 'pyproject.toml'
+      - 'tests/**'
+      - 'tnfr_lfs.toml'
+      - 'src/tnfr_lfs/**'
+      - 'typing_targets/**'
+    include_in_matrix: false
+  - name: examples
+    display_name: examples
+    filter_globs:
+      - 'examples/**'
+    include_in_matrix: false
+  - name: docs
+    display_name: docs
+    filter_globs:
+      - 'docs/**'
+      - '**/*.md'
+    include_in_matrix: false
+  - name: analysis
+    display_name: analysis
+    filter_globs:
+      - 'src/tnfr_lfs/analysis/**'
+      - 'tests/test_analysis_*.py'
+      - 'tests/analysis/**'
+    pytest_args:
+      - tests/test_analysis_*.py
+      - tests/analysis
+  - name: core_pkg
+    display_name: core
+    filter_globs:
+      - 'src/tnfr_lfs/core/**'
+      - 'tests/test_core_*.py'
+      - 'tests/test_coherence*.py'
+      - 'tests/test_contextual_delta.py'
+      - 'tests/test_metrics.py'
+      - 'tests/test_operator_detection.py'
+      - 'tests/test_phase_alias_deprecations.py'
+      - 'tests/test_resonance.py'
+      - 'tests/test_segmentation.py'
+      - 'tests/test_structural_time.py'
+      - 'tests/test_epi.py'
+    pytest_args:
+      - tests/test_core_*.py
+      - tests/test_coherence*.py
+      - tests/test_contextual_delta.py
+      - tests/test_metrics.py
+      - tests/test_operator_detection.py
+      - tests/test_phase_alias_deprecations.py
+      - tests/test_resonance.py
+      - tests/test_segmentation.py
+      - tests/test_structural_time.py
+      - tests/test_epi.py
+  - name: cli
+    display_name: cli
+    filter_globs:
+      - 'src/tnfr_lfs/cli/**'
+      - 'tests/test_cli*.py'
+      - '!tests/test_cli_osd.py'
+      - 'tests/test_cli_parser.py'
+    pytest_args:
+      - tests/test_cli.py
+      - tests/test_cli_*.py
+      - tests/test_cli_parser.py
+  - name: exporters
+    display_name: exporters
+    filter_globs:
+      - 'src/tnfr_lfs/exporters/**'
+      - 'tests/test_*exporter*.py'
+      - 'tests/test_replay_csv_bundle.py'
+    pytest_args:
+      - tests/test_*exporter*.py
+      - tests/test_replay_csv_bundle.py
+  - name: ingestion
+    display_name: ingestion
+    filter_globs:
+      - 'src/tnfr_lfs/ingestion/**'
+      - 'tests/test_ingestion.py'
+      - 'tests/test_outgauge_udp.py'
+      - 'tests/test_outsim_udp.py'
+      - 'tests/test_insim.py'
+      - 'tests/test_track_loader.py'
+      - 'tests/ingestion/**'
+    pytest_args:
+      - tests/test_ingestion.py
+      - tests/test_outgauge_udp.py
+      - tests/test_outsim_udp.py
+      - tests/test_insim.py
+      - tests/test_track_loader.py
+      - tests/ingestion
+  - name: io
+    display_name: io
+    filter_globs:
+      - 'src/tnfr_lfs/io/**'
+      - 'tests/test_io_*.py'
+      - 'tests/test_cli_io.py'
+    pytest_args:
+      - tests/test_io_*.py
+      - tests/test_cli_io.py
+  - name: processing
+    display_name: processing
+    filter_globs:
+      - 'src/tnfr_lfs/processing.py'
+      - 'src/tnfr_lfs/processing/**'
+      - 'tests/test_processing.py'
+    pytest_args:
+      - tests/test_processing.py
+  - name: recommender
+    display_name: recommender
+    filter_globs:
+      - 'src/tnfr_lfs/recommender/**'
+      - 'tests/test_recommender*.py'
+      - 'tests/test_recommender_search_cache.py'
+    pytest_args:
+      - tests/test_recommender*.py
+      - tests/test_recommender_search_cache.py
+  - name: plugins
+    display_name: plugins
+    filter_globs:
+      - 'src/tnfr_lfs/plugins/**'
+      - 'tests/plugins/**'
+      - 'tests/test_cli_osd.py'
+    pytest_args:
+      - tests/plugins
+      - tests/test_cli_osd.py
