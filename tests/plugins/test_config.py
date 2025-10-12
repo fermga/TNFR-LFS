@@ -28,8 +28,8 @@ def test_plugin_config_from_pyproject_block(
 
     exporter = config.get_plugin_config("exporter")
     assert exporter["targets"] == ["html"]
-    assert exporter["path"] == "out/practice-dashboard.html"
-    assert exporter["template"] == "docs/templates/practice.html"
+    assert exporter["html"]["path"] == "out/practice-dashboard.html"
+    assert exporter["html"]["template"] == "docs/templates/practice.html"
 
     config.set_profile("racing")
     assert set(config.enabled_plugins()) == {"telemetry", "exporter", "relay"}
@@ -241,6 +241,58 @@ def test_plugin_config_profile_overrides(tmp_path: Path) -> None:
     assert relay["enabled"] is True
     assert relay["channel"] == "zeromq"
     assert set(config.enabled_plugins()) == {"telemetry", "exporter", "relay"}
+
+
+def test_profile_inheritance_merges_settings(tmp_path: Path) -> None:
+    config_path = write_plugin_config_text(
+        tmp_path,
+        """
+        [plugins]
+        auto_discover = false
+        plugin_dir = "plugins"
+
+        [plugins.telemetry]
+        enabled = true
+        buffer_seconds = 15
+        flush_interval = "5s"
+
+        [plugins.relay]
+        enabled = false
+        channel = "zeromq"
+        bind = "tcp://127.0.0.1:6000"
+
+        [profiles.base]
+        plugins = ["telemetry", "relay"]
+        max_concurrent = 4
+
+        [profiles.base.telemetry]
+        flush_interval = "2s"
+
+        [profiles.racing]
+        extends = "base"
+        max_concurrent = 2
+
+        [profiles.racing.telemetry]
+        flush_interval = "1s"
+
+        [profiles.racing.relay]
+        enabled = true
+        bind = "tcp://0.0.0.0:6000"
+        """,
+    )
+
+    config = PluginConfig(config_path)
+
+    config.set_profile("racing")
+    assert config.max_concurrent == 2
+
+    telemetry = config.get_plugin_config("telemetry")
+    relay = config.get_plugin_config("relay")
+
+    assert telemetry["flush_interval"] == "1s"
+    assert relay["channel"] == "zeromq"
+    assert relay["bind"] == "tcp://0.0.0.0:6000"
+    assert set(config.enabled_plugins()) == {"telemetry", "relay"}
 
 
 def test_reload_config_preserves_active_profile(tmp_path: Path) -> None:
