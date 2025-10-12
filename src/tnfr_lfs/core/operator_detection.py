@@ -1,7 +1,8 @@
 """Detection utilities for on-track operator events.
 
-Each detection routine analyses a windowed sequence of :class:`TelemetryRecord`
-objects and yields event descriptors when the observed behaviour exceeds the
+Each detection routine analyses a windowed sequence of
+:class:`~tnfr_lfs.core.interfaces.SupportsTelemetrySample` objects and yields
+event descriptors when the observed behaviour exceeds the
 configured thresholds.  The detectors are intentionally lightweight so that
 they can be executed on every microsector without adding measurable overhead
 to the orchestration pipeline.
@@ -15,7 +16,7 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import List, Mapping, Sequence, Tuple
 
-from .epi import TelemetryRecord
+from .interfaces import SupportsTelemetrySample
 from .structural_time import compute_structural_timestamps
 
 __all__ = [
@@ -108,14 +109,16 @@ class OperatorEvent:
         }
 
 
-def _window(records: Sequence[TelemetryRecord], start: int, size: int) -> Sequence[TelemetryRecord]:
+def _window(
+    records: Sequence[SupportsTelemetrySample], start: int, size: int
+) -> Sequence[SupportsTelemetrySample]:
     lower = max(0, start - size + 1)
     return records[lower : start + 1]
 
 
 def _finalise_event(
     name: str,
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     start_index: int,
     end_index: int,
     peak_value: float,
@@ -140,7 +143,7 @@ def _finalise_event(
 
 
 def detect_al(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     window: int = 5,
     lateral_threshold: float = 1.6,
@@ -204,7 +207,7 @@ def detect_al(
 
 
 def detect_oz(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     window: int = 5,
     slip_threshold: float = 0.12,
@@ -261,7 +264,7 @@ def detect_oz(
 
 
 def detect_il(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     window: int = 5,
     base_threshold: float = 0.35,
@@ -331,7 +334,7 @@ def detect_il(
 
 
 def detect_silence(
-    records: Sequence[TelemetryRecord],
+    records: Sequence[SupportsTelemetrySample],
     *,
     window: int = 15,
     load_threshold: float = 400.0,

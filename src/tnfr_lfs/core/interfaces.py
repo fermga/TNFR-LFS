@@ -9,7 +9,7 @@ the concrete dataclasses used by the default ingestion pipeline.
 
 from __future__ import annotations
 
-from typing import Mapping, Protocol, runtime_checkable
+from typing import Mapping, Protocol, Sequence, Tuple, runtime_checkable
 
 __all__ = [
     "SupportsTelemetrySample",
@@ -20,6 +20,8 @@ __all__ = [
     "SupportsContextTyres",
     "SupportsContextChassis",
     "SupportsContextTransmission",
+    "SupportsGoal",
+    "SupportsMicrosector",
 ]
 
 
@@ -203,3 +205,82 @@ class SupportsContextBundle(Protocol):
     tyres: SupportsContextTyres | None
     chassis: SupportsContextChassis | None
     transmission: SupportsContextTransmission | None
+
+
+@runtime_checkable
+class SupportsGoal(Protocol):
+    """Goal specification produced by the segmentation heuristics."""
+
+    phase: str
+    archetype: str
+    description: str
+    target_delta_nfr: float
+    target_sense_index: float
+    nu_f_target: float
+    nu_exc_target: float
+    rho_target: float
+    target_phase_lag: float
+    target_phase_alignment: float
+    measured_phase_lag: float
+    measured_phase_alignment: float
+    target_phase_synchrony: float
+    measured_phase_synchrony: float
+    slip_lat_window: Tuple[float, float]
+    slip_long_window: Tuple[float, float]
+    yaw_rate_window: Tuple[float, float]
+    dominant_nodes: Tuple[str, ...]
+    target_delta_nfr_long: float
+    target_delta_nfr_lat: float
+    delta_axis_weights: Mapping[str, float]
+    archetype_delta_nfr_long_target: float
+    archetype_delta_nfr_lat_target: float
+    archetype_nu_f_target: float
+    archetype_si_phi_target: float
+    detune_ratio_weights: Mapping[str, float]
+    track_gradient: float
+
+
+@runtime_checkable
+class SupportsMicrosector(Protocol):
+    """Microsector abstraction consumed by operator orchestration."""
+
+    index: int
+    start_time: float
+    end_time: float
+    curvature: float
+    brake_event: bool
+    support_event: bool
+    delta_nfr_signature: float
+    goals: Sequence[SupportsGoal]
+    phase_boundaries: Mapping[str, Tuple[int, int]]
+    phase_samples: Mapping[str, Tuple[int, ...]]
+    active_phase: str
+    dominant_nodes: Mapping[str, Tuple[str, ...]]
+    phase_weights: Mapping[str, Mapping[str, float] | float]
+    grip_rel: float
+    phase_lag: Mapping[str, float]
+    phase_alignment: Mapping[str, float]
+    phase_synchrony: Mapping[str, float]
+    phase_motor_latency: Mapping[str, float]
+    motor_latency_ms: float
+    filtered_measures: Mapping[str, object]
+    recursivity_trace: Sequence[Mapping[str, float | str | None]]
+    last_mutation: Mapping[str, object] | None
+    window_occupancy: Mapping[str, Mapping[str, float]]
+    delta_nfr_std: float
+    nodal_delta_nfr_std: float
+    phase_delta_nfr_std: Mapping[str, float]
+    phase_nodal_delta_nfr_std: Mapping[str, float]
+    delta_nfr_entropy: float
+    node_entropy: float
+    phase_delta_nfr_entropy: Mapping[str, float]
+    phase_node_entropy: Mapping[str, float]
+    phase_axis_targets: Mapping[str, Mapping[str, float]]
+    phase_axis_weights: Mapping[str, Mapping[str, float]]
+    context_factors: Mapping[str, float]
+    sample_context_factors: Mapping[int, Mapping[str, float]]
+    operator_events: Mapping[str, Sequence[Mapping[str, object]]]
+
+    def phase_indices(self, phase: str) -> range:
+        """Return the range of telemetry samples associated with ``phase``."""
+

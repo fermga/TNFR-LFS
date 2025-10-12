@@ -9,18 +9,7 @@ import math
 import warnings
 from math import sqrt
 from statistics import mean, pvariance
-from typing import (
-    Deque,
-    Dict,
-    List,
-    Mapping,
-    MutableMapping,
-    Sequence,
-    Tuple,
-    TYPE_CHECKING,
-    TypedDict,
-    cast,
-)
+from typing import Deque, Dict, List, Mapping, MutableMapping, Sequence, Tuple, TypedDict, cast
 
 from .constants import WHEEL_SUFFIXES
 
@@ -46,10 +35,8 @@ from .operator_detection import (
     normalize_structural_operator_identifier,
     silence_event_payloads,
 )
+from .interfaces import SupportsMicrosector
 from ..plugins import TNFRPlugin
-
-if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
-    from .segmentation import Microsector
 
 
 @dataclass(frozen=True)
@@ -164,7 +151,7 @@ def dissonance_breakdown_operator(
     series: Sequence[float],
     target: float,
     *,
-    microsectors: Sequence["Microsector"] | None = None,
+    microsectors: Sequence[SupportsMicrosector] | None = None,
     bundles: Sequence[EPIBundle] | None = None,
 ) -> DissonanceBreakdown:
     """Classify support events into useful (positive) and parasitic dissonance."""
@@ -1199,7 +1186,7 @@ def _stage_coherence(
     objectives: Mapping[str, float],
     *,
     coherence_window: int,
-    microsectors: Sequence["Microsector"] | None = None,
+    microsectors: Sequence[SupportsMicrosector] | None = None,
 ) -> Dict[str, object]:
     if not bundles:
         empty_breakdown = DissonanceBreakdown(
@@ -1425,7 +1412,7 @@ def _update_bundles(
     return updated
 
 
-def _microsector_sample_indices(microsector: "Microsector") -> List[int]:
+def _microsector_sample_indices(microsector: SupportsMicrosector) -> List[int]:
     indices: set[int] = set()
     for samples in getattr(microsector, "phase_samples", {}).values():
         if samples is None:
@@ -1442,7 +1429,7 @@ def _microsector_sample_indices(microsector: "Microsector") -> List[int]:
 
 
 def _phase_context_from_microsectors(
-    microsectors: Sequence["Microsector"] | None,
+    microsectors: Sequence[SupportsMicrosector] | None,
 ) -> tuple[Dict[int, str], Dict[int, Mapping[str, Mapping[str, float] | float]]]:
     assignments: Dict[int, str] = {}
     weight_lookup: Dict[int, Mapping[str, Mapping[str, float] | float]] = {}
@@ -1518,7 +1505,7 @@ def _delta_integral_series(
     return integrals
 
 
-def _microsector_cphi_values(microsector: "Microsector") -> List[float]:
+def _microsector_cphi_values(microsector: SupportsMicrosector) -> List[float]:
     values: List[float] = []
     measures = getattr(microsector, "filtered_measures", {}) or {}
     if isinstance(measures, Mapping):
@@ -1539,7 +1526,7 @@ def _microsector_cphi_values(microsector: "Microsector") -> List[float]:
     return values
 
 
-def _microsector_phase_synchrony_values(microsector: "Microsector") -> List[float]:
+def _microsector_phase_synchrony_values(microsector: SupportsMicrosector) -> List[float]:
     synchrony = getattr(microsector, "phase_synchrony", {}) or {}
     values: List[float] = []
     if isinstance(synchrony, Mapping):
@@ -1550,7 +1537,7 @@ def _microsector_phase_synchrony_values(microsector: "Microsector") -> List[floa
 
 
 def _microsector_variability(
-    microsectors: Sequence["Microsector"] | None,
+    microsectors: Sequence[SupportsMicrosector] | None,
     bundles: Sequence[EPIBundle],
     lap_indices: Sequence[int],
     lap_metadata: Sequence[Mapping[str, object]],
@@ -1616,7 +1603,7 @@ def _microsector_variability(
 
 
 def _aggregate_operator_events(
-    microsectors: Sequence["Microsector"] | None,
+    microsectors: Sequence[SupportsMicrosector] | None,
 ) -> Dict[str, object]:
     aggregated: Dict[str, List[Mapping[str, object]]] = {}
     latent_states: Dict[str, Dict[int, Dict[str, float]]] = {}
@@ -1686,7 +1673,7 @@ def orchestrate_delta_metrics(
     *,
     coherence_window: int = 3,
     recursion_decay: float = 0.4,
-    microsectors: Sequence["Microsector"] | None = None,
+    microsectors: Sequence[SupportsMicrosector] | None = None,
     phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
     operator_state: Mapping[str, Dict[str, object]] | None = None,
 ) -> Mapping[str, object]:
