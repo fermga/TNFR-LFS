@@ -1,43 +1,60 @@
 # TNFR × LFS Documentation
 
-TNFR × LFS (Fractal-Resonant Telemetry Analytics for Live for Speed) is
-the lightweight Python toolkit that operationalises the canonical
-Telemetry/Theory of the Fractal-Resonant Nature (TNFR) framework
-alongside the Load Flow Synthesis methodology. The theory establishes
-how to reason about Event Performance Indicators (EPI), ΔFz/ΔSi deltas
-and Sense Index signals; the toolkit provides production-ready layers to
-apply those ideas in racing telemetry pipelines:
+TNFR × LFS (Fractal-Resonant Telemetry Analytics for Live for Speed) is the
+lightweight Python toolkit that operationalises the canonical
+Telemetry/Theory of the Fractal-Resonant Nature (TNFR) framework alongside the
+Load Flow Synthesis methodology. The theory establishes how to reason about
+Event Performance Indicators (EPI), ΔFz/ΔSi deltas and Sense Index signals; the
+toolkit provides production-ready layers to apply those ideas in racing
+telemetry pipelines. This index is the canonical home for the extended
+introduction, feature descriptions and onboarding guide referenced from the
+project README.
 
-1. **Ingest** – capture telemetry samples from OutSim-compatible
-   streams via :class:`tnfr_lfs.ingestion.live.OutSimClient`.
-2. **Core analytics** – extract Event Performance Indicators (EPI) and
-   compute ΔFz/ΔSi deltas through :class:`tnfr_lfs.core.epi.EPIExtractor`.
-3. **Recommendation engine** – map metrics to actionable setup advice
-   using the rule engine in :mod:`tnfr_lfs.recommender.rules`.
-4. **Exporters** – serialise analysis results to JSON or CSV with the
-   functions in :mod:`tnfr_lfs.exporters`.
+## Feature overview
 
-The project ships with a CLI (`tnfr_lfs`) as well as examples and unit
-tests to illustrate the workflow. The ingestion pipeline regression
-suite in `tests/test_ingestion.py` exercises the OutSim/OutGauge UDP
-clients and fusion helpers end-to-end.【F:tests/test_ingestion.py†L1-L376】
+TNFR × LFS bundles the following core capabilities for race engineers and data
+scientists:
 
-## Getting started
+- Live ΔNFR HUD and capture pipeline wired directly to Live for Speed
+  OutSim/OutGauge streams.
+- Automated baselines, analysis, suggestions and reporting from a single CLI.
+- Extensible exporters (JSONL, Markdown, HTML) and configuration packs for
+  repeatable engineering workflows.
+- Benchmark suite and reproducible examples for regression testing new ideas.
+- Ingestion, analytics, recommendation and export subsystems that map the TNFR
+  framework to actionable setup advice:
+  1. **Ingest** – capture telemetry samples from OutSim-compatible streams via
+     :class:`tnfr_lfs.ingestion.live.OutSimClient`.
+  2. **Core analytics** – extract Event Performance Indicators (EPI) and
+     compute ΔFz/ΔSi deltas through :class:`tnfr_lfs.core.epi.EPIExtractor`.
+  3. **Recommendation engine** – map metrics to actionable setup advice using
+     the rule engine in :mod:`tnfr_lfs.recommender.rules`.
+  4. **Exporters** – serialise analysis results to JSON or CSV with the
+     functions in :mod:`tnfr_lfs.exporters`.
+
+The project ships with a CLI (`tnfr_lfs`) as well as examples and unit tests to
+illustrate the workflow. The ingestion pipeline regression suite in
+`tests/test_ingestion.py` exercises the OutSim/OutGauge UDP clients and fusion
+helpers end-to-end.【F:tests/test_ingestion.py†L1-L376】
+
+## Quickstart checklist
 
 TNFR × LFS targets Python 3.9+ environments and Live for Speed telemetry
-streams. The onboarding workflow below is the definitive reference for
-setting up the toolkit from scratch.
+streams. Work through the following checklist to complete the onboarding
+journey:
 
-### Quickstart overview
+1. **Install the toolkit** – follow the dependency and virtual environment
+   setup in the [beginner quickstart](tutorials.md#1-install-the-toolkit).
+2. **Run the quickstart scenario** – execute the sample capture and reporting
+   workflow under [step 2](tutorials.md#2-run-the-quickstart-scenario).
+3. **Configure Live for Speed telemetry** – mirror the simulator settings in
+   [step 3](tutorials.md#3-configure-live-for-speed-telemetry) so OutSim/OutGauge
+   streams connect to the toolkit.
+4. **Inspect the generated artefacts** – validate your run outputs using the
+   guidance in [step 4](tutorials.md#4-inspect-the-generated-artefacts).
 
-Follow the [beginner quickstart](tutorials.md) to move from installation to a
-validated telemetry capture in four focused stops: set up your environment in
-[“Install the toolkit”](tutorials.md#1-install-the-toolkit), execute the sample
-workflow from [“Run the quickstart scenario”](tutorials.md#2-run-the-quickstart-scenario),
-prepare Live for Speed by mirroring the settings in
-[“Configure Live for Speed telemetry”](tutorials.md#3-configure-live-for-speed-telemetry),
-and inspect the resulting artefacts through
-[“Inspect the generated artefacts”](tutorials.md#4-inspect-the-generated-artefacts).
+Each item links directly to the detailed walkthrough and should be ticked off
+before rolling the toolkit into regular telemetry sessions.
 
 ## Operational checklist
 
