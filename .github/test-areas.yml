@@ -32,10 +32,8 @@ areas:
     filter_globs:
       - 'src/tnfr_lfs/analysis/**'
       - 'tests/test_analysis_*.py'
-      - 'tests/analysis/**'
     pytest_args:
       - tests/test_analysis_*.py
-      - tests/analysis
   - name: core_pkg
     display_name: core
     filter_globs:
