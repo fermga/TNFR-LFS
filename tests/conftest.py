@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 import sys
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
@@ -15,6 +17,46 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
+
+if importlib.util.find_spec("pytest_cov") is None:
+
+    def pytest_addoption(parser: pytest.Parser) -> None:
+        """Register stub coverage options when pytest-cov is unavailable."""
+
+        parser.addoption(
+            "--cov",
+            action="append",
+            default=[],
+            metavar="MODULE",
+            help="Stub option provided when pytest-cov is not installed.",
+        )
+        parser.addoption(
+            "--cov-report",
+            action="append",
+            default=[],
+            metavar="TYPE",
+            help="Stub option provided when pytest-cov is not installed.",
+        )
+        parser.addoption(
+            "--cov-config",
+            action="store",
+            default=None,
+            metavar="PATH",
+            help="Stub option provided when pytest-cov is not installed.",
+        )
+
+    def pytest_configure(config: pytest.Config) -> None:
+        """Inform users that coverage collection is skipped without pytest-cov."""
+
+        cov_requested = bool(config.getoption("--cov")) or bool(
+            config.getoption("--cov-report")
+        ) or bool(config.getoption("--cov-config"))
+        if cov_requested:
+            warnings.warn(
+                "pytest-cov is not installed; coverage options will be ignored.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
 from tnfr_lfs.resources import data_root
 from tnfr_lfs.examples import quickstart_dataset
