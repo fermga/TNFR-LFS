@@ -1,11 +1,13 @@
 # TNFR × LFS Toolkit
 
-**TNFR × LFS** turns the Fractal-Resonant Nature Theory into a race-ready
-telemetry and recommendation workflow for Live for Speed. Capture OutSim and
-OutGauge streams, analyse Event Performance Indicators, and ship setup advice
-without leaving a single toolkit.
+**TNFR × LFS** packages the Fractal-Resonant Nature Theory into a race-ready
+telemetry and recommendation workflow for Live for Speed.
 
-Looking for the full feature catalogue, quickstart walkthrough, or API map?
-Head straight to [`docs/index.md`](docs/index.md) — the MkDocs entry point that
-collects every checklist, tutorial, and reference linked throughout the
-toolkit.
+## Documentation
+
+- [Full documentation index](docs/index.md) – complete feature catalogue,
+  onboarding narrative, and API reference.
+- [Beginner quickstart](docs/tutorials.md) – step-by-step installation and
+  sample session walkthrough.
+- [Examples gallery](docs/examples.md) – automation scripts for common
+  engineering tasks.
