@@ -178,9 +178,13 @@ areas:
       - 'src/tnfr_lfs/recommender/**'
       - 'tests/test_recommender*.py'
       - 'tests/test_recommender_search_cache.py'
+      - 'tests/test_pareto.py'
+      - 'tests/test_search.py'
     pytest_args:
       - tests/test_recommender*.py
       - tests/test_recommender_search_cache.py
+      - tests/test_pareto.py
+      - tests/test_search.py
   - name: plugins
     display_name: plugins
     filter_globs:
