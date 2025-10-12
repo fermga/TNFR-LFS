@@ -184,8 +184,87 @@ def canonical_cli_config_block(pyproject_path: Path) -> str:
     return "\n".join(captured)
 
 
+def write_legacy_cli_config(
+    pyproject_path: Path, *, output_path: Path | None = None
+) -> Path:
+    """Persist the canonical CLI configuration into ``tnfr_lfs.toml``.
+
+    Parameters
+    ----------
+    pyproject_path:
+        Path to a ``pyproject.toml`` file or its parent directory.
+    output_path:
+        Optional location for the generated legacy file. When omitted, the
+        helper writes alongside ``pyproject.toml`` using the default
+        ``tnfr_lfs.toml`` filename.
+
+    Returns
+    -------
+    pathlib.Path
+        The resolved path of the generated legacy configuration file.
+    """
+
+    resolved_pyproject = _resolve_pyproject_path(pyproject_path)
+    if resolved_pyproject is None:
+        raise ValueError(f"Unable to resolve pyproject.toml from {pyproject_path!s}")
+
+    resolved_pyproject = resolved_pyproject.expanduser().resolve(strict=True)
+
+    canonical_block = canonical_cli_config_block(resolved_pyproject)
+    legacy_lines: list[str] = []
+    prefix = "tool.tnfr_lfs"
+
+    for line in canonical_block.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[[tool.tnfr_lfs"):
+            raise ValueError(
+                "Legacy configuration generation does not support array tables "
+                "within [tool.tnfr_lfs]."
+            )
+        if stripped.startswith("[tool.tnfr_lfs") and stripped.endswith("]"):
+            table_name = stripped[1:-1]
+            if table_name == prefix:
+                # ``[tool.tnfr_lfs]`` would introduce an empty legacy table; skip it.
+                line = ""
+            elif table_name.startswith(f"{prefix}."):
+                suffix = table_name[len(prefix) + 1 :]
+                indentation = line[: len(line) - len(line.lstrip())]
+                line = f"{indentation}[{suffix}]"
+            else:  # pragma: no cover - unexpected format guard
+                raise ValueError(
+                    "Encountered an unexpected table while generating legacy configuration: "
+                    f"{table_name}"
+                )
+        if line:
+            legacy_lines.append(line)
+        else:
+            legacy_lines.append("")
+
+    legacy_block = "\n".join(legacy_lines).rstrip() + "\n"
+
+    if output_path is not None:
+        target_path = Path(output_path).expanduser().resolve(strict=False)
+    else:
+        target_path = resolved_pyproject.with_name(_DEFAULT_LEGACY_FILENAME)
+
+    header_lines = [
+        "# Auto-generated from the canonical [tool.tnfr_lfs] block in pyproject.toml.",
+        "# Regenerate via tnfr_lfs.configuration.write_legacy_cli_config(pyproject_path).",
+        "# Legacy consumers may continue reading tnfr_lfs.toml; new tooling reads pyproject.toml.",
+    ]
+    header_text = "\n".join(header_lines).rstrip() + "\n\n"
+
+    target_path.write_text(
+        header_text + legacy_block,
+        encoding="utf8",
+    )
+
+    return target_path
+
+
 __all__ = [
     "canonical_cli_config_block",
     "load_project_config",
     "load_project_plugins_config",
+    "write_legacy_cli_config",
 ]
