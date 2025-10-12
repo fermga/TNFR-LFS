@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import pytest
-from typing import Mapping
+from typing import Callable, Mapping
 
 from tnfr_lfs.core.metrics import (
     AeroBalanceDrift,
@@ -102,49 +102,63 @@ def test_motor_input_correlations_prefers_steer_yaw_pair() -> None:
     assert dominant.latency_ms == pytest.approx(expected_latency, abs=5.0)
 
 
-def test_ackermann_parallel_delta_uses_wheel_slip_angles() -> None:
-    baseline = build_telemetry_record(
-        0.0,
-        100.0,
-        yaw_rate=0.6,
-        slip_angle=0.02,
-        slip_angle_fl=0.06,
-        slip_angle_fr=0.01,
-    )
-    sample = replace(
-        baseline,
-        yaw_rate=0.8,
-        slip_angle_fl=0.10,
-        slip_angle_fr=-0.02,
-    )
+@pytest.mark.parametrize(
+    "baseline_factory, sample_overrides, min_yaw_rate, expected",
+    [
+        (
+            lambda: build_telemetry_record(
+                0.0,
+                100.0,
+                yaw_rate=0.6,
+                slip_angle=0.02,
+                slip_angle_fl=0.06,
+                slip_angle_fr=0.01,
+            ),
+            {"yaw_rate": 0.8, "slip_angle_fl": 0.10, "slip_angle_fr": -0.02},
+            1e-6,
+            0.07,
+        ),
+        (
+            lambda: build_telemetry_record(
+                0.0,
+                95.0,
+                yaw_rate=-0.5,
+                slip_angle=0.015,
+                slip_angle_fl=0.02,
+                slip_angle_fr=0.08,
+            ),
+            {"yaw_rate": -0.7, "slip_angle_fl": 0.01, "slip_angle_fr": 0.12},
+            1e-6,
+            0.05,
+        ),
+        (
+            lambda: build_telemetry_record(
+                0.0,
+                92.0,
+                yaw_rate=0.0,
+                slip_angle_fl=0.03,
+                slip_angle_fr=0.0,
+            ),
+            {"yaw_rate": 1e-7, "slip_angle_fl": 0.2, "slip_angle_fr": -0.1},
+            1e-6,
+            0.0,
+        ),
+    ],
+)
+def test_ackermann_parallel_delta(
+    baseline_factory: Callable[[], TelemetryRecord],
+    sample_overrides: Mapping[str, float],
+    min_yaw_rate: float,
+    expected: float,
+) -> None:
+    baseline = baseline_factory()
+    sample = replace(baseline, **sample_overrides)
+
     delta = _ackermann_parallel_delta(sample, baseline)
-    assert delta == pytest.approx(0.07, rel=1e-6)
 
-
-def test_ackermann_parallel_delta_swaps_wheels_on_right_turn() -> None:
-    baseline = build_telemetry_record(
-        0.0,
-        95.0,
-        yaw_rate=-0.5,
-        slip_angle=0.015,
-        slip_angle_fl=0.02,
-        slip_angle_fr=0.08,
-    )
-    sample = replace(
-        baseline,
-        yaw_rate=-0.7,
-        slip_angle_fl=0.01,
-        slip_angle_fr=0.12,
-    )
-    delta = _ackermann_parallel_delta(sample, baseline)
-    assert delta == pytest.approx(0.05, rel=1e-6)
-
-
-def test_ackermann_parallel_delta_ignores_low_yaw_rate() -> None:
-    baseline = build_telemetry_record(0.0, 92.0, yaw_rate=0.0, slip_angle_fl=0.03, slip_angle_fr=0.0)
-    sample = replace(baseline, yaw_rate=1e-7, slip_angle_fl=0.2, slip_angle_fr=-0.1)
-    delta = _ackermann_parallel_delta(sample, baseline)
-    assert delta == pytest.approx(0.0)
+    if max(abs(baseline.yaw_rate), abs(sample.yaw_rate)) <= min_yaw_rate:
+        assert expected == pytest.approx(0.0)
+    assert delta == pytest.approx(expected, rel=1e-6)
 
 
 def test_compute_window_metrics_tracks_ackermann_overshoot() -> None:
