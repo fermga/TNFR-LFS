@@ -14,6 +14,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
+from ..configuration import load_project_config
 from ..core.cache_settings import CacheOptions
 from ..ingestion import OutSimClient
 from ..ingestion.offline import (
@@ -28,6 +29,7 @@ from .errors import CliError
 
 CONFIG_ENV_VAR = "TNFR_LFS_CONFIG"
 DEFAULT_CONFIG_FILENAME = "tnfr_lfs.toml"
+PROJECT_CONFIG_FILENAME = "pyproject.toml"
 
 Records = List[TelemetryRecord]
 
@@ -37,50 +39,95 @@ _PARQUET_DEPENDENCY_MESSAGE = (
 )
 
 
-def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
-    """Load CLI defaults from ``tnfr_lfs.toml`` style files."""
+def _normalise_cli_config(payload: Mapping[str, Any], source: Path) -> dict[str, Any]:
+    data = {str(key): value for key, value in payload.items()}
+    telemetry_cfg = data.get("telemetry")
+    if isinstance(telemetry_cfg, Mapping) and "core" not in data:
+        data["core"] = dict(telemetry_cfg)
 
-    candidates: List[Path] = []
-    if path is not None:
-        candidates.append(path)
-    env_path = os.environ.get(CONFIG_ENV_VAR)
-    if env_path:
-        candidates.append(Path(env_path))
-    candidates.append(Path.cwd() / DEFAULT_CONFIG_FILENAME)
-    candidates.append(Path.home() / ".config" / DEFAULT_CONFIG_FILENAME)
+    cache_options = CacheOptions.from_config(data)
+    performance_cfg_raw = data.get("performance")
+    legacy_cache_raw = data.get("cache")
+    if isinstance(performance_cfg_raw, Mapping):
+        performance_cfg = dict(performance_cfg_raw)
+    else:
+        performance_cfg = {}
+    if isinstance(performance_cfg_raw, Mapping) or isinstance(legacy_cache_raw, Mapping):
+        performance_cfg.update(cache_options.to_performance_config())
+        data["performance"] = performance_cfg
 
-    resolved_candidates: Dict[Path, None] = {}
+    data["_config_path"] = str(source.expanduser().resolve())
+    return data
+
+
+def _iter_unique_paths(candidates: List[Path]) -> List[Path]:
+    seen: Dict[Path, None] = {}
+    ordered: List[Path] = []
     for candidate in candidates:
-        if candidate is None:
+        resolved = candidate.expanduser().resolve(strict=False)
+        if resolved in seen:
             continue
-        resolved = candidate.expanduser().resolve()
-        if resolved in resolved_candidates:
+        seen[resolved] = None
+        ordered.append(resolved)
+    return ordered
+
+
+def _pyproject_candidates(base: Path) -> List[Path]:
+    base = base.expanduser()
+    if base.name == PROJECT_CONFIG_FILENAME:
+        return [base]
+    if base.suffix:
+        return []
+    return [base / PROJECT_CONFIG_FILENAME]
+
+
+def _load_toml_mapping(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    with path.open("rb") as handle:
+        data = tomllib.load(handle)
+    if isinstance(data, dict):
+        return {str(key): value for key, value in data.items()}
+    return None
+
+
+def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
+    """Load CLI defaults from ``pyproject.toml`` or ``tnfr_lfs.toml`` files."""
+
+    env_config = os.environ.get(CONFIG_ENV_VAR)
+    env_path = Path(env_config) if env_config else None
+
+    pyproject_bases: List[Path] = [Path.cwd()]
+    if path is not None:
+        pyproject_bases.append(path)
+    if env_path is not None:
+        pyproject_bases.append(env_path)
+
+    pyproject_candidates: List[Path] = []
+    for base in pyproject_bases:
+        pyproject_candidates.extend(_pyproject_candidates(base))
+
+    for candidate in _iter_unique_paths(pyproject_candidates):
+        loaded = load_project_config(candidate)
+        if not loaded:
             continue
-        resolved_candidates[resolved] = None
-        if not resolved.exists():
+        payload, resolved = loaded
+        return _normalise_cli_config(payload, resolved)
+
+    legacy_candidates: List[Path] = []
+    if path is not None:
+        legacy_candidates.append(path)
+    if env_path is not None:
+        legacy_candidates.append(env_path)
+    legacy_candidates.append(Path.cwd() / DEFAULT_CONFIG_FILENAME)
+    legacy_candidates.append(Path.home() / ".config" / DEFAULT_CONFIG_FILENAME)
+
+    for candidate in _iter_unique_paths(legacy_candidates):
+        payload = _load_toml_mapping(candidate)
+        if payload is None:
             continue
-        with resolved.open("rb") as handle:
-            data = tomllib.load(handle)
-        if isinstance(data, dict):
-            telemetry_cfg = data.get("telemetry")
-            if isinstance(telemetry_cfg, Mapping) and "core" not in data:
-                data["core"] = dict(telemetry_cfg)
-            cache_options = CacheOptions.from_config(data)
-            performance_cfg_raw = data.get("performance")
-            legacy_cache_raw = data.get("cache")
-            should_update_performance = isinstance(performance_cfg_raw, Mapping) or isinstance(
-                legacy_cache_raw, Mapping
-            )
-            if should_update_performance:
-                performance_cfg: dict[str, Any]
-                if isinstance(performance_cfg_raw, Mapping):
-                    performance_cfg = dict(performance_cfg_raw)
-                else:
-                    performance_cfg = {}
-                performance_cfg.update(cache_options.to_performance_config())
-                data["performance"] = performance_cfg
-        data["_config_path"] = str(resolved)
-        return data
+        return _normalise_cli_config(payload, candidate)
+
     return {"_config_path": None}
 
 

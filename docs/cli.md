@@ -9,9 +9,10 @@ tnfr_lfs baseline runs/test1.jsonl data/test1.raf --format jsonl
 
 !!! tip
     The CLI entry point uses an underscore: invoke commands as `tnfr_lfs ...` and
-    keep configuration overrides in `tnfr_lfs.toml` (for example
-    `~/.config/tnfr_lfs.toml`). Update any local scripts that still call `tnfr-lfs`
-    so they point to the underscore-prefixed executable.
+    declare defaults under `[tool.tnfr_lfs]` in your `pyproject.toml`. Legacy
+    `tnfr_lfs.toml` files (including `~/.config/tnfr_lfs.toml`) continue to work
+    and are merged automatically. Update any local scripts that still call
+    `tnfr-lfs` so they point to the underscore-prefixed executable.
 
 The example converts the bundled RAF capture (`data/test1.raf`) into a
 JSONL baseline. The CLI inspects the suffix of every telemetry source
@@ -388,19 +389,22 @@ operator only raises wing tweaks when the stored baseline (low speed)
 remains within tolerance.
 ## Configuration
 
-The CLI resolves defaults from a ``tnfr_lfs.toml`` file located in the
-current working directory, the path referenced by the
-``TNFR_LFS_CONFIG`` environment variable, or ``~/.config/tnfr_lfs.toml``
-as a fallback.  Any explicit CLI flag takes precedence, but the file can
-define sensible defaults for ports, exporters, car/track profiles and
-report locations.
+The CLI resolves defaults from the `[tool.tnfr_lfs]` table in the nearest
+``pyproject.toml``.  It checks the project in the current working
+directory first, then `--config`/``TNFR_LFS_CONFIG`` when provided, before
+falling back to legacy ``tnfr_lfs.toml`` files (including
+``~/.config/tnfr_lfs.toml``).  Any explicit CLI flag takes precedence,
+but the configuration can define sensible defaults for ports, exporters,
+car/track profiles and report locations.
 
 !!! note
     The snippet below is rendered directly from the bundled
     ``tnfr_lfs.toml`` so the documentation always matches the canonical
     defaults.  Additional tables shown later in this section (for
     example ``[performance]``) illustrate optional overrides rather than
-    values written to the default template.
+    values written to the default template.  When using
+    ``pyproject.toml`` simply copy the same tables under
+    ``[tool.tnfr_lfs]``.
 
 {{ render_config_defaults() }}
 

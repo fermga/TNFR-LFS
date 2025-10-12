@@ -73,6 +73,88 @@ def test_load_cli_config_normalises_performance_section(tmp_path: Path) -> None:
     assert performance_cfg["telemetry_buffer_size"] == 42
 
 
+def test_load_cli_config_reads_pyproject(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text(
+        dedent(
+            """
+            [tool.tnfr_lfs.telemetry]
+            baseline = "baseline.jsonl"
+
+            [tool.tnfr_lfs.cache]
+            cache_enabled = "yes"
+            nu_f_cache_size = "48"
+            """
+        ),
+        encoding="utf8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    config = cli_io.load_cli_config()
+
+    assert config["_config_path"] == str(pyproject_path.resolve())
+    assert config["core"]["baseline"] == "baseline.jsonl"
+    performance_cfg = config["performance"]
+    assert performance_cfg["cache_enabled"] is True
+    assert performance_cfg["nu_f_cache_size"] == 48
+    assert performance_cfg["max_cache_size"] == 48
+
+
+def test_load_cli_config_merges_pyproject_with_legacy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    legacy_path = tmp_path / "tnfr_lfs.toml"
+    legacy_path.write_text(
+        dedent(
+            """
+            [logging]
+            format = "text"
+            output = "stdout"
+            """
+        ),
+        encoding="utf8",
+    )
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text(
+        dedent(
+            """
+            [tool.tnfr_lfs.logging]
+            level = "warning"
+            """
+        ),
+        encoding="utf8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    config = cli_io.load_cli_config()
+
+    assert config["_config_path"] == str(pyproject_path.resolve())
+    logging_cfg = config["logging"]
+    assert logging_cfg["level"] == "warning"
+    assert logging_cfg["format"] == "text"
+    assert logging_cfg["output"] == "stdout"
+
+
+def test_load_cli_config_accepts_explicit_pyproject_path(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    pyproject_path = config_dir / "pyproject.toml"
+    pyproject_path.write_text(
+        dedent(
+            """
+            [tool.tnfr_lfs.logging]
+            level = "debug"
+            """
+        ),
+        encoding="utf8",
+    )
+
+    config = cli_io.load_cli_config(pyproject_path)
+
+    assert config["_config_path"] == str(pyproject_path.resolve())
+    assert config["logging"]["level"] == "debug"
+
+
 def test_resolve_cache_size_returns_none_without_options() -> None:
     namespace = argparse.Namespace()
 
