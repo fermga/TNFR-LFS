@@ -8,6 +8,10 @@
 * Rename operator helpers to English (`coupling_operator`, `recursive_filter_operator`) while keeping deprecated Spanish aliases for compatibility.
 * Translate the structural silence operator naming to English (`detect_silence`, `SILENCE`), normalise legacy `SILENCIO` payloads to the canonical identifier, and update telemetry aggregation to consume the English label consistently.
 
+### Removed
+
+* Retire the legacy `tnfr_lfs.pack` alias in favour of `tnfr_lfs.resources` helpers.
+
 ## v0.3.0 (2025-10-10)
 
 ### Documentation
@@ -354,7 +358,7 @@ Consolidate HTML exporter test coverage ([`614d2be`](https://github.com/fermga/T
 
 * refactor: expose quickstart dataset helper in package ([`3eb097a`](https://github.com/fermga/TNFR-LFS/commit/3eb097ad979707b4f6ece5f358717eb4763aabeb))
 
-* refactor: package resources inside tnfr_lfs.pack ([`5bcb62a`](https://github.com/fermga/TNFR-LFS/commit/5bcb62a34c598874564a8113bc8edd05241c8abb))
+* refactor: package resources inside tnfr_lfs.resources ([`5bcb62a`](https://github.com/fermga/TNFR-LFS/commit/5bcb62a34c598874564a8113bc8edd05241c8abb))
 
 * refactor: share entropy helper across core metrics ([`ae05411`](https://github.com/fermga/TNFR-LFS/commit/ae05411899046f65355f214b325b56d38926bfc3))
 

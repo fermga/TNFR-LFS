@@ -9,7 +9,7 @@ from typing import Iterable
 __all__ = ["pack_root", "data_root", "modifiers_root", "set_pack_root_override"]
 
 _FALLBACK_PACK_ROOT = Path(__file__).resolve().parent
-_PACKAGES: tuple[str, ...] = ("tnfr_lfs.resources", "tnfr_lfs.pack")
+_PACKAGES: tuple[str, ...] = ("tnfr_lfs.resources",)
 
 _PACK_ROOT: Path | None = None
 _DATA_ROOT: Path | None = None
