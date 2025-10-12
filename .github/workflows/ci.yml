@@ -89,7 +89,8 @@ jobs:
           )
 
           filters_yaml = yaml.safe_dump(filters, sort_keys=False)
-          matrix_json = json.dumps(matrix, separators=(",", ":"))
+          matrix_obj = {"include": matrix}
+          matrix_json = json.dumps(matrix_obj, separators=(",", ":"))
 
           output_path = Path(os.environ["GITHUB_OUTPUT"])
           with output_path.open("a", encoding="utf-8") as fh:
