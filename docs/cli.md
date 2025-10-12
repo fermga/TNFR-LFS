@@ -9,10 +9,12 @@ tnfr_lfs baseline runs/test1.jsonl data/test1.raf --format jsonl
 
 !!! tip
     The CLI entry point uses an underscore: invoke commands as `tnfr_lfs ...` and
-    declare defaults under `[tool.tnfr_lfs]` in your `pyproject.toml`. Legacy
-    `tnfr_lfs.toml` files (including `~/.config/tnfr_lfs.toml`) continue to work
-    and are merged automatically. Update any local scripts that still call
-    `tnfr-lfs` so they point to the underscore-prefixed executable.
+    persist defaults under `[tool.tnfr_lfs]` in your `pyproject.toml`. The
+    repository ships a generated `tnfr_lfs.toml` for legacy automation (including
+    `~/.config/tnfr_lfs.toml`), but the loader now reads the pyproject section
+    first and only falls back to standalone files when necessary. Update any
+    local scripts that still call `tnfr-lfs` so they point to the
+    underscore-prefixed executable.
 
 The example converts the bundled RAF capture (`data/test1.raf`) into a
 JSONL baseline. The CLI inspects the suffix of every telemetry source
@@ -56,9 +58,9 @@ and destination via the top-level flags:
 * `--log-format` – select `json` (default) or `text` for a human-readable
   formatter.
 
-The same options can be persisted inside `tnfr_lfs.toml` under
-`[logging]`. See the updated template at the project root for an example
-with sane defaults.
+Persist the same options inside `pyproject.toml` under
+`[tool.tnfr_lfs.logging]`. The generated `tnfr_lfs.toml` mirrors that block so
+older environments inherit the defaults without additional work.
 
 ### Monitoring capture metrics
 
@@ -398,13 +400,14 @@ but the configuration can define sensible defaults for ports, exporters,
 car/track profiles and report locations.
 
 !!! note
-    The snippet below is rendered directly from the bundled
-    ``tnfr_lfs.toml`` so the documentation always matches the canonical
-    defaults.  Additional tables shown later in this section (for
-    example ``[performance]``) illustrate optional overrides rather than
-    values written to the default template.  When using
-    ``pyproject.toml`` simply copy the same tables under
-    ``[tool.tnfr_lfs]``.
+    The snippet below is rendered directly from the `[tool.tnfr_lfs]`
+    block in ``pyproject.toml`` so the documentation always matches the
+    canonical defaults.  The repository keeps a generated
+    ``tnfr_lfs.toml`` with the same content for tooling that still
+    expects a standalone file.  Additional tables shown later in this
+    section (for example ``[performance]``) illustrate optional overrides
+    rather than values written to the default template—copy whichever
+    tables you need under ``[tool.tnfr_lfs]`` in your project.
 
 {{ render_config_defaults() }}
 

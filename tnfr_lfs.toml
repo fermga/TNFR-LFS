@@ -1,3 +1,7 @@
+# Auto-generated from the canonical [tool.tnfr_lfs] block in pyproject.toml.
+# The CLI now reads defaults directly from pyproject.toml; keep this file
+# only when older automation still expects tnfr_lfs.toml to exist.
+
 [logging]
 level = "info"
 output = "stderr"
