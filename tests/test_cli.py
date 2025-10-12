@@ -21,7 +21,10 @@ from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
-from tnfr_lfs.configuration import canonical_cli_config_block
+from tnfr_lfs.configuration import (
+    canonical_cli_config_block,
+    canonical_cli_config_legacy_text,
+)
 from tests.helpers import (
     DummyBundle,
     create_cli_config_pack,
@@ -1192,22 +1195,27 @@ exit = 0.2
 
 
 def test_repository_template_configures_default_ports_and_profiles() -> None:
-    config_path = Path(__file__).resolve().parents[1] / "tnfr_lfs.toml"
-    data = tomllib.loads(config_path.read_text(encoding="utf8"))
-    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
-    pyproject_payload = tomllib.loads(pyproject_path.read_text(encoding="utf8"))
-    canonical = pyproject_payload["tool"]["tnfr_lfs"]
+    repo_root = Path(__file__).resolve().parents[1]
+    config_path = repo_root / "tnfr_lfs.toml"
+    pyproject_path = repo_root / "pyproject.toml"
+
+    config_text = config_path.read_text(encoding="utf8")
+    assert config_text == canonical_cli_config_legacy_text(pyproject_path)
+
     snippet = canonical_cli_config_block(pyproject_path)
     assert snippet.strip().startswith("[tool.tnfr_lfs.logging]")
 
+    canonical_payload = tomllib.loads(snippet)["tool"]["tnfr_lfs"]
+    data = tomllib.loads(config_text)
+
+    assert data == canonical_payload
+
     logging_cfg = data["logging"]
-    assert logging_cfg == canonical["logging"]
     assert logging_cfg["level"] == "info"
     assert logging_cfg["output"] == "stderr"
     assert logging_cfg["format"] == "json"
 
     core = data["core"]
-    assert core == canonical["core"]
     assert core["host"] == "127.0.0.1"
     assert core["outsim_port"] == 4123
     assert core["outgauge_port"] == 3000
@@ -1216,32 +1224,22 @@ def test_repository_template_configures_default_ports_and_profiles() -> None:
     assert core["udp_retries"] == 3
 
     performance = data["performance"]
-    assert performance == canonical["performance"]
     assert performance["telemetry_buffer_size"] == 64
     assert performance["cache_enabled"] is True
     assert performance["max_cache_size"] == DEFAULT_DYNAMIC_CACHE_SIZE
 
     suggestion_defaults = data["suggest"]
-    assert suggestion_defaults == canonical["suggest"]
     assert suggestion_defaults["car_model"] == "FZR"
     assert suggestion_defaults["track"] == "AS5"
 
     paths_cfg = data["paths"]
-    assert paths_cfg == canonical["paths"]
     assert paths_cfg["output_dir"] == "out"
     assert paths_cfg["pack_root"] == "."
 
     limits = data["limits"]["delta_nfr"]
-    assert limits == canonical["limits"]["delta_nfr"]
     assert limits["entry"] == pytest.approx(0.5, rel=1e-3)
     assert limits["apex"] == pytest.approx(0.4, rel=1e-3)
     assert limits["exit"] == pytest.approx(0.6, rel=1e-3)
-
-    plugins = data["plugins"]
-    assert plugins == canonical["plugins"]
-
-    profiles = data["profiles"]
-    assert profiles == canonical["profiles"]
 
 
 def test_diagnose_reports_success(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:

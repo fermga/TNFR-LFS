@@ -15,6 +15,11 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 _DEFAULT_LEGACY_FILENAME = "tnfr_lfs.toml"
 _PROJECT_FILENAME = "pyproject.toml"
+_LEGACY_HEADER_LINES = (
+    "# Auto-generated from the canonical [tool.tnfr_lfs] block in pyproject.toml.",
+    "# Regenerate via tnfr_lfs.configuration.write_legacy_cli_config(pyproject_path).",
+    "# Legacy consumers may continue reading tnfr_lfs.toml; new tooling reads pyproject.toml.",
+)
 
 
 def _as_dict(payload: ABCMapping[str, Any]) -> dict[str, Any]:
@@ -184,33 +189,21 @@ def canonical_cli_config_block(pyproject_path: Path) -> str:
     return "\n".join(captured)
 
 
-def write_legacy_cli_config(
-    pyproject_path: Path, *, output_path: Path | None = None
-) -> Path:
-    """Persist the canonical CLI configuration into ``tnfr_lfs.toml``.
-
-    Parameters
-    ----------
-    pyproject_path:
-        Path to a ``pyproject.toml`` file or its parent directory.
-    output_path:
-        Optional location for the generated legacy file. When omitted, the
-        helper writes alongside ``pyproject.toml`` using the default
-        ``tnfr_lfs.toml`` filename.
-
-    Returns
-    -------
-    pathlib.Path
-        The resolved path of the generated legacy configuration file.
-    """
+def canonical_cli_config_legacy_text(pyproject_path: Path) -> str:
+    """Return the canonical legacy ``tnfr_lfs.toml`` contents."""
 
     resolved_pyproject = _resolve_pyproject_path(pyproject_path)
     if resolved_pyproject is None:
         raise ValueError(f"Unable to resolve pyproject.toml from {pyproject_path!s}")
 
     resolved_pyproject = resolved_pyproject.expanduser().resolve(strict=True)
+    legacy_block = _format_legacy_cli_config_block(resolved_pyproject)
+    header_text = "\n".join(_LEGACY_HEADER_LINES).rstrip() + "\n\n"
+    return header_text + legacy_block
 
-    canonical_block = canonical_cli_config_block(resolved_pyproject)
+
+def _format_legacy_cli_config_block(pyproject_path: Path) -> str:
+    canonical_block = canonical_cli_config_block(pyproject_path)
     legacy_lines: list[str] = []
     prefix = "tool.tnfr_lfs"
 
@@ -240,30 +233,49 @@ def write_legacy_cli_config(
         else:
             legacy_lines.append("")
 
-    legacy_block = "\n".join(legacy_lines).rstrip() + "\n"
+    return "\n".join(legacy_lines).rstrip() + "\n"
+
+
+def write_legacy_cli_config(
+    pyproject_path: Path, *, output_path: Path | None = None
+) -> Path:
+    """Persist the canonical CLI configuration into ``tnfr_lfs.toml``.
+
+    Parameters
+    ----------
+    pyproject_path:
+        Path to a ``pyproject.toml`` file or its parent directory.
+    output_path:
+        Optional location for the generated legacy file. When omitted, the
+        helper writes alongside ``pyproject.toml`` using the default
+        ``tnfr_lfs.toml`` filename.
+
+    Returns
+    -------
+    pathlib.Path
+        The resolved path of the generated legacy configuration file.
+    """
+
+    resolved_pyproject = _resolve_pyproject_path(pyproject_path)
+    if resolved_pyproject is None:
+        raise ValueError(f"Unable to resolve pyproject.toml from {pyproject_path!s}")
+
+    resolved_pyproject = resolved_pyproject.expanduser().resolve(strict=True)
+    legacy_text = canonical_cli_config_legacy_text(resolved_pyproject)
 
     if output_path is not None:
         target_path = Path(output_path).expanduser().resolve(strict=False)
     else:
         target_path = resolved_pyproject.with_name(_DEFAULT_LEGACY_FILENAME)
 
-    header_lines = [
-        "# Auto-generated from the canonical [tool.tnfr_lfs] block in pyproject.toml.",
-        "# Regenerate via tnfr_lfs.configuration.write_legacy_cli_config(pyproject_path).",
-        "# Legacy consumers may continue reading tnfr_lfs.toml; new tooling reads pyproject.toml.",
-    ]
-    header_text = "\n".join(header_lines).rstrip() + "\n\n"
-
-    target_path.write_text(
-        header_text + legacy_block,
-        encoding="utf8",
-    )
+    target_path.write_text(legacy_text, encoding="utf8")
 
     return target_path
 
 
 __all__ = [
     "canonical_cli_config_block",
+    "canonical_cli_config_legacy_text",
     "load_project_config",
     "load_project_plugins_config",
     "write_legacy_cli_config",
