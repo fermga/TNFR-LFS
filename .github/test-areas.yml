@@ -34,9 +34,6 @@ areas:
       - '!src/tnfr_lfs/processing/**'
       - '!src/tnfr_lfs/recommender/**'
       - 'tests/__init__.py'
-      - 'tests/conftest.py'
-      - 'tests/data/**'
-      - 'tests/helpers/**'
       - 'tests/test_abtest.py'
       - 'tests/test_acceptance_pipeline.py'
       - 'tests/test_brake_thermal.py'
@@ -67,6 +64,13 @@ areas:
       - tests/test_search.py
       - tests/test_session.py
       - tests/test_version.py
+  - name: full
+    display_name: full
+    filter_globs:
+      - 'tests/conftest.py'
+      - 'tests/data/**'
+      - 'tests/helpers/**'
+    include_in_matrix: false
   - name: examples
     display_name: examples
     filter_globs:
