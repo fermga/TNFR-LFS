@@ -177,6 +177,7 @@ areas:
     display_name: plugins
     filter_globs:
       - 'src/tnfr_lfs/plugins/**'
+      - 'src/tnfr_lfs/cli/osd.py'
       - 'tests/plugins/**'
       - 'tests/test_cli_osd.py'
     pytest_args:
