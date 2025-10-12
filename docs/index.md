@@ -10,6 +10,10 @@ telemetry pipelines. This index is the canonical home for the extended
 introduction, feature descriptions and onboarding guide referenced from the
 project README.
 
+> The README offers a compact elevator pitch and quick links; bookmark this
+> index when you need the full onboarding narrative, detailed checklists and
+> API map.
+
 ## Feature overview
 
 TNFR × LFS bundles the following core capabilities for race engineers and data
@@ -94,6 +98,8 @@ aerodynamic imbalance).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 - [Advanced workflows](advanced_workflows.md) – Pareto sweeps, robustness
   checks and A/B comparisons.
 - [API reference](api_reference.md) – module-level documentation.
+- [Operational checklist](#operational-checklist) – quantitative targets for
+  stint reviews and automated rules.
 - [Examples gallery](examples.md) – automation scripts under ``examples/``.
 - [CLI guide](cli.md) – command-line usage and configuration templates.
 - [Setup equivalences](setup_equivalences.md) – map TNFR metrics to setup
