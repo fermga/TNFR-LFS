@@ -6,7 +6,7 @@ artefacts that the CLI generates. When you are ready to expand towards Pareto
 sweeps or lap-by-lap comparisons, jump to the
 [advanced workflows](advanced_workflows.md).
 
-## 1. Install the toolkit
+## 1. Install the toolkit {#1-install-the-toolkit}
 
 The quickstart requires Python 3.9+ and the base dependencies declared in
 `pyproject.toml`.
@@ -36,7 +36,7 @@ environment is active before continuing.
     extractor. The same calibration hooks and pack overrides apply to both the
     CLI and your own scripts.
 
-## 2. Run the quickstart scenario
+## 2. Run the quickstart scenario {#2-run-the-quickstart-scenario}
 
 From the repository root run:
 
@@ -62,7 +62,74 @@ Baseline saved 17 samples to /workspace/TNFR-LFS/examples/out/baseline.jsonl (js
     * Artefacts missing under `examples/out/` – check write permissions or
       delete stale files before re-running the script.
 
-## 3. Inspect the generated artefacts
+## 3. Configure Live for Speed telemetry {#3-configure-live-for-speed-telemetry}
+
+1. Launch Live for Speed and open `cfg.txt` (Options → Misc → `cfg.txt`
+   or edit the file directly).
+2. Enable the OutSim broadcaster with a suitable host/port pair, then append
+   the extended options so TNFR × LFS receives the four-wheel payload:
+
+   ```text
+   OutSim 1 29999 1000 0.0 0.0 0.0
+   OutSim Opts ff
+   ```
+
+3. Enable the OutGauge broadcaster and request the extended payload that carries
+   tyre temperatures, pressures, and brake data:
+
+   ```text
+   OutGauge 1 30000 1
+   OutGauge Opts OG_EXT_TYRE_TEMP|OG_EXT_TYRE_PRESS|OG_EXT_BRAKE_TEMP
+   ```
+
+   The corresponding in-game commands are `/outsim Opts ff` followed by
+   `/outsim 1 …` and `/outgauge Opts …` before `/outgauge 1 …` if you
+   prefer configuring from the console.
+4. Restart the session so Live for Speed loads the new configuration. Refer to
+   the [telemetry reference](telemetry.md) for a detailed breakdown of the
+   available fields and integration tips.
+
+All TNFR metrics (`ΔNFR`, the nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`,
+`C(t)` and related indicators) are derived from these native telemetry
+streams; the toolkit never fabricates missing inputs. The fusion layer reads
+the OutSim/OutGauge packets produced with the configuration above so the HUD,
+CLI, and exporters have access to the full data set.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】【F:tnfr_lfs/ingestion/fusion.py†L594-L657】
+
+!!! note "Brake temperature estimation"
+    Live for Speed only publishes real brake temperatures when the extended OutGauge payload is enabled; otherwise the stream exposes `0 °C` placeholders. TNFR × LFS consumes those native readings whenever they arrive and seamlessly falls back to the brake thermal proxy to keep fade metrics alive, integrating brake work and convective cooling until fresh data shows up again.【F:tnfr_lfs/ingestion/fusion.py†L248-L321】【F:tnfr_lfs/ingestion/fusion.py†L1064-L1126】
+    The CSV reader mirrors that philosophy by preserving optional columns as `math.nan` when OutSim leaves them out, preventing artificial estimates from leaking into the metrics pipeline.【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】 When the wheel payload is disabled the toolkit now surfaces tyre loads, slip ratios and suspension metrics as “no data” rather than fabricating zeroed values, making it obvious that the telemetry stream is incomplete.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】
+
+#### Metric field checklist
+
+- **ΔNFR (nodal gradient) and ∇NFR∥/∇NFR⊥ (gradient projections)** – rely on
+  per-wheel Fz loads, their ΔFz derivatives, the longitudinal/lateral
+  forces, and the suspension deflections reported by OutSim together with
+  the engine regime, pedals, and ABS/TC flags provided by OutGauge to
+  resolve the nodal gradient.  The ∇NFR∥/∇NFR⊥ projections are components of
+  that gradient and do not replace the raw load channels; always cross-check
+  recommendations against the `Fz`/`ΔFz` logs when you need absolute forces.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+- **ν_f (natural frequency)** – requires load split, slip ratios/angles,
+  and yaw rate/velocity from OutSim, plus driver style signals (throttle,
+  gear) resolved via OutGauge to tailor node categories and spectral
+  windows.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+- **C(t) (structural coherence)** – builds on the ΔNFR distribution and
+  ν_f bands, leveraging the same OutSim data, the derived `mu_eff_*`
+  coefficients, and the ABS/TC flags that OutGauge exposes.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+- **Ackermann / slide-catch budgets** – use only the `slip_angle_*`
+  channels and `yaw_rate` broadcast by OutSim to measure parallel-steer
+  deltas and slide-recovery headroom; when these signals are absent the
+  toolkit surfaces the literal `"no data"` marker instead of synthetic
+  values.
+- **Aero balance drift** – derives rake trends exclusively from OutSim
+  `pitch` plus front/rear suspension travel so the drift guidance mirrors
+  native LFS telemetry even if `AeroCoherence` appears neutral.【F:tnfr_lfs/core/metrics.py†L1650-L1735】
+- **Tyre temperatures/pressures** – TNFR × LFS now consumes the values
+  emitted by the OutGauge extended payload when they are finite and
+  positive; when the block is disabled the fusion keeps the historical
+  sample or the same `"no data"` placeholder so downstream tooling does
+  not fabricate temperatures.【F:tnfr_lfs/ingestion/fusion.py†L594-L657】
+
+## 4. Inspect the generated artefacts {#4-inspect-the-generated-artefacts}
 
 The quickstart populates `examples/out/` with JSONL, JSON and Markdown payloads:
 

@@ -1,12 +1,6 @@
 # Development and verification
 
-This repository relies on linting, typing, and testing workflows to keep the TNFR × LFS toolkit healthy. After cloning the project install the development dependencies (this includes `numpy>=1.24,<2.0` and `pandas>=1.5,<3.0`, required by the tests and analysis pipelines) via the packaged extras:
-
-```bash
-pip install .[dev]
-# or, for an editable environment
-pip install -e .[dev]
-```
+This repository relies on linting, typing, and testing workflows to keep the TNFR × LFS toolkit healthy. After cloning the project, follow the [Step 1 installation guide](tutorials.md#1-install-the-toolkit) and choose the development extra (`pip install .[dev]` or `pip install -e .[dev]`) so the verification tools below are available.
 
 ## Verification flow
 
@@ -27,13 +21,10 @@ lychee --config lychee.toml README.md docs/**/*.md
 ### Pre-commit hooks
 
 Install the [pre-commit](https://pre-commit.com) hooks to run Ruff, Black, and MyPy with the same
-settings defined in `pyproject.toml` before every commit. The `dev` extra already provides the
-`pre-commit` executable, so re-use the development install command and then enable the hooks:
+settings defined in `pyproject.toml` before every commit. With the development extra from
+[Step 1](tutorials.md#1-install-the-toolkit) already installed, enable the hooks:
 
 ```bash
-pip install .[dev]
-# or, for editable workflows
-pip install -e .[dev]
 pre-commit install
 ```
 
