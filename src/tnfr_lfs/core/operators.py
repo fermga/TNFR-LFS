@@ -50,7 +50,7 @@ from .epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from .phases import expand_phase_alias
+from .phases import LEGACY_PHASE_MAP
 from .archetypes import ARCHETYPE_MEDIUM
 from .operator_detection import (
     normalize_structural_operator_identifier,
@@ -65,6 +65,11 @@ from .interfaces import (
     SupportsTyresNode,
 )
 from ..plugins import TNFRPlugin
+
+
+_APEX_PHASE_CANDIDATES: Tuple[str, ...] = LEGACY_PHASE_MAP.get("apex", tuple())
+if "apex" not in _APEX_PHASE_CANDIDATES:
+    _APEX_PHASE_CANDIDATES = _APEX_PHASE_CANDIDATES + ("apex",)
 
 
 @dataclass(frozen=True)
@@ -310,7 +315,7 @@ def dissonance_breakdown_operator(
             if not microsector.support_event:
                 continue
             apex_goal = None
-            for apex_phase in expand_phase_alias("apex"):
+            for apex_phase in _APEX_PHASE_CANDIDATES:
                 apex_goal = next(
                     (goal for goal in microsector.goals if goal.phase == apex_phase),
                     None,
@@ -320,7 +325,7 @@ def dissonance_breakdown_operator(
             if apex_goal is None:
                 continue
             apex_indices: List[int] = []
-            for apex_phase in expand_phase_alias("apex"):
+            for apex_phase in _APEX_PHASE_CANDIDATES:
                 indices = microsector.phase_samples.get(apex_phase) or ()
                 apex_indices.extend(idx for idx in indices if 0 <= idx < bundle_count)
             if not apex_indices:
