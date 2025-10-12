@@ -143,16 +143,22 @@ areas:
     filter_globs:
       - 'src/tnfr_lfs/ingestion/**'
       - 'tests/test_ingestion.py'
+      - 'tests/test_brake_thermal.py'
       - 'tests/test_outgauge_udp.py'
       - 'tests/test_outsim_udp.py'
       - 'tests/test_insim.py'
+      - 'tests/test_fusion_calibration.py'
+      - 'tests/test_fusion_helpers.py'
       - 'tests/test_track_loader.py'
       - 'tests/ingestion/**'
     pytest_args:
       - tests/test_ingestion.py
+      - tests/test_brake_thermal.py
       - tests/test_outgauge_udp.py
       - tests/test_outsim_udp.py
       - tests/test_insim.py
+      - tests/test_fusion_calibration.py
+      - tests/test_fusion_helpers.py
       - tests/test_track_loader.py
       - tests/ingestion
   - name: io
