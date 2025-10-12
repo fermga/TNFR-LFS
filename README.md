@@ -15,18 +15,14 @@ sessions, and surface setup recommendations without leaving the paddock.
 
 ## Getting started
 
-1. **Install the toolkit** – follow the detailed instructions in the
-   [installation guide](docs/index.md#installation) to choose between base,
-   developer, or extras-enabled setups.
-2. **Configure telemetry** – enable the Live for Speed OutSim/OutGauge
-   broadcasters as described in the
-   [telemetry requirements](docs/index.md#telemetry-requirements).
-3. **Run the quickstart scenario** – execute `make quickstart` to generate JSON
-   and Markdown reports for the bundled dataset, then dive deeper with the
-   [workflow guides](docs/index.md#resources).
+Read the [onboarding guide](docs/index.md#getting-started) for the full,
+step-by-step walkthrough covering installation choices, telemetry setup, and
+the quickstart workflow. The README surfaces the highlights; the
+documentation is the definitive reference for commands, configuration, and
+troubleshooting details.
 
 ## Learn more
 
-The [documentation index](docs/index.md) hosts the complete manual, including
-installation details, telemetry references, CLI walkthroughs, API docs, and
-advanced workflow guides.
+The [documentation index](docs/index.md) hosts the complete manual and should
+be considered the source of truth for installation details, telemetry
+references, CLI walkthroughs, API docs, and advanced workflow guides.

@@ -22,93 +22,98 @@ tests to illustrate the workflow. The ingestion pipeline regression
 suite in `tests/test_ingestion.py` exercises the OutSim/OutGauge UDP
 clients and fusion helpers end-to-end.【F:tests/test_ingestion.py†L1-L376】
 
-## Installation
+## Getting started
 
-TNFR × LFS targets Python 3.9+ environments with the scientific stack that
-supports the analytics pipeline.
+TNFR × LFS targets Python 3.9+ environments and Live for Speed telemetry
+streams. The onboarding workflow below is the definitive reference for
+setting up the toolkit from scratch.
 
-### Prerequisites
+### Step 1 – Prepare your environment
 
-- Python 3.9 or later available on ``PATH``.
-- ``numpy>=1.24,<2.0`` and ``pandas>=1.5,<3.0``.
-- The bundled telemetry samples (or your own datasets) placed under
-  ``src/tnfr_lfs/resources/data/`` when you need to override the defaults.
+1. Install **Python 3.9 or later** and ensure it is available on ``PATH``.
+   Verify the interpreter with ``python --version`` or ``py --version``
+   depending on your platform.
+2. Create and activate a virtual environment (``python -m venv .venv`` followed
+   by ``source .venv/bin/activate`` or ``.venv\Scripts\activate``) if you
+   want to keep the toolkit isolated from other projects.
+3. Confirm you have internet access to download dependencies. The analytics
+   stack relies on ``numpy>=1.24,<2.0`` and ``pandas>=1.5,<3.0``; ``pip`` will
+   resolve them automatically during installation.
+4. (Optional) Copy your own telemetry into
+   ``src/tnfr_lfs/resources/data/`` when you plan to override the packaged
+   samples used by the quickstart workflow.
 
-### Environment setup
+### Step 2 – Install the toolkit
 
-The minimal setup installs the CLI and examples:
+Choose the install flavour that matches your needs:
 
-```bash
-pip install .
-```
+- **User install** – minimal CLI and examples:
 
-Add the developer tooling with extras when you need the full verification flow:
+  ```bash
+  pip install .
+  ```
 
-```bash
-pip install .[dev]
-```
+- **Developer install** – includes linting, testing, and docs extras:
 
-Optional extras such as ``spectral`` enable the Goertzel helper used in the
-benchmark suite:
+  ```bash
+  pip install .[dev]
+  ```
 
-```bash
-pip install .[spectral]
-```
+- **Spectral extras** – pull in the Goertzel helper used by the benchmark
+  suite:
 
-Reusable Makefile targets mirror those commands for convenience:
+  ```bash
+  pip install .[spectral]
+  ```
+
+Make targets provide the same flows when you prefer ``make`` wrappers:
 
 ```bash
 make install      # base dependencies only
 make dev-install  # base + development tooling
 ```
 
-Editable installs are supported via ``pip install -e .``; combine extras as
-needed, for example ``pip install -e .[dev]`` when you want to iterate on the
-codebase.
+Editable installs are supported with ``pip install -e .``; append extras such as
+``pip install -e .[dev]`` when iterating on the codebase.
 
-### Quickstart workflow
+### Step 3 – Configure Live for Speed telemetry
 
-Run the end-to-end example with:
+1. Launch Live for Speed and open ``cfg.txt`` (Options → Misc → ``cfg.txt``
+   or edit the file directly).
+2. Enable the OutSim broadcaster with a suitable host/port pair, then append
+   the extended options so TNFR × LFS receives the four-wheel payload:
 
-```bash
-make quickstart
-```
+   ```text
+   OutSim 1 29999 1000 0.0 0.0 0.0
+   OutSim Opts ff
+   ```
 
-The target delegates to ``examples/quickstart.sh``. It resolves the packaged
-dataset through
-``tnfr_lfs.examples.quickstart_dataset.dataset_path()`` so the artefacts under
-``examples/out/`` are generated without manual file management. Explore the
-Examples gallery for additional runnable automation scripts.
+3. Enable the OutGauge broadcaster and request the extended payload that carries
+   tyre temperatures, pressures, and brake data:
 
-## Telemetry requirements
+   ```text
+   OutGauge 1 30000 1
+   OutGauge Opts OG_EXT_TYRE_TEMP|OG_EXT_TYRE_PRESS|OG_EXT_BRAKE_TEMP
+   ```
+
+   The corresponding in-game commands are ``/outsim Opts ff`` followed by
+   ``/outsim 1 …`` and ``/outgauge Opts …`` before ``/outgauge 1 …`` if you
+   prefer configuring from the console.
+4. Restart the session so Live for Speed loads the new configuration. Refer to
+   the [telemetry reference](telemetry.md) for a detailed breakdown of the
+   available fields and integration tips.
 
 All TNFR metrics (``ΔNFR``, the nodal projections ``∇NFR∥``/``∇NFR⊥``, ``ν_f``,
-``C(t)`` and related indicators) are derived from the native Live for Speed
-OutSim/OutGauge telemetry; the toolkit never fabricates inputs. The
-``docs/telemetry.md`` guide expands on the signal breakdown and how
-calibration packs integrate with the analytics stack. Enable both UDP
-broadcasters and extend OutSim with ``OutSim Opts ff`` in ``cfg.txt`` (or run
-``/outsim Opts ff`` before ``/outsim 1 …``) so the packets include the player
-identifier, driver inputs and the four-wheel block that feeds the telemetry
-fusion layer.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】 Likewise, enable the
-extended OutGauge payload (via ``OutGauge Opts …`` in ``cfg.txt`` or
-``/outgauge Opts …``) so the simulator transmits tyre temperatures, their
-three-layer profile and pressures; set at least the ``OG_EXT_TYRE_TEMP``,
-``OG_EXT_TYRE_PRESS`` and ``OG_EXT_BRAKE_TEMP`` flags so the 20-float block
-(inner/middle/outer layers, pressure ring and brake discs) is broadcast.
-Otherwise the HUD and CLI surface those entries as “no data”.【F:tnfr_lfs/ingestion/fusion.py†L594-L657】
+``C(t)`` and related indicators) are derived from these native telemetry
+streams; the toolkit never fabricates missing inputs. The fusion layer reads
+the OutSim/OutGauge packets produced with the configuration above so the HUD,
+CLI, and exporters have access to the full data set.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】【F:tnfr_lfs/ingestion/fusion.py†L594-L657】
 
 !!! note "Brake temperature estimation"
     Live for Speed only publishes real brake temperatures when the extended OutGauge payload is enabled; otherwise the stream exposes `0 °C` placeholders. TNFR × LFS consumes those native readings whenever they arrive and seamlessly falls back to the brake thermal proxy to keep fade metrics alive, integrating brake work and convective cooling until fresh data shows up again.【F:tnfr_lfs/ingestion/fusion.py†L248-L321】【F:tnfr_lfs/ingestion/fusion.py†L1064-L1126】
-The CSV reader mirrors that philosophy by preserving optional columns as
-`math.nan` when OutSim leaves them out, preventing artificial estimates
-from leaking into the metrics pipeline.【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】
-When the wheel payload is disabled the toolkit now surfaces tyre loads,
-slip ratios and suspension metrics as “no data” rather than
-fabricating zeroed values, making it obvious that the telemetry stream
-is incomplete.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】
+    The CSV reader mirrors that philosophy by preserving optional columns as `math.nan` when OutSim leaves them out, preventing artificial estimates from leaking into the metrics pipeline.【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】 When the wheel payload is disabled the toolkit now surfaces tyre loads, slip ratios and suspension metrics as “no data” rather than fabricating zeroed values, making it obvious that the telemetry stream is incomplete.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】【F:tnfr_lfs/ingestion/outsim_client.py†L87-L155】
 
-### Metric field checklist
+#### Metric field checklist
 
 - **ΔNFR (nodal gradient) and ∇NFR∥/∇NFR⊥ (gradient projections)** – rely on
   per-wheel Fz loads, their ΔFz derivatives, the longitudinal/lateral
@@ -139,6 +144,33 @@ is incomplete.【F:tnfr_lfs/ingestion/fusion.py†L93-L200】【F:tnfr_lfs/inges
   sample or the same `"no data"` placeholder so downstream tooling does
   not fabricate temperatures.【F:tnfr_lfs/ingestion/fusion.py†L594-L657】
 
+### Step 4 – Run the quickstart workflow
+
+1. Open a terminal in the repository root (or the virtual environment if you
+   created one).
+2. Run the packaged scenario:
+
+   ```bash
+   make quickstart
+   ```
+
+3. The Make target delegates to ``examples/quickstart.sh``, which resolves the
+   bundled dataset through
+   ``tnfr_lfs.examples.quickstart_dataset.dataset_path()`` so JSON and Markdown
+   artefacts appear under ``examples/out/`` without manual file management.
+4. Inspect the generated reports with your preferred viewer and cross-reference
+   the [examples gallery](examples.md) for additional automation scripts you can
+   adapt to your own telemetry.
+
+### Step 5 – Explore further
+
+- Launch the CLI HUD with the commands in the [CLI guide](cli.md) once telemetry
+  streaming is active.
+- Dive into the [advanced workflows](advanced_workflows.md) to extend the
+  baseline analysis with Pareto sweeps, regression comparisons, and scripting
+  patterns.
+- Keep the [setup equivalences](setup_equivalences.md) at hand when translating
+  ΔNFR/ΔSi recommendations into garage adjustments.
 ## Operational checklist
 
 Pre-stint reviews rely on a compact checklist that validates four
