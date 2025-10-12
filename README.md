@@ -79,9 +79,10 @@ scripts that demonstrate ingestion, exporting and recommendation workflows.
 
 > **API note:** Live (`OutSim`/`OutGauge`/`InSim`) and offline (RAF, Replay
 > Analyzer, profiles) ingestion helpers live under the consolidated
-> `tnfr_lfs.ingestion` namespace (for example
-> `tnfr_lfs.ingestion.live` and `tnfr_lfs.ingestion.replay`). Use these
-> modules to wire capture pipelines directly into the analytics stack.
+> `tnfr_lfs.ingestion` namespace. The package re-exports the RAF and Replay
+> Analyzer utilities available via `tnfr_lfs.ingestion.offline`, alongside the
+> streaming helpers (for example `tnfr_lfs.ingestion.live`). Use these modules
+> to wire capture pipelines directly into the analytics stack.
 
 ## Telemetry overview
 
