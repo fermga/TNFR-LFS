@@ -35,7 +35,12 @@ from .operator_detection import (
     normalize_structural_operator_identifier,
     silence_event_payloads,
 )
-from .interfaces import SupportsMicrosector
+from .interfaces import (
+    SupportsChassisNode,
+    SupportsMicrosector,
+    SupportsSuspensionNode,
+    SupportsTyresNode,
+)
 from ..plugins import TNFRPlugin
 
 
@@ -171,6 +176,7 @@ def dissonance_breakdown_operator(
 
     if microsectors and bundles:
         bundle_count = len(bundles)
+        tyre_nodes: Sequence[SupportsTyresNode] = [bundle.tyres for bundle in bundles]
         for microsector in microsectors:
             if not microsector.support_event:
                 continue
@@ -201,7 +207,7 @@ def dissonance_breakdown_operator(
                             bundle_context[idx].multiplier,
                         ),
                     )
-                tyre_delta.append(bundles[idx].tyres.delta_nfr * multiplier)
+                tyre_delta.append(tyre_nodes[idx].delta_nfr * multiplier)
             if not tyre_delta:
                 continue
             deviation = mean(tyre_delta) - apex_goal.target_delta_nfr
@@ -226,7 +232,10 @@ def dissonance_breakdown_operator(
             )
             for idx, bundle in enumerate(bundles)
         ]
-        yaw_rates = [bundle.chassis.yaw_rate for bundle in bundles]
+        chassis_nodes: Sequence[SupportsChassisNode] = [
+            bundle.chassis for bundle in bundles
+        ]
+        yaw_rates = [node.yaw_rate for node in chassis_nodes]
         (
             useful_dissonance_samples,
             high_yaw_acc_samples,
@@ -1286,19 +1295,28 @@ def _stage_nodal_metrics(bundles: Sequence[EPIBundle]) -> Dict[str, object]:
     )
     context_matrix = load_context_matrix()
     bundle_context = resolve_series_context(bundles, matrix=context_matrix)
+    tyre_nodes: Sequence[SupportsTyresNode] = [bundle.tyres for bundle in bundles]
+    suspension_nodes: Sequence[SupportsSuspensionNode] = [
+        bundle.suspension for bundle in bundles
+    ]
+    chassis_nodes: Sequence[SupportsChassisNode] = [
+        bundle.chassis for bundle in bundles
+    ]
     delta_by_node = {"tyres": [], "suspension": [], "chassis": []}
-    for bundle, factors in zip(bundles, bundle_context):
+    for tyre, suspension, chassis, factors in zip(
+        tyre_nodes, suspension_nodes, chassis_nodes, bundle_context
+    ):
         multiplier = max(
             context_matrix.min_multiplier,
             min(context_matrix.max_multiplier, factors.multiplier),
         )
-        delta_by_node["tyres"].append(bundle.tyres.delta_nfr * multiplier)
-        delta_by_node["suspension"].append(bundle.suspension.delta_nfr * multiplier)
-        delta_by_node["chassis"].append(bundle.chassis.delta_nfr * multiplier)
+        delta_by_node["tyres"].append(tyre.delta_nfr * multiplier)
+        delta_by_node["suspension"].append(suspension.delta_nfr * multiplier)
+        delta_by_node["chassis"].append(chassis.delta_nfr * multiplier)
     si_by_node = {
-        "tyres": [bundle.tyres.sense_index for bundle in bundles],
-        "suspension": [bundle.suspension.sense_index for bundle in bundles],
-        "chassis": [bundle.chassis.sense_index for bundle in bundles],
+        "tyres": [node.sense_index for node in tyre_nodes],
+        "suspension": [node.sense_index for node in suspension_nodes],
+        "chassis": [node.sense_index for node in chassis_nodes],
     }
     pairwise_delta = pairwise_coupling_operator(delta_by_node, pairs=node_pairs)
     pairwise_si = pairwise_coupling_operator(si_by_node, pairs=node_pairs)

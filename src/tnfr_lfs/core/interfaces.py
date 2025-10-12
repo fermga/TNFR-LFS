@@ -14,6 +14,13 @@ from typing import Mapping, Protocol, Sequence, Tuple, runtime_checkable
 __all__ = [
     "SupportsTelemetrySample",
     "SupportsEPINode",
+    "SupportsTyresNode",
+    "SupportsSuspensionNode",
+    "SupportsChassisNode",
+    "SupportsBrakesNode",
+    "SupportsTransmissionNode",
+    "SupportsTrackNode",
+    "SupportsDriverNode",
     "SupportsEPIBundle",
     "SupportsContextRecord",
     "SupportsContextBundle",
@@ -137,6 +144,108 @@ class SupportsEPINode(Protocol):
 
 
 @runtime_checkable
+class SupportsTyresNode(SupportsEPINode, Protocol):
+    """Tyre subsystem payload consumed by analytics and operators."""
+
+    load: float
+    slip_ratio: float
+    mu_eff_front: float
+    mu_eff_rear: float
+    mu_eff_front_lateral: float
+    mu_eff_front_longitudinal: float
+    mu_eff_rear_lateral: float
+    mu_eff_rear_longitudinal: float
+    tyre_temp_fl: float
+    tyre_temp_fr: float
+    tyre_temp_rl: float
+    tyre_temp_rr: float
+    tyre_temp_fl_inner: float
+    tyre_temp_fr_inner: float
+    tyre_temp_rl_inner: float
+    tyre_temp_rr_inner: float
+    tyre_temp_fl_middle: float
+    tyre_temp_fr_middle: float
+    tyre_temp_rl_middle: float
+    tyre_temp_rr_middle: float
+    tyre_temp_fl_outer: float
+    tyre_temp_fr_outer: float
+    tyre_temp_rl_outer: float
+    tyre_temp_rr_outer: float
+    tyre_pressure_fl: float
+    tyre_pressure_fr: float
+    tyre_pressure_rl: float
+    tyre_pressure_rr: float
+
+
+@runtime_checkable
+class SupportsSuspensionNode(SupportsEPINode, Protocol):
+    """Suspension subsystem payload consumed by analytics and operators."""
+
+    travel_front: float
+    travel_rear: float
+    velocity_front: float
+    velocity_rear: float
+
+
+@runtime_checkable
+class SupportsChassisNode(SupportsEPINode, Protocol):
+    """Chassis subsystem payload consumed by analytics and operators."""
+
+    yaw: float
+    pitch: float
+    roll: float
+    yaw_rate: float
+    lateral_accel: float
+    longitudinal_accel: float
+
+
+@runtime_checkable
+class SupportsBrakesNode(SupportsEPINode, Protocol):
+    """Brake subsystem payload consumed by analytics and operators."""
+
+    brake_pressure: float
+    locking: float
+    brake_temp_fl: float
+    brake_temp_fr: float
+    brake_temp_rl: float
+    brake_temp_rr: float
+    brake_temp_peak: float
+    brake_temp_mean: float
+
+
+@runtime_checkable
+class SupportsTransmissionNode(SupportsEPINode, Protocol):
+    """Transmission subsystem payload consumed by analytics and operators."""
+
+    throttle: float
+    gear: int
+    speed: float
+    longitudinal_accel: float
+    rpm: float
+    line_deviation: float
+
+
+@runtime_checkable
+class SupportsTrackNode(SupportsEPINode, Protocol):
+    """Track condition payload consumed by analytics and operators."""
+
+    axle_load_balance: float
+    axle_velocity_balance: float
+    yaw: float
+    lateral_accel: float
+    gradient: float
+
+
+@runtime_checkable
+class SupportsDriverNode(SupportsEPINode, Protocol):
+    """Driver payload consumed by analytics and operators."""
+
+    steer: float
+    throttle: float
+    style_index: float
+
+
+@runtime_checkable
 class SupportsEPIBundle(Protocol):
     """Aggregated telemetry insights required by EPI consumers."""
 
@@ -158,13 +267,13 @@ class SupportsEPIBundle(Protocol):
     coherence_index: float
     ackermann_parallel_index: float
 
-    tyres: SupportsEPINode
-    suspension: SupportsEPINode
-    chassis: SupportsEPINode
-    brakes: SupportsEPINode
-    transmission: SupportsEPINode
-    track: SupportsEPINode
-    driver: SupportsEPINode
+    tyres: SupportsTyresNode
+    suspension: SupportsSuspensionNode
+    chassis: SupportsChassisNode
+    brakes: SupportsBrakesNode
+    transmission: SupportsTransmissionNode
+    track: SupportsTrackNode
+    driver: SupportsDriverNode
 
 
 @runtime_checkable
