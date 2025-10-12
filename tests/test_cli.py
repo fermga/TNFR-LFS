@@ -71,6 +71,70 @@ def test_run_cli_dispatches_registered_handler(monkeypatch: pytest.MonkeyPatch) 
     }
 
 
+def test_run_cli_prefers_pyproject_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    legacy_path = tmp_path / "tnfr_lfs.toml"
+    legacy_path.write_text(
+        dedent(
+            """
+            [logging]
+            format = "text"
+            output = "stdout"
+            """
+        ),
+        encoding="utf8",
+    )
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text(
+        dedent(
+            """
+            [tool.tnfr_lfs.logging]
+            level = "warning"
+
+            [tool.tnfr_lfs.cache]
+            cache_enabled = "no"
+            nu_f_cache_size = "12"
+            """
+        ),
+        encoding="utf8",
+    )
+
+    captured_configs: list[Mapping[str, object]] = []
+
+    def dummy_handler(
+        namespace: argparse.Namespace, *, config: Mapping[str, object]
+    ) -> str:
+        captured_configs.append(config)
+        return "ok"
+
+    def build_parser_stub(
+        config: Mapping[str, object] | None = None,
+    ) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="command", required=True)
+        parser_dummy = subparsers.add_parser("dummy")
+        parser_dummy.set_defaults(handler=dummy_handler)
+        return parser
+
+    monkeypatch.setattr(cli_module, "build_parser", build_parser_stub)
+
+    result = run_cli(["dummy"])
+
+    assert result == "ok"
+    assert len(captured_configs) == 1
+    config = captured_configs[0]
+    assert config["_config_path"] == str(pyproject_path.resolve())
+    logging_cfg = config["logging"]
+    assert logging_cfg["level"] == "warning"
+    assert logging_cfg["format"] == "text"
+    assert logging_cfg["output"] == "stdout"
+    performance_cfg = config["performance"]
+    assert performance_cfg["cache_enabled"] is False
+    assert performance_cfg["nu_f_cache_size"] == 0
+
+
 def test_run_cli_requires_telemetry_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli_module, "load_cli_config", lambda path: {})
 
