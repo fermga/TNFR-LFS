@@ -16,11 +16,13 @@ Run the following commands before submitting a change. Each tool is integrated w
 ruff check .
 mypy --strict
 pytest
+lychee --config lychee.toml README.md docs/**/*.md
 ```
 
 - `ruff` enforces the code-style and cleanliness rules defined in `pyproject.toml`.
 - `mypy --strict` analyses `tnfr_lfs` and the rest of the declared typing targets (including the tests and examples helper). If you need to pass the paths explicitly run `mypy --strict src tests`; note that strict analysis across the whole package takes longer than the reduced subset.
 - `pytest` runs the unit and integration test suite, including verification for the example datasets `src/tnfr_lfs/resources/data/test1.raf` and `src/tnfr_lfs/resources/data/test1.zip`.
+- `lychee` verifies that the Markdown documentation (including the MkDocs site) references valid URLs and relative links. Install it via `cargo install lychee` or download a pre-built release binary from the [Lychee project](https://github.com/lycheeverse/lychee/releases).
 
 ### Pre-commit hooks
 
@@ -47,11 +49,11 @@ formatting, and typing issues early.
 
 ### CI triggering rules
 
-The CI workflow skips documentation-only pushes and pull requests (`docs/**` and Markdown files). Any
-change touching code, configuration, tests, benchmarks, or the automation itself still runs the lint,
-type-check, and test jobs. The `make quickstart` pipeline executes on merges to `main` and whenever the
-`examples/` tree changes, so example scenarios stay covered without running the heavier simulation for
-purely editorial branches.
+The CI workflow now runs on documentation-only branches and executes a dedicated link-checking job in
+addition to the lint/type/test matrix. Broken intra-site references or external URLs fail fast via the
+Lychee action. The `make quickstart` pipeline executes on merges to `main` and whenever the `examples/`
+tree changes, so example scenarios stay covered without running the heavier simulation for purely
+editorial branches.
 
 
 ## Module layout

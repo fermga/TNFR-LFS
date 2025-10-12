@@ -1,0 +1,23 @@
+# Link checker configuration for lychee.
+# Exclude local development URLs and schemes unsupported by the checker.
+verbose = true
+no_progress = true
+max_concurrency = 8
+retry_attempts = 2
+retry_wait_time = "2s"
+timeout = 15
+
+exclude = [
+  "mailto:",
+  "tel:",
+  "^https?://localhost",
+  "^https?://127\\.0\\.0\\.1",
+  "^https?://0\\.0\\.0\\.0",
+  "^http://192\\.168\\.",
+]
+
+[[inputs]]
+path = "README.md"
+
+[[inputs]]
+path = "docs"

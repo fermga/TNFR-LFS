@@ -3,13 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
   pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -31,6 +25,7 @@ jobs:
       processing: ${{ steps.filter.outputs.processing }}
       recommender: ${{ steps.filter.outputs.recommender }}
       plugins: ${{ steps.filter.outputs.plugins }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -106,6 +101,9 @@ jobs:
               - 'tests/test_cli_osd.py'
             examples:
               - 'examples/**'
+            docs:
+              - 'docs/**'
+              - '**/*.md'
 
   test:
     needs: detect-changes
@@ -273,6 +271,27 @@ jobs:
         with:
           name: coverage-xml
           path: coverage.xml
+  link-check:
+    name: Documentation links
+    needs: detect-changes
+    if: >-
+      needs.detect-changes.outputs.docs == 'true' ||
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Check documentation links
+        uses: lycheeverse/lychee-action@v1
+        with:
+          args: >-
+            --config lychee.toml
+            --no-progress
+            --verbose
+            README.md
+            docs/**/*.md
+
   quickstart:
     needs:
       - detect-changes
