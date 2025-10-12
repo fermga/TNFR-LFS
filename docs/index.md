@@ -1,12 +1,6 @@
 # TNFR × LFS Documentation
 
-TNFR × LFS (Fractal-Resonant Telemetry Analytics for Live for Speed) is the
-lightweight Python toolkit that operationalises the canonical
-Telemetry/Theory of the Fractal-Resonant Nature (TNFR) framework alongside the
-Load Flow Synthesis methodology. The theory establishes how to reason about
-Event Performance Indicators (EPI), ΔFz/ΔSi deltas and Sense Index signals; the
-toolkit provides production-ready layers to apply those ideas in racing
-telemetry pipelines. Treat this index as the canonical home for the extended
+Treat this index as the canonical home for the extended
 introduction, feature descriptions, onboarding narratives, checklists and API
 map that the project README now summarises.
 
