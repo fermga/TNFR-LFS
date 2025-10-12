@@ -9,10 +9,7 @@ tnfr_lfs baseline runs/test1.jsonl data/test1.raf --format jsonl
 
 !!! tip
     The CLI entry point uses an underscore: invoke commands as `tnfr_lfs ...` and
-    persist defaults under `[tool.tnfr_lfs]` in your `pyproject.toml`. The
-    repository ships a generated `tnfr_lfs.toml` for legacy automation (including
-    `~/.config/tnfr_lfs.toml`), but the loader now reads the pyproject section
-    first and only falls back to standalone files when necessary. Update any
+    persist defaults under `[tool.tnfr_lfs]` in your `pyproject.toml`. Update any
     local scripts that still call `tnfr-lfs` so they point to the
     underscore-prefixed executable.
 
@@ -59,8 +56,7 @@ and destination via the top-level flags:
   formatter.
 
 Persist the same options inside `pyproject.toml` under
-`[tool.tnfr_lfs.logging]`. The generated `tnfr_lfs.toml` mirrors that block so
-older environments inherit the defaults without additional work.
+`[tool.tnfr_lfs.logging]` so every invocation inherits consistent defaults.
 
 ### Monitoring capture metrics
 
@@ -97,7 +93,8 @@ The ``tnfr_lfs`` executable (part of the TNFR × LFS toolkit) organises the work
 Generates ΔNFR objectives together with slip/yaw windows for a given
 car/track profile.  The command resolves the same threshold library used
 by the recommendation engine (backed by ``data/threshold_profiles.toml``)
-and emits a TOML snippet that can be dropped into ``tnfr_lfs.toml``.
+and emits a TOML snippet that can be pasted under ``[tool.tnfr_lfs]`` in
+``pyproject.toml``.
 
 ```bash
 tnfr_lfs template --car FZR --track AS5 > presets/fzr_as5.toml
@@ -393,21 +390,20 @@ remains within tolerance.
 
 The CLI resolves defaults from the `[tool.tnfr_lfs]` table in the nearest
 ``pyproject.toml``.  It checks the project in the current working
-directory first, then `--config`/``TNFR_LFS_CONFIG`` when provided, before
-falling back to legacy ``tnfr_lfs.toml`` files (including
-``~/.config/tnfr_lfs.toml``).  Any explicit CLI flag takes precedence,
-but the configuration can define sensible defaults for ports, exporters,
+directory first, then inspects `--config`/``TNFR_LFS_CONFIG`` when
+provided (accepting either the file itself or a directory containing
+``pyproject.toml``).  If no project configuration is found the command
+runs with built-in defaults.  Any explicit CLI flag takes precedence, but
+the configuration can define sensible defaults for ports, exporters,
 car/track profiles and report locations.
 
 !!! note
     The snippet below is rendered directly from the `[tool.tnfr_lfs]`
     block in ``pyproject.toml`` so the documentation always matches the
-    canonical defaults.  The repository keeps a generated
-    ``tnfr_lfs.toml`` with the same content for tooling that still
-    expects a standalone file.  Additional tables shown later in this
-    section (for example ``[performance]``) illustrate optional overrides
-    rather than values written to the default template—copy whichever
-    tables you need under ``[tool.tnfr_lfs]`` in your project.
+    canonical defaults.  Additional tables shown later in this section
+    (for example ``[performance]``) illustrate optional overrides rather
+    than values written to the default template—copy whichever tables you
+    need under ``[tool.tnfr_lfs]`` in your project.
 
 {{ render_config_defaults() }}
 
@@ -450,18 +446,9 @@ discovery rules (``plugin_dir``) and concurrency limits without materialising a
 separate ``plugins.toml`` file.  Profiles continue to live alongside the table
 as ``[tool.tnfr_lfs.profiles.<name>]`` entries, letting you activate exporters,
 UDP bridges or relay workers selectively (the ``racing``/``practice`` profiles
-ship as references).  ``python -m tnfr_lfs.plugins.template`` still renders the
-legacy ``config/plugins.toml`` template, which is useful when you need to ship a
-standalone configuration with packs or external tooling that hasn't migrated to
-``pyproject.toml`` yet.
-
-When you need to synchronise the legacy artefacts (`tnfr_lfs.toml` and
-``config/plugins.toml``) run ``tnfr_lfs config sync``.  The command resolves the
-active ``pyproject.toml``, writes the canonical ``tnfr_lfs.toml`` header and
-regenerates the plugin template alongside any warning preambles.  Pass
-``--project-root`` to point at a specific repository and ``--output-dir`` to
-emit the files elsewhere.  Avoid editing the generated files manually; rerun the
-sync command instead so they continue to mirror ``[tool.tnfr_lfs]``.
+ship as references).  ``python -m tnfr_lfs.plugins.template`` can still render a
+standalone configuration for external tooling, but the CLI itself always reads
+from ``pyproject.toml``.
 
 ### Brake thermal proxy modes
 

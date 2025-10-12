@@ -19,12 +19,12 @@ from tnfr_lfs.cli.common import CliError
 from tests.helpers import DummyRecord, build_load_parquet_args, build_persist_parquet_args
 
 
-def test_load_cli_config_promotes_legacy_cache(tmp_path: Path) -> None:
-    config_path = tmp_path / "tnfr_lfs.toml"
-    config_path.write_text(
+def test_load_cli_config_promotes_cache_settings_from_pyproject(tmp_path: Path) -> None:
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text(
         dedent(
             """
-            [cache]
+            [tool.tnfr_lfs.cache]
             cache_enabled = "yes"
             nu_f_cache_size = "48"
             """
@@ -32,9 +32,9 @@ def test_load_cli_config_promotes_legacy_cache(tmp_path: Path) -> None:
         encoding="utf8",
     )
 
-    config = cli_io.load_cli_config(config_path)
+    config = cli_io.load_cli_config(pyproject_path)
 
-    assert config["_config_path"] == str(config_path.resolve())
+    assert config["_config_path"] == str(pyproject_path.resolve())
     performance_cfg = config["performance"]
     expected = CacheOptions(
         enable_delta_cache=True,
@@ -46,11 +46,11 @@ def test_load_cli_config_promotes_legacy_cache(tmp_path: Path) -> None:
 
 
 def test_load_cli_config_normalises_performance_section(tmp_path: Path) -> None:
-    config_path = tmp_path / "tnfr_lfs.toml"
-    config_path.write_text(
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text(
         dedent(
             """
-            [performance]
+            [tool.tnfr_lfs.performance]
             cache_enabled = "no"
             max_cache_size = "12"
             telemetry_buffer_size = 42
@@ -59,7 +59,7 @@ def test_load_cli_config_normalises_performance_section(tmp_path: Path) -> None:
         encoding="utf8",
     )
 
-    config = cli_io.load_cli_config(config_path)
+    config = cli_io.load_cli_config(pyproject_path)
 
     expected = CacheOptions(
         enable_delta_cache=False,
@@ -99,26 +99,21 @@ def test_load_cli_config_reads_pyproject(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert performance_cfg["max_cache_size"] == 48
 
 
-def test_load_cli_config_merges_pyproject_with_legacy(
+def test_load_cli_config_uses_pyproject_when_multiple_directories(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    legacy_path = tmp_path / "tnfr_lfs.toml"
-    legacy_path.write_text(
-        dedent(
-            """
-            [logging]
-            format = "text"
-            output = "stdout"
-            """
-        ),
-        encoding="utf8",
-    )
+    secondary = tmp_path / "secondary"
+    secondary.mkdir()
+    (secondary / "pyproject.toml").write_text("", encoding="utf8")
+
     pyproject_path = tmp_path / "pyproject.toml"
     pyproject_path.write_text(
         dedent(
             """
             [tool.tnfr_lfs.logging]
             level = "warning"
+            format = "text"
+            output = "stdout"
             """
         ),
         encoding="utf8",

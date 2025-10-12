@@ -3,11 +3,10 @@ Telemetry and configuration helpers for the TNFR × LFS CLI.
 
 ## Functions
 - `load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]`
-  - Load CLI defaults from ``pyproject.toml`` or ``tnfr_lfs.toml`` files.
+  - Load CLI defaults from ``pyproject.toml`` files.
 
 ## Attributes
 - `CONFIG_ENV_VAR = 'TNFR_LFS_CONFIG'`
-- `DEFAULT_CONFIG_FILENAME = 'tnfr_lfs.toml'`
 - `PROJECT_CONFIG_FILENAME = 'pyproject.toml'`
 - `Records = List[TelemetryRecord]`
 

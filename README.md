@@ -122,12 +122,11 @@ The complete documentation lives under `docs/` and is published with MkDocs.
 - [`docs/cli.md`](docs/cli.md): command-line interface guide.
 - [`docs/setup_equivalences.md`](docs/setup_equivalences.md): link TNFR metrics to
   setup adjustments.
-- [`tnfr_lfs.toml`](tnfr_lfs.toml) and [`config/plugins.toml`](config/plugins.toml):
-  legacy artefacts regenerated from `pyproject.toml` with `tnfr_lfs config sync`
-  (or the older `python -m tnfr_lfs.plugins.template --output config/plugins.toml`
-  helper).  The runtime reads discovery and profile data directly from
-  `[tool.tnfr_lfs]`; avoid editing the generated files by hand because the sync
-  command overwrites them.
+- The CLI reads all defaults from the `[tool.tnfr_lfs]` table in
+  `pyproject.toml`.  Plugin discovery and profile data live under the nested
+  `[tool.tnfr_lfs.plugins]` and `[tool.tnfr_lfs.profiles]` tables, so updating
+  the project configuration is enough to keep the runtime and documentation in
+  sync.
 
 ## Branding and relationship with the theory
 
@@ -135,8 +134,8 @@ The complete documentation lives under `docs/` and is published with MkDocs.
   defines the EPI, the ΔNFR/ΔSi metrics and the resonant principles.
 - **TNFR × LFS** identifies the software toolkit that implements and automates
   those principles.
-- The CLI (`tnfr_lfs`), Python modules (`tnfr_lfs`) and configuration
-  tables (`[tool.tnfr_lfs]`/`tnfr_lfs.toml`) retain their respective
+- The CLI (`tnfr_lfs`), Python modules (`tnfr_lfs`) and configuration tables
+  (the `[tool.tnfr_lfs]` block in `pyproject.toml`) retain their respective
   naming conventions for compatibility.
 
 ## Development
