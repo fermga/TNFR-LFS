@@ -48,6 +48,7 @@ areas:
       - 'tests/test_search.py'
       - 'tests/test_session.py'
       - 'tests/test_version.py'
+      - 'tools/**'
     run_output: core_full_suite
     pytest_args:
       - tests/test_abtest.py
