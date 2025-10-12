@@ -50,6 +50,7 @@ jobs:
           steps.filter.outputs.plugins != 'true'
         )
       }}
+      pytest_matrix: ${{ steps.build-pytest-matrix.outputs.result }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -128,81 +129,126 @@ jobs:
             docs:
               - 'docs/**'
               - '**/*.md'
+      - name: Build pytest matrix
+        id: build-pytest-matrix
+        # Update the mapping below when introducing a new pytest area. The
+        # script emits the JSON consumed by the test job's strategy so no other
+        # section of this workflow needs adjusting.
+        uses: actions/github-script@v7
+        env:
+          ANALYSIS: ${{ steps.filter.outputs.analysis }}
+          CORE_PKG: ${{ steps.filter.outputs.core_pkg }}
+          CLI: ${{ steps.filter.outputs.cli }}
+          EXPORTERS: ${{ steps.filter.outputs.exporters }}
+          INGESTION: ${{ steps.filter.outputs.ingestion }}
+          IO: ${{ steps.filter.outputs.io }}
+          PROCESSING: ${{ steps.filter.outputs.processing }}
+          RECOMMENDER: ${{ steps.filter.outputs.recommender }}
+          PLUGINS: ${{ steps.filter.outputs.plugins }}
+          PYTEST_FULL: ${{
+            github.ref == 'refs/heads/main' || (
+              steps.filter.outputs.analysis != 'true' &&
+              steps.filter.outputs.core_pkg != 'true' &&
+              steps.filter.outputs.cli != 'true' &&
+              steps.filter.outputs.exporters != 'true' &&
+              steps.filter.outputs.ingestion != 'true' &&
+              steps.filter.outputs.io != 'true' &&
+              steps.filter.outputs.processing != 'true' &&
+              steps.filter.outputs.recommender != 'true' &&
+              steps.filter.outputs.plugins != 'true'
+            )
+          }}
+        with:
+          result-encoding: string
+          script: |
+            const areaMap = [
+              {
+                area: 'analysis',
+                flag: process.env.ANALYSIS,
+                pytest_args: `tests/test_analysis_*.py
+tests/analysis`,
+              },
+              {
+                area: 'core',
+                flag: process.env.CORE_PKG,
+                pytest_args: `tests/test_core_*.py
+tests/test_coherence*.py
+tests/test_contextual_delta.py
+tests/test_metrics.py
+tests/test_operator_detection.py
+tests/test_phase_alias_deprecations.py
+tests/test_resonance.py
+tests/test_segmentation.py
+tests/test_structural_time.py
+tests/test_epi.py`,
+              },
+              {
+                area: 'cli',
+                flag: process.env.CLI,
+                pytest_args: `tests/test_cli.py
+tests/test_cli_*.py
+tests/test_cli_parser.py`,
+              },
+              {
+                area: 'exporters',
+                flag: process.env.EXPORTERS,
+                pytest_args: `tests/test_*exporter*.py
+tests/test_replay_csv_bundle.py`,
+              },
+              {
+                area: 'ingestion',
+                flag: process.env.INGESTION,
+                pytest_args: `tests/test_ingestion.py
+tests/test_outgauge_udp.py
+tests/test_outsim_udp.py
+tests/test_insim.py
+tests/test_track_loader.py
+tests/ingestion`,
+              },
+              {
+                area: 'io',
+                flag: process.env.IO,
+                pytest_args: `tests/test_io_*.py
+tests/test_cli_io.py`,
+              },
+              {
+                area: 'processing',
+                flag: process.env.PROCESSING,
+                pytest_args: 'tests/test_processing.py',
+              },
+              {
+                area: 'recommender',
+                flag: process.env.RECOMMENDER,
+                pytest_args: `tests/test_recommender*.py
+tests/test_recommender_search_cache.py`,
+              },
+              {
+                area: 'plugins',
+                flag: process.env.PLUGINS,
+                pytest_args: `tests/plugins
+tests/test_cli_osd.py`,
+              },
+            ];
+
+            const include = areaMap
+              .filter((entry) => entry.flag === 'true')
+              .map(({ area, pytest_args }) => ({ area, pytest_args }));
+
+            if (process.env.PYTEST_FULL === 'true') {
+              include.unshift({ area: 'full', pytest_args: '' });
+            }
+
+            const matrix = { include };
+
+            return JSON.stringify(matrix);
 
 
   test:
     needs: detect-changes
-    if: >-
-      (needs.detect-changes.outputs.pytest_full == 'true' ||
-      needs.detect-changes.outputs.pytest_any == 'true') &&
-      matrix.enabled
+    if: ${{ needs.detect-changes.outputs.pytest_matrix != '{"include":[]}' }}
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        include:
-          # When adding a new pytest area:
-          #   1. Declare the matching filter above so dorny/paths-filter exposes an output.
-          #   2. Add a single include entry here with the area name, pytest args, and enable check.
-          # This keeps change detection and matrix expansion in sync without duplicating logic elsewhere.
-          - area: full
-            pytest_args: ""
-            enabled: ${{ needs.detect-changes.outputs.pytest_full == 'true' }}
-          - area: analysis
-            pytest_args: >-
-              tests/test_analysis_*.py
-              tests/analysis
-            enabled: ${{ needs.detect-changes.outputs.analysis == 'true' }}
-          - area: core
-            pytest_args: >-
-              tests/test_core_*.py
-              tests/test_coherence*.py
-              tests/test_contextual_delta.py
-              tests/test_metrics.py
-              tests/test_operator_detection.py
-              tests/test_phase_alias_deprecations.py
-              tests/test_resonance.py
-              tests/test_segmentation.py
-              tests/test_structural_time.py
-              tests/test_epi.py
-            enabled: ${{ needs.detect-changes.outputs.core_pkg == 'true' }}
-          - area: cli
-            pytest_args: >-
-              tests/test_cli.py
-              tests/test_cli_*.py
-              tests/test_cli_parser.py
-            enabled: ${{ needs.detect-changes.outputs.cli == 'true' }}
-          - area: exporters
-            pytest_args: >-
-              tests/test_*exporter*.py
-              tests/test_replay_csv_bundle.py
-            enabled: ${{ needs.detect-changes.outputs.exporters == 'true' }}
-          - area: ingestion
-            pytest_args: >-
-              tests/test_ingestion.py
-              tests/test_outgauge_udp.py
-              tests/test_outsim_udp.py
-              tests/test_insim.py
-              tests/test_track_loader.py
-              tests/ingestion
-            enabled: ${{ needs.detect-changes.outputs.ingestion == 'true' }}
-          - area: io
-            pytest_args: >-
-              tests/test_io_*.py
-              tests/test_cli_io.py
-            enabled: ${{ needs.detect-changes.outputs.io == 'true' }}
-          - area: processing
-            pytest_args: tests/test_processing.py
-            enabled: ${{ needs.detect-changes.outputs.processing == 'true' }}
-          - area: recommender
-            pytest_args: >-
-              tests/test_recommender*.py
-              tests/test_recommender_search_cache.py
-            enabled: ${{ needs.detect-changes.outputs.recommender == 'true' }}
-          - area: plugins
-            pytest_args: >-
-              tests/plugins
-              tests/test_cli_osd.py
-            enabled: ${{ needs.detect-changes.outputs.plugins == 'true' }}
+      matrix: ${{ fromJSON(needs.detect-changes.outputs.pytest_matrix) }}
     steps:
       - uses: actions/checkout@v4
         with:
