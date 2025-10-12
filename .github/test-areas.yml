@@ -119,7 +119,7 @@ areas:
       - 'tests/test_cli_parser.py'
     pytest_args:
       - tests/test_cli.py
-      - tests/test_cli_*.py
+      - tests/test_cli_io.py
       - tests/test_cli_parser.py
   - name: exporters
     display_name: exporters
