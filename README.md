@@ -106,6 +106,12 @@ with the [CLI deep dive](docs/cli_deep_dive.md) alongside the primary
 
 The complete documentation lives under `docs/` and is published with MkDocs.
 
+- Install the documentation toolchain (MkDocs, plugins, and AutoAPI) with:
+
+  ```bash
+  pip install .[dev]
+  ```
+
 - [`docs/DESIGN.md`](docs/DESIGN.md): textual summary of the TNFR operations manual.
 - [`docs/cli.md`](docs/cli.md): command-line interface guide.
 - [`docs/setup_equivalences.md`](docs/setup_equivalences.md): link TNFR metrics to
