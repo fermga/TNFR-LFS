@@ -15,18 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.generate.outputs.matrix }}
-      core: ${{ steps.filter.outputs.core }}
-      core_pkg: ${{ steps.filter.outputs.core_pkg }}
-      examples: ${{ steps.filter.outputs.examples }}
-      analysis: ${{ steps.filter.outputs.analysis }}
-      cli: ${{ steps.filter.outputs.cli }}
-      exporters: ${{ steps.filter.outputs.exporters }}
-      ingestion: ${{ steps.filter.outputs.ingestion }}
-      io: ${{ steps.filter.outputs.io }}
-      processing: ${{ steps.filter.outputs.processing }}
-      recommender: ${{ steps.filter.outputs.recommender }}
-      plugins: ${{ steps.filter.outputs.plugins }}
-      docs: ${{ steps.filter.outputs.docs }}
+      changes: ${{ steps.filter.outputs.changes }}
       full_suite_on_main: ${{ steps.determine-pytest.outputs.full_suite_on_main }}
       should_run_tests: ${{ steps.determine-pytest.outputs.should_run_tests }}
     steps:
@@ -132,7 +121,7 @@ jobs:
 
   test:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.should_run_tests == 'true' && needs.detect-changes.outputs[matrix.run] == 'true' }}
+    if: ${{ needs.detect-changes.outputs.should_run_tests == 'true' && ((matrix.run == 'full_suite_on_main' && needs.detect-changes.outputs.full_suite_on_main == 'true') || (matrix.run != 'full_suite_on_main' && contains(fromJson(needs.detect-changes.outputs.changes), matrix.run))) }}
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
@@ -186,7 +175,7 @@ jobs:
     name: Documentation links
     needs: detect-changes
     if: >-
-      needs.detect-changes.outputs.docs == 'true' ||
+      contains(fromJson(needs.detect-changes.outputs.changes), 'docs') ||
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -208,7 +197,7 @@ jobs:
       - detect-changes
     if: >-
       github.ref == 'refs/heads/main' ||
-      needs.detect-changes.outputs.examples == 'true'
+      contains(fromJson(needs.detect-changes.outputs.changes), 'examples')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
