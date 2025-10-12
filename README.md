@@ -122,8 +122,9 @@ The complete documentation lives under `docs/` and is published with MkDocs.
 - [`docs/cli.md`](docs/cli.md): command-line interface guide.
 - [`docs/setup_equivalences.md`](docs/setup_equivalences.md): link TNFR metrics to
   setup adjustments.
-- [`config/plugins.toml`](config/plugins.toml): plugin discovery and profile
-  templates consumed by the CLI helpers.
+- [`config/plugins.toml`](config/plugins.toml): generated from
+  `pyproject.toml` via `python -m tnfr_lfs.plugins.template --output config/plugins.toml`
+  and used as the plugin discovery/profile template by the CLI helpers.
 
 ## Branding and relationship with the theory
 
