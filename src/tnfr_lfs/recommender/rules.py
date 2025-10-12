@@ -43,7 +43,7 @@ from ..core.epi_models import EPIBundle
 from ..core.operators import TyreBalanceControlOutput, tyre_balance_controller
 from ..core.operator_detection import canonical_operator_label, silence_event_payloads
 from ..core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
-from ..utils.numeric import _safe_float
+from ..math.conversions import _safe_float
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from tnfr_lfs.ingestion.offline.profiles import AeroProfile, ProfileManager

@@ -4,6 +4,7 @@
 
 ### Changed
 
+* Move utility helpers into themed packages (`tnfr_lfs.common`, `tnfr_lfs.logging`, `tnfr_lfs.math`, `tnfr_lfs.visualization`) and deprecate the `tnfr_lfs.utils` compatibility layer.
 * Rename operator helpers to English (`coupling_operator`, `recursive_filter_operator`) while keeping deprecated Spanish aliases for compatibility.
 * Translate the structural silence operator naming to English (`detect_silence`, `SILENCE`), normalise legacy `SILENCIO` payloads to the canonical identifier, and update telemetry aggregation to consume the English label consistently.
 

@@ -71,8 +71,8 @@ from ..exporters.setup_plan import (
 from ..recommender import RecommendationEngine, SetupPlanner
 from ..recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObjectives
 from .session import format_session_messages
-from ..utils.numeric import _safe_float
-from ..utils.sparkline import DEFAULT_SPARKLINE_BLOCKS, render_sparkline
+from ..math.conversions import _safe_float
+from ..visualization.sparkline import DEFAULT_SPARKLINE_BLOCKS, render_sparkline
 
 
 logger = logging.getLogger(__name__)

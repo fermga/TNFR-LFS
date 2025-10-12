@@ -9,7 +9,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 
 from ..ingestion.config_loader import parse_cache_options
 from ..core import cache as cache_helpers
-from ..utils.logging import setup_logging
+from ..logging.config import setup_logging
 
 from . import common as _common_module
 from . import io as _cli_io_module

@@ -18,7 +18,7 @@ from .setup_plan import (
 )
 from .report_extended import html_exporter
 from ..cli.session import format_session_messages
-from ..utils.sparkline import render_sparkline
+from ..visualization.sparkline import render_sparkline
 
 
 CAR_MODEL_PREFIXES = {
