@@ -66,26 +66,11 @@ Baseline saved 17 samples to /workspace/TNFR-LFS/examples/out/baseline.jsonl (js
 
 1. Launch Live for Speed and open `cfg.txt` (Options → Misc → `cfg.txt`
    or edit the file directly).
-2. Enable the OutSim broadcaster with a suitable host/port pair, then append
-   the extended options so TNFR × LFS receives the four-wheel payload:
-
-   ```text
-   OutSim 1 29999 1000 0.0 0.0 0.0
-   OutSim Opts ff
-   ```
-
-3. Enable the OutGauge broadcaster and request the extended payload that carries
-   tyre temperatures, pressures, and brake data:
-
-   ```text
-   OutGauge 1 30000 1
-   OutGauge Opts OG_EXT_TYRE_TEMP|OG_EXT_TYRE_PRESS|OG_EXT_BRAKE_TEMP
-   ```
-
-   The corresponding in-game commands are `/outsim Opts ff` followed by
-   `/outsim 1 …` and `/outgauge Opts …` before `/outgauge 1 …` if you
-   prefer configuring from the console.
-4. Restart the session so Live for Speed loads the new configuration. Refer to
+2. Enable the OutSim and OutGauge broadcasters with the extended payloads listed
+   in the [telemetry configuration checklist](telemetry.md#required-simulators-settings).
+   That section provides the exact `cfg.txt` entries and `/outsim`/`/outgauge`
+   console commands for both host/port selection and payload flags.
+3. Restart the session so Live for Speed loads the new configuration. Refer to
    the [telemetry reference](telemetry.md) for a detailed breakdown of the
    available fields and integration tips.
 
