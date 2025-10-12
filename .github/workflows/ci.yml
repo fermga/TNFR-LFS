@@ -26,65 +26,19 @@ jobs:
       recommender: ${{ steps.filter.outputs.recommender }}
       plugins: ${{ steps.filter.outputs.plugins }}
       docs: ${{ steps.filter.outputs.docs }}
-      full_suite_on_main: ${{ steps.build-pytest-matrix.outputs.full_suite_on_main }}
-      pytest_matrix: ${{ steps.build-pytest-matrix.outputs.matrix }}
+      full_suite_on_main: ${{ steps.determine-pytest.outputs.full_suite_on_main }}
+      should_run_tests: ${{ steps.determine-pytest.outputs.should_run_tests }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Load pytest areas
-        id: load-pytest-areas
-        uses: actions/github-script@v7
-        with:
-          result-encoding: string
-          script: |
-            const fs = require('fs');
-            const core = require('@actions/core');
-
-            const raw = fs.readFileSync('.github/test-areas.yml', 'utf8');
-            let parsed;
-
-            try {
-              parsed = JSON.parse(raw);
-            } catch (error) {
-              core.setFailed(`Unable to parse .github/test-areas.yml: ${error}`);
-              return;
-            }
-
-            if (!parsed || !Array.isArray(parsed.areas)) {
-              core.setFailed('Failed to load pytest areas from .github/test-areas.yml');
-              return;
-            }
-
-            const filters = {};
-            for (const area of parsed.areas) {
-              filters[area.name] = area.filter_globs;
-            }
-
-            const lines = [];
-
-            for (const [areaName, globs] of Object.entries(filters)) {
-              lines.push(`${areaName}:`);
-
-              for (const glob of globs) {
-                const safeGlob = glob.replace(/'/g, "''");
-                lines.push(`  - '${safeGlob}'`);
-              }
-            }
-
-            const indentedFilters = lines
-              .map((line) => `            ${line}`)
-              .join('\n');
-
-            core.setOutput('filters', indentedFilters);
-            core.setOutput('areas', JSON.stringify(parsed.areas));
       - id: filter
         uses: dorny/paths-filter@v3
         with:
           # Each filter below mirrors a logical product area. When adding a
-          # module or a new test file, update the relevant glob in
-          # .github/test-areas.yml so the downstream pytest selection remains
+          # module or a new test file, update the relevant glob here (and in the
+          # test matrix below) so the downstream pytest selection remains
           # accurate.
           filters: |
             core:
@@ -104,71 +58,153 @@ jobs:
             docs:
               - 'docs/**'
               - '**/*.md'
-            ${{ steps.load-pytest-areas.outputs.filters }}
-      - name: Build pytest matrix
-        id: build-pytest-matrix
-        # The script consumes .github/test-areas.yml to build the pytest matrix
-        # used by the test job, so updates only require editing that manifest.
-        uses: actions/github-script@v7
+            analysis:
+              - 'src/tnfr_lfs/analysis/**'
+              - 'tests/test_analysis_*.py'
+              - 'tests/analysis/**'
+            core_pkg:
+              - 'src/tnfr_lfs/core/**'
+              - 'tests/test_core_*.py'
+              - 'tests/test_coherence*.py'
+              - 'tests/test_contextual_delta.py'
+              - 'tests/test_metrics.py'
+              - 'tests/test_operator_detection.py'
+              - 'tests/test_phase_alias_deprecations.py'
+              - 'tests/test_resonance.py'
+              - 'tests/test_segmentation.py'
+              - 'tests/test_structural_time.py'
+              - 'tests/test_epi.py'
+            cli:
+              - 'src/tnfr_lfs/cli/**'
+              - 'tests/test_cli*.py'
+              - '!tests/test_cli_osd.py'
+              - 'tests/test_cli_parser.py'
+            exporters:
+              - 'src/tnfr_lfs/exporters/**'
+              - 'tests/test_*exporter*.py'
+              - 'tests/test_replay_csv_bundle.py'
+            ingestion:
+              - 'src/tnfr_lfs/ingestion/**'
+              - 'tests/test_ingestion.py'
+              - 'tests/test_outgauge_udp.py'
+              - 'tests/test_outsim_udp.py'
+              - 'tests/test_insim.py'
+              - 'tests/test_track_loader.py'
+              - 'tests/ingestion/**'
+            io:
+              - 'src/tnfr_lfs/io/**'
+              - 'tests/test_io_*.py'
+              - 'tests/test_cli_io.py'
+            processing:
+              - 'src/tnfr_lfs/processing.py'
+              - 'src/tnfr_lfs/processing/**'
+              - 'tests/test_processing.py'
+            recommender:
+              - 'src/tnfr_lfs/recommender/**'
+              - 'tests/test_recommender*.py'
+              - 'tests/test_recommender_search_cache.py'
+            plugins:
+              - 'src/tnfr_lfs/plugins/**'
+              - 'tests/plugins/**'
+              - 'tests/test_cli_osd.py'
+      - name: Determine pytest selection
+        id: determine-pytest
         env:
-          AREAS: ${{ steps.load-pytest-areas.outputs.areas }}
-          ANALYSIS: ${{ steps.filter.outputs.analysis }}
-          CORE_PKG: ${{ steps.filter.outputs.core_pkg }}
-          CLI: ${{ steps.filter.outputs.cli }}
-          EXPORTERS: ${{ steps.filter.outputs.exporters }}
-          INGESTION: ${{ steps.filter.outputs.ingestion }}
-          IO: ${{ steps.filter.outputs.io }}
-          PROCESSING: ${{ steps.filter.outputs.processing }}
-          RECOMMENDER: ${{ steps.filter.outputs.recommender }}
-          PLUGINS: ${{ steps.filter.outputs.plugins }}
+          CHANGED_AREAS: ${{ steps.filter.outputs.changes }}
           IS_MAIN: ${{ github.ref == 'refs/heads/main' }}
-        with:
-          result-encoding: string
-          script: |
-            const core = require('@actions/core');
+        run: |
+          python - <<'PY'
+          import json
+          import os
 
-            const areas = JSON.parse(process.env.AREAS);
+          changes = json.loads(os.environ["CHANGED_AREAS"])
+          is_main = os.environ["IS_MAIN"].lower() == "true"
 
-            const changed = [];
+          full_suite = is_main and not changes
+          should_run = full_suite or bool(changes)
 
-            for (const area of areas) {
-              const envName = area.name
-                .toUpperCase()
-                .replace(/[^A-Z0-9]/g, '_');
-              const flag = process.env[envName];
-
-              if (flag === 'true') {
-                const pytestArgs = Array.isArray(area.pytest_args)
-                  ? area.pytest_args.join(' ')
-                  : (area.pytest_args || '').toString();
-
-                const areaLabel = area.display_name || area.name;
-
-                changed.push({ area: areaLabel, pytest_args: pytestArgs.trim() });
-              }
-            }
-
-            const include = [...changed];
-
-            const runFullSuite = process.env.IS_MAIN === 'true' && include.length === 0;
-
-            if (runFullSuite) {
-              include.unshift({ area: 'full', pytest_args: '' });
-            }
-
-            core.setOutput('full_suite_on_main', runFullSuite ? 'true' : 'false');
-            core.setOutput('matrix', JSON.stringify(include));
-
-            return JSON.stringify(include);
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"full_suite_on_main={'true' if full_suite else 'false'}\n")
+              fh.write(f"should_run_tests={'true' if should_run else 'false'}\n")
+          PY
 
 
   test:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.pytest_matrix != '[]' }}
+    if: ${{ needs.detect-changes.outputs.should_run_tests == 'true' && matrix.run == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include: ${{ fromJSON(needs.detect-changes.outputs.pytest_matrix) }}
+        include:
+          - area: analysis
+            display_name: analysis
+            pytest_args: >-
+              tests/test_analysis_*.py
+              tests/analysis
+            run: ${{ needs.detect-changes.outputs.analysis }}
+          - area: core_pkg
+            display_name: core
+            pytest_args: >-
+              tests/test_core_*.py
+              tests/test_coherence*.py
+              tests/test_contextual_delta.py
+              tests/test_metrics.py
+              tests/test_operator_detection.py
+              tests/test_phase_alias_deprecations.py
+              tests/test_resonance.py
+              tests/test_segmentation.py
+              tests/test_structural_time.py
+              tests/test_epi.py
+            run: ${{ needs.detect-changes.outputs.core_pkg }}
+          - area: cli
+            display_name: cli
+            pytest_args: >-
+              tests/test_cli.py
+              tests/test_cli_*.py
+              tests/test_cli_parser.py
+            run: ${{ needs.detect-changes.outputs.cli }}
+          - area: exporters
+            display_name: exporters
+            pytest_args: >-
+              tests/test_*exporter*.py
+              tests/test_replay_csv_bundle.py
+            run: ${{ needs.detect-changes.outputs.exporters }}
+          - area: ingestion
+            display_name: ingestion
+            pytest_args: >-
+              tests/test_ingestion.py
+              tests/test_outgauge_udp.py
+              tests/test_outsim_udp.py
+              tests/test_insim.py
+              tests/test_track_loader.py
+              tests/ingestion
+            run: ${{ needs.detect-changes.outputs.ingestion }}
+          - area: io
+            display_name: io
+            pytest_args: >-
+              tests/test_io_*.py
+              tests/test_cli_io.py
+            run: ${{ needs.detect-changes.outputs.io }}
+          - area: processing
+            display_name: processing
+            pytest_args: tests/test_processing.py
+            run: ${{ needs.detect-changes.outputs.processing }}
+          - area: recommender
+            display_name: recommender
+            pytest_args: >-
+              tests/test_recommender*.py
+              tests/test_recommender_search_cache.py
+            run: ${{ needs.detect-changes.outputs.recommender }}
+          - area: plugins
+            display_name: plugins
+            pytest_args: >-
+              tests/plugins
+              tests/test_cli_osd.py
+            run: ${{ needs.detect-changes.outputs.plugins }}
+          - area: full
+            display_name: full
+            pytest_args: ''
+            run: ${{ needs.detect-changes.outputs.full_suite_on_main }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -188,7 +224,7 @@ jobs:
       - name: Publish pytest selection
         env:
           PYTEST_ARGS: ${{ matrix.pytest_args }}
-          PYTEST_AREA: ${{ matrix.area }}
+          PYTEST_AREA: ${{ matrix.display_name }}
         run: |
           if [[ -z "$PYTEST_ARGS" ]]; then
             echo "* **${PYTEST_AREA}** → full suite" >> "$GITHUB_STEP_SUMMARY"
