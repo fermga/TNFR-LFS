@@ -50,6 +50,7 @@ from tnfr_lfs.core.operators import (
     dissonance_breakdown_operator,
     dissonance_operator,
     _aggregate_operator_events,
+    _stage_coherence,
     evolve_epi,
     emission_operator,
     mutation_operator,
@@ -65,6 +66,7 @@ from tnfr_lfs.core.operators import (
 )
 from tnfr_lfs.core.metrics import compute_window_metrics
 from tnfr_lfs.core.operator_detection import canonical_operator_label
+from tnfr_lfs.core.interfaces import SupportsEPIBundle
 
 
 def test_delta_calculator_decomposes_longitudinal_component():
@@ -171,12 +173,84 @@ def _build_microsector(
     return build_microsector(**kwargs)
 
 
+class _ProtocolBundleStub:
+    """Minimal stub implementing :class:`SupportsEPIBundle`."""
+
+    def __init__(self, timestamp: float, delta_nfr: float, sense_index: float) -> None:
+        self.timestamp = timestamp
+        self.epi = 0.0
+        self.delta_nfr = delta_nfr
+        self.sense_index = sense_index
+        self.tyres = TyresNode(delta_nfr=delta_nfr, sense_index=sense_index)
+        self.suspension = SuspensionNode(delta_nfr=delta_nfr, sense_index=sense_index)
+        self.chassis = ChassisNode(delta_nfr=delta_nfr, sense_index=sense_index)
+        self.brakes = BrakesNode(delta_nfr=0.0, sense_index=sense_index)
+        self.transmission = TransmissionNode(delta_nfr=0.0, sense_index=sense_index)
+        self.track = TrackNode(delta_nfr=0.0, sense_index=sense_index)
+        self.driver = DriverNode(delta_nfr=0.0, sense_index=sense_index)
+        self.structural_timestamp = None
+        self.delta_breakdown: Mapping[str, Mapping[str, float]] = {}
+        self.dEPI_dt = 0.0
+        self.integrated_epi = 0.0
+        self.node_evolution: Mapping[str, tuple[float, float]] = {}
+        self.delta_nfr_proj_longitudinal = 0.0
+        self.delta_nfr_proj_lateral = 0.0
+        self.nu_f_classification = ""
+        self.nu_f_category = ""
+        self.nu_f_label = ""
+        self.nu_f_dominant = 0.0
+        self.coherence_index = 0.0
+        self.ackermann_parallel_index = 0.0
+
 def test_coherence_operator_reduces_jitter_without_bias():
     raw_series = [0.2, 0.8, 0.1, 0.9, 0.2]
     smoothed = coherence_operator(raw_series, window=3)
 
     assert mean(smoothed) == pytest.approx(mean(raw_series), rel=1e-9)
     assert pstdev(smoothed) < pstdev(raw_series)
+
+
+def test_stage_coherence_accepts_protocol_bundles() -> None:
+    bundles: List[SupportsEPIBundle] = [
+        _ProtocolBundleStub(0.0, 0.12, 0.62),
+        _ProtocolBundleStub(0.5, -0.08, 0.58),
+        _ProtocolBundleStub(1.0, 0.04, 0.61),
+    ]
+    objectives = emission_operator(0.0, 0.6)
+
+    stage = _stage_coherence(bundles, objectives, coherence_window=1)
+
+    assert stage["bundles"], "expected updated bundles returned"
+    assert all(isinstance(bundle, EPIBundle) for bundle in stage["bundles"])
+    assert len(stage["smoothed_delta"]) == len(bundles)
+    assert len(stage["smoothed_sense_index"]) == len(bundles)
+    for updated, original in zip(stage["smoothed_delta"], bundles):
+        assert updated == pytest.approx(original.delta_nfr, rel=0.15)
+    for updated, original in zip(stage["smoothed_sense_index"], bundles):
+        assert 0.0 <= updated <= 1.0
+        assert updated == pytest.approx(original.sense_index, rel=0.05)
+    # ensure original protocol bundle remains unchanged
+    assert isinstance(bundles[0], _ProtocolBundleStub)
+    assert bundles[0].delta_nfr == pytest.approx(0.12)
+
+
+def test_dissonance_breakdown_handles_protocol_bundles() -> None:
+    bundles: List[SupportsEPIBundle] = [
+        _ProtocolBundleStub(0.0, 0.2, 0.5),
+        _ProtocolBundleStub(0.5, -0.1, 0.55),
+        _ProtocolBundleStub(1.0, 0.0, 0.52),
+    ]
+    series = [bundle.delta_nfr for bundle in bundles]
+
+    breakdown = dissonance_breakdown_operator(
+        series,
+        0.0,
+        microsectors=None,
+        bundles=bundles,
+    )
+
+    assert isinstance(breakdown, DissonanceBreakdown)
+    assert breakdown.value == pytest.approx(mean(abs(value) for value in series))
 
 
 def test_evolve_epi_runs_euler_step():
