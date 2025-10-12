@@ -90,7 +90,7 @@ TNFR × LFS reads exclusively from native Live for Speed broadcasters. Enable
 OutSim/OutGauge/Insim in the simulator and consult the
 [telemetry guide](docs/telemetry.md) for the complete signal breakdown and brake
 thermal proxy details. Developers wiring direct UDP ingest pipelines can jump to
-the [`TelemetryFusion` API reference](docs/api_reference.md#tnfr_lfsingestionlivetelemetryfusion)
+the [`TelemetryFusion` API reference](docs/reference/autoapi/tnfr_lfs/ingestion/fusion/index.md#telemetryfusion)
 to see how OutSim/OutGauge packets are combined and how calibration packs slot
 into the workflow.
 

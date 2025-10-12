@@ -31,7 +31,7 @@ environment is active before continuing.
 
 !!! info "Capturing your own telemetry"
     When you're ready to ingest live UDP streams, follow the
-    [`TelemetryFusion` walkthrough](api_reference.md#tnfr_lfsingestionlivetelemetryfusion)
+    [`TelemetryFusion` walkthrough](reference/autoapi/tnfr_lfs/ingestion/fusion/index.md#telemetryfusion)
     to wire the OutSim and OutGauge broadcasters straight into the EPI
     extractor. The same calibration hooks and pack overrides apply to both the
     CLI and your own scripts.
