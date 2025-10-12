@@ -1086,7 +1086,7 @@ class _RunningBaseline:
 
     def add(
         self,
-        record: TelemetryRecord,
+        record: SupportsTelemetrySample,
         *,
         car_model: str | None = None,
         track_name: str | None = None,
@@ -1099,22 +1099,28 @@ class _RunningBaseline:
                 self._first_structural = float(structural)
             else:
                 self._first_structural = self._first_timestamp
-            self._car_model = car_model or record.car_model
-            self._track_name = track_name or record.track_name
-            self._tyre_compound = tyre_compound or record.tyre_compound
+            record_car = getattr(record, "car_model", None)
+            record_track = getattr(record, "track_name", None)
+            record_tyre = getattr(record, "tyre_compound", None)
+            self._car_model = car_model or record_car
+            self._track_name = track_name or record_track
+            self._tyre_compound = tyre_compound or record_tyre
         else:
+            record_car = getattr(record, "car_model", None)
+            record_track = getattr(record, "track_name", None)
+            record_tyre = getattr(record, "tyre_compound", None)
             if car_model:
                 self._car_model = car_model
-            elif record.car_model:
-                self._car_model = record.car_model
+            elif record_car:
+                self._car_model = record_car
             if track_name:
                 self._track_name = track_name
-            elif record.track_name:
-                self._track_name = record.track_name
+            elif record_track:
+                self._track_name = record_track
             if tyre_compound:
                 self._tyre_compound = tyre_compound
-            elif record.tyre_compound:
-                self._tyre_compound = record.tyre_compound
+            elif record_tyre:
+                self._tyre_compound = record_tyre
 
         self._count += 1
         for field in self._AVERAGE_FIELDS:
@@ -1248,7 +1254,7 @@ class EPIExtractor:
 
     def update(
         self,
-        record: TelemetryRecord,
+        record: SupportsTelemetrySample,
         *,
         calibration: "CoherenceCalibrationStore" | None = None,
         player_name: str | None = None,
@@ -1289,7 +1295,7 @@ class EPIExtractor:
         nu_snapshot = resolve_nu_f_by_node(
             record,
             analyzer=self._nu_f_analyzer,
-            car_model=car_model or record.car_model,
+            car_model=car_model or getattr(record, "car_model", None),
             cache_options=self._cache_options,
         )
         bundle = DeltaCalculator.compute_bundle(
@@ -1312,7 +1318,7 @@ class EPIExtractor:
 
     def extract(
         self,
-        records: Sequence[TelemetryRecord],
+        records: Sequence[SupportsTelemetrySample],
         *,
         calibration: "CoherenceCalibrationStore" | None = None,
         player_name: str | None = None,
@@ -1333,9 +1339,9 @@ class EPIExtractor:
                     record,
                     calibration=calibration,
                     player_name=player_name,
-                    car_model=car_model or record.car_model,
-                    track_name=record.track_name,
-                    tyre_compound=record.tyre_compound,
+                    car_model=car_model or getattr(record, "car_model", None),
+                    track_name=getattr(record, "track_name", None),
+                    tyre_compound=getattr(record, "tyre_compound", None),
                 )
                 bundles.append(bundle)
         finally:
@@ -1350,7 +1356,7 @@ class EPIExtractor:
             self._pending_baseline = None
         return bundles
 
-    def _compute_epi(self, record: TelemetryRecord) -> float:
+    def _compute_epi(self, record: SupportsTelemetrySample) -> float:
         # Normalise vertical load between 0 and 10 kN which is a typical
         # race car range.  Slip ratio is expected in -1..1.
         load_component = min(max(record.vertical_load / 10000.0, 0.0), 1.0)

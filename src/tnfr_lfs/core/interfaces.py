@@ -34,7 +34,12 @@ __all__ = [
 
 @runtime_checkable
 class SupportsTelemetrySample(Protocol):
-    """Telemetry payload exposing the fields required by core analytics."""
+    """Telemetry payload exposing analytics fields and optional metadata.
+
+    Implementations provide the numerical signals consumed by the
+    :mod:`tnfr_lfs.core` analytics along with optional descriptive metadata such
+    as ``car_model``, ``track_name``, and ``tyre_compound``.
+    """
 
     timestamp: float
     structural_timestamp: float | None
@@ -130,6 +135,9 @@ class SupportsTelemetrySample(Protocol):
     line_deviation: float
 
     reference: "SupportsTelemetrySample" | None
+    car_model: str | None
+    track_name: str | None
+    tyre_compound: str | None
 
 
 @runtime_checkable
