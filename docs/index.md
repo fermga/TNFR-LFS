@@ -6,13 +6,9 @@ Telemetry/Theory of the Fractal-Resonant Nature (TNFR) framework alongside the
 Load Flow Synthesis methodology. The theory establishes how to reason about
 Event Performance Indicators (EPI), ΔFz/ΔSi deltas and Sense Index signals; the
 toolkit provides production-ready layers to apply those ideas in racing
-telemetry pipelines. This index is the canonical home for the extended
-introduction, feature descriptions and onboarding guide referenced from the
-project README.
-
-> The README offers a compact elevator pitch and quick links; bookmark this
-> index when you need the full onboarding narrative, detailed checklists and
-> API map.
+telemetry pipelines. Treat this index as the canonical home for the extended
+introduction, feature descriptions, onboarding narratives, checklists and API
+map that the project README now summarises.
 
 ## Feature overview
 
@@ -41,24 +37,18 @@ illustrate the workflow. The ingestion pipeline regression suite in
 `tests/test_ingestion.py` exercises the OutSim/OutGauge UDP clients and fusion
 helpers end-to-end.【F:tests/test_ingestion.py†L1-L376】
 
-## Quickstart checklist
+## Quickstart
+
+!!! tip "Ready to run the toolkit?"
+    Follow the [beginner quickstart tutorial](tutorials.md) for the step-by-step
+    installation, sample scenario, telemetry configuration and artefact review
+    walkthrough that onboards you from a fresh environment to a race-ready
+    workflow.
 
 TNFR × LFS targets Python 3.9+ environments and Live for Speed telemetry
-streams. Work through the following checklist to complete the onboarding
-journey:
-
-1. **Install the toolkit** – follow the dependency and virtual environment
-   setup in the [beginner quickstart](tutorials.md#1-install-the-toolkit).
-2. **Run the quickstart scenario** – execute the sample capture and reporting
-   workflow under [step 2](tutorials.md#2-run-the-quickstart-scenario).
-3. **Configure Live for Speed telemetry** – mirror the simulator settings in
-   [step 3](tutorials.md#3-configure-live-for-speed-telemetry) so OutSim/OutGauge
-   streams connect to the toolkit.
-4. **Inspect the generated artefacts** – validate your run outputs using the
-   guidance in [step 4](tutorials.md#4-inspect-the-generated-artefacts).
-
-Each item links directly to the detailed walkthrough and should be ticked off
-before rolling the toolkit into regular telemetry sessions.
+streams. The quickstart covers dependency setup, the baseline scenario, the
+simulator configuration and the report validation process without duplicating
+those instructions here.
 
 ## Operational checklist
 
