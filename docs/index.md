@@ -30,31 +30,14 @@ setting up the toolkit from scratch.
 
 ### Quickstart overview
 
-The [beginner quickstart](tutorials.md) is the canonical onboarding guide.
-It expands on the brief pointer in the project README and walks through the
-initial setup from start to finish. Refer back to the summary below whenever
-you need to re-run a portion of the workflow:
-
-1. **Install prerequisites** – follow the environment preparation checklist in
-   [“Install the toolkit”](tutorials.md#1-install-the-toolkit) to install
-   Python 3.9+, create an optional virtual environment, and select the
-   dependency extras (``[capture]`` or ``[full]``) that match your hardware.
-   The section also links to the driver packages required for capturing
-   OutSim/OutGauge streams on Windows hosts.
-2. **Run the bundled scenario** – execute the capture pipeline described in
-   [“Run the quickstart scenario”](tutorials.md#2-run-the-quickstart-scenario)
-   to replay the sample telemetry. Completing this step validates both the
-   installation and your ``tnfr_lfs`` CLI wiring before you connect to a live
-   server.
-3. **Configure live telemetry** – when you are ready to ingest real-time
-   OutSim/OutGauge streams, mirror the configuration in Live for Speed by
-   following [“Configure Live for Speed telemetry”](tutorials.md#3-configure-live-for-speed-telemetry).
-   It covers port selection, firewall allowances, and the ``tnfr_lfs ingest``
-   command flags for UDP capture.
-4. **Review artefacts** – explore the reports highlighted in
-   [“Inspect the generated artefacts”](tutorials.md#4-inspect-the-generated-artefacts)
-   to understand how baseline summaries, setup plans, JSON exports, and HUD
-   overlays map to the metrics discussed in the theory chapter.
+Follow the [beginner quickstart](tutorials.md) to move from installation to a
+validated telemetry capture in four focused stops: set up your environment in
+[“Install the toolkit”](tutorials.md#1-install-the-toolkit), execute the sample
+workflow from [“Run the quickstart scenario”](tutorials.md#2-run-the-quickstart-scenario),
+prepare Live for Speed by mirroring the settings in
+[“Configure Live for Speed telemetry”](tutorials.md#3-configure-live-for-speed-telemetry),
+and inspect the resulting artefacts through
+[“Inspect the generated artefacts”](tutorials.md#4-inspect-the-generated-artefacts).
 
 ## Operational checklist
 
