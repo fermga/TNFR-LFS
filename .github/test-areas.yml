@@ -87,8 +87,12 @@ areas:
     filter_globs:
       - 'src/tnfr_lfs/analysis/**'
       - 'tests/test_analysis_*.py'
+      - 'tests/test_brake_thermal.py'
+      - 'tests/test_robustness.py'
     pytest_args:
       - tests/test_analysis_*.py
+      - tests/test_brake_thermal.py
+      - tests/test_robustness.py
   - name: core_pkg
     display_name: core
     filter_globs:
