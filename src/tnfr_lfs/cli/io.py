@@ -9,11 +9,6 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-try:  # Python 3.11+
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
-    import tomli as tomllib  # type: ignore
-
 from ..configuration import load_project_config
 from ..core.cache_settings import CacheOptions
 from ..ingestion import OutSimClient
@@ -28,7 +23,6 @@ from ..core.epi import TelemetryRecord
 from .errors import CliError
 
 CONFIG_ENV_VAR = "TNFR_LFS_CONFIG"
-DEFAULT_CONFIG_FILENAME = "tnfr_lfs.toml"
 PROJECT_CONFIG_FILENAME = "pyproject.toml"
 
 Records = List[TelemetryRecord]
@@ -81,18 +75,8 @@ def _pyproject_candidates(base: Path) -> List[Path]:
     return [base / PROJECT_CONFIG_FILENAME]
 
 
-def _load_toml_mapping(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    with path.open("rb") as handle:
-        data = tomllib.load(handle)
-    if isinstance(data, dict):
-        return {str(key): value for key, value in data.items()}
-    return None
-
-
 def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
-    """Load CLI defaults from ``pyproject.toml`` or ``tnfr_lfs.toml`` files."""
+    """Load CLI defaults from ``pyproject.toml`` files."""
 
     env_config = os.environ.get(CONFIG_ENV_VAR)
     env_path = Path(env_config) if env_config else None
@@ -105,12 +89,6 @@ def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
 
     for base in explicit_bases:
         resolved = base.expanduser()
-        if resolved.suffix and resolved.name != PROJECT_CONFIG_FILENAME:
-            payload = _load_toml_mapping(resolved)
-            if payload is not None:
-                return _normalise_cli_config(payload, resolved)
-            continue
-
         pyproject_paths = _pyproject_candidates(resolved)
         for candidate in _iter_unique_paths(pyproject_paths):
             loaded = load_project_config(candidate)
@@ -119,28 +97,12 @@ def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
             payload, resolved_candidate = loaded
             return _normalise_cli_config(payload, resolved_candidate)
 
-        if not resolved.suffix:
-            legacy_fallback = resolved / DEFAULT_CONFIG_FILENAME
-            payload = _load_toml_mapping(legacy_fallback)
-            if payload is not None:
-                return _normalise_cli_config(payload, legacy_fallback)
-
     for candidate in _iter_unique_paths(_pyproject_candidates(Path.cwd())):
         loaded = load_project_config(candidate)
         if not loaded:
             continue
         payload, resolved = loaded
         return _normalise_cli_config(payload, resolved)
-
-    legacy_candidates: List[Path] = []
-    legacy_candidates.append(Path.cwd() / DEFAULT_CONFIG_FILENAME)
-    legacy_candidates.append(Path.home() / ".config" / DEFAULT_CONFIG_FILENAME)
-
-    for candidate in _iter_unique_paths(legacy_candidates):
-        payload = _load_toml_mapping(candidate)
-        if payload is None:
-            continue
-        return _normalise_cli_config(payload, candidate)
 
     return {"_config_path": None}
 

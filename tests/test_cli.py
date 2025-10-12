@@ -22,11 +22,7 @@ from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
-from tnfr_lfs.configuration import (
-    canonical_cli_config_block,
-    canonical_cli_config_legacy_text,
-)
-from tnfr_lfs.plugins.template import canonical_plugins_template
+from tnfr_lfs.configuration import load_project_config
 from tests.helpers import (
     DummyBundle,
     create_cli_config_pack,
@@ -77,27 +73,18 @@ def test_run_cli_dispatches_registered_handler(monkeypatch: pytest.MonkeyPatch) 
     }
 
 
-def test_run_cli_prefers_pyproject_config(
+def test_run_cli_loads_pyproject_config(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    legacy_path = tmp_path / "tnfr_lfs.toml"
-    legacy_path.write_text(
-        dedent(
-            """
-            [logging]
-            format = "text"
-            output = "stdout"
-            """
-        ),
-        encoding="utf8",
-    )
     pyproject_path = tmp_path / "pyproject.toml"
     pyproject_path.write_text(
         dedent(
             """
             [tool.tnfr_lfs.logging]
             level = "warning"
+            format = "text"
+            output = "stdout"
 
             [tool.tnfr_lfs.performance]
             cache_enabled = false
@@ -140,62 +127,6 @@ def test_run_cli_prefers_pyproject_config(
     assert performance_cfg["cache_enabled"] is False
     assert performance_cfg["nu_f_cache_size"] == 0
     assert performance_cfg["max_cache_size"] == 0
-
-
-def test_config_sync_regenerates_legacy_and_plugins(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    pyproject_source = Path(__file__).resolve().parents[1] / "pyproject.toml"
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text(pyproject_source.read_text(encoding="utf8"), encoding="utf8")
-
-    result = run_cli_in_tmp(["config", "sync"], tmp_path=tmp_path, monkeypatch=monkeypatch)
-
-    legacy_path = tmp_path / "tnfr_lfs.toml"
-    plugins_path = tmp_path / "config" / "plugins.toml"
-    assert legacy_path.exists()
-    assert plugins_path.exists()
-    assert legacy_path.read_text(encoding="utf8") == canonical_cli_config_legacy_text(pyproject_path)
-    assert (
-        plugins_path.read_text(encoding="utf8")
-        == canonical_plugins_template(pyproject_path)
-    )
-    assert "Legacy configuration written to" in result
-
-
-def test_config_sync_honours_output_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-    source_pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
-    pyproject_path = project_root / "pyproject.toml"
-    pyproject_path.write_text(source_pyproject.read_text(encoding="utf8"), encoding="utf8")
-
-    output_dir = tmp_path / "artifacts"
-    result = run_cli_in_tmp(
-        [
-            "config",
-            "sync",
-            "--project-root",
-            str(project_root),
-            "--output-dir",
-            str(output_dir),
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-    )
-
-    legacy_path = output_dir / "tnfr_lfs.toml"
-    plugins_path = output_dir / "config" / "plugins.toml"
-    assert legacy_path.exists()
-    assert plugins_path.exists()
-    assert legacy_path.read_text(encoding="utf8") == canonical_cli_config_legacy_text(pyproject_path)
-    assert (
-        plugins_path.read_text(encoding="utf8")
-        == canonical_plugins_template(pyproject_path)
-    )
-    assert str(legacy_path) in result
 
 
 def test_run_cli_requires_telemetry_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -397,8 +328,11 @@ def test_baseline_overlay_uses_keepalive_and_overlay(
 def test_baseline_threads_configured_buffer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    config_path = tmp_path / "tnfr_lfs.toml"
-    config_path.write_text("[performance]\ntelemetry_buffer_size = 12\n", encoding="utf8")
+    config_path = tmp_path / "pyproject.toml"
+    config_path.write_text(
+        "[tool.tnfr_lfs.performance]\ntelemetry_buffer_size = 12\n",
+        encoding="utf8",
+    )
 
     captured: dict[str, object] = {}
 
@@ -550,11 +484,11 @@ def test_template_command_emits_phase_presets() -> None:
 def test_compare_command_attaches_abtest(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    config_path = tmp_path / "tnfr_lfs.toml"
+    config_path = tmp_path / "pyproject.toml"
     config_path.write_text(
         dedent(
             """
-            [compare]
+            [tool.tnfr_lfs.compare]
             car_model = "XFG"
             target_delta = 0.42
             target_si = 0.86
@@ -1230,28 +1164,28 @@ def test_configuration_defaults_are_applied(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config_path = tmp_path / "tnfr_lfs.toml"
+    config_path = tmp_path / "pyproject.toml"
     config_path.write_text(
         """
-[core]
+[tool.tnfr_lfs.core]
 outsim_port = 4567
 
-[performance]
+[tool.tnfr_lfs.performance]
 telemetry_buffer_size = 8
 
-[suggest]
+[tool.tnfr_lfs.suggest]
 car_model = "config_gt"
 track = "config_track"
 
-[paths]
+[tool.tnfr_lfs.paths]
 output_dir = "artifacts"
 
-[limits.delta_nfr]
+[tool.tnfr_lfs.limits.delta_nfr]
 entry = 0.2
 apex = 0.2
 exit = 0.2
 """
-    ,
+        ,
         encoding="utf8",
     )
 
@@ -1286,21 +1220,12 @@ exit = 0.2
     assert report_root.parent.name == "artifacts"
 
 
-def test_repository_template_configures_default_ports_and_profiles() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    config_path = repo_root / "tnfr_lfs.toml"
-    pyproject_path = repo_root / "pyproject.toml"
-
-    config_text = config_path.read_text(encoding="utf8")
-    assert config_text == canonical_cli_config_legacy_text(pyproject_path)
-
-    snippet = canonical_cli_config_block(pyproject_path)
-    assert snippet.strip().startswith("[tool.tnfr_lfs.logging]")
-
-    canonical_payload = tomllib.loads(snippet)["tool"]["tnfr_lfs"]
-    data = tomllib.loads(config_text)
-
-    assert data == canonical_payload
+def test_repository_pyproject_configures_default_ports_and_profiles() -> None:
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    loaded = load_project_config(pyproject_path)
+    assert loaded is not None
+    data, resolved_path = loaded
+    assert resolved_path == pyproject_path
 
     logging_cfg = data["logging"]
     assert logging_cfg["level"] == "info"
@@ -1432,17 +1357,17 @@ def test_profiles_persist_and_adjust(
     synthetic_stint_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config_path = tmp_path / "tnfr_lfs.toml"
+    config_path = tmp_path / "pyproject.toml"
     config_path.write_text(
         """
-[suggest]
+[tool.tnfr_lfs.suggest]
 car_model = "FZR"
 track = "AS5"
 
-[write_set]
+[tool.tnfr_lfs.write_set]
 car_model = "FZR"
 
-[paths]
+[tool.tnfr_lfs.paths]
 profiles = "profiles.toml"
 """.strip()
         + "\n",
@@ -1534,7 +1459,25 @@ def test_analyze_uses_pack_root_metadata(
 ) -> None:
     baseline_path = tmp_path / "baseline.jsonl"
     pack_root = create_cli_config_pack(tmp_path / "pack")
-    config_path = pack_root / "config" / "global.toml"
+    config_path = tmp_path / "pyproject.toml"
+    config_path.write_text(
+        """
+[tool.tnfr_lfs.analyze]
+car_model = "ABC"
+
+[tool.tnfr_lfs.suggest]
+car_model = "ABC"
+track = "AS5"
+
+[tool.tnfr_lfs.write_set]
+car_model = "ABC"
+
+[tool.tnfr_lfs.osd]
+car_model = "ABC"
+track = "AS5"
+""",
+        encoding="utf8",
+    )
     pack_arg = str(pack_root)
 
     run_cli_in_tmp(

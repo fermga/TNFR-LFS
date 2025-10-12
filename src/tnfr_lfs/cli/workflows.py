@@ -63,8 +63,6 @@ from ..core.segmentation import (
 )
 from ..analysis import compute_session_robustness
 from ..analysis.insights import InsightsResult, compute_insights
-from ..configuration import write_legacy_cli_config
-from ..plugins.template import canonical_plugins_template
 
 
 logger = logging.getLogger(__name__)
@@ -2185,71 +2183,6 @@ def _handle_template(namespace: argparse.Namespace, *, config: Mapping[str, Any]
         },
     )
     return result
-
-
-def _handle_config_sync(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    project_hint = namespace.project_root
-    if project_hint is None:
-        config_path = config.get("_config_path")
-        if config_path:
-            project_hint = Path(str(config_path))
-        else:
-            project_hint = Path.cwd() / "pyproject.toml"
-
-    project_candidate = Path(project_hint).expanduser()
-    output_dir = namespace.output_dir
-    if output_dir is not None:
-        output_dir = Path(output_dir).expanduser().resolve(strict=False)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        legacy_output = output_dir / "tnfr_lfs.toml"
-    else:
-        legacy_output = None
-
-    try:
-        legacy_path = write_legacy_cli_config(project_candidate, output_path=legacy_output)
-    except (ValueError, FileNotFoundError) as exc:  # pragma: no cover - defensive guard
-        raise CliError(
-            "Unable to locate pyproject.toml to synchronise configuration.",
-            category="usage",
-            context={"project_root": str(project_candidate)},
-        ) from exc
-
-    plugins_root = output_dir or legacy_path.parent
-    plugins_path = Path(plugins_root) / "config" / "plugins.toml"
-    plugins_path.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        template_text = canonical_plugins_template(project_candidate)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        raise CliError(
-            "Unable to render canonical plugins configuration from pyproject.toml.",
-            category="usage",
-            context={"project_root": str(project_candidate)},
-        ) from exc
-
-    plugins_path.write_text(template_text, encoding="utf8")
-
-    if project_candidate.name == "pyproject.toml":
-        resolved_pyproject = project_candidate
-    else:
-        resolved_pyproject = project_candidate / "pyproject.toml"
-    resolved_pyproject = resolved_pyproject.expanduser().resolve(strict=False)
-
-    logger.info(
-        "Synchronised legacy configuration from pyproject.toml.",
-        extra={
-            "event": "config.sync",
-            "pyproject": str(resolved_pyproject),
-            "legacy_path": str(legacy_path),
-            "plugins_path": str(plugins_path),
-        },
-    )
-
-    summary = [
-        f"Legacy configuration written to {legacy_path}",
-        f"Plugins template written to {plugins_path}",
-    ]
-    return "\n".join(summary)
 
 
 def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:

@@ -21,7 +21,6 @@ from .workflows import (
     _handle_suggest,
     _handle_template,
     _handle_write_set,
-    _handle_config_sync,
 )
 
 
@@ -98,32 +97,6 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         help="Track identifier used to resolve the preset (default: configured track).",
     )
     template_parser.set_defaults(handler=_handle_template)
-
-    config_parser = subparsers.add_parser(
-        "config",
-        help="Synchronise legacy configuration files from pyproject.toml.",
-    )
-    config_subparsers = config_parser.add_subparsers(dest="config_command", required=True)
-    config_sync_parser = config_subparsers.add_parser(
-        "sync",
-        help="Regenerate tnfr_lfs.toml and config/plugins.toml from pyproject.toml.",
-    )
-    config_sync_parser.add_argument(
-        "--project-root",
-        type=Path,
-        default=None,
-        help=(
-            "Directory or pyproject.toml to treat as the project root "
-            "(defaults to the active configuration)."
-        ),
-    )
-    config_sync_parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=None,
-        help="Destination directory for generated files (defaults to the project root).",
-    )
-    config_sync_parser.set_defaults(handler=_handle_config_sync)
 
     osd_cfg_raw = core_cfg.get("osd", {})
     if isinstance(osd_cfg_raw, Mapping):

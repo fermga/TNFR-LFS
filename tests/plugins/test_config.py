@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from tnfr_lfs.plugins.config import PluginConfig, PluginConfigError
-from tnfr_lfs.plugins.template import render_plugins_template
+from tnfr_lfs.plugins.template import canonical_plugins_mapping, render_plugins_template
 from tests.helpers import build_plugin_config_mapping, write_plugin_config_text
 
 
@@ -94,11 +94,14 @@ def test_from_project_matches_mapping(tmp_path: Path) -> None:
         ) == config_from_mapping.get_plugin_config(plugin_name)
 
 
-def test_reference_template_matches_canonical_configuration(
+def test_canonical_template_matches_pyproject_configuration(
     canonical_plugins_template_text: str,
 ) -> None:
-    reference_path = Path(__file__).resolve().parents[2] / "config" / "plugins.toml"
-    assert reference_path.read_text() == canonical_plugins_template_text
+    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    from_pyproject = render_plugins_template(
+        canonical_plugins_mapping(pyproject_path)[0]
+    )
+    assert from_pyproject == canonical_plugins_template_text
 
 
 def test_reload_config_from_mapping_applies_updates(tmp_path: Path) -> None:

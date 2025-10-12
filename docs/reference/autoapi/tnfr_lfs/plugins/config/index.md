@@ -23,7 +23,7 @@ source:
     Optional path describing the origin of ``data``. When provided it is
     used for relative path resolution (``plugin_dir``) and logging. If
     omitted, a placeholder ``"<memory>"`` path is used.
-- `from_project(cls, pyproject_path: Path | None = None, *, default_profile: str | None = None, legacy_candidates: Sequence[Path] | None = None) -> 'PluginConfig'`
+- `from_project(cls, pyproject_path: Path | None = None, *, default_profile: str | None = None) -> 'PluginConfig'`
   - Construct a configuration from ``pyproject.toml`` metadata.
 - `path(self) -> Path`
   - Return the resolved configuration file path.

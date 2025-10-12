@@ -118,9 +118,8 @@ aerodynamic imbalance).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 - **TNFR × LFS toolkit** is the software package documented in this
   site; it contains the CLI, Python modules and exporter pipelines.
 - Identifiers that use underscores (e.g. `tnfr_lfs`) coexist with
-  configuration templates declared under `[tool.tnfr_lfs]` or within
-  legacy `tnfr_lfs.toml` files to preserve compatibility with existing
-  scripts.
+  configuration templates declared under `[tool.tnfr_lfs]` inside
+  `pyproject.toml` to preserve compatibility with existing scripts.
 
 ## Resources
 
