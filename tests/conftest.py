@@ -8,7 +8,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
-from typing import Dict, Iterable, List
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, cast
 
 import pytest
 
@@ -61,6 +61,13 @@ if importlib.util.find_spec("pytest_cov") is None:
 from tnfr_lfs.resources import data_root
 from tnfr_lfs.examples import quickstart_dataset
 
+from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
+from tnfr_lfs.ingestion import outsim_udp as outsim_module
+from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
+from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
+
+from tests.helpers import build_outgauge_payload, build_outsim_payload
+
 from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
@@ -81,6 +88,76 @@ def quickstart_dataset_path() -> Path:
     """Baseline dataset referenced by the quickstart flow."""
 
     return quickstart_dataset.dataset_path()
+
+
+@pytest.fixture(params=("outgauge", "outsim"), name="udp_client_spec")
+def udp_client_spec_fixture(request: pytest.FixtureRequest) -> Dict[str, Any]:
+    """Provide parameterized specifications for UDP client tests."""
+
+    specs: Dict[str, Dict[str, Any]] = {
+        "outgauge": {
+            "name": "outgauge",
+            "module": outgauge_module,
+            "sync_constructor": OutGaugeUDPClient,
+            "async_constructor": cast(
+                Callable[..., Awaitable[Any]], AsyncOutGaugeUDPClient.create
+            ),
+            "payload_factory": build_outgauge_payload,
+            "value_extractor": lambda packet: packet.packet_id,
+            "expected_attribute": "packet_id",
+            "default_address": ("127.0.0.1", 3000),
+            "host_payload_spec": {"packet_id": 7, "time_value": 70, "layout": "LYT"},
+            "host_expected_value": 7,
+            "batch_specs": [
+                {"packet_id": 5, "time_value": 50, "layout": "LYT"},
+                {"packet_id": 6, "time_value": 60, "layout": "LYT"},
+                {"packet_id": 7, "time_value": 70, "layout": "LYT"},
+            ],
+            "batch_expected_values": [5, 6, 7],
+            "pending_first": {"packet_id": 5, "time_value": 50, "layout": "LYT"},
+            "pending_successor": {"packet_id": 6, "time_value": 60, "layout": "LYT"},
+            "pending_appended": {"packet_id": 7, "time_value": 70, "layout": "LYT"},
+            "pending_expected_values": (5, 6),
+            "isolated_first": {"packet_id": 7, "time_value": 70, "layout": "LYT"},
+            "isolated_second": {"packet_id": 8, "time_value": 90, "layout": "LYT"},
+            "isolated_expected_values": (7, 8),
+            "async_send_specs": [
+                {"packet_id": 5, "time_value": 50, "layout": "LYT"},
+                {"packet_id": 7, "time_value": 70, "layout": "LYT"},
+                {"packet_id": 6, "time_value": 60, "layout": "LYT"},
+            ],
+            "async_expected_values": [5, 6, 7],
+            "release_packets": True,
+        },
+        "outsim": {
+            "name": "outsim",
+            "module": outsim_module,
+            "sync_constructor": OutSimUDPClient,
+            "async_constructor": cast(
+                Callable[..., Awaitable[Any]], AsyncOutSimUDPClient.create
+            ),
+            "payload_factory": build_outsim_payload,
+            "value_extractor": lambda packet: packet.time,
+            "expected_attribute": "time",
+            "default_address": ("127.0.0.1", 4123),
+            "host_payload_spec": 200,
+            "host_expected_value": 200,
+            "batch_specs": [100, 120, 140],
+            "batch_expected_values": [100, 120, 140],
+            "pending_first": 100,
+            "pending_successor": 120,
+            "pending_appended": 140,
+            "pending_expected_values": (100, 120),
+            "isolated_first": 100,
+            "isolated_second": 120,
+            "isolated_expected_values": (100, 120),
+            "async_send_specs": [100, 140, 120],
+            "async_expected_values": [100, 120, 140],
+            "release_packets": False,
+        },
+    }
+
+    return specs[request.param]
 
 
 @pytest.fixture(scope="session")
