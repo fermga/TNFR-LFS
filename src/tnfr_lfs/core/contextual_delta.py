@@ -19,6 +19,7 @@ except ModuleNotFoundError:  # pragma: no cover - fall back to ``tomli`` in 3.10
     import tomli as tomllib  # type: ignore
 
 from ..data import CONTEXT_FACTORS_RESOURCE
+from .interfaces import SupportsContextBundle, SupportsContextRecord
 
 __all__ = [
     "ContextFactors",
@@ -246,37 +247,60 @@ def apply_contextual_delta(
 
 def resolve_context_from_record(
     matrix: ContextMatrix,
-    record: Mapping[str, object],
+    record: SupportsContextRecord | Mapping[str, object],
     *,
     baseline_vertical_load: float | None = None,
 ) -> ContextFactors:
     """Derive factors from a :class:`~tnfr_lfs.core.epi.TelemetryRecord`-like payload."""
 
-    lateral = abs(float(getattr(record, "lateral_accel", 0.0)))
+    if isinstance(record, Mapping):
+        lateral = abs(float(record.get("lateral_accel", 0.0)))
+        vertical = float(record.get("vertical_load", 0.0))
+        long_accel = abs(float(record.get("longitudinal_accel", 0.0)))
+    elif isinstance(record, SupportsContextRecord):
+        lateral = abs(float(record.lateral_accel))
+        vertical = float(record.vertical_load)
+        long_accel = abs(float(record.longitudinal_accel))
+    else:  # pragma: no cover - defensive fallback for unexpected payloads
+        lateral = abs(float(getattr(record, "lateral_accel", 0.0)))
+        vertical = float(getattr(record, "vertical_load", 0.0))
+        long_accel = abs(float(getattr(record, "longitudinal_accel", 0.0)))
+
     curve_factor = matrix.curve_factor(lateral)
 
-    vertical = float(getattr(record, "vertical_load", 0.0))
     reference = baseline_vertical_load or matrix.surface_reference_load
     reference = reference if reference > 1e-6 else matrix.surface_reference_load
     reference = reference if reference > 1e-6 else 1.0
     surface_ratio = vertical / reference
     surface_factor = matrix.surface_factor(surface_ratio)
 
-    long_accel = abs(float(getattr(record, "longitudinal_accel", 0.0)))
     traffic_load = long_accel / matrix.traffic_longitudinal_reference
     traffic_factor = matrix.traffic_factor(traffic_load)
 
     return ContextFactors(curve_factor, surface_factor, traffic_factor)
 
 
-def resolve_context_from_bundle(matrix: ContextMatrix, bundle: object) -> ContextFactors:
+def resolve_context_from_bundle(
+    matrix: ContextMatrix, bundle: SupportsContextBundle | Mapping[str, object]
+) -> ContextFactors:
     """Resolve factors using the information stored inside an :class:`EPIBundle`."""
 
-    chassis = getattr(bundle, "chassis", None)
-    tyres = getattr(bundle, "tyres", None)
-    transmission = getattr(bundle, "transmission", None)
+    if isinstance(bundle, Mapping):
+        chassis = bundle.get("chassis")
+        tyres = bundle.get("tyres")
+        transmission = bundle.get("transmission")
+    elif isinstance(bundle, SupportsContextBundle):
+        chassis = bundle.chassis
+        tyres = bundle.tyres
+        transmission = bundle.transmission
+    else:  # pragma: no cover - defensive fallback for unexpected payloads
+        chassis = getattr(bundle, "chassis", None)
+        tyres = getattr(bundle, "tyres", None)
+        transmission = getattr(bundle, "transmission", None)
 
-    lateral = abs(float(getattr(chassis, "lateral_accel", 0.0))) if chassis is not None else 0.0
+    lateral = (
+        abs(float(getattr(chassis, "lateral_accel", 0.0))) if chassis is not None else 0.0
+    )
     curve_factor = matrix.curve_factor(lateral)
 
     load_value = float(getattr(tyres, "load", 0.0)) if tyres is not None else 0.0
@@ -313,7 +337,7 @@ def resolve_microsector_context(
 
 
 def resolve_series_context(
-    series: Sequence[object],
+    series: Sequence[SupportsContextBundle | SupportsContextRecord | Mapping[str, object]],
     *,
     matrix: ContextMatrix | None = None,
     baseline_vertical_load: float | None = None,
@@ -323,7 +347,9 @@ def resolve_series_context(
     matrix = matrix or load_context_matrix()
     factors: list[ContextFactors] = []
     for entry in series:
-        if hasattr(entry, "tyres"):
+        if isinstance(entry, SupportsContextBundle):
+            factors.append(resolve_context_from_bundle(matrix, entry))
+        elif isinstance(entry, Mapping) and "tyres" in entry:
             factors.append(resolve_context_from_bundle(matrix, entry))
         else:
             factors.append(

@@ -3,13 +3,17 @@ import math
 import pytest
 
 from tests.helpers import build_contextual_delta_record
+from tests.helpers.epi import build_epi_bundle
 
 from tnfr_lfs.core.contextual_delta import (
     ContextFactors,
     apply_contextual_delta,
     load_context_matrix,
+    resolve_context_from_bundle,
     resolve_context_from_record,
+    resolve_series_context,
 )
+from tnfr_lfs.core.interfaces import SupportsContextBundle, SupportsContextRecord
 
 
 def test_apply_contextual_delta_clamps_multiplier():
@@ -39,3 +43,23 @@ def test_resolve_context_from_record_matches_profiles(lateral_accel, longitudina
         min(matrix.max_multiplier, factors.multiplier),
     )
     assert multiplier == pytest.approx(expected_multiplier, rel=1e-3)
+
+
+def test_protocols_cover_record_and_bundle_sources() -> None:
+    record = build_contextual_delta_record()
+    bundle = build_epi_bundle(timestamp=0.0)
+
+    assert isinstance(record, SupportsContextRecord)
+    assert isinstance(bundle, SupportsContextBundle)
+
+    matrix = load_context_matrix()
+    mixed = resolve_series_context(
+        [record, bundle],
+        matrix=matrix,
+        baseline_vertical_load=float(record.vertical_load),
+    )
+
+    assert mixed[0] == resolve_context_from_record(
+        matrix, record, baseline_vertical_load=float(record.vertical_load)
+    )
+    assert mixed[1] == resolve_context_from_bundle(matrix, bundle)
