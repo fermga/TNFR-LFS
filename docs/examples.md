@@ -29,7 +29,7 @@ PYTHONPATH=. bash examples/quickstart.sh
 **Expected output**
 
 ```
-{"timestamp": "2025-10-09T08:08:49.201836Z", "level": "INFO", "logger": "tnfr_lfs.cli.workflows", "message": "Baseline saved 17 samples to /workspace/TNFR-LFS/examples/out/baseline.jsonl (jsonl).", "extra": {"taskName": null, "event": "baseline.saved", "samples": 17, "destination": "/workspace/TNFR-LFS/examples/out/baseline.jsonl", "format": "jsonl", "simulate": true, "capture_metrics": {"attempts": 17, "samples": 17, "dropped_pairs": 0, "duration": 0.0, "outsim_timeouts": 0, "outgauge_timeouts": 0, "outsim_ignored_hosts": 0, "outgauge_ignored_hosts": 0}}}
+{"timestamp": "2025-10-09T08:08:49.201836Z", "level": "INFO", "logger": "tnfr_lfs.cli.workflows", "message": "Baseline saved 17 samples to /workspace/TNFR-LFS/examples/out/baseline.jsonl (jsonl).", "extra": {"taskName": null, "event": "baseline.saved", "samples": 17, "destination": "/workspace/TNFR-LFS/examples/out/baseline.jsonl", "format": "jsonl", "simulate": true, "capture_metrics": {"attempts": 17, "samples": 17, "dropped_pairs": 0, "duration": 0.0, "outsim_timeouts": 0, "outgauge_timeouts": 0, "outsim_ignored_hosts": 0, "outgauge_ignored_hosts": 0, "outsim_loss_events": 0, "outgauge_loss_events": 0, "outsim_recovered_packets": 0, "outgauge_recovered_packets": 0}}}
 Baseline saved 17 samples to /workspace/TNFR-LFS/examples/out/baseline.jsonl (jsonl).
 ```
 
