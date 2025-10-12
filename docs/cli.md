@@ -130,12 +130,10 @@ calculations honour the tuned nodal emphasis.
 ### ``osd``
 
 Renders the live ΔNFR HUD inside Live for Speed using an ``IS_BTN`` overlay.
-Before launching the command ensure the simulator exposes the three
-telemetry interfaces:
-
-* ``/outsim 1 127.0.0.1 4123`` – activates the OutSim UDP stream.
-* ``/outgauge 1 127.0.0.1 3000`` – exposes the OutGauge dashboard data.
-* ``/insim 29999`` – opens the InSim TCP control port required by the HUD.
+Before launching the command make sure Live for Speed is configured as described
+in the [Telemetry guide](telemetry.md); the HUD uses the same OutSim/OutGauge
+streams and connects to the InSim control port (`/insim 29999`) to drive the
+overlay.
 
 The HUD cycles through three pages (press the button to advance):
 

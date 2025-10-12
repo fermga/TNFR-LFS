@@ -5,7 +5,7 @@ streams exposed by Live for Speed. This guide expands on the short overview in
 the README, detailing the telemetry prerequisites and how each metric consumes
 the simulator feeds.
 
-## Required simulators settings
+## Required simulator settings
 
 Enable the UDP/TCP broadcasters before running the toolkit:
 
@@ -13,9 +13,26 @@ Enable the UDP/TCP broadcasters before running the toolkit:
 * `/outgauge 1 127.0.0.1 3000`
 * `/insim 29999`
 
-Extend the OutSim block with `OutSim Opts ff` in `cfg.txt` (or use `/outsim Opts ff`)
-so that TNFR × LFS receives the player ID, wheel packet and driver inputs needed
-by the fusion module.
+The HUD subcommands reuse the same ports, so the configuration can live either in
+`cfg.txt` (persistent) or be set ad-hoc via the in-sim console commands above.
+
+### Extended payloads
+
+TNFR × LFS derives most metrics from the OutSim wheel packet and the OutGauge
+extended block. Make sure those richer payloads are available:
+
+* Add `OutSim Opts ff` to `cfg.txt` (or run `/outsim Opts ff`) to expose the
+  player index, wheel loads/forces/deflections and driver inputs required by the
+  fusion module.
+* Enable the OutGauge extensions so the dashboard exporter sends the temperature
+  and pressure profiles that feed the tyre/thermal indicators. At minimum set
+  `OutGauge Opts OG_EXT_TYRE_TEMP OG_EXT_TYRE_PRESS OG_EXT_BRAKE_TEMP` (or the
+  equivalent bitmask value `0x0007`) before launching the session.
+
+When Live for Speed omits any of those blocks, TNFR × LFS keeps the last valid
+sample or reports "no data" instead of inventing synthetic readings. CSV-based
+imports follow the same rule: the reader preserves missing columns as
+``math.nan`` so the downstream metrics surface the absence explicitly.
 
 ### Asynchronous ingestion
 
@@ -53,15 +70,39 @@ workflows.
 
 ## Metric inputs
 
-* **ΔNFR / ∇NFR∥ / ∇NFR⊥** – combine the OutSim wheel packet loads (`Fz`, `ΔFz`),
-  longitudinal/lateral accelerations, suspension deflections and OutGauge engine
-  state to contextualise gradient distribution.
-* **ν_f (natural frequency)** – uses load distribution, slip ratios/angles,
-  yaw rate and driver style (`throttle`, `gear`) to classify each node and tune
-  the spectral window.
-* **C(t) (structural coherence)** – derives from the nodal ΔNFR distribution and
-  ν_f bands, enriched with adhesion coefficients (`mu_eff_*`) and ABS/TC flags
-  converted into lockup events by the fusion pipeline.
+Every indicator consumes a specific slice of the OutSim/OutGauge feeds. Refer
+back to this list when validating telemetry captures or wiring custom data
+sources:
+
+* **ΔNFR / ∇NFR∥ / ∇NFR⊥** – integrate the OutSim wheel loads (`Fz`, `ΔFz`), wheel
+  forces and suspension deflections together with engine regime, pedal inputs and
+  ABS/TC lamps from OutGauge. Whenever a recommendation depends on absolute
+  forces, compare the nodal readings against the raw `Fz`/`ΔFz` channels provided
+  by the extended OutSim payload.
+* **ν_f (natural frequency)** – leverages the load distribution, `slip_ratio_*`
+  and `slip_angle_*` channels, `speed` and `yaw_rate` emitted by OutSim combined
+  with driver-style cues (`throttle`, `gear`) from OutGauge to classify the
+  resonant bands. The fusion pipeline aggregates slip as a load-weighted
+  four-wheel average and falls back to the kinematic estimate only when the
+  simulator omits the per-wheel data.
+* **C(t) (structural coherence)** – built from the nodal ΔNFR distribution, the
+  derived adhesion coefficients (`mu_eff_*`) and the ABS/TC activity reported by
+  OutGauge. Lock-up events detected in the fusion stage keep coherence aligned
+  with the HUD and CLI recommendations.
+* **Ackermann budgets / Slide Catch** – depend on the OutSim per-wheel
+  `slip_angle_*` channels and the shared `yaw_rate`. Missing angles translate to
+  `"no data"` in the CLI and HUD instead of fabricating the geometry.
+* **Aero balance drift (`aero_balance_drift`)** – summarises rake from the OutSim
+  `pitch` signal, axle suspension travel and the longitudinal μ contrast without
+  using synthetic inputs.
+* **Tyre temperatures/pressures** – consume the OutGauge extended block when the
+  samples are positive and finite. Disable the block and the pipeline freezes the
+  last sample or yields `"no data"` to highlight the missing source.
+* **CPHI (Contact Patch Health Index)** – requires per-wheel `slip_ratio`,
+  `slip_angle`, lateral/longitudinal forces and wheel loads from the extended
+  OutSim packet. Without those signals the planner flags the patch as
+  `"no data"`, preventing tyre-balance interventions. Reports and the HUD reuse
+  the shared 0.62/0.78/0.90 thresholds to colour the indicator.
 * **Ventilation / brake fade** – consumes OutGauge brake temperatures when
   available; otherwise the thermal proxy keeps the series continuous.
 
