@@ -15,9 +15,9 @@ sessions, and surface setup recommendations without leaving the paddock.
 
 ## Getting started
 
-Read the [onboarding guide](docs/index.md#getting-started) for the full,
-step-by-step walkthrough covering installation choices, telemetry setup, and
-the quickstart workflow. The README surfaces the highlights; the
+Follow the [beginner quickstart](docs/tutorials.md#1-install-the-toolkit) for
+the step-by-step walkthrough covering installation choices, telemetry setup,
+and the quickstart workflow. The README surfaces the highlights; the
 documentation is the definitive reference for commands, configuration, and
 troubleshooting details.
 
