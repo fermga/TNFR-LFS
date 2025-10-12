@@ -455,6 +455,14 @@ legacy ``config/plugins.toml`` template, which is useful when you need to ship a
 standalone configuration with packs or external tooling that hasn't migrated to
 ``pyproject.toml`` yet.
 
+When you need to synchronise the legacy artefacts (`tnfr_lfs.toml` and
+``config/plugins.toml``) run ``tnfr_lfs config sync``.  The command resolves the
+active ``pyproject.toml``, writes the canonical ``tnfr_lfs.toml`` header and
+regenerates the plugin template alongside any warning preambles.  Pass
+``--project-root`` to point at a specific repository and ``--output-dir`` to
+emit the files elsewhere.  Avoid editing the generated files manually; rerun the
+sync command instead so they continue to mirror ``[tool.tnfr_lfs]``.
+
 ### Brake thermal proxy modes
 
 The brake thermal proxy honours the ``mode`` declared in ``[thermal.brakes]`` and can be overridden per session with the ``TNFR_LFS_BRAKE_THERMAL`` environment variable. The accepted values are ``auto`` (default), ``off`` and ``force``.【F:tnfr_lfs/ingestion/fusion.py†L616-L733】【F:tnfr_lfs/ingestion/fusion.py†L1064-L1126】
