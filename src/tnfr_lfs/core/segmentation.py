@@ -41,6 +41,7 @@ from .contextual_delta import (
     resolve_microsector_context,
     resolve_series_context,
 )
+from .interfaces import SupportsContextBundle, SupportsContextRecord
 from .metrics import (
     compute_window_metrics,
     phase_synchrony_index,
@@ -267,10 +268,13 @@ def segment_microsectors(
     Parameters
     ----------
     records:
-        Telemetry samples in chronological order.
+        Telemetry samples in chronological order. Each instance must satisfy the
+        :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord` protocol so the
+        contextual weighting heuristics can access the required signals.
     bundles:
         Computed :class:`~tnfr_lfs.core.epi_models.EPIBundle` for the same
-        timestamps as ``records``.
+        timestamps as ``records``. Every bundle must implement the
+        :class:`~tnfr_lfs.core.interfaces.SupportsContextBundle` contract.
 
     Returns
     -------
@@ -285,6 +289,11 @@ def segment_microsectors(
         raise ValueError("records and bundles must have the same length")
     if recursion_decay < 0.0 or recursion_decay >= 1.0:
         raise ValueError("recursion_decay must be in the [0, 1) interval")
+
+    if records and not isinstance(records[0], SupportsContextRecord):
+        raise TypeError("records must provide lateral/vertical/longitudinal signals")
+    if bundles and not isinstance(bundles[0], SupportsContextBundle):
+        raise TypeError("bundles must expose chassis, tyres and transmission nodes")
 
     segments = _identify_corner_segments(records)
     if not segments:

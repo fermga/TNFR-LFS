@@ -20,6 +20,7 @@ from .contextual_delta import (
 from .dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
 from .epi import TelemetryRecord, delta_nfr_by_node
 from .epi_models import EPIBundle
+from .interfaces import SupportsContextBundle, SupportsContextRecord
 from .phases import replicate_phase_aliases
 from .spectrum import (
     PhaseCorrelation,
@@ -987,12 +988,14 @@ def compute_window_metrics(
     Parameters
     ----------
     records:
-        Ordered window of :class:`TelemetryRecord` samples.
+        Ordered window of :class:`TelemetryRecord` samples. Entries must satisfy
+        :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord` when contextual
+        weighting is applied.
     bundles:
         Optional precomputed :class:`~tnfr_lfs.core.epi_models.EPIBundle` series
-        matching ``records``. When provided the ΔNFR derivative used for the
-        Useful Dissonance Ratio (UDR) is computed from the smoothed bundle
-        values.
+        matching ``records``. Each bundle must adhere to
+        :class:`~tnfr_lfs.core.interfaces.SupportsContextBundle` so the node
+        metrics remain accessible to the contextual helpers.
     fallback_to_chronological:
         When ``True`` the metric computation gracefully falls back to the
         chronological timestamps if the structural axis is missing or
@@ -1059,6 +1062,11 @@ def compute_window_metrics(
             phase_brake_longitudinal_correlation={},
             phase_throttle_longitudinal_correlation={},
         )
+
+    if records and not isinstance(records[0], SupportsContextRecord):
+        raise TypeError("records must expose lateral/vertical/longitudinal signals")
+    if bundles and not isinstance(bundles[0], SupportsContextBundle):
+        raise TypeError("bundles must expose chassis, tyres and transmission nodes")
 
     if isinstance(phase_indices, Mapping):
         phase_windows: dict[str, tuple[int, ...]] = {}
