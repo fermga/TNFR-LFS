@@ -2,39 +2,24 @@
 
 from __future__ import annotations
 
-import copy
 import textwrap
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-try:  # pragma: no cover - Python < 3.11 fallback
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[no-redef]
-
 from tnfr_lfs.plugins.config import PluginConfig, PluginConfigError
 from tests.helpers import build_plugin_config_mapping, write_plugin_config_text
 
 
-def test_plugin_config_from_pyproject_block() -> None:
-    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
-    raw_data = tomllib.loads(pyproject_path.read_text())
-    tool_section = raw_data.get("tool", {})
-    plugin_root = tool_section.get("tnfr_lfs", {})
-
-    plugins_table = copy.deepcopy(plugin_root.get("plugins", {}))
-    mapping: dict[str, Any] = {"plugins": plugins_table}
-
-    profiles_table = plugin_root.get("profiles")
-    if profiles_table:
-        mapping["profiles"] = copy.deepcopy(profiles_table)
-
-    config = PluginConfig.from_mapping(mapping, source=pyproject_path)
+def test_plugin_config_from_pyproject_block(
+    canonical_plugins_payload: tuple[dict[str, Any], Path]
+) -> None:
+    mapping, source_path = canonical_plugins_payload
+    config = PluginConfig.from_mapping(mapping, source=source_path)
 
     assert config.auto_discover is True
-    assert config.plugin_dir == (pyproject_path.parent / "plugins").resolve()
+    assert config.plugin_dir == (source_path.parent / "plugins").resolve()
 
     config.set_profile("practice")
     assert config.active_profile == "practice"
@@ -53,6 +38,13 @@ def test_plugin_config_from_pyproject_block() -> None:
     config.set_profile(None)
     telemetry = config.get_plugin_config("telemetry")
     assert telemetry["flush_interval"] == "3s"
+
+
+def test_reference_template_matches_canonical_configuration(
+    canonical_plugins_template_text: str,
+) -> None:
+    reference_path = Path(__file__).resolve().parents[2] / "config" / "plugins.toml"
+    assert reference_path.read_text() == canonical_plugins_template_text
 
 
 def test_reload_config_from_mapping_applies_updates(tmp_path: Path) -> None:

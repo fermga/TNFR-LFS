@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Iterable, Mapping as ABCMapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -124,4 +125,30 @@ def load_project_config(
     return merged, pyproject_path
 
 
-__all__ = ["load_project_config"]
+def load_project_plugins_config(
+    path: Path,
+    *,
+    legacy_candidates: Sequence[Path] | None = None,
+) -> tuple[dict[str, Any], Path] | None:
+    """Expose the ``[tool.tnfr_lfs.plugins]`` block from ``pyproject.toml``."""
+
+    loaded = load_project_config(path, legacy_candidates=legacy_candidates)
+    if loaded is None:
+        return None
+
+    config, source_path = loaded
+
+    plugins_table = config.get("plugins")
+    if not isinstance(plugins_table, ABCMapping):
+        return None
+
+    payload: dict[str, Any] = {"plugins": copy.deepcopy(dict(plugins_table))}
+
+    profiles_table = config.get("profiles")
+    if isinstance(profiles_table, ABCMapping):
+        payload["profiles"] = copy.deepcopy(dict(profiles_table))
+
+    return payload, source_path
+
+
+__all__ = ["load_project_config", "load_project_plugins_config"]

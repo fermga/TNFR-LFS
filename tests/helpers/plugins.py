@@ -12,6 +12,7 @@ import textwrap
 from tnfr_lfs.plugins.base import TNFRPlugin
 from tnfr_lfs.plugins import register_plugin_metadata
 from tnfr_lfs.plugins.registry import _clear_registry
+from tnfr_lfs.plugins.template import render_plugins_template
 
 PluginRegistration = Tuple[type[TNFRPlugin], Sequence[str]]
 RegisterPlugin = Callable[[type[TNFRPlugin], Sequence[str]], type[TNFRPlugin]]
@@ -226,42 +227,6 @@ def write_plugin_manager_config(
         profiles=profiles,
     )
 
-    lines: list[str] = []
-    _emit_toml_table(lines, "plugins", mapping["plugins"])
-
-    profiles_table = mapping.get("profiles")
-    if profiles_table:
-        if lines and lines[-1] != "":
-            lines.append("")
-        _emit_toml_table(lines, "profiles", profiles_table)
-
     config_path = directory / config_name
-    config_path.write_text("\n".join(lines) + "\n")
+    config_path.write_text(render_plugins_template(mapping))
     return config_path
-
-
-def _emit_toml_table(lines: list[str], table_name: str, values: Mapping[str, Any]) -> None:
-    lines.append(f"[{table_name}]")
-    for key, value in values.items():
-        if isinstance(value, Mapping):
-            if lines and lines[-1] != "":
-                lines.append("")
-            _emit_toml_table(lines, f"{table_name}.{key}", value)
-            continue
-        lines.append(f"{key} = {_format_toml_value(value)}")
-
-
-def _format_toml_value(value: Any) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return repr(value)
-    if isinstance(value, Path):
-        return f'"{value.as_posix()}"'
-    if isinstance(value, str):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return "[" + ", ".join(_format_toml_value(item) for item in value) + "]"
-
-    raise TypeError(f"Unsupported TOML value type: {type(value)!r}")

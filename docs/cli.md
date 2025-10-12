@@ -447,9 +447,9 @@ discovery rules (``plugin_dir``) and concurrency limits without keeping a
 separate file.  Profiles continue to live alongside that table as
 ``[tool.tnfr_lfs.profiles.<name>]`` entries, letting you activate exporters,
 UDP bridges or relay workers selectively (the ``racing``/``practice`` profiles
-ship as references).  The original ``config/plugins.toml`` remains in the
-repository purely as a sample should you prefer copying the layout into custom
-configuration packs.
+ship as references).  The repository generates ``config/plugins.toml`` from the
+canonical block via ``python -m tnfr_lfs.plugins.template`` so the sample stays
+in sync should you prefer copying the layout into custom configuration packs.
 
 ### Brake thermal proxy modes
 
