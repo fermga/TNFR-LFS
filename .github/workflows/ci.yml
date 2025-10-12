@@ -26,6 +26,8 @@ jobs:
       recommender: ${{ steps.filter.outputs.recommender }}
       plugins: ${{ steps.filter.outputs.plugins }}
       docs: ${{ steps.filter.outputs.docs }}
+      pytest_matrix: ${{ steps.pytest-matrix.outputs.matrix }}
+      pytest_summary: ${{ steps.pytest-matrix.outputs.summary }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -105,12 +107,131 @@ jobs:
               - 'docs/**'
               - '**/*.md'
 
+      - name: Generate pytest matrix
+        id: pytest-matrix
+        env:
+          ON_MAIN: ${{ github.ref == 'refs/heads/main' }}
+          CHANGED_CORE: ${{ steps.filter.outputs.core_pkg }}
+          CHANGED_ANALYSIS: ${{ steps.filter.outputs.analysis }}
+          CHANGED_CLI: ${{ steps.filter.outputs.cli }}
+          CHANGED_EXPORTERS: ${{ steps.filter.outputs.exporters }}
+          CHANGED_INGESTION: ${{ steps.filter.outputs.ingestion }}
+          CHANGED_IO: ${{ steps.filter.outputs.io }}
+          CHANGED_PROCESSING: ${{ steps.filter.outputs.processing }}
+          CHANGED_RECOMMENDER: ${{ steps.filter.outputs.recommender }}
+          CHANGED_PLUGINS: ${{ steps.filter.outputs.plugins }}
+        run: |
+          python <<'PY'
+          import json
+          import os
+
+          area_flags = {
+              "analysis": os.getenv("CHANGED_ANALYSIS") == "true",
+              "core": os.getenv("CHANGED_CORE") == "true",
+              "cli": os.getenv("CHANGED_CLI") == "true",
+              "exporters": os.getenv("CHANGED_EXPORTERS") == "true",
+              "ingestion": os.getenv("CHANGED_INGESTION") == "true",
+              "io": os.getenv("CHANGED_IO") == "true",
+              "processing": os.getenv("CHANGED_PROCESSING") == "true",
+              "recommender": os.getenv("CHANGED_RECOMMENDER") == "true",
+              "plugins": os.getenv("CHANGED_PLUGINS") == "true",
+          }
+
+          area_to_targets = {
+              "analysis": [
+                  "tests/test_analysis_*.py",
+                  "tests/analysis",
+              ],
+              "core": [
+                  "tests/test_core_*.py",
+                  "tests/test_coherence*.py",
+                  "tests/test_contextual_delta.py",
+                  "tests/test_metrics.py",
+                  "tests/test_operator_detection.py",
+                  "tests/test_phase_alias_deprecations.py",
+                  "tests/test_resonance.py",
+                  "tests/test_segmentation.py",
+                  "tests/test_structural_time.py",
+                  "tests/test_epi.py",
+              ],
+              "cli": [
+                  "tests/test_cli.py",
+                  "tests/test_cli_*.py",
+                  "tests/test_cli_parser.py",
+              ],
+              "exporters": [
+                  "tests/test_*exporter*.py",
+                  "tests/test_replay_csv_bundle.py",
+              ],
+              "ingestion": [
+                  "tests/test_ingestion.py",
+                  "tests/test_outgauge_udp.py",
+                  "tests/test_outsim_udp.py",
+                  "tests/test_insim.py",
+                  "tests/test_track_loader.py",
+                  "tests/ingestion",
+              ],
+              "io": [
+                  "tests/test_io_*.py",
+                  "tests/test_cli_io.py",
+              ],
+              "processing": [
+                  "tests/test_processing.py",
+              ],
+              "recommender": [
+                  "tests/test_recommender*.py",
+                  "tests/test_recommender_search_cache.py",
+              ],
+              "plugins": [
+                  "tests/plugins",
+                  "tests/test_cli_osd.py",
+              ],
+          }
+
+          on_main = os.getenv("ON_MAIN") == "true"
+          selected_areas = [area for area, changed in area_flags.items() if changed]
+
+          includes = []
+          summary_lines = []
+
+          if on_main:
+              includes.append({"area": "full", "pytest_args": ""})
+              summary_lines.append("main branch -> run full suite")
+          elif not selected_areas:
+              includes.append({"area": "full", "pytest_args": ""})
+              summary_lines.append("no targeted area detected -> run full suite")
+          else:
+              for area in selected_areas:
+                  targets = area_to_targets.get(area, [])
+                  if targets:
+                      args = " ".join(targets)
+                      includes.append({"area": area, "pytest_args": args})
+                      summary_lines.append(f"{area} -> {args}")
+                  else:
+                      summary_lines.append(f"{area} -> no explicit targets; run full suite")
+
+              if not includes:
+                  includes.append({"area": "full", "pytest_args": ""})
+                  summary_lines.append("areas with no explicit targets -> run full suite")
+
+          matrix = {"include": includes}
+
+          output_path = os.environ["GITHUB_OUTPUT"]
+          with open(output_path, "a", encoding="utf-8") as fh:
+              fh.write(f"matrix={json.dumps(matrix)}\n")
+              fh.write("summary<<EOF\n")
+              fh.write("\n".join(summary_lines) + "\n")
+              fh.write("EOF\n")
+          PY
+
   test:
     needs: detect-changes
     if: >-
       needs.detect-changes.outputs.core == 'true' ||
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.detect-changes.outputs.pytest_matrix) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -127,143 +248,27 @@ jobs:
         run: ruff check .
       - name: Mypy
         run: mypy --strict
-      - name: Determine pytest target selection
-        id: pytest-targets
+      - name: Publish pytest selection
+        if: ${{ strategy.job-index == 0 && needs.detect-changes.outputs.pytest_summary != '' }}
         env:
-          ON_MAIN: ${{ github.ref == 'refs/heads/main' }}
-          CHANGED_CORE: ${{ needs.detect-changes.outputs.core_pkg }}
-          CHANGED_ANALYSIS: ${{ needs.detect-changes.outputs.analysis }}
-          CHANGED_CLI: ${{ needs.detect-changes.outputs.cli }}
-          CHANGED_EXPORTERS: ${{ needs.detect-changes.outputs.exporters }}
-          CHANGED_INGESTION: ${{ needs.detect-changes.outputs.ingestion }}
-          CHANGED_IO: ${{ needs.detect-changes.outputs.io }}
-          CHANGED_PROCESSING: ${{ needs.detect-changes.outputs.processing }}
-          CHANGED_RECOMMENDER: ${{ needs.detect-changes.outputs.recommender }}
-          CHANGED_PLUGINS: ${{ needs.detect-changes.outputs.plugins }}
+          PYTEST_SELECTION_SUMMARY: ${{ needs.detect-changes.outputs.pytest_summary }}
         run: |
-          set -euo pipefail
-
-          if [[ "$ON_MAIN" == "true" ]]; then
-            echo "args=" >> "$GITHUB_OUTPUT"
-            echo "summary=main branch -> run full suite" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          areas=()
-          if [[ "$CHANGED_ANALYSIS" == "true" ]]; then areas+=("analysis"); fi
-          if [[ "$CHANGED_CORE" == "true" ]]; then areas+=("core"); fi
-          if [[ "$CHANGED_CLI" == "true" ]]; then areas+=("cli"); fi
-          if [[ "$CHANGED_EXPORTERS" == "true" ]]; then areas+=("exporters"); fi
-          if [[ "$CHANGED_INGESTION" == "true" ]]; then areas+=("ingestion"); fi
-          if [[ "$CHANGED_IO" == "true" ]]; then areas+=("io"); fi
-          if [[ "$CHANGED_PROCESSING" == "true" ]]; then areas+=("processing"); fi
-          if [[ "$CHANGED_RECOMMENDER" == "true" ]]; then areas+=("recommender"); fi
-          if [[ "$CHANGED_PLUGINS" == "true" ]]; then areas+=("plugins"); fi
-
-          if (( ${#areas[@]} == 0 )); then
-            echo "args=" >> "$GITHUB_OUTPUT"
-            echo "summary=no targeted area detected -> run full suite" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          targets=()
-
-          for area in "${areas[@]}"; do
-            area_targets=()
-            case "$area" in
-              analysis)
-                area_targets=("tests/test_analysis_*.py" "tests/analysis")
-                ;;
-              core)
-                area_targets=(
-                  "tests/test_core_*.py"
-                  "tests/test_coherence*.py"
-                  "tests/test_contextual_delta.py"
-                  "tests/test_metrics.py"
-                  "tests/test_operator_detection.py"
-                  "tests/test_phase_alias_deprecations.py"
-                  "tests/test_resonance.py"
-                  "tests/test_segmentation.py"
-                  "tests/test_structural_time.py"
-                  "tests/test_epi.py"
-                )
-                ;;
-              cli)
-                area_targets=(
-                  "tests/test_cli.py"
-                  "tests/test_cli_*.py"
-                  "tests/test_cli_parser.py"
-                )
-                ;;
-              exporters)
-                area_targets=(
-                  "tests/test_*exporter*.py"
-                  "tests/test_replay_csv_bundle.py"
-                )
-                ;;
-              ingestion)
-                area_targets=(
-                  "tests/test_ingestion.py"
-                  "tests/test_outgauge_udp.py"
-                  "tests/test_outsim_udp.py"
-                  "tests/test_insim.py"
-                  "tests/test_track_loader.py"
-                  "tests/ingestion"
-                )
-                ;;
-              io)
-                area_targets=("tests/test_io_*.py" "tests/test_cli_io.py")
-                ;;
-              processing)
-                area_targets=("tests/test_processing.py")
-                ;;
-              recommender)
-                area_targets=(
-                  "tests/test_recommender*.py"
-                  "tests/test_recommender_search_cache.py"
-                )
-                ;;
-              plugins)
-                area_targets=(
-                  "tests/plugins"
-                  "tests/test_cli_osd.py"
-                )
-                ;;
-              *)
-                ;;
-            esac
-
-            if (( ${#area_targets[@]} > 0 )); then
-              targets+=("${area_targets[@]}")
-            fi
-          done
-
-          if (( ${#targets[@]} == 0 )); then
-            echo "args=" >> "$GITHUB_OUTPUT"
-            echo "summary=areas (${areas[*]}) have no explicit targets -> run full suite" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "args=${targets[*]}" >> "$GITHUB_OUTPUT"
-          echo "summary=targeted run for areas (${areas[*]}) -> ${targets[*]}" >> "$GITHUB_OUTPUT"
-
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ${PYTEST_SELECTION_SUMMARY}
+          EOF
       - name: Pytest
         env:
-          PYTEST_TARGET_ARGS: ${{ steps.pytest-targets.outputs.args }}
-          PYTEST_SELECTION_SUMMARY: ${{ steps.pytest-targets.outputs.summary }}
+          PYTEST_ARGS: ${{ matrix.pytest_args }}
+          PYTEST_AREA: ${{ matrix.area }}
         run: |
           set -euo pipefail
 
-          if [[ -n "$PYTEST_SELECTION_SUMMARY" ]]; then
-            echo "$PYTEST_SELECTION_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          if [[ -z "$PYTEST_TARGET_ARGS" ]]; then
+          if [[ -z "$PYTEST_ARGS" ]]; then
             echo "Running full pytest suite"
             pytest --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing
           else
-            echo "Running targeted pytest selection: $PYTEST_TARGET_ARGS"
-            pytest --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing $PYTEST_TARGET_ARGS
+            echo "Running targeted pytest selection for area '$PYTEST_AREA': $PYTEST_ARGS"
+            pytest --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing $PYTEST_ARGS
           fi
       - name: Upload coverage report
         if: always()
