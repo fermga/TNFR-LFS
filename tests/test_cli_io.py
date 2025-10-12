@@ -5,6 +5,7 @@ import builtins
 import json
 import sys
 import types
+from typing import Callable
 from pathlib import Path
 from textwrap import dedent
 
@@ -149,28 +150,31 @@ def test_load_cli_config_accepts_explicit_pyproject_path(tmp_path: Path) -> None
     assert config["logging"]["level"] == "debug"
 
 
-def test_resolve_cache_size_returns_none_without_options() -> None:
-    namespace = argparse.Namespace()
+@pytest.mark.parametrize(
+    ("namespace_factory", "expected"),
+    [
+        (lambda: argparse.Namespace(), None),
+        (lambda: argparse.Namespace(cache_options=types.SimpleNamespace()), None),
+        (
+            lambda: argparse.Namespace(
+                cache_options=CacheOptions(
+                    enable_delta_cache=True,
+                    nu_f_cache_size=32,
+                    telemetry_cache_size=16,
+                )
+            ),
+            16,
+        ),
+    ],
+)
+def test_resolve_cache_size(
+    namespace_factory: Callable[[], argparse.Namespace], expected: int | None
+) -> None:
+    namespace = namespace_factory()
 
-    assert cli_common.resolve_cache_size(namespace, "telemetry_cache_size") is None
-
-
-def test_resolve_cache_size_handles_missing_attribute() -> None:
-    namespace = argparse.Namespace()
-    namespace.cache_options = types.SimpleNamespace()
-
-    assert cli_common.resolve_cache_size(namespace, "telemetry_cache_size") is None
-
-
-def test_resolve_cache_size_returns_configured_value() -> None:
-    namespace = argparse.Namespace()
-    namespace.cache_options = CacheOptions(
-        enable_delta_cache=True,
-        nu_f_cache_size=32,
-        telemetry_cache_size=16,
+    assert (
+        cli_common.resolve_cache_size(namespace, "telemetry_cache_size") == expected
     )
-
-    assert cli_common.resolve_cache_size(namespace, "telemetry_cache_size") == 16
 
 
 def test_load_records_from_namespace_prefers_replay(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
