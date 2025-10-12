@@ -116,8 +116,8 @@ jobs:
           is_main = os.environ["IS_MAIN"].lower() == "true"
 
           run_full_suite = not changes
-          full_suite = is_main and run_full_suite
-          should_run = run_full_suite or bool(changes)
+          full_suite = is_main
+          should_run = full_suite or run_full_suite or bool(changes)
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
               fh.write(f"full_suite_on_main={'true' if full_suite else 'false'}\n")
