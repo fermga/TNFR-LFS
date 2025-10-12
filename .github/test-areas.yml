@@ -13,7 +13,9 @@ areas:
       - 'tnfr_lfs.toml'
       - 'src/tnfr_lfs/**'
       - 'typing_targets/**'
-    include_in_matrix: false
+    run_output: core_full_suite
+    pytest_args:
+      - tests
   - name: examples
     display_name: examples
     filter_globs:
