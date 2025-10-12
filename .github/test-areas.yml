@@ -9,13 +9,64 @@ areas:
       - 'mkdocs.yml'
       - 'modifiers/**'
       - 'pyproject.toml'
-      - 'tests/**'
       - 'tnfr_lfs.toml'
-      - 'src/tnfr_lfs/**'
       - 'typing_targets/**'
+      - 'src/tnfr_lfs/__init__.py'
+      - 'src/tnfr_lfs/__main__.py'
+      - 'src/tnfr_lfs/_version.py'
+      - 'src/tnfr_lfs/cache_settings.py'
+      - 'src/tnfr_lfs/common/**'
+      - 'src/tnfr_lfs/configuration.py'
+      - 'src/tnfr_lfs/data/**'
+      - 'src/tnfr_lfs/examples/**'
+      - 'src/tnfr_lfs/logging/**'
+      - 'src/tnfr_lfs/math/**'
+      - 'src/tnfr_lfs/resources/**'
+      - 'src/tnfr_lfs/visualization/**'
+      - '!src/tnfr_lfs/analysis/**'
+      - '!src/tnfr_lfs/cli/**'
+      - '!src/tnfr_lfs/core/**'
+      - '!src/tnfr_lfs/exporters/**'
+      - '!src/tnfr_lfs/ingestion/**'
+      - '!src/tnfr_lfs/io/**'
+      - '!src/tnfr_lfs/plugins/**'
+      - '!src/tnfr_lfs/processing.py'
+      - '!src/tnfr_lfs/processing/**'
+      - '!src/tnfr_lfs/recommender/**'
+      - 'tests/__init__.py'
+      - 'tests/conftest.py'
+      - 'tests/data/**'
+      - 'tests/helpers/**'
+      - 'tests/test_abtest.py'
+      - 'tests/test_acceptance_pipeline.py'
+      - 'tests/test_brake_thermal.py'
+      - 'tests/test_config_loader.py'
+      - 'tests/test_fusion_calibration.py'
+      - 'tests/test_fusion_helpers.py'
+      - 'tests/test_logs.py'
+      - 'tests/test_pareto.py'
+      - 'tests/test_playbook_rules.py'
+      - 'tests/test_quickstart_dataset.py'
+      - 'tests/test_robustness.py'
+      - 'tests/test_search.py'
+      - 'tests/test_session.py'
+      - 'tests/test_version.py'
     run_output: core_full_suite
     pytest_args:
-      - tests
+      - tests/test_abtest.py
+      - tests/test_acceptance_pipeline.py
+      - tests/test_brake_thermal.py
+      - tests/test_config_loader.py
+      - tests/test_fusion_calibration.py
+      - tests/test_fusion_helpers.py
+      - tests/test_logs.py
+      - tests/test_pareto.py
+      - tests/test_playbook_rules.py
+      - tests/test_quickstart_dataset.py
+      - tests/test_robustness.py
+      - tests/test_search.py
+      - tests/test_session.py
+      - tests/test_version.py
   - name: examples
     display_name: examples
     filter_globs:
