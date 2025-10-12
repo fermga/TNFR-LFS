@@ -1237,6 +1237,12 @@ def test_repository_template_configures_default_ports_and_profiles() -> None:
     assert limits["apex"] == pytest.approx(0.4, rel=1e-3)
     assert limits["exit"] == pytest.approx(0.6, rel=1e-3)
 
+    plugins = data["plugins"]
+    assert plugins == canonical["plugins"]
+
+    profiles = data["profiles"]
+    assert profiles == canonical["profiles"]
+
 
 def test_diagnose_reports_success(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
     lfs_root = tmp_path / "LFS"
