@@ -78,12 +78,12 @@ def test_load_cli_config_reads_pyproject(monkeypatch: pytest.MonkeyPatch, tmp_pa
     pyproject_path.write_text(
         dedent(
             """
-            [tool.tnfr_lfs.telemetry]
-            baseline = "baseline.jsonl"
+            [tool.tnfr_lfs.core]
+            host = "192.0.2.1"
 
-            [tool.tnfr_lfs.cache]
-            cache_enabled = "yes"
-            nu_f_cache_size = "48"
+            [tool.tnfr_lfs.performance]
+            cache_enabled = true
+            max_cache_size = 48
             """
         ),
         encoding="utf8",
@@ -93,10 +93,9 @@ def test_load_cli_config_reads_pyproject(monkeypatch: pytest.MonkeyPatch, tmp_pa
     config = cli_io.load_cli_config()
 
     assert config["_config_path"] == str(pyproject_path.resolve())
-    assert config["core"]["baseline"] == "baseline.jsonl"
+    assert config["core"]["host"] == "192.0.2.1"
     performance_cfg = config["performance"]
     assert performance_cfg["cache_enabled"] is True
-    assert performance_cfg["nu_f_cache_size"] == 48
     assert performance_cfg["max_cache_size"] == 48
 
 

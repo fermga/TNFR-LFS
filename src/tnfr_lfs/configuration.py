@@ -151,4 +151,41 @@ def load_project_plugins_config(
     return payload, source_path
 
 
-__all__ = ["load_project_config", "load_project_plugins_config"]
+def canonical_cli_config_block(pyproject_path: Path) -> str:
+    """Return the raw ``[tool.tnfr_lfs]`` snippet from ``pyproject.toml``.
+
+    The helper keeps documentation snippets and the legacy ``tnfr_lfs.toml``
+    template in sync with the canonical configuration.
+    """
+
+    text = pyproject_path.read_text(encoding="utf8")
+    lines = text.splitlines()
+    capture_prefix = "[tool.tnfr_lfs"
+    captured: list[str] = []
+    capturing = False
+    for line in lines:
+        if line.startswith(capture_prefix):
+            capturing = True
+        elif capturing and line.startswith("[tool.") and not line.startswith(
+            capture_prefix
+        ):
+            break
+        if capturing:
+            captured.append(line.rstrip())
+
+    while captured and captured[0].strip() == "":
+        captured.pop(0)
+    while captured and captured[-1].strip() == "":
+        captured.pop()
+
+    if not captured:
+        raise ValueError(f"No [tool.tnfr_lfs] section found in {pyproject_path}")
+
+    return "\n".join(captured)
+
+
+__all__ = [
+    "canonical_cli_config_block",
+    "load_project_config",
+    "load_project_plugins_config",
+]

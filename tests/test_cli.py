@@ -21,6 +21,7 @@ from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
+from tnfr_lfs.configuration import canonical_cli_config_block
 from tests.helpers import (
     DummyBundle,
     create_cli_config_pack,
@@ -93,9 +94,9 @@ def test_run_cli_prefers_pyproject_config(
             [tool.tnfr_lfs.logging]
             level = "warning"
 
-            [tool.tnfr_lfs.cache]
-            cache_enabled = "no"
-            nu_f_cache_size = "12"
+            [tool.tnfr_lfs.performance]
+            cache_enabled = false
+            max_cache_size = 12
             """
         ),
         encoding="utf8",
@@ -133,6 +134,7 @@ def test_run_cli_prefers_pyproject_config(
     performance_cfg = config["performance"]
     assert performance_cfg["cache_enabled"] is False
     assert performance_cfg["nu_f_cache_size"] == 0
+    assert performance_cfg["max_cache_size"] == 0
 
 
 def test_run_cli_requires_telemetry_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1192,8 +1194,20 @@ exit = 0.2
 def test_repository_template_configures_default_ports_and_profiles() -> None:
     config_path = Path(__file__).resolve().parents[1] / "tnfr_lfs.toml"
     data = tomllib.loads(config_path.read_text(encoding="utf8"))
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    pyproject_payload = tomllib.loads(pyproject_path.read_text(encoding="utf8"))
+    canonical = pyproject_payload["tool"]["tnfr_lfs"]
+    snippet = canonical_cli_config_block(pyproject_path)
+    assert snippet.strip().startswith("[tool.tnfr_lfs.logging]")
+
+    logging_cfg = data["logging"]
+    assert logging_cfg == canonical["logging"]
+    assert logging_cfg["level"] == "info"
+    assert logging_cfg["output"] == "stderr"
+    assert logging_cfg["format"] == "json"
 
     core = data["core"]
+    assert core == canonical["core"]
     assert core["host"] == "127.0.0.1"
     assert core["outsim_port"] == 4123
     assert core["outgauge_port"] == 3000
@@ -1202,15 +1216,23 @@ def test_repository_template_configures_default_ports_and_profiles() -> None:
     assert core["udp_retries"] == 3
 
     performance = data["performance"]
+    assert performance == canonical["performance"]
     assert performance["telemetry_buffer_size"] == 64
     assert performance["cache_enabled"] is True
     assert performance["max_cache_size"] == DEFAULT_DYNAMIC_CACHE_SIZE
 
     suggestion_defaults = data["suggest"]
+    assert suggestion_defaults == canonical["suggest"]
     assert suggestion_defaults["car_model"] == "FZR"
     assert suggestion_defaults["track"] == "AS5"
 
+    paths_cfg = data["paths"]
+    assert paths_cfg == canonical["paths"]
+    assert paths_cfg["output_dir"] == "out"
+    assert paths_cfg["pack_root"] == "."
+
     limits = data["limits"]["delta_nfr"]
+    assert limits == canonical["limits"]["delta_nfr"]
     assert limits["entry"] == pytest.approx(0.5, rel=1e-3)
     assert limits["apex"] == pytest.approx(0.4, rel=1e-3)
     assert limits["exit"] == pytest.approx(0.6, rel=1e-3)

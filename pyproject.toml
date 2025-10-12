@@ -80,6 +80,40 @@ python_version = "3.9"
 files = ["src", "tests"]
 warn_unused_configs = true
 
+[tool.tnfr_lfs.logging]
+level = "info"
+output = "stderr"
+format = "json"
+
+[tool.tnfr_lfs.core]
+host = "127.0.0.1"
+outsim_port = 4123
+outgauge_port = 3000
+insim_port = 29999
+udp_timeout = 0.01
+udp_retries = 3
+
+[tool.tnfr_lfs.performance]
+telemetry_buffer_size = 64
+cache_enabled = true
+max_cache_size = 256
+
+[tool.tnfr_lfs.analyze]
+export = "json"
+
+[tool.tnfr_lfs.suggest]
+car_model = "FZR"
+track = "AS5"
+
+[tool.tnfr_lfs.paths]
+output_dir = "out"
+pack_root = "."
+
+[tool.tnfr_lfs.limits.delta_nfr]
+entry = 0.5
+apex = 0.4
+exit = 0.6
+
 [tool.tnfr_lfs.plugins]
 auto_discover = true
 plugin_dir = "plugins"

@@ -97,17 +97,35 @@ def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
     env_config = os.environ.get(CONFIG_ENV_VAR)
     env_path = Path(env_config) if env_config else None
 
-    pyproject_bases: List[Path] = [Path.cwd()]
+    explicit_bases: List[Path] = []
     if path is not None:
-        pyproject_bases.append(path)
+        explicit_bases.append(path)
     if env_path is not None:
-        pyproject_bases.append(env_path)
+        explicit_bases.append(env_path)
 
-    pyproject_candidates: List[Path] = []
-    for base in pyproject_bases:
-        pyproject_candidates.extend(_pyproject_candidates(base))
+    for base in explicit_bases:
+        resolved = base.expanduser()
+        if resolved.suffix and resolved.name != PROJECT_CONFIG_FILENAME:
+            payload = _load_toml_mapping(resolved)
+            if payload is not None:
+                return _normalise_cli_config(payload, resolved)
+            continue
 
-    for candidate in _iter_unique_paths(pyproject_candidates):
+        pyproject_paths = _pyproject_candidates(resolved)
+        for candidate in _iter_unique_paths(pyproject_paths):
+            loaded = load_project_config(candidate)
+            if not loaded:
+                continue
+            payload, resolved_candidate = loaded
+            return _normalise_cli_config(payload, resolved_candidate)
+
+        if not resolved.suffix:
+            legacy_fallback = resolved / DEFAULT_CONFIG_FILENAME
+            payload = _load_toml_mapping(legacy_fallback)
+            if payload is not None:
+                return _normalise_cli_config(payload, legacy_fallback)
+
+    for candidate in _iter_unique_paths(_pyproject_candidates(Path.cwd())):
         loaded = load_project_config(candidate)
         if not loaded:
             continue
@@ -115,10 +133,6 @@ def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
         return _normalise_cli_config(payload, resolved)
 
     legacy_candidates: List[Path] = []
-    if path is not None:
-        legacy_candidates.append(path)
-    if env_path is not None:
-        legacy_candidates.append(env_path)
     legacy_candidates.append(Path.cwd() / DEFAULT_CONFIG_FILENAME)
     legacy_candidates.append(Path.home() / ".config" / DEFAULT_CONFIG_FILENAME)
 
