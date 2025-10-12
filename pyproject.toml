@@ -44,7 +44,7 @@ spectral = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/tnfr-labs/tnfr-lfs"
+Homepage = "https://github.com/fermga/TNFR-LFS"
 
 [project.scripts]
 "tnfr_lfs" = "tnfr_lfs.cli:main"
