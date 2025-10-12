@@ -38,8 +38,10 @@ reports under `examples/out/`.
 
 - Python 3.9 or newer on `PATH`.
 - Scientific dependencies: `numpy>=1.24,<2.0` and `pandas>=1.5,<3.0`.
-- A telemetry dataset in `data/` (the repo ships CSV, RAF and Replay Analyzer
-  bundles for testing).
+- Telemetry samples shipped with the repo. The quickstart resolves them
+  automatically via `tnfr_lfs.examples.quickstart_dataset.dataset_path()`. Place
+  custom bundles under `src/tnfr_lfs/resources/data/` or override the helper if
+  you need different inputs.
 
 ### Install dependencies
 
@@ -68,6 +70,9 @@ make quickstart
 ```
 
 This invokes `examples/quickstart.sh` to generate artefacts in `examples/out/`.
+The script loads the packaged dataset through
+`tnfr_lfs.examples.quickstart_dataset.dataset_path()`, so no manual copying is
+required for the bundled samples.
 
 Explore the [Examples gallery](docs/examples.md) for additional runnable
 scripts that demonstrate ingestion, exporting and recommendation workflows.
