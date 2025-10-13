@@ -78,6 +78,8 @@ from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
 
 from tests.helpers import build_outgauge_payload, build_outsim_payload, run_cli_in_tmp
 
+from tnfr_lfs.core.cache_settings import CacheOptions
+
 from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
 from tnfr_lfs.core.epi_models import (
     BrakesNode,
@@ -763,3 +765,137 @@ def mini_track_pack(tmp_path: Path) -> MiniTrackPack:
         modifiers_dir=modifiers_dir,
     )
 
+@dataclass(frozen=True)
+class CliConfigCase:
+    """Represent a reusable CLI configuration scenario."""
+
+    toml_text: str
+    expected_sections: Dict[str, object]
+    setup: Callable[[Path], None] | None = None
+
+
+def _prefers_top_level_setup(root: Path) -> None:
+    secondary = root / "secondary"
+    secondary.mkdir()
+    write_pyproject(secondary, "")
+
+
+_CLI_CONFIG_CASES: Dict[str, CliConfigCase] = {
+    "cache-section": CliConfigCase(
+        toml_text="""
+        [tool.tnfr_lfs.cache]
+        cache_enabled = "yes"
+        nu_f_cache_size = "48"
+        """,
+        expected_sections={
+            "performance": CacheOptions(
+                enable_delta_cache=True,
+                nu_f_cache_size=48,
+                telemetry_cache_size=48,
+                recommender_cache_size=48,
+            ).to_performance_config(),
+        },
+    ),
+    "normalised-performance": CliConfigCase(
+        toml_text="""
+        [tool.tnfr_lfs.performance]
+        cache_enabled = "no"
+        max_cache_size = "12"
+        telemetry_buffer_size = 42
+        """,
+        expected_sections={
+            "performance": {
+                **CacheOptions(
+                    enable_delta_cache=False,
+                    nu_f_cache_size=0,
+                    telemetry_cache_size=0,
+                    recommender_cache_size=0,
+                ).to_performance_config(),
+                "telemetry_buffer_size": 42,
+            }
+        },
+    ),
+    "explicit-sections": CliConfigCase(
+        toml_text="""
+        [tool.tnfr_lfs.core]
+        host = "192.0.2.1"
+
+        [tool.tnfr_lfs.performance]
+        cache_enabled = true
+        max_cache_size = 48
+        """,
+        expected_sections={
+            "core": {"host": "192.0.2.1"},
+            "performance": CacheOptions(
+                enable_delta_cache=True,
+                nu_f_cache_size=48,
+                telemetry_cache_size=48,
+                recommender_cache_size=48,
+            ).to_performance_config(),
+        },
+    ),
+    "prefers-top-level": CliConfigCase(
+        toml_text="""
+        [tool.tnfr_lfs.logging]
+        level = "warning"
+        format = "text"
+        output = "stdout"
+        """,
+        expected_sections={
+            "logging": {
+                "level": "warning",
+                "format": "text",
+                "output": "stdout",
+            }
+        },
+        setup=_prefers_top_level_setup,
+    ),
+    "logging-disabled-cache": CliConfigCase(
+        toml_text="""
+        [tool.tnfr_lfs.logging]
+        level = "warning"
+        format = "text"
+        output = "stdout"
+
+        [tool.tnfr_lfs.performance]
+        cache_enabled = false
+        max_cache_size = 12
+        """,
+        expected_sections={
+            "logging": {
+                "level": "warning",
+                "format": "text",
+                "output": "stdout",
+            },
+            "performance": CacheOptions(
+                enable_delta_cache=False,
+                nu_f_cache_size=0,
+                telemetry_cache_size=0,
+                recommender_cache_size=0,
+            ).to_performance_config(),
+        },
+    ),
+}
+
+
+@pytest.fixture
+def cli_config_case(
+    request: pytest.FixtureRequest,
+) -> tuple[str, Dict[str, object], Callable[[Path], None] | None]:
+    """Provide reusable CLI configuration TOML snippets and expectations."""
+
+    if not hasattr(request, "param"):
+        raise pytest.UsageError("cli_config_case fixture requires a parameter")
+
+    case_id = cast(str, request.param)
+    try:
+        case = _CLI_CONFIG_CASES[case_id]
+    except KeyError:
+        available = ", ".join(sorted(_CLI_CONFIG_CASES))
+        pytest.fail(
+            f"Unknown cli_config_case {case_id!r}. Available cases: {available}",
+            pytrace=False,
+        )
+
+    expected_sections = dict(case.expected_sections)
+    return case.toml_text, expected_sections, case.setup

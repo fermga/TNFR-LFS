@@ -26,128 +26,37 @@ from tests.helpers import (
 
 
 @pytest.mark.parametrize(
-    ("toml_text", "expected_sections"),
+    "cli_config_case",
     [
-        (
-            """
-            [tool.tnfr_lfs.cache]
-            cache_enabled = "yes"
-            nu_f_cache_size = "48"
-            """,
-            {
-                "performance": CacheOptions(
-                    enable_delta_cache=True,
-                    nu_f_cache_size=48,
-                    telemetry_cache_size=48,
-                    recommender_cache_size=48,
-                ).to_performance_config(),
-            },
-        ),
-        (
-            """
-            [tool.tnfr_lfs.performance]
-            cache_enabled = "no"
-            max_cache_size = "12"
-            telemetry_buffer_size = 42
-            """,
-            {
-                "performance": {
-                    **CacheOptions(
-                        enable_delta_cache=False,
-                        nu_f_cache_size=0,
-                        telemetry_cache_size=0,
-                        recommender_cache_size=0,
-                    ).to_performance_config(),
-                    "telemetry_buffer_size": 42,
-                },
-            },
-        ),
-        (
-            """
-            [tool.tnfr_lfs.core]
-            host = "192.0.2.1"
-
-            [tool.tnfr_lfs.performance]
-            cache_enabled = true
-            max_cache_size = 48
-            """,
-            {
-                "core": {"host": "192.0.2.1"},
-                "performance": CacheOptions(
-                    enable_delta_cache=True,
-                    nu_f_cache_size=48,
-                    telemetry_cache_size=48,
-                    recommender_cache_size=48,
-                ).to_performance_config(),
-            },
-        ),
-        (
-            """
-            [tool.tnfr_lfs.logging]
-            level = "warning"
-            format = "text"
-            output = "stdout"
-            """,
-            {
-                "__setup__": lambda root: (
-                    (root / "secondary").mkdir(),
-                    write_pyproject(root / "secondary", ""),
-                ),
-                "logging": {
-                    "level": "warning",
-                    "format": "text",
-                    "output": "stdout",
-                },
-            },
-        ),
+        pytest.param("cache-section", id="cache-section"),
+        pytest.param("normalised-performance", id="normalised-performance"),
+        pytest.param("explicit-sections", id="explicit-sections"),
+        pytest.param("prefers-top-level", id="prefers-top-level"),
     ],
-    ids=[
-        "cache-section",
-        "normalised-performance",
-        "explicit-sections",
-        "prefers-top-level",
-    ],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "explicit_path",
+    [pytest.param(False, id="via-chdir"), pytest.param(True, id="explicit-path")],
 )
 def test_load_cli_config_from_pyproject(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    toml_text: str,
-    expected_sections: dict[str, object],
+    cli_config_case: tuple[
+        str, dict[str, object], Callable[[Path], None] | None
+    ],
+    explicit_path: bool,
 ) -> None:
+    toml_text, expected_sections, setup = cli_config_case
     pyproject_path = write_pyproject(tmp_path, toml_text)
-    sections = dict(expected_sections)
-    setup = sections.pop("__setup__", None)
     if callable(setup):
         setup(tmp_path)
 
-    monkeypatch.chdir(tmp_path)
-    config = cli_io.load_cli_config()
-
-    assert config["_config_path"] == str(pyproject_path.resolve())
-    for section, expected in sections.items():
-        assert config[section] == expected
-
-
-@pytest.mark.parametrize(
-    ("toml_text", "expected_sections"),
-    [
-        (
-            """
-            [tool.tnfr_lfs.logging]
-            level = "debug"
-            """,
-            {"logging": {"level": "debug"}},
-        ),
-    ],
-)
-def test_load_cli_config_accepts_explicit_pyproject_path(
-    tmp_path: Path, toml_text: str, expected_sections: dict[str, object]
-) -> None:
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    pyproject_path = write_pyproject(config_dir, toml_text)
-
-    config = cli_io.load_cli_config(pyproject_path)
+    if explicit_path:
+        config = cli_io.load_cli_config(pyproject_path)
+    else:
+        monkeypatch.chdir(tmp_path)
+        config = cli_io.load_cli_config()
 
     assert config["_config_path"] == str(pyproject_path.resolve())
     for section, expected in expected_sections.items():
