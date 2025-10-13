@@ -80,6 +80,7 @@ from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPC
 from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
 
 from tests.helpers import (
+    _populate_hud,
     build_goal,
     build_microsector,
     build_outgauge_payload,
@@ -103,6 +104,7 @@ from tnfr_lfs.core.epi_models import (
     TyresNode,
 )
 from tnfr_lfs.core.segmentation import Goal, Microsector, segment_microsectors
+from tnfr_lfs.cli.osd import TelemetryHUD
 from tnfr_lfs.recommender.rules import RuleContext, ThresholdProfile
 
 
@@ -508,6 +510,21 @@ def synthetic_records(synthetic_stint_path: Path) -> List[TelemetryRecord]:
                 )
             )
     return records
+
+
+@pytest.fixture
+def osd_hud(
+    synthetic_records: Sequence[TelemetryRecord],
+) -> Callable[..., TelemetryHUD]:
+    """Build telemetry HUDs populated with subsets of the synthetic stint."""
+
+    def factory(
+        *, start: int = 0, stop: int | None = None, step: int = 1
+    ) -> TelemetryHUD:
+        selection = synthetic_records[slice(start, stop, step)]
+        return _populate_hud(selection)
+
+    return factory
 
 
 @pytest.fixture(scope="session")
