@@ -2,23 +2,17 @@
 
 This module centralises the heuristics required to contextualise ΔNFR values
 based on curvature, track surface grip and traffic density cues.  The
-calibration data is loaded from the embedded TOML metadata living under
-``tnfr_lfs/data`` so downstream modules can rely on a single source of truth
-for the adjustment matrix.
+calibration payload is supplied by the host application via
+:func:`configure_context_matrix_loader`, allowing :mod:`tnfr_core` to remain
+agnostic of where the resources live.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
+from collections.abc import Callable
 from typing import Mapping, Sequence
 
-try:  # pragma: no cover - ``tomllib`` only ships with Python ≥ 3.11
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:  # pragma: no cover - fall back to ``tomli`` in 3.10
-    import tomli as tomllib  # type: ignore
-
-from tnfr_lfs.data import CONTEXT_FACTORS_RESOURCE
 from tnfr_core.operators.interfaces import SupportsContextBundle, SupportsContextRecord
 
 __all__ = [
@@ -30,6 +24,7 @@ __all__ = [
     "resolve_context_from_bundle",
     "resolve_context_from_record",
     "resolve_series_context",
+    "configure_context_matrix_loader",
 ]
 
 
@@ -109,6 +104,38 @@ class ContextMatrix:
         return self.traffic_bands[-1]
 
 
+ContextPayload = Mapping[str, object]
+ContextPayloadLoader = Callable[[], ContextPayload]
+
+_context_payload_loader: ContextPayloadLoader | None = None
+_cached_payload: ContextPayload | None = None
+_matrix_cache: dict[tuple[str | None, int], ContextMatrix] = {}
+
+
+def configure_context_matrix_loader(loader: ContextPayloadLoader) -> None:
+    """Register ``loader`` as the source of contextual calibration payloads."""
+
+    global _context_payload_loader, _cached_payload
+
+    _context_payload_loader = loader
+    _cached_payload = None
+    _matrix_cache.clear()
+
+
+def _get_default_payload() -> ContextPayload:
+    if _context_payload_loader is None:
+        raise RuntimeError(
+            "No context matrix loader is configured. Call "
+            "'configure_context_matrix_loader' from the host package or pass "
+            "a payload to 'load_context_matrix'."
+        )
+
+    payload = _context_payload_loader()
+    if not isinstance(payload, Mapping):  # pragma: no cover - defensive guard
+        raise TypeError("Context matrix loader must return a mapping payload.")
+    return payload
+
+
 def _parse_curve_bands(
     payload: Mapping[str, object]
 ) -> tuple[tuple[float | None, float, str | None], ...]:
@@ -185,12 +212,31 @@ def _parse_traffic_bands(
     return tuple(bands)
 
 
-@lru_cache()
-def load_context_matrix(track: str | None = None) -> ContextMatrix:
-    """Return the context matrix for ``track`` (defaults to the generic profile)."""
+def load_context_matrix(
+    track: str | None = None,
+    *,
+    payload: ContextPayload | None = None,
+) -> ContextMatrix:
+    """Return the context matrix for ``track`` (defaults to the generic profile).
 
-    with CONTEXT_FACTORS_RESOURCE.open("rb") as handle:
-        payload = tomllib.load(handle)
+    When ``payload`` is omitted the configured loader registered via
+    :func:`configure_context_matrix_loader` is invoked.  Passing ``payload``
+    bypasses the global cache and allows callers to supply bespoke calibration
+    data directly.
+    """
+
+    if payload is None:
+        global _cached_payload
+        if _cached_payload is None:
+            _cached_payload = _get_default_payload()
+        payload = _cached_payload
+        cache_key = (track, id(payload))
+        cached = _matrix_cache.get(cache_key)
+        if cached is not None:
+            return cached
+    else:
+        cache_key = None
+
     dataset = payload.get(track or "defaults") or payload.get("defaults") or {}
     limits = dataset.get("min_multiplier"), dataset.get("max_multiplier")
     min_multiplier = float(limits[0]) if limits[0] is not None else 0.6
@@ -209,7 +255,7 @@ def load_context_matrix(track: str | None = None) -> ContextMatrix:
     direction_reference = float(traffic_data.get("direction_change_reference", 2.5)) if isinstance(traffic_data, Mapping) else 2.5
     longitudinal_reference = float(traffic_data.get("longitudinal_reference", 0.5)) if isinstance(traffic_data, Mapping) else 0.5
 
-    return ContextMatrix(
+    matrix = ContextMatrix(
         curve_bands=curve_bands,
         surface_bands=surface_bands,
         traffic_bands=traffic_bands,
@@ -220,6 +266,10 @@ def load_context_matrix(track: str | None = None) -> ContextMatrix:
         traffic_direction_reference=max(direction_reference, 1e-6),
         traffic_longitudinal_reference=max(longitudinal_reference, 1e-6),
     )
+
+    if cache_key is not None:
+        _matrix_cache[cache_key] = matrix
+    return matrix
 
 
 def _resolve_multiplier(factors: ContextFactors | Mapping[str, float]) -> float:

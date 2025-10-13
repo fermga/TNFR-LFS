@@ -2,10 +2,12 @@
 Context-aware ΔNFR adjustments.
 
 This module centralises the heuristics required to contextualise ΔNFR values
-based on curvature, track surface grip and traffic density cues.  The
-calibration data is loaded from the embedded TOML metadata living under
-``tnfr_lfs/data`` so downstream modules can rely on a single source of truth
-for the adjustment matrix.
+based on curvature, track surface grip and traffic density cues.  Host
+applications must provide the calibration payload via
+`configure_context_matrix_loader`, keeping :mod:`tnfr_core` agnostic of where
+the data lives.  The default implementation ships with
+`tnfr_lfs.analysis.contextual_delta` which wires the loader to the packaged
+TOML resource.
 
 ## Classes
 ### `ContextFactors`
@@ -27,7 +29,9 @@ Calibration payload loaded from ``context_factors.toml``.
 - `traffic_band(self, load: float) -> tuple[float | None, float, str | None]`
 
 ## Functions
-- `load_context_matrix(track: str | None = None) -> ContextMatrix`
+- `configure_context_matrix_loader(loader: ContextPayloadLoader) -> None`
+  - Register a callable returning the contextual calibration payload.
+- `load_context_matrix(track: str | None = None, *, payload: ContextPayload | None = None) -> ContextMatrix`
   - Return the context matrix for ``track`` (defaults to the generic profile).
 - `apply_contextual_delta(delta_value: float, factors: ContextFactors | Mapping[str, float], *, context_matrix: ContextMatrix | None = None) -> float`
   - Return ``delta_value`` scaled by the contextual factor matrix.
