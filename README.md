@@ -61,3 +61,18 @@ poetry run python tools/tnfr_theory_audit.py --core --tests --output tests/_repo
 
 Una vez generado, puede consultarse en
 [`tests/_report/theory_impl_matrix.md`](tests/_report/theory_impl_matrix.md).
+
+## Verificación de paridad TNFR
+
+Para comparar la implementación local del motor TNFR con el extra canónico
+instalado, utilice el verificador de paridad. El script analiza una serie de
+telemetría, ejecuta ambos motores y genera un informe JSON con los valores
+absolutos y las diferencias relativas observadas::
+
+```
+poetry run python tools/verify_tnfr_parity.py tests/data/synthetic_stint.csv --output parity_report.json
+```
+
+El mismo flujo está disponible a través del objetivo `make verify-tnfr-parity`,
+que activa el modo estricto y finaliza con código de salida distinto de cero si
+alguna métrica supera las tolerancias configuradas.
