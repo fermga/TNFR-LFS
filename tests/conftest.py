@@ -5,6 +5,7 @@ import importlib.util
 import json
 import sys
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
@@ -75,7 +76,7 @@ from tnfr_lfs.ingestion import outsim_udp as outsim_module
 from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
 from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
 
-from tests.helpers import build_outgauge_payload, build_outsim_payload
+from tests.helpers import build_outgauge_payload, build_outsim_payload, run_cli_in_tmp
 
 from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
 from tnfr_lfs.core.epi_models import (
@@ -184,6 +185,77 @@ def synthetic_stint_path() -> Path:
     """Location of the bundled synthetic telemetry stint."""
 
     return Path(__file__).with_name("data") / "synthetic_stint.csv"
+
+
+@pytest.fixture
+def baseline_cli_runner(
+    tmp_path: Path,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """Invoke the baseline CLI within ``tmp_path`` and report its output path."""
+
+    def _extract_positional(args: list[str]) -> tuple[Path | None, list[str]]:
+        remaining = list(args)
+        positional: Path | None = None
+        if remaining and not remaining[0].startswith("--"):
+            raw_positional = Path(remaining.pop(0))
+            positional = (
+                raw_positional
+                if raw_positional.is_absolute()
+                else tmp_path / raw_positional
+            )
+        return positional, remaining
+
+    def _infer_destination(positional: Path | None, options: list[str]) -> Path:
+        if positional is not None:
+            return positional
+
+        output_dir = tmp_path / "runs"
+        output_name: str | None = None
+        iterator = iter(options)
+        for token in iterator:
+            if token == "--output-dir":
+                value = next(iterator, None)
+                if value is None:
+                    raise ValueError("--output-dir requires a value")
+                path = Path(value)
+                output_dir = path if path.is_absolute() else tmp_path / path
+            elif token == "--output":
+                value = next(iterator, None)
+                if value is None:
+                    raise ValueError("--output requires a value")
+                output_name = value
+            else:
+                # Skip positional values for unrelated options.
+                continue
+
+        if output_name is not None:
+            return output_dir / output_name
+
+        return output_dir
+
+    def _run(cli_args: Sequence[str]) -> tuple[str, pytest.CaptureResult[str], Path]:
+        args_list = [str(arg) for arg in cli_args]
+        positional, remaining = _extract_positional(args_list)
+
+        invocation = ["baseline", *args_list]
+        if "--simulate" not in args_list:
+            invocation.extend(["--simulate", str(synthetic_stint_path)])
+
+        result, captured = run_cli_in_tmp(
+            invocation,
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+            capsys=capsys,
+            capture_output=True,
+        )
+
+        destination = _infer_destination(positional, remaining)
+        return result, captured, destination
+
+    return _run
 
 
 @pytest.fixture(scope="session")
