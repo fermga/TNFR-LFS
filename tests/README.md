@@ -16,12 +16,31 @@ implementations. Pairs whose similarity ratio exceeds the configured threshold
 identifiers (`path::qualified_name`) alongside the measured similarity so you
 can decide whether further parametrisation would remove duplication. The
 Makefile target automatically removes `tests/_report/*.json` after printing the
-summary so repeated runs keep the working tree clean.
+summary so repeated runs keep the working tree clean. The `_report` directory is
+dedicated to transient artefacts; its JSON files are intentionally left
+unversioned so local experiments and the CI sweep never dirty the tree.
 
 Use `make report-similar-tests-sweep` to execute the helper at thresholds 0.90,
 0.88, and 0.85 in one go. Capture the counts printed for each threshold and
 attach them to your pull request description so reviewers can see whether new
-tests introduce fresh similarities.
+tests introduce fresh similarities. Esta barrida de tres umbrales cubre todo el
+flujo: 0.90 actúa como corte duro, 0.88 destaca duplicados incipientes y 0.85
+ensancha la red para auditorías exploratorias.
+
+| Command | Umbral | Propósito |
+| --- | --- | --- |
+| `make report-similar-tests` | 0.90 | Hard gate local alineado con el corte obligatorio. |
+| `python tools/report_similar_tests.py --threshold 0.88` | 0.88 | Aviso manual para vigilar duplicados sin frenar iteraciones. |
+| `python tools/report_similar_tests.py --threshold 0.85` | 0.85 | Aviso amplio para detectar patrones candidatos a parametrizar. |
+
+El workflow de CI [Similar tests](../.github/workflows/similar-tests.yml)
+invoca el script a 0.90 dentro del job **Detect similar tests (0.90)** y falla
+si encuentra pares sobre el umbral duro. Un job separado genera los informes en
+0.90 y 0.85, y publica el artefacto `similar-tests-reports`. Para consultarlo,
+abre la ejecución del workflow en GitHub, entra al job **Similar test reports**
+y descarga el artefacto comprimido desde la sección *Artifacts*; allí encontrarás
+los JSON listos para su inspección, mientras que el barrido a 0.88 queda para
+ejecuciones locales con los comandos anteriores.
 
 The most recent snapshot shows only one matching pair around the operator
 normalisation helpers, confirming that previous parametrisation work kept the
