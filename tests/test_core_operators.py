@@ -339,6 +339,39 @@ def test_evolve_epi_runs_euler_step():
     nodal_integral = sum(component[0] for component in nodal.values())
     assert nodal_derivative == pytest.approx(derivative, rel=1e-9)
     assert nodal_integral == pytest.approx(expected_derivative * 0.1, rel=1e-9)
+    assert getattr(nodal, "metadata", {}) == {}
+
+
+def test_evolve_epi_applies_phase_metadata():
+    prev = 0.0
+    deltas = {
+        "tyres": 1.0,
+        "driver": -0.5,
+        "__theta__": "apex",
+        "__w_phase__": {
+            "apex": {"__default__": 0.75, "tyres": 2.0},
+            "__default__": {"__default__": 1.0},
+        },
+        "nu_f_objectives": {"driver": 0.2},
+    }
+    nu_map = {"tyres": 0.2, "driver": 0.1}
+
+    new_epi, derivative, nodal = evolve_epi(prev, deltas, 0.1, nu_map)
+
+    tyres_weight = 0.2 * 2.0
+    driver_weight = 0.2 * 0.75
+    expected_derivative = tyres_weight * 1.0 + driver_weight * -0.5
+
+    assert derivative == pytest.approx(expected_derivative, rel=1e-9)
+    assert new_epi == pytest.approx(expected_derivative * 0.1, rel=1e-9)
+    assert nodal["tyres"][1] == pytest.approx(tyres_weight * 1.0, rel=1e-9)
+    assert nodal["driver"][1] == pytest.approx(driver_weight * -0.5, rel=1e-9)
+
+    metadata = getattr(nodal, "metadata", {})
+    assert metadata.get("theta") == "apex"
+    assert metadata.get("theta_effect", {}).get("tyres") == pytest.approx(2.0)
+    assert metadata.get("theta_effect", {}).get("driver") == pytest.approx(0.75)
+    assert metadata.get("nu_f_objectives", {}).get("driver") == pytest.approx(0.2)
 
 
 def test_sense_index_penalises_active_phase_weights():
