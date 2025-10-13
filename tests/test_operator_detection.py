@@ -445,9 +445,8 @@ def test_detect_silence_flags_quiet_structural_intervals(case: OperatorCase) -> 
     ("func", "alias", "expected"),
     [
         (normalize_structural_operator_identifier, "silence", "SILENCE"),
-        (normalize_structural_operator_identifier, "SILENCIO", "SILENCE"),
-        (normalize_structural_operator_identifier, "silencio", "SILENCE"),
-        (canonical_operator_label, "silencio", "Structural silence"),
+        (normalize_structural_operator_identifier, "SILENCE", "SILENCE"),
+        (canonical_operator_label, "silence", "Structural silence"),
     ],
 )
 def test_structural_operator_aliases(
@@ -460,8 +459,8 @@ def _silence_tuple_event(payload: dict) -> dict:
     return {"silence": (payload,)}
 
 
-def _silencio_event(payload: dict) -> dict:
-    return {"SILENCIO": payload}
+def _silence_event(payload: dict) -> dict:
+    return {"SILENCE": payload}
 
 
 @pytest.mark.parametrize(
@@ -473,9 +472,9 @@ def _silencio_event(payload: dict) -> dict:
             id="english-alias-case-insensitive",
         ),
         pytest.param(
-            _silencio_event,
+            _silence_event,
             0.6,
-            id="spanish-alias",
+            id="english-identifier",
         ),
     ],
 )
