@@ -5,6 +5,22 @@ exercise the EPI extractor, segmentation heuristics and CLI pipelines.  This
 directory documents how to rebuild them if the telemetry model changes in the
 future.
 
+## Detecting similar pytest functions
+
+The `make report-similar-tests` helper runs `tools/report_similar_tests.py` and
+produces `tests/_report/similar_tests.json`. The script parses every
+`tests/**/*.py` module, normalises the AST of functions that start with
+`test_`, and computes a similarity score between structurally equivalent
+implementations. Pairs whose similarity ratio exceeds the configured threshold
+(`0.9` by default) are emitted in the JSON report. Each entry lists both test
+identifiers (`path::qualified_name`) alongside the measured similarity so you
+can decide whether further parametrisation would remove duplication.
+
+The most recent snapshot shows only one matching pair around the operator
+normalisation helpers, confirming that previous parametrisation work kept the
+suite DRY. Re-run the command after adding new tests to ensure fresh cases do
+not reintroduce duplicated logic.
+
 ## `src/tnfr_lfs/resources/data/BL1_XFG_baseline.csv`
 
 * Canonical dataset for the quickstart walkthrough and the CLI regression
