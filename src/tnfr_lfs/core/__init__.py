@@ -9,7 +9,7 @@ from tnfr_core import equations, metrics, operators
 from tnfr_core import *  # noqa: F401,F403
 
 warnings.warn(
-    "'tnfr_core' is deprecated and will be removed in a future release; "
+    "'tnfr_lfs.core' is deprecated and will be removed in a future release; "
     "import from 'tnfr_core' instead.",
     DeprecationWarning,
     stacklevel=2,
