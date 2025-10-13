@@ -695,13 +695,18 @@ def detect_um(
                 ('steer', 'yaw'),
             ),
         )
-        relevant = [abs(value) for value in correlations.values() if math.isfinite(value)]
-        max_corr = max(relevant) if relevant else 0.0
+        positive_correlations = [
+            value
+            for value in correlations.values()
+            if math.isfinite(value) and value >= 0.0
+        ]
+        max_corr = max(positive_correlations) if positive_correlations else 0.0
 
         phase_lag = _phase_lag(window_times, steer_window, yaw_window)
         duration = window_times[-1] - window_times[0]
         meets_threshold = (
-            max_corr >= rho_min
+            positive_correlations
+            and max_corr >= rho_min
             and math.isfinite(phase_lag)
             and phase_lag <= phase_max
             and duration > 0.0

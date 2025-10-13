@@ -115,3 +115,31 @@ def test_detect_um_rejects_large_phase_lag() -> None:
     )
 
     assert events == []
+
+
+def test_detect_um_rejects_anti_phase_correlation() -> None:
+    samples = []
+    for index in range(12):
+        steer = 0.04 * index
+        yaw_rate = -0.04 * index
+        slip_ratio = 0.02 * index
+        slip_angle = 0.015 * index
+        samples.append(
+            {
+                "steer": steer,
+                "yaw_rate": yaw_rate,
+                "slip_ratio": slip_ratio,
+                "slip_angle": slip_angle,
+            }
+        )
+    series = _series(samples)
+
+    events = detect_um(
+        series,
+        window=6,
+        rho_min=0.6,
+        phase_max=0.12,
+        min_duration=0.3,
+    )
+
+    assert events == []
