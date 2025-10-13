@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import csv
 import importlib.util
 import json
@@ -78,7 +79,12 @@ from tnfr_lfs.ingestion import outsim_udp as outsim_module
 from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
 from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
 
-from tests.helpers import build_outgauge_payload, build_outsim_payload, run_cli_in_tmp
+from tests.helpers import (
+    build_outgauge_payload,
+    build_outsim_payload,
+    pandas_engine_failure,
+    run_cli_in_tmp,
+)
 
 from tnfr_lfs.core.cache_settings import CacheOptions
 
@@ -102,6 +108,54 @@ def quickstart_dataset_path() -> Path:
     """Baseline dataset referenced by the quickstart flow."""
 
     return quickstart_dataset.dataset_path()
+
+
+@pytest.fixture
+def pandas_absence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[str], None]:
+    """Simulate an environment where :mod:`pandas` cannot be imported."""
+
+    original = sys.modules.pop("pandas", None)
+    original_import = builtins.__import__
+
+    def fake_import(name: str, *args: object, **kwargs: object):
+        if name == "pandas":
+            raise ModuleNotFoundError("No module named 'pandas'")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    def simulator(_mode: str) -> None:
+        return None
+
+    try:
+        yield simulator
+    finally:
+        if original is not None:
+            sys.modules["pandas"] = original
+        else:
+            sys.modules.pop("pandas", None)
+
+
+@pytest.fixture
+def parquet_engine_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[str], None]:
+    """Provide a callable that installs an incompatible parquet engine."""
+
+    original = sys.modules.get("pandas")
+
+    def simulator(mode: str) -> None:
+        pandas_engine_failure(monkeypatch, mode)
+
+    try:
+        yield simulator
+    finally:
+        if original is not None:
+            sys.modules["pandas"] = original
+        else:
+            sys.modules.pop("pandas", None)
 
 
 @pytest.fixture(params=("outgauge", "outsim"), name="udp_client_spec")
