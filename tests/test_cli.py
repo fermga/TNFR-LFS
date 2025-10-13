@@ -243,45 +243,73 @@ def test_cli_exports_helper_attributes() -> None:
     assert callable(cli_module._load_pack_lfs_class_overrides)
 
 
+@pytest.mark.parametrize(
+    (
+        "cli_args_factory",
+        "expected_destination_factory",
+        "expected_line_count",
+        "err_path_factory",
+    ),
+    [
+        pytest.param(
+            lambda tmp_path: [str(tmp_path / "baseline.jsonl")],
+            lambda tmp_path: tmp_path / "baseline.jsonl",
+            17,
+            lambda tmp_path, destination: str(destination),
+            id="explicit-path",
+        ),
+        pytest.param(
+            lambda tmp_path: [
+                "--duration",
+                "12",
+                "--limit",
+                "5",
+                "--output",
+                "session.jsonl",
+                "--output-dir",
+                str(tmp_path / "custom_runs"),
+                "--insim-keepalive",
+                "2.5",
+                "--force",
+            ],
+            lambda tmp_path: tmp_path / "custom_runs" / "session.jsonl",
+            5,
+            lambda tmp_path, destination: str(destination.relative_to(tmp_path)),
+            id="optional-flags",
+        ),
+    ],
+)
 def test_baseline_simulation_jsonl(
-    tmp_path: Path, capsys, synthetic_stint_path: Path, monkeypatch: pytest.MonkeyPatch
+    baseline_cli_runner,
+    tmp_path: Path,
+    cli_args_factory: Callable[[Path], list[str]],
+    expected_destination_factory: Callable[[Path], Path],
+    expected_line_count: int,
+    err_path_factory: Callable[[Path, Path], str],
 ) -> None:
-    baseline_path = tmp_path / "baseline.jsonl"
+    cli_args = cli_args_factory(tmp_path)
+    expected_destination = expected_destination_factory(tmp_path)
 
-    result, captured = run_cli_in_tmp(
-        [
-            "baseline",
-            str(baseline_path),
-            "--simulate",
-            str(synthetic_stint_path),
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-        capsys=capsys,
-        capture_output=True,
-    )
-    assert baseline_path.exists()
-    lines = [line for line in baseline_path.read_text(encoding="utf8").splitlines() if line.strip()]
-    assert len(lines) == 17
+    result, captured, destination = baseline_cli_runner(cli_args)
+
+    assert destination == expected_destination
+    assert destination.exists()
+    lines = [
+        line
+        for line in destination.read_text(encoding="utf8").splitlines()
+        if line.strip()
+    ]
+    assert len(lines) == expected_line_count
     assert "Baseline saved" in result
-    assert str(baseline_path) in captured.err
+    assert err_path_factory(tmp_path, destination) in captured.err
 
 
 def test_baseline_generates_timestamped_run(
-    tmp_path: Path, capsys, synthetic_stint_path: Path, monkeypatch: pytest.MonkeyPatch
+    baseline_cli_runner,
+    tmp_path: Path,
 ) -> None:
-    result, captured = run_cli_in_tmp(
-        [
-            "baseline",
-            "--simulate",
-            str(synthetic_stint_path),
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-        capsys=capsys,
-        capture_output=True,
-    )
-    runs_dir = tmp_path / "runs"
+    result, captured, runs_dir = baseline_cli_runner([])
+
     assert runs_dir.is_dir()
     runs = list(runs_dir.glob("*.jsonl"))
     assert len(runs) == 1
@@ -289,44 +317,6 @@ def test_baseline_generates_timestamped_run(
     assert re.match(r"xfg_generic_\d{8}_\d{6}_\d{6}\.jsonl$", run_path.name)
     assert "Baseline saved" in result
     assert str(run_path.relative_to(tmp_path)) in captured.err
-
-
-def test_baseline_simulation_accepts_optional_flags(
-    tmp_path: Path,
-    capsys,
-    synthetic_stint_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    output_dir = tmp_path / "custom_runs"
-
-    result, captured = run_cli_in_tmp(
-        [
-            "baseline",
-            "--simulate",
-            str(synthetic_stint_path),
-            "--duration",
-            "12",
-            "--limit",
-            "5",
-            "--output",
-            "session.jsonl",
-            "--output-dir",
-            str(output_dir),
-            "--insim-keepalive",
-            "2.5",
-            "--force",
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-        capsys=capsys,
-        capture_output=True,
-    )
-    destination = output_dir / "session.jsonl"
-    assert destination.exists()
-    lines = [line for line in destination.read_text(encoding="utf8").splitlines() if line.strip()]
-    assert len(lines) == 5
-    assert "Baseline saved" in result
-    assert str(destination.relative_to(tmp_path)) in captured.err
 
 
 def test_baseline_overlay_uses_keepalive_and_overlay(
