@@ -58,6 +58,11 @@ __all__ = [
     "compute_aero_coherence",
     "resolve_aero_mechanical_coherence",
     "phase_synchrony_index",
+    "coherence_total",
+    "psi_norm",
+    "psi_support",
+    "bifurcation_threshold",
+    "mutation_threshold",
 ]
 
 
@@ -156,6 +161,206 @@ def _normalised_weights(weights: Mapping[str, float]) -> dict[str, float]:
     if total <= 0.0:
         return {}
     return {key: value / total for key, value in positive.items()}
+
+
+def coherence_total(
+    samples: Sequence[tuple[float, float]] | Mapping[float, float], *, initial: float = 0.0
+) -> list[tuple[float, float]]:
+    """Return the cumulative TNFR coherence ``C(t)`` profile.
+
+    The HUD treats coherence as accumulated evidence that driver, chassis and
+    aero signals are converging.  Under this interpretation the curve must be
+    monotonic and any destabilising impulse is clipped rather than subtracted.
+
+    Parameters
+    ----------
+    samples:
+        Sequence or mapping of ``(time, delta)`` contributions.  ``time`` is
+        converted to ``float`` and used for sorting.
+    initial:
+        Starting value of the cumulative signal.  Negative values are clipped to
+        zero to preserve monotonicity.
+
+    Returns
+    -------
+    list[tuple[float, float]]
+        Sorted ``(time, cumulative)`` pairs representing ``C(t)``.
+
+    Examples
+    --------
+    >>> coherence_total([(0.0, 0.1), (0.5, -0.2), (0.75, 0.4)])
+    [(0.0, 0.1), (0.5, 0.1), (0.75, 0.5)]
+    >>> coherence_total({0.5: 0.2, 0.0: 0.1})
+    [(0.0, 0.1), (0.5, 0.30000000000000004)]
+    """
+
+    if isinstance(samples, MappingABC):
+        iterator: Iterable[tuple[float, float]] = samples.items()
+    else:
+        iterator = samples
+
+    cleaned: list[tuple[float, float]] = []
+    for time, delta in iterator:
+        try:
+            timestamp = float(time)
+            contribution = float(delta)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(timestamp) or not math.isfinite(contribution):
+            continue
+        cleaned.append((timestamp, contribution))
+
+    cleaned.sort(key=lambda item: item[0])
+
+    cumulative = max(0.0, float(initial))
+    profile: list[tuple[float, float]] = []
+    for timestamp, contribution in cleaned:
+        if contribution > 0.0:
+            cumulative += contribution
+        profile.append((timestamp, cumulative))
+    return profile
+
+
+def psi_norm(values: Sequence[float], *, ord: float = 2.0) -> float:
+    """Return the ℓₚ norm of a PSI vector.
+
+    In TNFR the phase synchrony index (PSI) vector captures modal coupling
+    between driver, chassis and tyre responses.  The Euclidean (``p=2``)
+    norm therefore provides a reproducible aggregate synchrony score.
+
+    Parameters
+    ----------
+    values:
+        Iterable containing PSI components.
+    ord:
+        Order of the ℓₚ norm.  ``math.inf`` returns the maximum
+        absolute component.
+
+    Examples
+    --------
+    >>> psi_norm([0.4, 0.3])
+    0.5
+    >>> psi_norm([0.1, -0.8], ord=math.inf)
+    0.8
+    """
+
+    cleaned = [float(value) for value in values if math.isfinite(float(value))]
+    if not cleaned:
+        return 0.0
+    if ord is math.inf:
+        return max(abs(value) for value in cleaned)
+    if ord <= 0.0:
+        raise ValueError("ord must be positive or math.inf")
+    return sum(abs(value) ** ord for value in cleaned) ** (1.0 / ord)
+
+
+def psi_support(values: Sequence[float], *, threshold: float = 1e-3) -> int:
+    """Return the TNFR PSI support count.
+
+    Support counts how many PSI components exceed a reproducible activation
+    threshold (strictly greater than ``threshold``) and therefore contribute to
+    the synchrony budget.
+
+    Parameters
+    ----------
+    values:
+        Iterable containing PSI components.
+    threshold:
+        Absolute magnitude below which PSI modes are ignored.
+
+    Examples
+    --------
+    >>> psi_support([0.0, 0.002, 0.2])
+    2
+    >>> psi_support([0.0, 1e-5, -3e-4], threshold=1e-4)
+    1
+    """
+
+    if threshold < 0.0:
+        threshold = abs(threshold)
+    cutoff = max(0.0, float(threshold))
+    count = 0
+    for value in values:
+        try:
+            magnitude = abs(float(value))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(magnitude):
+            continue
+        if magnitude > cutoff:
+            count += 1
+    return count
+
+
+def _quantile(sorted_values: Sequence[float], q: float) -> float:
+    if not sorted_values:
+        raise ValueError("sorted_values must not be empty")
+    if q <= 0.0:
+        return sorted_values[0]
+    if q >= 1.0:
+        return sorted_values[-1]
+    position = q * (len(sorted_values) - 1)
+    lower_index = int(math.floor(position))
+    upper_index = int(math.ceil(position))
+    lower_value = sorted_values[lower_index]
+    upper_value = sorted_values[upper_index]
+    if lower_index == upper_index:
+        return lower_value
+    weight = position - lower_index
+    return lower_value * (1.0 - weight) + upper_value * weight
+
+
+def bifurcation_threshold(
+    samples: Sequence[float], *, quantile: float = 0.9
+) -> float:
+    """Return the TNFR bifurcation threshold τ.
+
+    The threshold highlights coherence excursions large enough to trigger a
+    behavioural branch (driver correction or chassis response).  Using a high
+    quantile keeps the estimate reproducible while still reacting to genuine
+    peaks.
+
+    Examples
+    --------
+    >>> bifurcation_threshold([0.2, 0.35, 0.4, 0.5])
+    0.47
+    """
+
+    cleaned = sorted(
+        float(value)
+        for value in samples
+        if math.isfinite(float(value))
+    )
+    if not cleaned:
+        return 0.0
+    q = max(0.0, min(1.0, float(quantile)))
+    return _quantile(cleaned, q)
+
+
+def mutation_threshold(
+    samples: Sequence[float], *, quantile: float = 0.75
+) -> float:
+    """Return the TNFR mutation threshold ξ.
+
+    Mutations represent smaller disturbances that still warrant attention.  We
+    capture them via a mid-to-high quantile so the estimator is sensitive to
+    frequently repeating perturbations.
+
+    Examples
+    --------
+    >>> mutation_threshold([0.2, 0.35, 0.4, 0.5])
+    0.425
+    """
+
+    cleaned = sorted(
+        float(value)
+        for value in samples
+        if math.isfinite(float(value))
+    )
+    if not cleaned:
+        return 0.0
+    q = max(0.0, min(1.0, float(quantile)))
+    return _quantile(cleaned, q)
 
 
 def _aggregate_node_delta(

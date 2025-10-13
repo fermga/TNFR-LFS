@@ -15,6 +15,7 @@ MODULE_PUBLIC_EXPORTS: dict[str, set[str]] = {
         "NaturalFrequencySnapshot",
         "NaturalFrequencySettings",
         "DeltaCalculator",
+        "compute_delta_nfr",
         "delta_nfr_by_node",
         "apply_plugin_nu_f_snapshot",
         "resolve_plugin_nu_f",

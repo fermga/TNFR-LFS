@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import math
-import pytest
+import random
 from typing import Callable, Mapping
+
+import pytest
 
 from tnfr_lfs.core.metrics import (
     AeroBalanceDrift,
@@ -15,8 +17,13 @@ from tnfr_lfs.core.metrics import (
     SlideCatchBudget,
     SuspensionVelocityBands,
     WindowMetrics,
+    bifurcation_threshold,
+    coherence_total,
     compute_aero_coherence,
     compute_window_metrics,
+    mutation_threshold,
+    psi_norm,
+    psi_support,
     resolve_aero_mechanical_coherence,
 )
 from tnfr_lfs.core.spectrum import motor_input_correlations, phase_to_latency_ms
@@ -48,6 +55,49 @@ from tests.helpers import (
     build_steering_bundle,
     build_telemetry_record,
 )
+
+
+def test_coherence_total_is_monotonic() -> None:
+    samples = [(0.75, 0.4), (0.0, 0.1), (0.5, -0.2), (1.0, 0.15)]
+
+    profile = coherence_total(samples, initial=0.05)
+
+    times = [time for time, _value in profile]
+    assert times == sorted(times)
+    cumulative = [value for _time, value in profile]
+    assert all(prev <= curr + 1e-12 for prev, curr in zip(cumulative, cumulative[1:]))
+    assert cumulative[-1] == pytest.approx(0.05 + 0.1 + 0.4 + 0.15)
+
+
+def test_psi_functions_sparse_vector() -> None:
+    vector = [0.0, 1e-4, 0.5, -1e-5, -0.25]
+
+    assert psi_norm(vector) == pytest.approx(math.sqrt(0.5**2 + 0.25**2 + 1e-4**2))
+    assert psi_support(vector, threshold=1e-3) == 2
+    assert psi_support(vector, threshold=1e-5) == 3
+
+
+def test_threshold_estimators_with_seeded_data() -> None:
+    rng = random.Random(42)
+    samples = [rng.gauss(0.4, 0.08) for _ in range(64)]
+    samples.extend(rng.gauss(0.6, 0.05) for _ in range(16))
+
+    sorted_samples = sorted(samples)
+
+    def _quantile(values: list[float], q: float) -> float:
+        position = q * (len(values) - 1)
+        lower = int(math.floor(position))
+        upper = int(math.ceil(position))
+        if lower == upper:
+            return values[lower]
+        weight = position - lower
+        return values[lower] * (1.0 - weight) + values[upper] * weight
+
+    expected_tau = _quantile(sorted_samples, 0.9)
+    expected_xi = _quantile(sorted_samples, 0.75)
+
+    assert bifurcation_threshold(samples) == pytest.approx(expected_tau)
+    assert mutation_threshold(samples) == pytest.approx(expected_xi)
 
 
 def test_record_optional_defaults_are_nan() -> None:
