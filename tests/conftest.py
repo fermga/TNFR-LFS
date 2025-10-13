@@ -87,6 +87,7 @@ from tests.helpers import (
     pandas_engine_failure,
     run_cli_in_tmp,
 )
+from tnfr_lfs.cli import run_cli
 
 from tnfr_lfs.core.cache_settings import CacheOptions
 
@@ -1103,3 +1104,56 @@ def cli_config_case(
 
     expected_sections = dict(case.expected_sections)
     return case.toml_text, expected_sections, case.setup
+@dataclass(slots=True)
+class CliRunResult:
+    """Normalized representation of a CLI invocation."""
+
+    exit_code: int
+    stdout: str
+    stderr: str
+    result: str | None
+    exception: BaseException | None
+    cause: BaseException | None
+
+
+@pytest.fixture
+def cli_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """Execute CLI commands while capturing output and exit status."""
+
+    def _run(
+        args: Sequence[str],
+        *,
+        tmp_path: Path | None = None,
+    ) -> CliRunResult:
+        invocation = [str(arg) for arg in args]
+        exit_code = 0
+        result: str | None = None
+        exception: SystemExit | None = None
+
+        try:
+            if tmp_path is not None:
+                result = run_cli_in_tmp(
+                    invocation,
+                    tmp_path=tmp_path,
+                    monkeypatch=monkeypatch,
+                )
+            else:
+                result = run_cli(invocation)
+        except SystemExit as exc:  # pragma: no branch - normalized handling
+            exit_code = exc.code if isinstance(exc.code, int) else 1
+            exception = exc
+        captured = capsys.readouterr()
+        cause: BaseException | None = exception.__cause__ if exception else None
+        return CliRunResult(
+            exit_code=exit_code,
+            stdout=captured.out,
+            stderr=captured.err,
+            result=result,
+            exception=exception,
+            cause=cause,
+        )
+
+    return _run
