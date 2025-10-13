@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: quickstart install dev-install benchmark-delta-cache
+.PHONY: quickstart install dev-install benchmark-delta-cache report-similar-tests
 quickstart:
 	@if [[ ! -f examples/quickstart.sh ]]; then \
 		echo "Error: quickstart script examples/quickstart.sh not found. Please pull the examples directory or download the script before rerunning quickstart."; \
@@ -32,3 +32,13 @@ benchmark-delta-cache:
 	fi
 	@echo "Running delta cache benchmark..."
 	@python -m benchmarks.delta_cache_benchmark
+
+
+report-similar-tests:
+	@if ! command -v python >/dev/null 2>&1; then \
+		echo "Error: python command not found. Install Python before generating the similarity report."; \
+		exit 1; \
+	fi
+	@echo "Generating similarity report for pytest functions..."
+	@python tools/report_similar_tests.py
+
