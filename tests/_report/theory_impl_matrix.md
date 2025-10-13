@@ -1,0 +1,55 @@
+# TNFR theory implementation matrix
+
+| Category | Identifier | Description | Core references | Tests references |
+| --- | --- | --- | --- | --- |
+| Detector | `AL` | Support | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
+| Detector | `EN` | Reception | Pending | Pending |
+| Detector | `IL` | Coherence | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
+| Detector | `NAV` | Transition | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
+| Detector | `NUL` | Contraction | Pending | Pending |
+| Detector | `OZ` | Dissonance | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
+| Detector | `RA` | Propagation | Pending | Pending |
+| Detector | `REMESH` | Remeshing | Pending | Pending |
+| Detector | `SILENCE` | Structural silence | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
+| Detector | `THOL` | Auto-organisation | Pending | Pending |
+| Detector | `UM` | Coupling | Pending | Pending |
+| Detector | `VAL` | Amplification | Pending | Pending |
+| Detector | `ZHIR` | Transformation | Pending | Pending |
+| Operator | `acoplamiento_operator` | Compatibility alias for the coupling operator. | src/tnfr_core/operators/operators.py | tests/test_core_operators.py |
+| Operator | `coherence_operator` | Smooth numeric series while preserving averages. | src/tnfr_core/operators/operators.py | tests/plugins/test_interfaces.py<br />tests/plugins/test_plugin_integration.py<br />tests/plugins/test_registry.py<br />(+2 more) |
+| Operator | `coupling_operator` | Return normalised coupling between two series. | src/tnfr_core/operators/operators.py | tests/test_acceptance_pipeline.py<br />tests/test_core_operators.py |
+| Operator | `dissonance_breakdown_operator` | Classify useful versus parasitic dissonance events. | src/tnfr_core/operators/operators.py | tests/test_core_interfaces.py<br />tests/test_core_operators.py |
+| Operator | `dissonance_operator` | Compute mean absolute deviation for ΔNFR series. | src/tnfr_core/operators/operators.py | tests/test_core_operators.py |
+| Operator | `emission_operator` | Normalise ΔNFR and sense index targets. | src/tnfr_core/operators/operators.py | tests/helpers/plugins.py<br />tests/plugins/test_interfaces.py<br />tests/plugins/test_manager.py<br />(+2 more) |
+| Operator | `evolve_epi` | Integrate the Event Performance Index over time. | src/tnfr_core/equations/epi.py<br />src/tnfr_core/operators/operators.py | tests/test_core_operators.py |
+| Operator | `mutation_operator` | Mutate archetypes when entropy or style drifts. | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operators.py | tests/test_acceptance_pipeline.py<br />tests/test_core_operators.py |
+| Operator | `orchestrate_delta_metrics` | Aggregate ΔNFR and Si metrics across segments. | src/tnfr_core/operators/operators.py | tests/test_acceptance_pipeline.py<br />tests/test_cli.py<br />tests/test_core_operators.py |
+| Operator | `pairwise_coupling_operator` | Compute coupling across node pairs. | src/tnfr_core/operators/operators.py | tests/test_core_operators.py |
+| Operator | `plugin_coherence_operator` | Push coherence outputs into a plugin instance. | ✗ | tests/plugins/test_plugin_integration.py |
+| Operator | `reception_operator` | Convert raw telemetry into EPI bundles. | src/tnfr_core/operators/operators.py | tests/plugins/test_registry.py<br />tests/test_acceptance_pipeline.py<br />tests/test_core_operators.py |
+| Operator | `recursive_filter_operator` | Apply a recursive filter capturing hysteresis. | src/tnfr_core/operators/operators.py | tests/test_acceptance_pipeline.py<br />tests/test_core_operators.py |
+| Operator | `recursividad_operator` | Compatibility alias for recursive filter operator. | src/tnfr_core/operators/operators.py | tests/test_core_operators.py |
+| Operator | `recursivity_operator` | Maintain recursive thermal/style state per microsector. | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operators.py | tests/test_acceptance_pipeline.py<br />tests/test_core_operators.py |
+| Operator | `resonance_operator` | Estimate RMS resonance for a series. | src/tnfr_core/operators/operators.py | tests/test_acceptance_pipeline.py<br />tests/test_core_operators.py |
+| Operator | `tyre_balance_controller` | Compute ΔP and camber adjustments from tyre metrics. | src/tnfr_core/operators/operators.py | tests/test_core_operators.py<br />tests/test_recommender.py |
+| Variable | `ackermann_parallel_index` | Ackermann alignment index. | src/tnfr_core/equations/epi.py<br />src/tnfr_core/equations/epi_models.py<br />src/tnfr_core/metrics/metrics.py<br />(+3 more) | tests/helpers/steering.py<br />tests/test_cli_osd.py<br />tests/test_core_interfaces.py<br />(+4 more) |
+| Variable | `aero_balance_drift` | Average aerodynamic balance drift. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py | tests/test_metrics.py |
+| Variable | `coherence_index` | Structural coherence metric C(t). | src/tnfr_core/equations/epi.py<br />src/tnfr_core/equations/epi_models.py<br />src/tnfr_core/metrics/metrics.py<br />(+3 more) | tests/helpers/abtest.py<br />tests/plugins/test_plugin_integration.py<br />tests/test_cli.py<br />(+8 more) |
+| Variable | `delta_nfr` | ΔNFR gradient magnitude. | src/tnfr_core/equations/archetypes.py<br />src/tnfr_core/equations/coherence.py<br />src/tnfr_core/equations/epi.py<br />(+7 more) | tests/conftest.py<br />tests/helpers/abtest.py<br />tests/helpers/epi.py<br />(+27 more) |
+| Variable | `delta_nfr_entropy` | Entropy of ΔNFR distribution across phases. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/interfaces.py | tests/test_cli_osd.py<br />tests/test_metrics.py<br />tests/test_segmentation.py |
+| Variable | `delta_nfr_flat` | Reference ΔNFR used by recursivity filters. | src/tnfr_core/operators/operators.py | ✗ |
+| Variable | `load_support_ratio` | Normalised load support ratio. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operators.py | tests/test_cli_osd.py<br />tests/test_core_metrics.py<br />tests/test_core_operators.py<br />(+3 more) |
+| Variable | `network_memory` | Recursivity network memory snapshot. | src/tnfr_core/operators/operators.py | tests/test_acceptance_pipeline.py |
+| Variable | `node_entropy` | Node-level ΔNFR entropy. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/interfaces.py | tests/test_cli_osd.py<br />tests/test_metrics.py<br />tests/test_segmentation.py |
+| Variable | `nu_f` | Natural frequency classification. | src/tnfr_core/equations/archetypes.py<br />src/tnfr_core/equations/coherence.py<br />src/tnfr_core/equations/epi.py<br />(+8 more) | tests/conftest.py<br />tests/helpers/epi.py<br />tests/helpers/microsector.py<br />(+17 more) |
+| Variable | `phase_delta_nfr_entropy` | Phase-level ΔNFR entropy map. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/interfaces.py | tests/test_cli_osd.py<br />tests/test_metrics.py<br />tests/test_segmentation.py |
+| Variable | `phase_node_entropy` | Phase-level node entropy map. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/interfaces.py | tests/test_cli_osd.py<br />tests/test_metrics.py<br />tests/test_segmentation.py |
+| Variable | `sense_index` | Entropy-penalised Sense Index. | src/tnfr_core/equations/coherence.py<br />src/tnfr_core/equations/epi.py<br />src/tnfr_core/equations/epi_models.py<br />(+4 more) | tests/conftest.py<br />tests/helpers/abtest.py<br />tests/helpers/epi.py<br />(+25 more) |
+| Variable | `slide_catch_budget` | Slide recovery budget metric. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py | tests/test_cli_osd.py<br />tests/test_metrics.py<br />tests/test_recommender.py<br />(+1 more) |
+| Variable | `structural_contraction_lateral` | Lateral structural contraction indicator. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operators.py | tests/test_cli_osd.py<br />tests/test_core_metrics.py<br />tests/test_core_operators.py<br />(+2 more) |
+| Variable | `structural_contraction_longitudinal` | Longitudinal structural contraction indicator. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operators.py | tests/test_cli_osd.py<br />tests/test_core_metrics.py<br />tests/test_core_operators.py<br />(+2 more) |
+| Variable | `structural_expansion_lateral` | Lateral structural expansion indicator. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operators.py | tests/test_cli_osd.py<br />tests/test_core_metrics.py<br />tests/test_core_operators.py<br />(+2 more) |
+| Variable | `structural_expansion_longitudinal` | Longitudinal structural expansion indicator. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operators.py | tests/test_cli_osd.py<br />tests/test_core_metrics.py<br />tests/test_core_operators.py<br />(+2 more) |
+| Variable | `style_index` | Driving style index tracked by recursivity state. | src/tnfr_core/equations/epi.py<br />src/tnfr_core/equations/epi_models.py<br />src/tnfr_core/metrics/segmentation.py<br />(+2 more) | tests/conftest.py<br />tests/helpers/epi.py<br />tests/helpers/microsector.py<br />(+10 more) |
+| Variable | `support_effective` | Structurally weighted support metric. | src/tnfr_core/metrics/metrics.py<br />src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operators.py | tests/test_cli_osd.py<br />tests/test_core_metrics.py<br />tests/test_core_operators.py<br />(+2 more) |
+| Variable | `thermal_load` | Thermal load tracked by recursivity state. | src/tnfr_core/metrics/segmentation.py | tests/conftest.py<br />tests/helpers/microsector.py<br />tests/test_acceptance_pipeline.py<br />(+4 more) |
