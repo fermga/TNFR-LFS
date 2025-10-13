@@ -21,8 +21,9 @@ from tnfr_lfs.cli import run_cli
 from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
-from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
+from tnfr_lfs.core.cache_settings import CacheOptions, DEFAULT_DYNAMIC_CACHE_SIZE
 from tnfr_lfs.configuration import load_project_config
+from tests.conftest import write_pyproject
 from tests.helpers import (
     DummyBundle,
     create_cli_config_pack,
@@ -132,13 +133,10 @@ def test_run_cli_dispatches_registered_handler(monkeypatch: pytest.MonkeyPatch) 
     }
 
 
-def test_run_cli_loads_pyproject_config(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text(
-        dedent(
+@pytest.mark.parametrize(
+    ("toml_text", "expected_sections"),
+    [
+        (
             """
             [tool.tnfr_lfs.logging]
             level = "warning"
@@ -148,10 +146,31 @@ def test_run_cli_loads_pyproject_config(
             [tool.tnfr_lfs.performance]
             cache_enabled = false
             max_cache_size = 12
-            """
+            """,
+            {
+                "logging": {
+                    "level": "warning",
+                    "format": "text",
+                    "output": "stdout",
+                },
+                "performance": CacheOptions(
+                    enable_delta_cache=False,
+                    nu_f_cache_size=0,
+                    telemetry_cache_size=0,
+                    recommender_cache_size=0,
+                ).to_performance_config(),
+            },
         ),
-        encoding="utf8",
-    )
+    ],
+)
+def test_run_cli_loads_pyproject_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    toml_text: str,
+    expected_sections: Mapping[str, object],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    pyproject_path = write_pyproject(tmp_path, toml_text)
 
     captured_configs: list[Mapping[str, object]] = []
 
@@ -178,14 +197,8 @@ def test_run_cli_loads_pyproject_config(
     assert len(captured_configs) == 1
     config = captured_configs[0]
     assert config["_config_path"] == str(pyproject_path.resolve())
-    logging_cfg = config["logging"]
-    assert logging_cfg["level"] == "warning"
-    assert logging_cfg["format"] == "text"
-    assert logging_cfg["output"] == "stdout"
-    performance_cfg = config["performance"]
-    assert performance_cfg["cache_enabled"] is False
-    assert performance_cfg["nu_f_cache_size"] == 0
-    assert performance_cfg["max_cache_size"] == 0
+    for section, expected in expected_sections.items():
+        assert config[section] == expected
 
 
 def test_run_cli_requires_telemetry_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:

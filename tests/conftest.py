@@ -18,6 +18,15 @@ SRC_ROOT = ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
+
+def write_pyproject(directory: Path, contents: str) -> Path:
+    """Persist a ``pyproject.toml`` under ``directory`` and return its path."""
+
+    payload = dedent(contents).lstrip()
+    target = directory / "pyproject.toml"
+    target.write_text(payload, encoding="utf8")
+    return target
+
 if importlib.util.find_spec("pytest_cov") is None:
 
     def pytest_addoption(parser: pytest.Parser) -> None:
