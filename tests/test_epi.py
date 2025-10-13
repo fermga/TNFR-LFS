@@ -23,6 +23,7 @@ from tnfr_lfs.core.epi import (
     NaturalFrequencyAnalyzer,
     NaturalFrequencySettings,
     TelemetryRecord,
+    compute_delta_nfr,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
@@ -624,6 +625,87 @@ def test_delta_nfr_by_node_conserves_total_with_extended_fields():
     assert pytest.approx(sum(node_deltas.values()), rel=1e-6) == sample.nfr - baseline.nfr
     assert node_deltas["tyres"] > node_deltas["driver"]
     assert node_deltas["suspension"] != pytest.approx(0.0)
+
+
+def test_compute_delta_nfr_matches_distribution_with_reference():
+    baseline = build_telemetry_record(
+        timestamp=0.0,
+        nfr=480.0,
+        brake_pressure=0.1,
+        throttle=0.7,
+        slip_ratio=0.03,
+        lateral_accel=0.4,
+        longitudinal_accel=0.2,
+        yaw_rate=0.05,
+    )
+    record = build_telemetry_record(
+        timestamp=0.2,
+        nfr=492.0,
+        brake_pressure=0.75,
+        throttle=0.45,
+        slip_ratio=0.08,
+        lateral_accel=0.95,
+        longitudinal_accel=-0.1,
+        yaw_rate=0.4,
+        reference=baseline,
+    )
+
+    delta_total, node_map, contributions = compute_delta_nfr(record)
+    expected = delta_nfr_by_node(record)
+
+    assert delta_total == pytest.approx(record.nfr - baseline.nfr)
+    assert contributions.keys() == expected.keys()
+    for node, expected_value in expected.items():
+        assert node_map[node] == pytest.approx(expected_value)
+
+
+def test_compute_delta_nfr_defaults_to_self_reference():
+    record = build_telemetry_record(
+        timestamp=1.0,
+        nfr=505.0,
+        brake_pressure=0.2,
+        throttle=0.5,
+        slip_ratio=0.04,
+        lateral_accel=0.6,
+        longitudinal_accel=0.3,
+    )
+
+    delta_total, node_map, _ = compute_delta_nfr(record)
+    expected = delta_nfr_by_node(record)
+
+    assert delta_total == pytest.approx(0.0)
+    assert node_map.keys() == expected.keys()
+    for node, expected_value in expected.items():
+        assert node_map[node] == pytest.approx(expected_value)
+
+
+def test_compute_delta_nfr_accepts_explicit_reference():
+    baseline = build_telemetry_record(
+        timestamp=0.0,
+        nfr=460.0,
+        brake_pressure=0.05,
+        throttle=0.8,
+    )
+    alternative = build_telemetry_record(
+        timestamp=0.05,
+        nfr=455.0,
+        brake_pressure=0.15,
+        throttle=0.7,
+    )
+    record = build_telemetry_record(
+        timestamp=0.1,
+        nfr=470.0,
+        brake_pressure=0.5,
+        throttle=0.6,
+        reference=baseline,
+    )
+
+    delta_total, node_map, _ = compute_delta_nfr(record, reference=alternative)
+    expected = delta_nfr_by_node(replace(record, reference=alternative))
+
+    assert delta_total == pytest.approx(record.nfr - alternative.nfr)
+    for node, expected_value in expected.items():
+        assert node_map[node] == pytest.approx(expected_value)
 
 
 def test_delta_nfr_by_node_accepts_protocol_samples():

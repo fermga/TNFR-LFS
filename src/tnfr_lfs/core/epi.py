@@ -55,6 +55,7 @@ __all__ = [
     "NaturalFrequencySnapshot",
     "NaturalFrequencySettings",
     "DeltaCalculator",
+    "compute_delta_nfr",
     "delta_nfr_by_node",
     "apply_plugin_nu_f_snapshot",
     "resolve_plugin_nu_f",
@@ -855,14 +856,44 @@ def _distribute_node_delta(
     return distribute_weighted_delta(delta_nfr, node_signals)
 
 
-def _delta_nfr_by_node_uncached(record: SupportsTelemetrySample) -> Dict[str, float]:
-    baseline = record.reference or record
-    delta_nfr = record.nfr - baseline.nfr
+def compute_delta_nfr(
+    record: SupportsTelemetrySample,
+    *,
+    reference: SupportsTelemetrySample | None = None,
+) -> tuple[float, Dict[str, float], Dict[str, Dict[str, float]]]:
+    """Return the ΔNFR value and its distribution across telemetry nodes.
+
+    Parameters
+    ----------
+    record:
+        The telemetry sample to analyse.
+    reference:
+        Optional baseline sample. When omitted the function falls back to the
+        ``record.reference`` attribute and ultimately to ``record`` itself.
+
+    Returns
+    -------
+    tuple
+        A triple ``(delta_nfr, node_deltas, feature_contributions)`` where
+        ``delta_nfr`` is the total delta with respect to the baseline,
+        ``node_deltas`` distributes that delta per subsystem, and
+        ``feature_contributions`` exposes the raw feature magnitudes used to
+        derive the distribution.
+    """
+
+    baseline = reference or getattr(record, "reference", None) or record
     feature_contributions = _node_feature_contributions(record, baseline)
     node_signals = {
         node: sum(values.values()) for node, values in feature_contributions.items()
     }
-    return _distribute_node_delta(delta_nfr, node_signals)
+    delta_nfr = record.nfr - baseline.nfr
+    node_deltas = _distribute_node_delta(delta_nfr, node_signals)
+    return delta_nfr, node_deltas, feature_contributions
+
+
+def _delta_nfr_by_node_uncached(record: SupportsTelemetrySample) -> Dict[str, float]:
+    _, node_deltas, _ = compute_delta_nfr(record)
+    return node_deltas
 
 
 def delta_nfr_by_node(
@@ -1529,13 +1560,10 @@ class DeltaCalculator:
         | None = None,
     ) -> EPIBundle:
         structural_timestamp = getattr(record, "structural_timestamp", None)
-        delta_nfr = record.nfr - baseline.nfr
-        feature_contributions = _node_feature_contributions(record, baseline)
-        node_signals = {
-            node: sum(values.values()) for node, values in feature_contributions.items()
-        }
+        delta_nfr, node_deltas, feature_contributions = compute_delta_nfr(
+            record, reference=baseline
+        )
         axis_signals = _axis_signal_components(record, baseline, feature_contributions)
-        node_deltas = _distribute_node_delta(delta_nfr, node_signals)
         if nu_f_snapshot is None:
             nu_f_snapshot = resolve_nu_f_by_node(record)
         nu_f_map = dict(nu_f_by_node or nu_f_snapshot.by_node)
