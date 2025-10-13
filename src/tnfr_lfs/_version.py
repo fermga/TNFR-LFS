@@ -32,6 +32,7 @@ def _version_from_sources() -> str:
     )
 
 
+import os
 from importlib import metadata
 
 from packaging.version import InvalidVersion, Version
@@ -46,10 +47,23 @@ def _load_version() -> str:
 
     package_name = "tnfr_lfs"
 
-    try:
-        raw_version = metadata.version(package_name)
-    except metadata.PackageNotFoundError:
-        raw_version = _version_from_sources()
+    override_env_vars = [
+        "PYTHON_SEMANTIC_RELEASE_VERSION",
+        "SEMANTIC_RELEASE_VERSION",
+        "SEMANTIC_RELEASE_NEW_VERSION",
+    ]
+    raw_version = None
+    for env_var in override_env_vars:
+        candidate = os.environ.get(env_var)
+        if candidate:
+            raw_version = candidate
+            break
+
+    if raw_version is None:
+        try:
+            raw_version = metadata.version(package_name)
+        except metadata.PackageNotFoundError:
+            raw_version = _version_from_sources()
 
     try:
         parsed = Version(raw_version)
