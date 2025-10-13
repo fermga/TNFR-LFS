@@ -14,7 +14,14 @@ produces `tests/_report/similar_tests.json`. The script parses every
 implementations. Pairs whose similarity ratio exceeds the configured threshold
 (`0.9` by default) are emitted in the JSON report. Each entry lists both test
 identifiers (`path::qualified_name`) alongside the measured similarity so you
-can decide whether further parametrisation would remove duplication.
+can decide whether further parametrisation would remove duplication. The
+Makefile target automatically removes `tests/_report/*.json` after printing the
+summary so repeated runs keep the working tree clean.
+
+Use `make report-similar-tests-sweep` to execute the helper at thresholds 0.90,
+0.88, and 0.85 in one go. Capture the counts printed for each threshold and
+attach them to your pull request description so reviewers can see whether new
+tests introduce fresh similarities.
 
 The most recent snapshot shows only one matching pair around the operator
 normalisation helpers, confirming that previous parametrisation work kept the

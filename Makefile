@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: quickstart install dev-install benchmark-delta-cache report-similar-tests
+.PHONY: quickstart install dev-install benchmark-delta-cache report-similar-tests report-similar-tests-sweep
 quickstart:
 	@if [[ ! -f examples/quickstart.sh ]]; then \
 		echo "Error: quickstart script examples/quickstart.sh not found. Please pull the examples directory or download the script before rerunning quickstart."; \
@@ -36,9 +36,29 @@ benchmark-delta-cache:
 
 report-similar-tests:
 	@if ! command -v python >/dev/null 2>&1; then \
-		echo "Error: python command not found. Install Python before generating the similarity report."; \
-		exit 1; \
+        	echo "Error: python command not found. Install Python before generating the similarity report."; \
+        	exit 1; \
 	fi
 	@echo "Generating similarity report for pytest functions..."
 	@python tools/report_similar_tests.py
+	@rm -f tests/_report/*.json
+
+report-similar-tests-sweep:
+	@if ! command -v python >/dev/null 2>&1; then \
+        	echo "Error: python command not found. Install Python before generating the similarity report."; \
+        	exit 1; \
+	fi
+	@echo "Sweeping similarity reports for thresholds 0.90, 0.88, and 0.85..."
+	@echo ""
+	@echo "Running report at threshold 0.90"
+	@python tools/report_similar_tests.py --threshold 0.9
+	@rm -f tests/_report/*.json
+	@echo ""
+	@echo "Running report at threshold 0.88"
+	@python tools/report_similar_tests.py --threshold 0.88
+	@rm -f tests/_report/*.json
+	@echo ""
+	@echo "Running report at threshold 0.85"
+	@python tools/report_similar_tests.py --threshold 0.85
+	@rm -f tests/_report/*.json
 
