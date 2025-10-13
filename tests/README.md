@@ -165,3 +165,131 @@ Run the scenarios with:
 ```bash
 pytest tests/test_acceptance_pipeline.py
 ```
+
+## Parametrised factories and case tables
+
+New tests frequently rely on shared factories to keep telemetry scenarios
+readable. When extending them:
+
+* Prefer `ids=` arguments that echo the scenario name or failure message.
+  Descriptive IDs keep `pytest -k` filters discoverable and aid CI triage.
+* Describe the behavioural gap each new case covers (new branch, regression,
+  or integration between helpers) in a one-line comment close to the table.
+* Update any derived ID sequences (for example `TYRE_BALANCE_IDS`) whenever
+  you append a case so parametrised runs stay in sync.
+
+### Replay CSV bundle helpers
+
+`tests/conftest.py` exposes a `csv_bundle` fixture that emits a temporary ZIP
+bundle compatible with :class:`tnfr_lfs.ingestion.offline.ReplayCSVBundleReader`.
+The builder writes a minimal `time.csv`/`speed.csv` pair unless you request
+missing channels or a renamed distance column. Helper functions under
+`tests/helpers/replay_bundle.py`—such as `read_reference_rows` and
+`monkeypatch_row_to_record_counter`—provide reference data and instrumentation
+used throughout `tests/test_replay_csv_bundle.py`.
+
+To add a regression scenario, append an entry to the
+`pytest.mark.parametrize("bundle_kwargs", ...)` table in
+`tests/test_replay_csv_bundle.py` with a concise slugged `id`. Keep `bundle_kwargs`
+focused on the failure condition and reuse existing expectation helpers:
+
+```python
+@pytest.mark.parametrize(
+    ("bundle_kwargs", "expected"),
+    [
+        pytest.param({"missing": "speed"}, "missing speed.csv", id="missing-speed"),
+        pytest.param({"with_distance": False}, "distance column", id="wrong-distance"),
+    ],
+)
+def test_reader_errors(csv_bundle, bundle_kwargs, expected):
+    reader = ReplayCSVBundleReader(csv_bundle(**bundle_kwargs))
+    with pytest.raises(ValueError, match=expected):
+        reader.to_dataframe()
+```
+
+### CLI configuration matrix
+
+The `_CLI_CONFIG_CASES` catalogue in `tests/conftest.py` feeds the
+`cli_config_case` fixture, which normalises TOML snippets and expected
+configuration payloads exercised by `tests/test_cli.py` and
+`tests/test_cli_io.py`. Case IDs double as `pytest` parametrisation identifiers,
+so use kebab-cased slugs that describe the user-facing configuration. The
+`baseline_cli_runner` fixture in the same module drives the `baseline` command
+and automatically wires in the synthetic stint bundled under
+`tnfr_lfs.examples.quickstart_dataset`.
+
+When adding a new CLI regression:
+
+```python
+_CLI_CONFIG_CASES["custom-cache-horizon"] = CliConfigCase(
+    toml_text="""
+    [tool.tnfr_lfs.performance]
+    cache_enabled = true
+    telemetry_buffer_size = 96
+    """,
+    expected_sections={
+        "performance": {
+            **CacheOptions(enable_delta_cache=True, telemetry_cache_size=96).to_performance_config(),
+            "telemetry_buffer_size": 96,
+        }
+    },
+)
+```
+
+Reference the case via `@pytest.mark.parametrize("cli_config_case", [...],
+ids=[...], indirect=True)` and document how it exercises
+`tnfr_lfs.cli.config.load_cli_config` or `tnfr_lfs.cli.run_cli`.
+
+### Rule scenario cases
+
+Rule-oriented parametrisation lives in `tests/test_recommender.py`. The
+`rule_scenario_factory` fixture assembles `(RuleContext, Goal, Microsector)`
+tuples, while the `RuleCase` dataclass declares expected deltas for rules such
+as :class:`tnfr_lfs.recommender.rules.TyreBalanceRule`,
+:class:`tnfr_lfs.recommender.rules.ParallelSteerRule`, and
+:class:`tnfr_lfs.recommender.rules.LockingWindowRule`. Each case description
+feeds the corresponding `ids` list (for example `TYRE_BALANCE_IDS`), so new
+entries must use unique, kebab-cased summaries of the scenario under test.
+
+Additions should document which branch of the rule they target (threshold,
+message rendering, suppression, …) and keep payload overrides narrow. A minimal
+extension looks like:
+
+```python
+TYRE_BALANCE_CASES.append(
+    RuleCase(
+        description="suppresses-when-session-hints-lock-out",
+        context_overrides={"session_hints": {"tyre_balance_override": "skip"}},
+        expected_parameters=(),
+    )
+)
+TYRE_BALANCE_IDS[:] = [case.description for case in TYRE_BALANCE_CASES]
+```
+
+### Synthetic window metrics
+
+Window-metric parametrisation focuses on :func:`tnfr_lfs.metrics.window.compute_window_metrics`.
+The `synthetic_window_factory` fixture in `tests/conftest.py` builds
+deterministic telemetry windows, and helpers in `tests/helpers/steering.py`
+(`build_parallel_window_metrics`) supply richer Ackermann/steering scenarios.
+`tests/test_metrics.py` uses declarative tuples that pair factory kwargs with
+expected attribute checks, naming each case through the `ids=` argument.
+
+When extending the suite, favour inputs that toggle a new branch inside
+`WindowMetrics` or its brake headroom sub-structure and express expectations via
+`pytest.approx` or symbolic markers (`"isnan"`, `"lt"`, …). Example:
+
+```python
+WINDOW_CASES = [
+    *WINDOW_CASES,
+    (
+        {"profile": "fade-recovery", "brake_pressure": 0.4},
+        {"ventilation_alert": "recovered", "fade_ratio": pytest.approx(0.1)},
+    ),
+]
+WINDOW_CASE_IDS = [*WINDOW_CASE_IDS, "fade-recovery"]
+```
+
+Cross-reference the impacted modules when committing (for instance, mention
+`tnfr_lfs.metrics.window`) so reviewers can align the telemetry fixture with the
+implementation branch under scrutiny.

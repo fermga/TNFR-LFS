@@ -38,6 +38,14 @@ pre-commit autoupdate
 The CI pipeline executes the same tools, so keeping the local hooks current helps surface lint,
 formatting, and typing issues early.
 
+### Test fixtures and parametrisation
+
+The [tests fixture catalogue](../tests/README.md) documents the deterministic
+datasets, factories, and parametrised case tables exercised by the suite. Refer
+to it before adding new telemetry bundles, CLI configuration cases, recommender
+scenarios, or metric windows so you can reuse the shared builders and follow the
+`ids=` naming guidance enforced in CI.
+
 ### CI triggering rules
 
 The CI workflow now runs on documentation-only branches and executes a dedicated link-checking job in
