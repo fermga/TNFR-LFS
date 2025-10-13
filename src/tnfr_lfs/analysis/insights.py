@@ -7,6 +7,8 @@ from dataclasses import dataclass, replace
 from time import monotonic
 from typing import Any, Mapping, Optional, Sequence
 
+import tnfr_lfs.analysis.contextual_delta  # noqa: F401 - ensures loader registration
+
 from tnfr_lfs.analysis.robustness import compute_session_robustness
 from tnfr_core.equations.epi import EPIExtractor, TelemetryRecord
 from tnfr_core.equations.epi_models import EPIBundle

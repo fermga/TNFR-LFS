@@ -23,6 +23,11 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 
+import tnfr_lfs.analysis.contextual_delta as _lfs_contextual_delta
+
+_lfs_contextual_delta.ensure_context_loader()
+
+
 def write_pyproject(directory: Path, contents: str) -> Path:
     """Persist a ``pyproject.toml`` under ``directory`` and return its path."""
 
