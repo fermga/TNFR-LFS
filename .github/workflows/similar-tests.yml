@@ -1,0 +1,72 @@
+name: Similar tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  similar-tests-threshold-90:
+    name: Detect similar tests (0.90)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install .[dev]
+      - name: Generate similar test report (0.90)
+        run: |
+          mkdir -p tests/_report
+          python tools/report_similar_tests.py --threshold 0.9 --output tests/_report/similar_tests.json
+      - name: Fail when similar tests are detected
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("tests/_report/similar_tests.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          pairs = data.get("similar_pairs", [])
+          if isinstance(pairs, dict):
+              count = pairs.get("count", 0)
+          else:
+              count = len(pairs)
+          if count:
+              raise SystemExit(f"{count} similar test pair(s) detected above threshold 0.90")
+          PY
+
+  similar-tests-artifacts:
+    name: Similar test reports
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install .[dev]
+      - name: Generate report (0.90)
+        run: |
+          mkdir -p tests/_report
+          python tools/report_similar_tests.py --threshold 0.9 --output tests/_report/similar_tests.json
+      - name: Generate report (0.85)
+        run: |
+          python tools/report_similar_tests.py --threshold 0.85 --output tests/_report/similar_tests.85.json
+      - name: Upload similar test reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: similar-tests-reports
+          path: |
+            tests/_report/similar_tests.json
+            tests/_report/similar_tests.85.json
+          if-no-files-found: error
