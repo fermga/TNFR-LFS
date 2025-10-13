@@ -1,0 +1,2 @@
+# Ignore generated similarity reports
+_report/*.json
