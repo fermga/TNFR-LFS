@@ -1338,7 +1338,7 @@ def test_repository_pyproject_configures_default_ports_and_profiles() -> None:
         "cfg_text",
         "stub_overrides",
         "cli_args",
-        "expect_exit",
+        "expected_exit_code",
         "stdout_contains",
         "result_contains",
         "clipboard_expected",
@@ -1360,7 +1360,7 @@ InSim Port 29999
             ),
             None,
             ["--timeout", "0.05"],
-            False,
+            0,
             ["Status: ok"],
             [
                 "OutSim responded",
@@ -1385,7 +1385,7 @@ OutGauge Port 3000
             ),
             None,
             [],
-            True,
+            1,
             [
                 "/outsim 1 127.0.0.1 4123",
                 "/outgauge 1 127.0.0.1 3000",
@@ -1399,13 +1399,13 @@ OutGauge Port 3000
     ],
 )
 def test_diagnose_modes(
-    capsys,
+    cli_runner,
     monkeypatch: pytest.MonkeyPatch,
     prepare_diagnose_environment: Callable[[Mapping[str, StubOverride] | None], Path],
     cfg_text: str,
     stub_overrides: Mapping[str, StubOverride] | None,
     cli_args: list[str],
-    expect_exit: bool,
+    expected_exit_code: int,
     stdout_contains: Iterable[str],
     result_contains: Iterable[str],
     clipboard_expected: Iterable[str] | None,
@@ -1423,27 +1423,23 @@ def test_diagnose_modes(
     cfg_path = prepare_diagnose_environment(stub_overrides, cfg_text=cfg_text)
     args = ["diagnose", str(cfg_path), *cli_args]
 
-    result: str | None = None
-    excinfo: pytest.ExceptionInfo[SystemExit] | None = None
-    if expect_exit:
-        with pytest.raises(SystemExit) as caught:
-            run_cli(args)
-        excinfo = caught
-    else:
-        result = run_cli(args)
+    outcome = cli_runner(args)
 
-    captured = capsys.readouterr()
+    assert outcome.exit_code == expected_exit_code
     for expected in stdout_contains:
-        assert expected in captured.out
+        assert expected in outcome.stdout
 
     if result_contains:
-        assert result is not None
+        assert outcome.result is not None
         for expected in result_contains:
-            assert expected in result
+            assert expected in outcome.result
 
-    if expect_exit and exception_fragment is not None:
-        assert excinfo is not None
-        assert exception_fragment in str(excinfo.value.__cause__)
+    if exception_fragment is not None:
+        if expected_exit_code == 0:
+            assert outcome.cause is None
+        else:
+            assert outcome.cause is not None
+            assert exception_fragment in str(outcome.cause)
 
     if clipboard_expected is not None:
         assert clipboard
@@ -1638,14 +1634,14 @@ def test_diagnose_reports_errors(
     failing_stub: str,
     stub_result: tuple[bool, str],
     expected_message: str,
-    capsys,
+    cli_runner,
     prepare_diagnose_environment: Callable[[Mapping[str, StubOverride] | None], Path],
 ) -> None:
     cfg_path = prepare_diagnose_environment({failing_stub: stub_result})
 
-    with pytest.raises(SystemExit) as excinfo:
-        run_cli(["diagnose", str(cfg_path)])
+    outcome = cli_runner(["diagnose", str(cfg_path)])
 
-    captured = capsys.readouterr()
-    assert expected_message in captured.err
-    assert expected_message in str(excinfo.value.__cause__)
+    assert outcome.exit_code != 0
+    assert expected_message in outcome.stderr
+    assert outcome.cause is not None
+    assert expected_message in str(outcome.cause)

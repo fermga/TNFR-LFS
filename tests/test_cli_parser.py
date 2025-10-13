@@ -80,3 +80,38 @@ def test_compare_specific_defaults_are_used() -> None:
     assert workflows._default_car_model(config) == "RB4"
     assert workflows._default_track_name(config) == "SO1"
 
+
+@pytest.mark.parametrize(
+    "argv, expected_exit_code, stdout_snippets, stderr_snippets",
+    [
+        pytest.param(
+            ["--help"],
+            0,
+            ["TNFR × LFS", "diagnose"],
+            [],
+            id="help",
+        ),
+        pytest.param(
+            ["unknown"],
+            2,
+            [],
+            ["invalid choice: 'unknown'"],
+            id="unknown-command",
+        ),
+    ],
+)
+def test_cli_entrypoint_outcomes(
+    cli_runner,
+    argv: list[str],
+    expected_exit_code: int,
+    stdout_snippets: list[str],
+    stderr_snippets: list[str],
+) -> None:
+    result = cli_runner(argv)
+
+    assert result.exit_code == expected_exit_code
+    for snippet in stdout_snippets:
+        assert snippet in result.stdout
+    for snippet in stderr_snippets:
+        assert snippet in result.stderr
+
