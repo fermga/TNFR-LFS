@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import math
-import pytest
 from types import SimpleNamespace
+from typing import Callable
+
+import pytest
 
 from tnfr_lfs.ingestion.live import ButtonEvent, ButtonLayout, MacroQueue, OverlayManager
 from tnfr_lfs.cli import osd as osd_module
@@ -34,14 +36,42 @@ from tests.helpers import (
 )
 
 
-def test_osd_pages_fit_within_button_limit(synthetic_records):
-    hud = _populate_hud(synthetic_records[:120])
-    pages = hud.pages()
-    assert len(pages) == 4
-    for page in pages:
-        assert len(page.encode("utf8")) <= OverlayManager.MAX_BUTTON_TEXT - 1
+def _make_hud_pages(records: list[TelemetryRecord]) -> list[str]:
+    return _populate_hud(records).pages()
 
-    page_a, page_b, page_c, page_d = pages
+
+def _make_pager(records: list[TelemetryRecord]) -> tuple[HUDPager, ButtonLayout]:
+    pages = _make_hud_pages(records)
+    return HUDPager(pages), ButtonLayout().clamp()
+
+
+def _make_button_event(
+    layout: ButtonLayout, *, click_offset: int = 0, type_in: int = 0, flags: int = 0
+) -> ButtonEvent:
+    return ButtonEvent(
+        ucid=layout.ucid,
+        click_id=layout.click_id + click_offset,
+        inst=layout.inst,
+        type_in=type_in,
+        flags=flags,
+    )
+
+
+def _make_macro_queue(
+    sender: Callable[[str], None], *, min_interval: float = 0.2, time_fn: Callable[[], float]
+) -> MacroQueue:
+    return MacroQueue(sender, min_interval=min_interval, time_fn=time_fn)
+
+
+def assert_macro_queue_progress(queue: MacroQueue, expected_commands: list[str]) -> None:
+    pending = list(queue.pending())
+    assert len(queue) == len(expected_commands)
+    assert pending == expected_commands
+
+
+def _assert_osd_page_texts(
+    page_a: str, page_b: str, page_c: str, page_d: str
+) -> None:
     assert "ΔNFR" in page_a
     assert "C(t)" in page_a
     assert "[" in page_a  # ΔNFR gauge present
@@ -54,6 +84,16 @@ def test_osd_pages_fit_within_button_limit(synthetic_records):
     assert "C(t)" in page_b
     assert "ΔNFR phase map" in page_c
     assert "Apply" in page_d
+
+
+def test_osd_pages_fit_within_button_limit(synthetic_records):
+    pages = _make_hud_pages(synthetic_records[:120])
+    assert len(pages) == 4
+    for page in pages:
+        assert len(page.encode("utf8")) <= OverlayManager.MAX_BUTTON_TEXT - 1
+
+    page_a, page_b, page_c, page_d = pages
+    _assert_osd_page_texts(page_a, page_b, page_c, page_d)
 
 
 def test_entropy_indicator_uses_thresholds() -> None:
@@ -95,36 +135,19 @@ def test_lap_integral_series_and_cov_indicator() -> None:
 
 
 def test_hud_pager_cycles_on_button_click(synthetic_records):
-    hud = _populate_hud(synthetic_records[:90])
-    pager = HUDPager(hud.pages())
-    layout = ButtonLayout().clamp()
+    pager, layout = _make_pager(synthetic_records[:90])
 
     first_page = pager.current()
-    click_event = ButtonEvent(
-        ucid=layout.ucid,
-        click_id=layout.click_id,
-        inst=layout.inst,
-        type_in=0,
-    )
+    click_event = _make_button_event(layout)
     assert pager.handle_event(click_event, layout)
     assert pager.current() != first_page
 
-    unchanged_event = ButtonEvent(
-        ucid=layout.ucid,
-        click_id=layout.click_id + 1,
-        inst=layout.inst,
-        type_in=0,
-    )
+    unchanged_event = _make_button_event(layout, click_offset=1)
     current = pager.current()
     assert not pager.handle_event(unchanged_event, layout)
     assert pager.current() == current
 
-    typed_event = ButtonEvent(
-        ucid=layout.ucid,
-        click_id=layout.click_id,
-        inst=layout.inst,
-        type_in=1,
-    )
+    typed_event = _make_button_event(layout, type_in=1)
     assert not pager.handle_event(typed_event, layout)
 
 
@@ -138,16 +161,17 @@ def test_macro_queue_respects_timing():
     def sender(command: str) -> None:
         events.append((fake_time(), command))
 
-    queue = MacroQueue(sender, min_interval=0.2, time_fn=fake_time)
+    queue = _make_macro_queue(sender, time_fn=fake_time)
     queue.enqueue_press_sequence(["F12", "+", "+"], spacing=0.25)
 
-    assert len(queue) == 3
-    assert queue.pending()[0] == "/press F12"
+    assert_macro_queue_progress(
+        queue, ["/press F12", "/press +", "/press +"]
+    )
 
     dispatched = queue.tick()
     assert dispatched == 1
     assert events[0][1] == "/press F12"
-    assert len(queue) == 2
+    assert_macro_queue_progress(queue, ["/press +", "/press +"])
 
     current_time += 0.2
     assert queue.tick() == 0  # spacing not yet elapsed
