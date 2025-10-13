@@ -11,8 +11,8 @@ from typing import Any, Awaitable, Callable, Deque, Iterable, List, Sequence
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
-from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
-from tnfr_lfs.ingestion import outsim_udp as outsim_module
+from tnfr_lfs.telemetry import outgauge_udp as outgauge_module
+from tnfr_lfs.telemetry import outsim_udp as outsim_module
 
 UDPPayload = bytes | tuple[bytes, tuple[str, int]]
 

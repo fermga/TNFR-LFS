@@ -207,7 +207,7 @@ readable. When extending them:
 ### Replay CSV bundle helpers
 
 `tests/conftest.py` exposes a `csv_bundle` fixture that emits a temporary ZIP
-bundle compatible with :class:`tnfr_lfs.ingestion.offline.ReplayCSVBundleReader`.
+bundle compatible with :class:`tnfr_lfs.telemetry.offline.ReplayCSVBundleReader`.
 The builder writes a minimal `time.csv`/`speed.csv` pair unless you request
 missing channels or a renamed distance column. Helper functions under
 `tests/helpers/replay_bundle.py`—such as `read_reference_rows` and

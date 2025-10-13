@@ -19,7 +19,7 @@ modern layout adopted by the project.
 - [`tnfr_lfs.data`](data/index.md)
 - [`tnfr_lfs.examples`](examples/index.md)
 - [`tnfr_lfs.exporters`](exporters/index.md)
-- [`tnfr_lfs.ingestion`](ingestion/index.md)
+- [`tnfr_lfs.telemetry`](ingestion/index.md)
 - [`tnfr_lfs.io`](io/index.md)
 - [`tnfr_lfs.logging`](logging/index.md)
 - [`tnfr_lfs.math`](math/index.md)

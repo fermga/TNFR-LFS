@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from tnfr_lfs.analysis.brake_thermal import BrakeThermalConfig, BrakeThermalEstimator
-from tnfr_lfs.ingestion.live import (
+from tnfr_lfs.telemetry.live import (
     OutSimDriverInputs,
     OutSimWheelState,
     TelemetryFusion,
@@ -56,7 +56,7 @@ def test_telemetry_fusion_uses_packaged_resources(
     pack_root = create_brake_thermal_pack(tmp_path / "pack")
 
     resources.set_pack_root_override(pack_root)
-    ingestion_mod = importlib.import_module("tnfr_lfs.ingestion.live")
+    ingestion_mod = importlib.import_module("tnfr_lfs.telemetry.live")
     fusion_mod = importlib.import_module(ingestion_mod.TelemetryFusion.__module__)
     importlib.reload(fusion_mod)
     ingestion_module = importlib.reload(ingestion_mod)

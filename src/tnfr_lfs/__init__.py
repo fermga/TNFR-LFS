@@ -24,11 +24,11 @@ from tnfr_core import (
     segment_microsectors,
     sense_index,
 )
-from tnfr_lfs.ingestion.live import OutSimClient
+from tnfr_lfs.telemetry.live import OutSimClient
 from tnfr_lfs.recommender.rules import Recommendation, RecommendationEngine
 from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
 from tnfr_lfs.exporters import exporters_registry
-from tnfr_lfs.ingestion.config_loader import (
+from tnfr_lfs.telemetry.config_loader import (
     Car,
     Profile,
     example_pipeline,
@@ -36,7 +36,7 @@ from tnfr_lfs.ingestion.config_loader import (
     load_profiles,
     resolve_targets,
 )
-from tnfr_lfs.ingestion.track_loader import (
+from tnfr_lfs.telemetry.track_loader import (
     Track,
     TrackConfig,
     assemble_session_weights,

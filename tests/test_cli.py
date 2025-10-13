@@ -21,7 +21,7 @@ from tnfr_lfs.cli import io as cli_io_module
 from tnfr_lfs.cli import workflows as workflows_module
 from tnfr_lfs.cli import run_cli
 from tnfr_lfs.cli.common import CliError
-from tnfr_lfs.ingestion.offline import ProfileManager
+from tnfr_lfs.telemetry.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
 from tnfr_lfs.configuration import load_project_config

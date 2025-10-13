@@ -18,7 +18,7 @@ scientists:
 - Ingestion, analytics, recommendation and export subsystems that map the TNFR
   framework to actionable setup advice:
   1. **Ingest** – capture telemetry samples from OutSim-compatible streams via
-     :class:`tnfr_lfs.ingestion.live.OutSimClient`.
+     :class:`tnfr_lfs.telemetry.live.OutSimClient`.
   2. **Core analytics** – extract Event Performance Indicators (EPI) and
      compute ΔFz/ΔSi deltas through :class:`tnfr_core.epi.EPIExtractor`.
   3. **Recommendation engine** – map metrics to actionable setup advice using

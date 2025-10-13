@@ -11,7 +11,7 @@ from tnfr_lfs.cli.workflows import (
     _augment_session_with_playbook,
     _resolve_playbook_suggestions,
 )
-from tnfr_lfs.ingestion.offline import load_playbook
+from tnfr_lfs.telemetry.offline import load_playbook
 
 
 _PLAYBOOK_RESOURCE_TARGET = f"{load_playbook.__module__}.resources.open_binary"

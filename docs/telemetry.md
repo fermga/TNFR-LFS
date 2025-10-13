@@ -36,17 +36,17 @@ imports follow the same rule: the reader preserves missing columns as
 
 ### Asynchronous ingestion
 
-The synchronous :class:`tnfr_lfs.ingestion.outsim_udp.OutSimUDPClient` and
-:class:`tnfr_lfs.ingestion.outgauge_udp.OutGaugeUDPClient` remain available for
+The synchronous :class:`tnfr_lfs.telemetry.outsim_udp.OutSimUDPClient` and
+:class:`tnfr_lfs.telemetry.outgauge_udp.OutGaugeUDPClient` remain available for
 tight polling loops, but the toolkit now ships asynchronous counterparts for
 applications built around :mod:`asyncio`.  Use
-:class:`tnfr_lfs.ingestion.outsim_udp.AsyncOutSimUDPClient` and
-:class:`tnfr_lfs.ingestion.outgauge_udp.AsyncOutGaugeUDPClient` when you need to
+:class:`tnfr_lfs.telemetry.outsim_udp.AsyncOutSimUDPClient` and
+:class:`tnfr_lfs.telemetry.outgauge_udp.AsyncOutGaugeUDPClient` when you need to
 integrate telemetry into event-driven tasks without blocking the loop:
 
 ```python
 import asyncio
-from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient
+from tnfr_lfs.telemetry.outsim_udp import AsyncOutSimUDPClient
 
 async def main() -> None:
     async with AsyncOutSimUDPClient(port=4123) as outsim:

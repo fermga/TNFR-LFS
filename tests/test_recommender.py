@@ -12,7 +12,7 @@ from collections.abc import Mapping
 
 from tnfr_core.segmentation import Goal, Microsector
 from tnfr_core.operator_detection import canonical_operator_label
-from tnfr_lfs.ingestion.offline import AeroProfile, ProfileManager
+from tnfr_lfs.telemetry.offline import AeroProfile, ProfileManager
 from tnfr_lfs.recommender.rules import (
     AeroCoherenceRule,
     FrontWingBalanceRule,

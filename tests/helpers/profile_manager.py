@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tnfr_lfs.ingestion.offline import ProfileManager
+from tnfr_lfs.telemetry.offline import ProfileManager
 
 
 def preloaded_profile_manager(

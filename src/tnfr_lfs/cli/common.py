@@ -10,14 +10,14 @@ from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
 from tnfr_core.equations.epi import TelemetryRecord
 from tnfr_lfs.exporters import exporters_registry
-from tnfr_lfs.ingestion.track_loader import (
+from tnfr_lfs.telemetry.track_loader import (
     Track,
     TrackConfig,
     load_modifiers as load_track_modifiers,
     load_track as load_track_manifest,
     load_track_profiles,
 )
-from tnfr_lfs.ingestion.config_loader import (
+from tnfr_lfs.telemetry.config_loader import (
     Car as PackCar,
     Profile as PackProfile,
     load_cars as _load_pack_cars_dataset,

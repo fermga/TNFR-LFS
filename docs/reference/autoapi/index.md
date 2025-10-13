@@ -16,7 +16,7 @@ This index was generated from the source tree and mirrors the ``tnfr_lfs`` packa
 - [`tnfr_lfs.data`](tnfr_lfs/data/index.md)
 - [`tnfr_lfs.examples`](tnfr_lfs/examples/index.md)
 - [`tnfr_lfs.exporters`](tnfr_lfs/exporters/index.md)
-- [`tnfr_lfs.ingestion`](tnfr_lfs/ingestion/index.md)
+- [`tnfr_lfs.telemetry`](tnfr_lfs/ingestion/index.md)
 - [`tnfr_lfs.io`](tnfr_lfs/io/index.md)
 - [`tnfr_lfs.logging`](tnfr_lfs/logging/index.md)
 - [`tnfr_lfs.math`](tnfr_lfs/math/index.md)

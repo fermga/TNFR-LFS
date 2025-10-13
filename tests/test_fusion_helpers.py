@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tnfr_lfs.ingestion.live import (
+from tnfr_lfs.telemetry.live import (
     FusionCalibration,
     OutSimWheelState,
     TelemetryFusion,

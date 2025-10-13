@@ -5,9 +5,9 @@ from itertools import count
 
 import pytest
 
-from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
-from tnfr_lfs.ingestion import outsim_udp as outsim_module
-from tnfr_lfs.ingestion._reorder_buffer import CircularReorderBuffer
+from tnfr_lfs.telemetry import outgauge_udp as outgauge_module
+from tnfr_lfs.telemetry import outsim_udp as outsim_module
+from tnfr_lfs.telemetry._reorder_buffer import CircularReorderBuffer
 
 from tests.helpers import build_outgauge_packet, build_outsim_packet
 
