@@ -10,7 +10,7 @@ from typing import Literal
 
 import numpy as np
 
-from .interfaces import SupportsTelemetrySample
+from tnfr_lfs.core.interfaces import SupportsTelemetrySample
 
 try:  # pragma: no cover - SciPy is optional
     from scipy.signal import goertzel as _SCIPY_GOERTZEL

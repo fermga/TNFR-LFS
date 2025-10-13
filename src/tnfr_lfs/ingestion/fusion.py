@@ -14,16 +14,16 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from ..resources import pack_root
-from ..analysis.brake_thermal import (
+from tnfr_lfs.resources import pack_root
+from tnfr_lfs.analysis.brake_thermal import (
     BrakeThermalConfig,
     BrakeThermalEstimator,
     merge_brake_config,
 )
-from ..core.epi import EPIExtractor, EPIBundle, TelemetryRecord
-from ..math.conversions import _safe_float
-from .outsim_udp import OutSimPacket, OutSimWheelState
-from .outgauge_udp import OutGaugePacket
+from tnfr_lfs.core.epi import EPIExtractor, EPIBundle, TelemetryRecord
+from tnfr_lfs.math.conversions import _safe_float
+from tnfr_lfs.ingestion.outsim_udp import OutSimPacket, OutSimWheelState
+from tnfr_lfs.ingestion.outgauge_udp import OutGaugePacket
 
 __all__ = ["TelemetryFusion"]
 

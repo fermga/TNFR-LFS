@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, List, Sequence, TextIO
 
-from ..core.epi import TelemetryRecord
+from tnfr_lfs.core.epi import TelemetryRecord
 
 
 @dataclass

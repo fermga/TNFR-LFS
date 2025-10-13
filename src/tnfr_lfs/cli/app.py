@@ -7,18 +7,18 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from ..ingestion.config_loader import parse_cache_options
-from ..core import cache as cache_helpers
-from ..logging.config import setup_logging
+from tnfr_lfs.ingestion.config_loader import parse_cache_options
+from tnfr_lfs.core import cache as cache_helpers
+from tnfr_lfs.logging.config import setup_logging
 
-from . import common as _common_module
-from . import io as _cli_io_module
-from . import workflows as _workflows_module
-from .common import CliError
-from .errors import log_cli_error
-from .io import load_cli_config
-from .parser import build_parser
-from .workflows import (
+from tnfr_lfs.cli import common as _common_module
+from tnfr_lfs.cli import io as _cli_io_module
+from tnfr_lfs.cli import workflows as _workflows_module
+from tnfr_lfs.cli.common import CliError
+from tnfr_lfs.cli.errors import log_cli_error
+from tnfr_lfs.cli.io import load_cli_config
+from tnfr_lfs.cli.parser import build_parser
+from tnfr_lfs.cli.workflows import (
     _handle_analyze,
     _handle_baseline,
     _handle_diagnose,

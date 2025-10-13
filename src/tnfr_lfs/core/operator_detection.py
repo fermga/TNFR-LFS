@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import List, Mapping, Sequence, Tuple
 
-from .interfaces import SupportsTelemetrySample
-from .structural_time import compute_structural_timestamps
+from tnfr_lfs.core.interfaces import SupportsTelemetrySample
+from tnfr_lfs.core.structural_time import compute_structural_timestamps
 
 __all__ = [
     "OperatorEvent",

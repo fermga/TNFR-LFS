@@ -6,9 +6,9 @@ import argparse
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from ..recommender import pareto_front, sweep_candidates
+from tnfr_lfs.recommender import pareto_front, sweep_candidates
 
-from .common import (
+from tnfr_lfs.cli.common import (
     CliError,
     add_export_argument,
     default_car_model,
@@ -16,7 +16,7 @@ from .common import (
     resolve_exports,
     validated_export,
 )
-from .workflows import build_setup_plan_payload, compute_setup_plan
+from tnfr_lfs.cli.workflows import build_setup_plan_payload, compute_setup_plan
 
 
 def register_subparser(

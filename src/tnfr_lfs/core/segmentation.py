@@ -23,14 +23,14 @@ from dataclasses import dataclass, field
 from statistics import mean, pstdev
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple, cast
 
-from .epi import (
+from tnfr_lfs.core.epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
     NaturalFrequencyAnalyzer,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from .contextual_delta import (
+from tnfr_lfs.core.contextual_delta import (
     ContextFactors,
     ContextMatrix,
     apply_contextual_delta,
@@ -39,46 +39,46 @@ from .contextual_delta import (
     resolve_microsector_context,
     resolve_series_context,
 )
-from .interfaces import (
+from tnfr_lfs.core.interfaces import (
     SupportsContextBundle,
     SupportsContextRecord,
     SupportsEPIBundle,
     SupportsTelemetrySample,
 )
-from .metrics import (
+from tnfr_lfs.core.metrics import (
     compute_window_metrics,
     phase_synchrony_index,
 )
-from .operator_detection import (
+from tnfr_lfs.core.operator_detection import (
     detect_al,
     detect_il,
     detect_oz,
     detect_silence,
     silence_event_payloads,
 )
-from .operators import (
+from tnfr_lfs.core.operators import (
     RecursivityMicroStateSnapshot,
     RecursivityOperatorResult,
     RecursivityStateRoot,
     mutation_operator,
     recursivity_operator,
 )
-from .phases import (
+from tnfr_lfs.core.phases import (
     LEGACY_PHASE_MAP,
     PHASE_SEQUENCE,
     expand_phase_alias,
     phase_family,
     replicate_phase_aliases,
 )
-from .archetypes import (
+from tnfr_lfs.core.archetypes import (
     ARCHETYPE_CHICANE,
     ARCHETYPE_HAIRPIN,
     ARCHETYPE_FAST,
     ARCHETYPE_MEDIUM,
     archetype_phase_targets,
 )
-from .resonance import estimate_excitation_frequency
-from .spectrum import phase_alignment
+from tnfr_lfs.core.resonance import estimate_excitation_frequency
+from tnfr_lfs.core.spectrum import phase_alignment
 
 # Public API: core.__init__ re-exports segmentation artefacts via these names.
 __all__ = [

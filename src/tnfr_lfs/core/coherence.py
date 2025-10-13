@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping as MappingABC
 from typing import Dict, Mapping
 
-from .delta_utils import distribute_weighted_delta
-from .phases import expand_phase_alias, phase_family
-from .utils import normalised_entropy
+from tnfr_lfs.core.delta_utils import distribute_weighted_delta
+from tnfr_lfs.core.phases import expand_phase_alias, phase_family
+from tnfr_lfs.core.utils import normalised_entropy
 
 __all__ = ["compute_node_delta_nfr", "sense_index"]
 

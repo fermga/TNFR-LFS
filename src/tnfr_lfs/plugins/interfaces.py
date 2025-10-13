@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence, Tuple, Type
 
-from .base import TNFRPlugin
-from .registry import get_plugin_operator_requirements
+from tnfr_lfs.plugins.base import TNFRPlugin
+from tnfr_lfs.plugins.registry import get_plugin_operator_requirements
 
 OperatorIdentifier = str
 

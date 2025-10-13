@@ -18,13 +18,13 @@ from types import MappingProxyType
 from statistics import fmean
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence
 
-from ..core.cache import LRUCache
-from ..core.cache_settings import CacheOptions, resolve_recommender_cache_size
-from ..core.dissonance import compute_useful_dissonance_stats
-from ..core.epi_models import EPIBundle
-from ..core.segmentation import Microsector
-from .pareto import ParetoPoint
-from .rules import Recommendation, RecommendationEngine
+from tnfr_lfs.core.cache import LRUCache
+from tnfr_lfs.core.cache_settings import CacheOptions, resolve_recommender_cache_size
+from tnfr_lfs.core.dissonance import compute_useful_dissonance_stats
+from tnfr_lfs.core.epi_models import EPIBundle
+from tnfr_lfs.core.segmentation import Microsector
+from tnfr_lfs.recommender.pareto import ParetoPoint
+from tnfr_lfs.recommender.rules import Recommendation, RecommendationEngine
 
 
 DecisionVector = Mapping[str, float]

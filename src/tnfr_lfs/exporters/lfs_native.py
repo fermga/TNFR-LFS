@@ -7,7 +7,7 @@ import struct
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-from .setup_plan import SetupPlan, serialise_setup_plan
+from tnfr_lfs.exporters.setup_plan import SetupPlan, serialise_setup_plan
 
 
 FEATURE_FLAG_LFS_NATIVE_EXPORT = bool(os.getenv("TNFR_LFS_NATIVE_EXPORT"))

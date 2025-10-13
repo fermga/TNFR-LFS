@@ -7,8 +7,8 @@ from collections import defaultdict
 from statistics import fmean, pstdev
 from typing import Any, Iterable, Mapping, Sequence
 
-from ..core.epi_models import EPIBundle
-from ..core.phases import PHASE_SEQUENCE, phase_family
+from tnfr_lfs.core.epi_models import EPIBundle
+from tnfr_lfs.core.phases import PHASE_SEQUENCE, phase_family
 
 
 def _numeric_series(values: Iterable[Any]) -> list[float]:

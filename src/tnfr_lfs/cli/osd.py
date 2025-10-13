@@ -20,7 +20,7 @@ from typing import (
     Tuple,
 )
 
-from ..ingestion import (
+from tnfr_lfs.ingestion import (
     ButtonEvent,
     ButtonLayout,
     InSimClient,
@@ -32,7 +32,7 @@ from ..ingestion import (
     OutSimUDPClient,
     TelemetryFusion,
 )
-from ..core.constants import (
+from tnfr_lfs.core.constants import (
     BRAKE_TEMPERATURE_MEAN_KEYS,
     BRAKE_TEMPERATURE_STD_KEYS,
     PRESSURE_MEAN_KEYS,
@@ -42,8 +42,8 @@ from ..core.constants import (
     WHEEL_LABELS,
     WHEEL_SUFFIXES,
 )
-from ..core.epi import EPIExtractor, TelemetryRecord
-from ..core.metrics import (
+from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
+from tnfr_lfs.core.metrics import (
     AeroBalanceDrift,
     AeroBalanceDriftBin,
     BrakeHeadroom,
@@ -51,28 +51,28 @@ from ..core.metrics import (
     WindowMetrics,
     compute_window_metrics,
 )
-from ..core.operators import orchestrate_delta_metrics
-from ..core.operator_detection import canonical_operator_label, silence_event_payloads
-from ..core.phases import PHASE_SEQUENCE, phase_family
-from ..core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
-from ..core.segmentation import (
+from tnfr_lfs.core.operators import orchestrate_delta_metrics
+from tnfr_lfs.core.operator_detection import canonical_operator_label, silence_event_payloads
+from tnfr_lfs.core.phases import PHASE_SEQUENCE, phase_family
+from tnfr_lfs.core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
+from tnfr_lfs.core.segmentation import (
     Goal,
     Microsector,
     detect_quiet_microsector_streaks,
     microsector_stability_metrics,
     segment_microsectors,
 )
-from ..exporters.setup_plan import (
+from tnfr_lfs.exporters.setup_plan import (
     SetupChange,
     SetupPlan,
     compute_phase_axis_summary,
     phase_axis_summary_lines,
 )
-from ..recommender import RecommendationEngine, SetupPlanner
-from ..recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObjectives
-from .session import format_session_messages
-from ..math.conversions import _safe_float
-from ..visualization.sparkline import DEFAULT_SPARKLINE_BLOCKS, render_sparkline
+from tnfr_lfs.recommender import RecommendationEngine, SetupPlanner
+from tnfr_lfs.recommender.rules import NODE_LABELS, ThresholdProfile, RuleProfileObjectives
+from tnfr_lfs.cli.session import format_session_messages
+from tnfr_lfs.math.conversions import _safe_float
+from tnfr_lfs.visualization.sparkline import DEFAULT_SPARKLINE_BLOCKS, render_sparkline
 
 
 logger = logging.getLogger(__name__)

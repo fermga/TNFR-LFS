@@ -9,16 +9,16 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Protocol, Sequence, Tuple
 
-from ..core.epi_models import EPIBundle
-from ..core.operator_detection import canonical_operator_label
-from .setup_plan import (
+from tnfr_lfs.core.epi_models import EPIBundle
+from tnfr_lfs.core.operator_detection import canonical_operator_label
+from tnfr_lfs.exporters.setup_plan import (
     SetupPlan,
     phase_axis_summary_lines,
     serialise_setup_plan,
 )
-from .report_extended import html_exporter
-from ..cli.session import format_session_messages
-from ..visualization.sparkline import render_sparkline
+from tnfr_lfs.exporters.report_extended import html_exporter
+from tnfr_lfs.cli.session import format_session_messages
+from tnfr_lfs.visualization.sparkline import render_sparkline
 
 
 CAR_MODEL_PREFIXES = {

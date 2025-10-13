@@ -27,27 +27,27 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from ..core.archetypes import (
+from tnfr_lfs.core.archetypes import (
     ARCHETYPE_MEDIUM,
     DEFAULT_ARCHETYPE_PHASE_TARGETS,
     PhaseArchetypeTargets,
 )
-from ..core.constants import (
+from tnfr_lfs.core.constants import (
     PRESSURE_STD_KEYS,
     TEMPERATURE_MEAN_KEYS,
     TEMPERATURE_STD_KEYS,
     WHEEL_LABELS,
     WHEEL_SUFFIXES,
 )
-from ..core.epi_models import EPIBundle
-from ..core.operators import TyreBalanceControlOutput, tyre_balance_controller
-from ..core.operator_detection import canonical_operator_label, silence_event_payloads
-from ..core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
-from ..math.conversions import _safe_float
+from tnfr_lfs.core.epi_models import EPIBundle
+from tnfr_lfs.core.operators import TyreBalanceControlOutput, tyre_balance_controller
+from tnfr_lfs.core.operator_detection import canonical_operator_label, silence_event_payloads
+from tnfr_lfs.core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
+from tnfr_lfs.math.conversions import _safe_float
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from tnfr_lfs.ingestion.offline.profiles import AeroProfile, ProfileManager
-from ..core.segmentation import (
+from tnfr_lfs.core.segmentation import (
     Goal,
     Microsector,
     detect_quiet_microsector_streaks,

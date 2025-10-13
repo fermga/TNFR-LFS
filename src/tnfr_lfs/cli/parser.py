@@ -6,11 +6,11 @@ import argparse
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from ..exporters import REPORT_ARTIFACT_FORMATS, exporters_registry
-from . import compare as compare_command
-from . import pareto as pareto_command
-from .common import add_export_argument, default_car_model, default_track_name, validated_export
-from .workflows import (
+from tnfr_lfs.exporters import REPORT_ARTIFACT_FORMATS, exporters_registry
+from tnfr_lfs.cli import compare as compare_command
+from tnfr_lfs.cli import pareto as pareto_command
+from tnfr_lfs.cli.common import add_export_argument, default_car_model, default_track_name, validated_export
+from tnfr_lfs.cli.workflows import (
     _handle_analyze,
     _handle_baseline,
     _handle_compare,

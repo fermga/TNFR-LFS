@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
-from .base import TNFRPlugin
-from . import registry
-from .config import PluginConfig, PluginConfigError
+from tnfr_lfs.plugins.base import TNFRPlugin
+from tnfr_lfs.plugins import registry
+from tnfr_lfs.plugins.config import PluginConfig, PluginConfigError
 
 
 logger = logging.getLogger(__name__)

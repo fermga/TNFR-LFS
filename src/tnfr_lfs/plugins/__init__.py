@@ -2,10 +2,10 @@
 
 from pathlib import Path
 
-from .base import TNFRPlugin
-from .interfaces import PluginContract, PluginMetadata
-from .config import PluginConfig, PluginConfigError
-from .registry import (
+from tnfr_lfs.plugins.base import TNFRPlugin
+from tnfr_lfs.plugins.interfaces import PluginContract, PluginMetadata
+from tnfr_lfs.plugins.config import PluginConfig, PluginConfigError
+from tnfr_lfs.plugins.registry import (
     available_operator_identifiers,
     get_plugin_operator_requirements,
     iter_plugin_operator_requirements,
