@@ -6,6 +6,7 @@ from collections import deque
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import dataclass, field, fields
 import math
+from importlib import import_module
 import warnings
 from math import sqrt
 from statistics import mean, pvariance
@@ -66,6 +67,7 @@ from tnfr_core.operators.interfaces import (
     SupportsTelemetrySample,
     SupportsTyresNode,
 )
+from tnfr_core._canonical import CANONICAL_REQUESTED, import_tnfr
 
 
 _APEX_PHASE_CANDIDATES: Tuple[str, ...] = LEGACY_PHASE_MAP.get("apex", tuple())
@@ -2104,4 +2106,18 @@ __all__ = [
     "orchestrate_delta_metrics",
     "evolve_epi",
 ]
+
+
+if CANONICAL_REQUESTED:  # pragma: no cover - depends on optional package
+    tnfr = import_tnfr()
+    canonical_ops = import_module(f"{tnfr.__name__}.operators.operators")
+
+    canonical_exports = getattr(canonical_ops, "__all__", None)
+    if canonical_exports is not None:
+        __all__ = list(dict.fromkeys([*canonical_exports, *__all__]))
+
+    for name in dir(canonical_ops):
+        if name.startswith("__"):
+            continue
+        globals()[name] = getattr(canonical_ops, name)
 

@@ -7,6 +7,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from collections.abc import Mapping as MappingABC
 from statistics import mean
+from importlib import import_module
 from typing import (
     Callable,
     Deque,
@@ -46,6 +47,7 @@ from tnfr_core.equations.epi_models import (
 )
 from tnfr_core.operators.interfaces import SupportsTelemetrySample
 from tnfr_core.equations.phases import expand_phase_alias, phase_family
+from tnfr_core._canonical import CANONICAL_REQUESTED, import_tnfr
 __all__ = [
     "TelemetryRecord",
     "EPIExtractor",
@@ -1582,6 +1584,7 @@ class DeltaCalculator:
             ackermann_parallel_index=ackermann_delta,
         )
 
+
     @staticmethod
     def _build_nodes(
         record: TelemetryRecord,
@@ -1725,3 +1728,17 @@ class DeltaCalculator:
                 style_index=record.si,
             ),
         }
+
+
+if CANONICAL_REQUESTED:  # pragma: no cover - depends on optional package
+    tnfr = import_tnfr()
+    canonical_epi = import_module(f"{tnfr.__name__}.equations.epi")
+
+    canonical_exports = getattr(canonical_epi, "__all__", None)
+    if canonical_exports is not None:
+        __all__ = list(dict.fromkeys([*canonical_exports, *__all__]))
+
+    for name in dir(canonical_epi):
+        if name.startswith("__"):
+            continue
+        globals()[name] = getattr(canonical_epi, name)

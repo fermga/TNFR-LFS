@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from dataclasses import dataclass, field
 from typing import Mapping
+
+from tnfr_core._canonical import CANONICAL_REQUESTED, import_tnfr
 
 __all__ = ["EPIBundle"]
 
@@ -173,4 +176,26 @@ class EPIBundle:
     nu_f_dominant: float = 0.0
     coherence_index: float = 0.0
     ackermann_parallel_index: float = 0.0
+
+
+if CANONICAL_REQUESTED:  # pragma: no cover - depends on optional package
+    tnfr = import_tnfr()
+    canonical_models = import_module(f"{tnfr.__name__}.equations.epi_models")
+
+    canonical_exports = getattr(canonical_models, "__all__", None)
+    if canonical_exports is not None:
+        __all__ = list(dict.fromkeys([*canonical_exports, *__all__]))
+
+    for name in (
+        "TyresNode",
+        "SuspensionNode",
+        "ChassisNode",
+        "BrakesNode",
+        "TransmissionNode",
+        "TrackNode",
+        "DriverNode",
+        "EPIBundle",
+    ):
+        if hasattr(canonical_models, name):
+            globals()[name] = getattr(canonical_models, name)
 
