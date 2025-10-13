@@ -1001,150 +1001,86 @@ def test_report_generation(
     assert "rendered" in bifurcation_report
 
 
-def test_write_set_markdown_export(
-    tmp_path: Path,
-    capsys,
-    synthetic_stint_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    baseline_path = tmp_path / "baseline.jsonl"
-    run_cli_in_tmp(
-        [
-            "baseline",
-            str(baseline_path),
-            "--simulate",
-            str(synthetic_stint_path),
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-    )
-
-    output = run_cli_in_tmp(
-        [
-            "write-set",
-            str(baseline_path),
-            "--export",
-            "markdown",
-            "--car-model",
-            "FZR",
-            "--session",
-            "stint-1",
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-    )
-
-    assert "| Change |" in output
-
-
-def test_write_set_lfs_export(
-    tmp_path: Path,
-    synthetic_stint_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    baseline_path = tmp_path / "baseline.jsonl"
-    run_cli_in_tmp(
-        [
-            "baseline",
-            str(baseline_path),
-            "--simulate",
-            str(synthetic_stint_path),
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-    )
-
-    message = run_cli_in_tmp(
-        [
-            "write-set",
-            str(baseline_path),
-            "--export",
-            "set",
-            "--car-model",
-            "FZR",
-            "--session",
-            "stint-1",
-            "--set-output",
-            "FZR_race",
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-    )
-
-    destination = tmp_path / "LFS/data/setups/FZR_race.set"
-    assert destination.exists()
-    assert "FZR_race" in message
-    assert "TNFR-LFS setup export" in destination.read_text(encoding="utf8")
-
-
-def test_write_set_combined_export_outputs(
-    tmp_path: Path,
-    capsys,
-    synthetic_stint_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    baseline_path = tmp_path / "baseline.jsonl"
-    run_cli_in_tmp(
-        [
-            "baseline",
-            str(baseline_path),
-            "--simulate",
-            str(synthetic_stint_path),
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-        capsys=capsys,
-        capture_output=True,
-    )
-
-    result, captured = run_cli_in_tmp(
-        [
-            "write-set",
-            str(baseline_path),
-            "--export",
-            "set",
-            "--export",
-            "lfs-notes",
-            "--car-model",
-            "FZR",
-            "--set-output",
-            "FZR_test",
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-        capsys=capsys,
-        capture_output=True,
-    )
-    destination = tmp_path / "LFS/data/setups/FZR_test.set"
-    assert destination.exists()
-    assert "Setup saved" in result
-    assert "Quick TNFR notes" in result
-    assert "| Change | Δ | Action |" in result
-    assert "| Change | Δ | Action |" in captured.out
-
-
-def test_write_set_lfs_rejects_invalid_name(
-    tmp_path: Path,
-    synthetic_stint_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    baseline_path = tmp_path / "baseline.jsonl"
-    run_cli_in_tmp(
-        [
-            "baseline",
-            str(baseline_path),
-            "--simulate",
-            str(synthetic_stint_path),
-        ],
-        tmp_path=tmp_path,
-        monkeypatch=monkeypatch,
-    )
-
-    with pytest.raises(ValueError):
-        run_cli_in_tmp(
+@pytest.mark.parametrize(
+    (
+        "cli_arguments",
+        "expected_result_substrings",
+        "expected_stdout_substrings",
+        "file_expectations",
+        "expected_exception",
+        "capture_output",
+    ),
+    [
+        pytest.param(
             [
-                "write-set",
-                str(baseline_path),
+                "--export",
+                "markdown",
+                "--car-model",
+                "FZR",
+                "--session",
+                "stint-1",
+            ],
+            ["| Change |"],
+            [],
+            [],
+            None,
+            False,
+            id="markdown-export",
+        ),
+        pytest.param(
+            [
+                "--export",
+                "set",
+                "--car-model",
+                "FZR",
+                "--session",
+                "stint-1",
+                "--set-output",
+                "FZR_race",
+            ],
+            ["FZR_race"],
+            [],
+            [
+                {
+                    "relative_path": Path("LFS/data/setups/FZR_race.set"),
+                    "exists": True,
+                    "contains": ["TNFR-LFS setup export"],
+                }
+            ],
+            None,
+            False,
+            id="lfs-export",
+        ),
+        pytest.param(
+            [
+                "--export",
+                "set",
+                "--export",
+                "lfs-notes",
+                "--car-model",
+                "FZR",
+                "--set-output",
+                "FZR_test",
+            ],
+            [
+                "Setup saved",
+                "Quick TNFR notes",
+                "| Change | Δ | Action |",
+            ],
+            ["| Change | Δ | Action |"],
+            [
+                {
+                    "relative_path": Path("LFS/data/setups/FZR_test.set"),
+                    "exists": True,
+                    "contains": [],
+                }
+            ],
+            None,
+            True,
+            id="combined-exports",
+        ),
+        pytest.param(
+            [
                 "--export",
                 "set",
                 "--car-model",
@@ -1152,9 +1088,86 @@ def test_write_set_lfs_rejects_invalid_name(
                 "--set-output",
                 "bad_name",
             ],
+            [],
+            [],
+            [
+                {
+                    "relative_path": Path("LFS/data/setups/bad_name.set"),
+                    "exists": False,
+                    "contains": [],
+                }
+            ],
+            ValueError,
+            False,
+            id="invalid-name",
+        ),
+    ],
+)
+def test_write_set_exports(
+    baseline_path: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    cli_arguments: list[str],
+    expected_result_substrings: list[str],
+    expected_stdout_substrings: list[str],
+    file_expectations: list[dict[str, object]],
+    expected_exception: type[Exception] | None,
+    capture_output: bool,
+) -> None:
+    invocation = ["write-set", str(baseline_path), *cli_arguments]
+
+    if expected_exception is not None:
+        with pytest.raises(expected_exception):
+            run_cli_in_tmp(
+                invocation,
+                tmp_path=tmp_path,
+                monkeypatch=monkeypatch,
+            )
+        for file_spec in file_expectations:
+            expected_path = tmp_path / file_spec["relative_path"]  # type: ignore[index]
+            assert not expected_path.exists()
+        return
+
+    if capture_output:
+        result, captured = run_cli_in_tmp(
+            invocation,
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+            capsys=capsys,
+            capture_output=True,
+        )
+    else:
+        result = run_cli_in_tmp(
+            invocation,
             tmp_path=tmp_path,
             monkeypatch=monkeypatch,
         )
+        captured = None
+
+    for snippet in expected_result_substrings:
+        assert snippet in result
+
+    if captured is not None:
+        for snippet in expected_stdout_substrings:
+            assert snippet in captured.out
+    else:
+        assert not expected_stdout_substrings
+
+    for file_spec in file_expectations:
+        expected_path = tmp_path / file_spec["relative_path"]  # type: ignore[index]
+        should_exist = file_spec.get("exists", True)  # type: ignore[union-attr]
+        if should_exist:
+            assert expected_path.exists()
+            contents = (
+                expected_path.read_text(encoding="utf8")
+                if file_spec.get("contains")  # type: ignore[union-attr]
+                else None
+            )
+            for snippet in file_spec.get("contains", []):  # type: ignore[call-overload]
+                assert contents is not None and snippet in contents
+        else:
+            assert not expected_path.exists()
 
 
 def test_cli_end_to_end_pipeline(

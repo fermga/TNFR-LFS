@@ -260,6 +260,28 @@ def baseline_cli_runner(
     return _run
 
 
+@pytest.fixture
+def baseline_path(
+    tmp_path: Path,
+    synthetic_stint_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    """Generate a baseline telemetry run within ``tmp_path`` and return its path."""
+
+    destination = tmp_path / "baseline.jsonl"
+    run_cli_in_tmp(
+        [
+            "baseline",
+            str(destination),
+            "--simulate",
+            str(synthetic_stint_path),
+        ],
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+    )
+    return destination
+
+
 @pytest.fixture(scope="session")
 def synthetic_records(synthetic_stint_path: Path) -> List[TelemetryRecord]:
     """Load telemetry records used across segmentation/EPI tests."""
