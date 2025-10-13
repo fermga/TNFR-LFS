@@ -3,15 +3,27 @@
 from __future__ import annotations
 
 import warnings
+from importlib import import_module
 from typing import Callable, Mapping, Sequence, Tuple, TypeVar
 
-PHASE_SEQUENCE: Tuple[str, ...] = ("entry1", "entry2", "apex3a", "apex3b", "exit4")
+from tnfr_core._canonical import CANONICAL_REQUESTED, import_tnfr
 
-LEGACY_PHASE_MAP: dict[str, Tuple[str, ...]] = {
+_LOCAL_PHASE_SEQUENCE: Tuple[str, ...] = (
+    "entry1",
+    "entry2",
+    "apex3a",
+    "apex3b",
+    "exit4",
+)
+
+_LOCAL_LEGACY_PHASE_MAP: dict[str, Tuple[str, ...]] = {
     "entry": ("entry1", "entry2"),
     "apex": ("apex3a", "apex3b"),
     "exit": ("exit4",),
 }
+
+PHASE_SEQUENCE: Tuple[str, ...] = _LOCAL_PHASE_SEQUENCE
+LEGACY_PHASE_MAP: dict[str, Tuple[str, ...]] = dict(_LOCAL_LEGACY_PHASE_MAP)
 
 T = TypeVar("T")
 
@@ -105,3 +117,28 @@ def replicate_phase_aliases(
         else:
             normalised[alias] = candidates[-1]
     return normalised
+
+
+if CANONICAL_REQUESTED:  # pragma: no cover - depends on optional package
+    tnfr = import_tnfr()
+    canonical_phases = import_module(f"{tnfr.__name__}.equations.phases")
+
+    PHASE_SEQUENCE = getattr(
+        canonical_phases, "PHASE_SEQUENCE", _LOCAL_PHASE_SEQUENCE
+    )
+    LEGACY_PHASE_MAP = dict(
+        getattr(canonical_phases, "LEGACY_PHASE_MAP", _LOCAL_LEGACY_PHASE_MAP)
+    )
+
+    _PHASE_TO_FAMILY = getattr(canonical_phases, "_PHASE_TO_FAMILY", _PHASE_TO_FAMILY)
+
+    normalise_phase_key = getattr(
+        canonical_phases, "normalise_phase_key", normalise_phase_key
+    )
+    expand_phase_alias = getattr(
+        canonical_phases, "expand_phase_alias", expand_phase_alias
+    )
+    phase_family = getattr(canonical_phases, "phase_family", phase_family)
+    replicate_phase_aliases = getattr(
+        canonical_phases, "replicate_phase_aliases", replicate_phase_aliases
+    )
