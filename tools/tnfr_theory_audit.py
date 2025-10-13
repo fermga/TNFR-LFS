@@ -1,8 +1,12 @@
 """Audit TNFR theory operators and variable references across the repository.
 
-Usage example::
+Usage examples::
 
-    poetry run python tools/tnfr_theory_audit.py --core --tests --output tests/_report/theory_impl_matrix.md
+    # Use default core (src/tnfr_core + src/tnfr_lfs/core) and tests directories
+    poetry run python tools/tnfr_theory_audit.py --core --tests
+
+    # Extend the search to an additional directory
+    poetry run python tools/tnfr_theory_audit.py --core examples --tests docs/tests
 """
 from __future__ import annotations
 
@@ -10,6 +14,13 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
+
+DEFAULT_CORE_DIRECTORIES: tuple[Path, ...] = (
+    Path("src/tnfr_core"),
+    Path("src/tnfr_lfs/core"),
+)
+
+DEFAULT_TEST_DIRECTORIES: tuple[Path, ...] = (Path("tests"),)
 
 THEORY_OPERATORS: Mapping[str, Mapping[str, object]] = {
     "emission_operator": {
@@ -242,10 +253,10 @@ def _build_entries() -> list[TheoryEntry]:
     return entries
 
 
-def generate_report(include_core: bool, include_tests: bool, output_path: Path) -> None:
+def generate_report(
+    core_paths: Sequence[Path], tests_paths: Sequence[Path], output_path: Path
+) -> None:
     repo_root = _resolve_repo_root()
-    core_paths = [repo_root / "src" / "tnfr_lfs" / "core"] if include_core else []
-    tests_paths = [repo_root / "tests"] if include_tests else []
     if not output_path.is_absolute():
         output_path = (repo_root / output_path).resolve()
 
@@ -277,13 +288,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Audit TNFR theory coverage across the repository.")
     parser.add_argument(
         "--core",
-        action="store_true",
-        help="Scan src/tnfr_core for theory references.",
+        nargs="*",
+        metavar="PATH",
+        help=(
+            "Scan one or more core directories for theory references (default: "
+            "src/tnfr_core and src/tnfr_lfs/core)."
+        ),
     )
     parser.add_argument(
         "--tests",
-        action="store_true",
-        help="Scan tests/ for theory references.",
+        nargs="*",
+        metavar="PATH",
+        help="Scan one or more test directories for theory references (default: tests).",
     )
     parser.add_argument(
         "--output",
@@ -293,14 +309,42 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _resolve_requested_paths(
+    requested: Sequence[str] | None,
+    default_directories: Sequence[Path],
+    repo_root: Path,
+) -> list[Path]:
+    if requested is None:
+        return []
+    if not requested:
+        candidates = list(default_directories)
+    else:
+        candidates = [Path(path) for path in requested]
+
+    resolved: list[Path] = []
+    for candidate in candidates:
+        absolute = candidate if candidate.is_absolute() else repo_root / candidate
+        if absolute not in resolved:
+            resolved.append(absolute)
+    return resolved
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
-    include_core = args.core
-    include_tests = args.tests
-    if not include_core and not include_tests:
-        include_core = include_tests = True
+    repo_root = _resolve_repo_root()
+
+    default_core_paths = [repo_root / path for path in DEFAULT_CORE_DIRECTORIES]
+    default_test_paths = [repo_root / path for path in DEFAULT_TEST_DIRECTORIES]
+
+    if args.core is None and args.tests is None:
+        core_paths = default_core_paths
+        test_paths = default_test_paths
+    else:
+        core_paths = _resolve_requested_paths(args.core, DEFAULT_CORE_DIRECTORIES, repo_root)
+        test_paths = _resolve_requested_paths(args.tests, DEFAULT_TEST_DIRECTORIES, repo_root)
+
     output_path = Path(args.output)
-    generate_report(include_core, include_tests, output_path)
+    generate_report(core_paths, test_paths, output_path)
 
 
 if __name__ == "__main__":

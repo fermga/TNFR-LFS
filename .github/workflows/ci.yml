@@ -238,7 +238,6 @@ jobs:
   theory-audit:
     name: Theory audit
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -249,7 +248,7 @@ jobs:
           python-version: "3.11"
       - name: Run theory audit
         run: |
-          python -m tools.tnfr_theory_audit --core src/tnfr_lfs/core --tests tests --output tests/_report/theory_impl_matrix.md
+          python -m tools.tnfr_theory_audit --core --tests --output tests/_report/theory_impl_matrix.md
       - name: Upload theory implementation matrix
         if: always()
         uses: actions/upload-artifact@v4
