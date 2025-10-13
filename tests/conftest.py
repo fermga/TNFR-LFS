@@ -4,7 +4,9 @@ import csv
 import importlib.util
 import json
 import sys
+import uuid
 import warnings
+import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -187,6 +189,48 @@ def synthetic_stint_path() -> Path:
     """Location of the bundled synthetic telemetry stint."""
 
     return Path(__file__).with_name("data") / "synthetic_stint.csv"
+
+
+@pytest.fixture
+def csv_bundle(tmp_path: Path) -> Callable[..., Path]:
+    """Build a temporary CSV bundle for ReplayCSVBundleReader tests."""
+
+    def _build(
+        *, missing: Sequence[str] | str | None = None, with_distance: bool = True
+    ) -> Path:
+        bundle_path = tmp_path / f"bundle_{uuid.uuid4().hex}.zip"
+
+        entries: dict[str, Iterable[tuple[float, float]]] = {
+            "time.csv": ((0.0, 0.0), (1.0, 1.0)),
+            "speed.csv": ((0.0, 100.0), (1.0, 101.0)),
+        }
+
+        missing_entries: set[str]
+        if missing is None:
+            missing_entries = set()
+        elif isinstance(missing, str):
+            missing_entries = {missing}
+        else:
+            missing_entries = set(missing)
+
+        normalised_missing = {
+            name if name.endswith(".csv") else f"{name}.csv" for name in missing_entries
+        }
+
+        distance_column = "d" if with_distance else "distance"
+
+        with zipfile.ZipFile(bundle_path, "w") as archive:
+            for name, rows in entries.items():
+                if name in normalised_missing:
+                    continue
+
+                lines = [f"{distance_column},value"]
+                lines.extend(f"{distance},{value}" for distance, value in rows)
+                archive.writestr(name, "\n".join(lines) + "\n")
+
+        return bundle_path
+
+    return _build
 
 
 @pytest.fixture

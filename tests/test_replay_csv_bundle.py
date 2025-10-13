@@ -5,7 +5,6 @@ import math
 import time
 import importlib
 import tracemalloc
-import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -274,24 +273,20 @@ def test_replay_csv_clear_cache_refreshes_records(monkeypatch: pytest.MonkeyPatc
         assert counter.count > mutation_calls
 
 
-def test_replay_csv_bundle_without_time_entry_raises(tmp_path: Path) -> None:
-    bundle = tmp_path / "missing_time.zip"
-    with zipfile.ZipFile(bundle, "w") as archive:
-        archive.writestr("speed.csv", "d,value\n0,100\n")
+@pytest.mark.parametrize(
+    ("bundle_kwargs", "expected_message"),
+    (
+        ({"missing": "time"}, "must contain a time.csv entry"),
+        ({"with_distance": False}, "does not contain a distance column"),
+    ),
+)
+def test_replay_csv_bundle_validation_errors(
+    csv_bundle: Callable[..., Path], bundle_kwargs: dict[str, object], expected_message: str
+) -> None:
+    bundle = csv_bundle(**bundle_kwargs)
 
     reader = ReplayCSVBundleReader(bundle)
-    with pytest.raises(ValueError, match="must contain a time.csv entry"):
-        reader.to_dataframe()
-
-
-def test_replay_csv_bundle_missing_distance_column_raises(tmp_path: Path) -> None:
-    bundle = tmp_path / "missing_distance.zip"
-    with zipfile.ZipFile(bundle, "w") as archive:
-        archive.writestr("time.csv", "d,value\n0,0.0\n")
-        archive.writestr("speed.csv", "distance,value\n0,100\n")
-
-    reader = ReplayCSVBundleReader(bundle)
-    with pytest.raises(ValueError, match="does not contain a distance column"):
+    with pytest.raises(ValueError, match=expected_message):
         reader.to_dataframe()
 
 
