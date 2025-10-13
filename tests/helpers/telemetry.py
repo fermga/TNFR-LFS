@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Sequence
 
-from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_core.epi import TelemetryRecord
 
 
 _DEFAULT_TELEMETRY_RECORD = TelemetryRecord(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Callable
 
-from tnfr_lfs.core.epi_models import (
+from tnfr_core.epi_models import (
     BrakesNode,
     ChassisNode,
     DriverNode,

@@ -27,27 +27,27 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from tnfr_lfs.core.archetypes import (
+from tnfr_core.equations.archetypes import (
     ARCHETYPE_MEDIUM,
     DEFAULT_ARCHETYPE_PHASE_TARGETS,
     PhaseArchetypeTargets,
 )
-from tnfr_lfs.core.constants import (
+from tnfr_core.equations.constants import (
     PRESSURE_STD_KEYS,
     TEMPERATURE_MEAN_KEYS,
     TEMPERATURE_STD_KEYS,
     WHEEL_LABELS,
     WHEEL_SUFFIXES,
 )
-from tnfr_lfs.core.epi_models import EPIBundle
-from tnfr_lfs.core.operators import TyreBalanceControlOutput, tyre_balance_controller
-from tnfr_lfs.core.operator_detection import canonical_operator_label, silence_event_payloads
-from tnfr_lfs.core.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
+from tnfr_core.equations.epi_models import EPIBundle
+from tnfr_core.operators.operators import TyreBalanceControlOutput, tyre_balance_controller
+from tnfr_core.operators.operator_detection import canonical_operator_label, silence_event_payloads
+from tnfr_core.equations.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
 from tnfr_lfs.math.conversions import _safe_float
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from tnfr_lfs.ingestion.offline.profiles import AeroProfile, ProfileManager
-from tnfr_lfs.core.segmentation import (
+from tnfr_core.metrics.segmentation import (
     Goal,
     Microsector,
     detect_quiet_microsector_streaks,

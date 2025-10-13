@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Iterator
 
 import pandas as pd
 
-from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_core.epi import TelemetryRecord
 from tnfr_lfs.ingestion.offline import ReplayCSVBundleReader
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only.

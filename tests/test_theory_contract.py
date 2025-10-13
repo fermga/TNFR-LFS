@@ -4,8 +4,8 @@ from importlib import import_module
 
 import pytest
 
-from tnfr_lfs.core import metrics as core_metrics
-from tnfr_lfs.core import operator_detection
+from tnfr_core import metrics as core_metrics
+from tnfr_core import operator_detection
 
 
 STRUCTURAL_LABELS = {

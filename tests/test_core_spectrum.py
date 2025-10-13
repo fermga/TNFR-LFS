@@ -6,7 +6,7 @@ from typing import Sequence
 import numpy as np
 import pytest
 
-from tnfr_lfs.core import spectrum
+from tnfr_core import spectrum
 
 
 def _sine_wave(

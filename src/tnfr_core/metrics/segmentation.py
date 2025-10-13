@@ -1,7 +1,7 @@
 """Microsector segmentation utilities.
 
 This module analyses the stream of telemetry samples together with the
-corresponding :class:`~tnfr_lfs.core.interfaces.SupportsEPIBundle` instances to
+corresponding :class:`~tnfr_core.operators.interfaces.SupportsEPIBundle` instances to
 derive microsectors and their tactical goals.  The segmentation is
 performed using three simple heuristics inspired by motorsport
 engineering practice:
@@ -23,14 +23,14 @@ from dataclasses import dataclass, field
 from statistics import mean, pstdev
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple, cast
 
-from tnfr_lfs.core.epi import (
+from tnfr_core.equations.epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
     NaturalFrequencyAnalyzer,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from tnfr_lfs.core.contextual_delta import (
+from tnfr_core.equations.contextual_delta import (
     ContextFactors,
     ContextMatrix,
     apply_contextual_delta,
@@ -39,46 +39,46 @@ from tnfr_lfs.core.contextual_delta import (
     resolve_microsector_context,
     resolve_series_context,
 )
-from tnfr_lfs.core.interfaces import (
+from tnfr_core.operators.interfaces import (
     SupportsContextBundle,
     SupportsContextRecord,
     SupportsEPIBundle,
     SupportsTelemetrySample,
 )
-from tnfr_lfs.core.metrics import (
+from tnfr_core.metrics.metrics import (
     compute_window_metrics,
     phase_synchrony_index,
 )
-from tnfr_lfs.core.operator_detection import (
+from tnfr_core.operators.operator_detection import (
     detect_al,
     detect_il,
     detect_oz,
     detect_silence,
     silence_event_payloads,
 )
-from tnfr_lfs.core.operators import (
+from tnfr_core.operators.operators import (
     RecursivityMicroStateSnapshot,
     RecursivityOperatorResult,
     RecursivityStateRoot,
     mutation_operator,
     recursivity_operator,
 )
-from tnfr_lfs.core.phases import (
+from tnfr_core.equations.phases import (
     LEGACY_PHASE_MAP,
     PHASE_SEQUENCE,
     expand_phase_alias,
     phase_family,
     replicate_phase_aliases,
 )
-from tnfr_lfs.core.archetypes import (
+from tnfr_core.equations.archetypes import (
     ARCHETYPE_CHICANE,
     ARCHETYPE_HAIRPIN,
     ARCHETYPE_FAST,
     ARCHETYPE_MEDIUM,
     archetype_phase_targets,
 )
-from tnfr_lfs.core.resonance import estimate_excitation_frequency
-from tnfr_lfs.core.spectrum import phase_alignment
+from tnfr_core.metrics.resonance import estimate_excitation_frequency
+from tnfr_core.metrics.spectrum import phase_alignment
 
 # Public API: core.__init__ re-exports segmentation artefacts via these names.
 __all__ = [
@@ -278,13 +278,13 @@ def segment_microsectors(
     ----------
     records:
         Telemetry samples in chronological order. Each instance must implement
-        :class:`~tnfr_lfs.core.interfaces.SupportsTelemetrySample` and satisfy
-        :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord` so the
+        :class:`~tnfr_core.operators.interfaces.SupportsTelemetrySample` and satisfy
+        :class:`~tnfr_core.operators.interfaces.SupportsContextRecord` so the
         contextual weighting heuristics can access the required signals.
     bundles:
-        Computed :class:`~tnfr_lfs.core.interfaces.SupportsEPIBundle` entries for
+        Computed :class:`~tnfr_core.operators.interfaces.SupportsEPIBundle` entries for
         the same timestamps as ``records``. Every bundle must also implement the
-        :class:`~tnfr_lfs.core.interfaces.SupportsContextBundle` contract.
+        :class:`~tnfr_core.operators.interfaces.SupportsContextBundle` contract.
 
     Returns
     -------

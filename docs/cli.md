@@ -181,7 +181,7 @@ Page C adds a “Checklist” line that validates the operations targets:
 mean ``Si`` ≥ 0.75, ΔNFR integral ≤ 6.00 kN·s⁻¹, ``Head`` ≥ 0.40, and Δμ ≤
 0.12. Each block shows ✅ when the metric respects the threshold and ⚠️ when
 it requires attention, reusing the same limits enforced by the rule engine and
-the window metrics.【F:tnfr_lfs/recommender/rules.py†L604-L615】【F:tnfr_lfs/recommender/search.py†L210-L236】【F:tnfr_lfs/core/metrics.py†L2558-L2575】【F:tnfr_lfs/cli/osd.py†L1477-L1567】
+the window metrics.【F:tnfr_lfs/recommender/rules.py†L604-L615】【F:tnfr_lfs/recommender/search.py†L210-L236】【F:tnfr_core/metrics.py†L2558-L2575】【F:tnfr_lfs/cli/osd.py†L1477-L1567】
 
 Refer to the [setup equivalence guide](setup_equivalences.md) for a
 metric-by-metric breakdown (`∇NFR⊥`, `ν_f`, `C(t)`) that matches the HUD
@@ -294,7 +294,7 @@ persists ``out/<baseline-stem>/sense_index_map.json`` and
 Index heatmap and modal resonance analysis without re-running the CLI.
 
 Each microsector entry under ``filtered_measures`` now embeds a nested ``cphi``
-block mirroring the :class:`~tnfr_lfs.core.metrics.CPHIReport`. The export
+block mirroring the :class:`~tnfr_core.metrics.CPHIReport`. The export
 includes the red/amber/green thresholds and the ``optimal`` flag so downstream
 dashboards can reuse the same tyre-health semantics shown in the HUD without
 deriving bands manually.
@@ -482,13 +482,13 @@ Save the changes and run ``tnfr_lfs diagnose /path/to/cfg.txt`` to confirm the v
   expose Fz loads, accelerations, forces, and wheel deflection together with
   OutGauge to obtain `rpm`, pedal positions, and ABS/TC lights. These signals feed
   the nodal gradient; consult the `Fz`/`ΔFz` channels if you need to quantify
-  absolute loads before applying an adjustment.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+  absolute loads before applying an adjustment.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_core/epi.py†L604-L676】
 - **ν_f (natural frequency)** – depends on the distribution of Fz loads,
   `slip_ratio`/`slip_angle`, speed, and `yaw_rate` computed from OutSim, along
-  with style signals (`throttle`, `gear`) emitted by OutGauge.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+  with style signals (`throttle`, `gear`) emitted by OutGauge.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_core/epi.py†L648-L710】
 - **C(t) (structural coherence)** – consumes the same blend of OutSim signals
   used for ΔNFR together with the `mu_eff_*` coefficients and the ABS/TC flags
-  from OutGauge that the fusion module translates into lockup events.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+  from OutGauge that the fusion module translates into lockup events.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_core/epi.py†L604-L676】【F:tnfr_core/coherence.py†L65-L125】
 
 Use ``--config`` to point to an alternative file on a per-invocation
 basis:

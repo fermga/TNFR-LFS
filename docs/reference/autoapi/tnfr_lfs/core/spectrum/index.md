@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.spectrum` module
+# `tnfr_core.spectrum` module
 Spectral helpers shared across modal and phase alignment analyses.
 
 ## Classes

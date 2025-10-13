@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.metrics` module
+# `tnfr_core.metrics` module
 Windowed telemetry metrics used by the HUD and setup planner.
 
 ## Classes
@@ -135,14 +135,14 @@ Parameters
 ----------
 records:
     Ordered window of telemetry samples implementing
-    :class:`~tnfr_lfs.core.interfaces.SupportsTelemetrySample`. Entries
-    must also satisfy :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord`
+    :class:`~tnfr_core.interfaces.SupportsTelemetrySample`. Entries
+    must also satisfy :class:`~tnfr_core.interfaces.SupportsContextRecord`
     when contextual weighting is applied.
 bundles:
     Optional precomputed insight series implementing
-    :class:`~tnfr_lfs.core.interfaces.SupportsEPIBundle` and matching
+    :class:`~tnfr_core.interfaces.SupportsEPIBundle` and matching
     ``records``. Each bundle must adhere to
-    :class:`~tnfr_lfs.core.interfaces.SupportsContextBundle` so the node
+    :class:`~tnfr_core.interfaces.SupportsContextBundle` so the node
     metrics remain accessible to the contextual helpers.
 fallback_to_chronological:
     When ``True`` the metric computation gracefully falls back to the
@@ -153,7 +153,7 @@ fallback_to_chronological:
   - Compute aero balance deltas at low and high speed.
 
 The helper inspects ΔNFR contributions attributed to μ_eff front/rear terms
-in the :attr:`~tnfr_lfs.core.interfaces.SupportsEPIBundle.delta_breakdown`
+in the :attr:`~tnfr_core.interfaces.SupportsEPIBundle.delta_breakdown`
 payload.
 When the optional ``bundles`` sequence is not provided or lacks breakdown
 data the function gracefully returns a neutral :class:`AeroCoherence`

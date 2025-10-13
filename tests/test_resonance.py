@@ -6,7 +6,7 @@ import pytest
 
 from tests.helpers import build_resonance_record
 
-from tnfr_lfs.core.resonance import analyse_modal_resonance
+from tnfr_core.resonance import analyse_modal_resonance
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.phases` module
+# `tnfr_core.phases` module
 Shared definitions for TNFR phase nomenclature.
 
 ## Functions

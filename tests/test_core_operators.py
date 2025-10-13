@@ -17,21 +17,21 @@ from tests.helpers import (
     clone_protocol_series,
 )
 
-from tnfr_lfs.core import Microsector, TelemetryRecord, phase_synchrony_index
-from tnfr_lfs.core.spectrum import phase_to_latency_ms
-from tnfr_lfs.core.coherence import sense_index
-from tnfr_lfs.core.contextual_delta import (
+from tnfr_core import Microsector, TelemetryRecord, phase_synchrony_index
+from tnfr_core.spectrum import phase_to_latency_ms
+from tnfr_core.coherence import sense_index
+from tnfr_core.contextual_delta import (
     apply_contextual_delta,
     load_context_matrix,
     resolve_series_context,
 )
-from tnfr_lfs.core.epi import (
+from tnfr_core.epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from tnfr_lfs.core.epi_models import (
+from tnfr_core.epi_models import (
     BrakesNode,
     ChassisNode,
     DriverNode,
@@ -41,9 +41,9 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias
-from tnfr_lfs.core.constants import WHEEL_SUFFIXES
-from tnfr_lfs.core.operators import (
+from tnfr_core.phases import PHASE_SEQUENCE, expand_phase_alias
+from tnfr_core.constants import WHEEL_SUFFIXES
+from tnfr_core.operators import (
     DissonanceBreakdown,
     acoplamiento_operator,
     coupling_operator,
@@ -66,9 +66,9 @@ from tnfr_lfs.core.operators import (
     TyreBalanceControlOutput,
     tyre_balance_controller,
 )
-from tnfr_lfs.core.metrics import compute_window_metrics
-from tnfr_lfs.core.operator_detection import canonical_operator_label
-from tnfr_lfs.core.interfaces import SupportsEPIBundle
+from tnfr_core.metrics import compute_window_metrics
+from tnfr_core.operator_detection import canonical_operator_label
+from tnfr_core.interfaces import SupportsEPIBundle
 
 
 CASES = [
@@ -630,7 +630,10 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
         return bundles
 
     _fake_reception.call_count = 0
-    monkeypatch.setattr("tnfr_lfs.core.operators.reception_operator", _fake_reception)
+    monkeypatch.setattr(
+        "tnfr_core.operators.operators.reception_operator",
+        _fake_reception,
+    )
 
     phase_sync_a = {
         phase: 0.85 + index * 0.02 for index, phase in enumerate(PHASE_SEQUENCE)

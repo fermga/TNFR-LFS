@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from tnfr_lfs.core import spectrum
+from tnfr_core import spectrum
 
 pytestmark = pytest.mark.benchmark(group="spectrum")
 

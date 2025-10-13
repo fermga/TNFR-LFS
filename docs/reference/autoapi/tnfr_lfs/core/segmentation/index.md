@@ -1,8 +1,8 @@
-# `tnfr_lfs.core.segmentation` module
+# `tnfr_core.segmentation` module
 Microsector segmentation utilities.
 
 This module analyses the stream of telemetry samples together with the
-corresponding :class:`~tnfr_lfs.core.interfaces.SupportsEPIBundle` instances to
+corresponding :class:`~tnfr_core.interfaces.SupportsEPIBundle` instances to
 derive microsectors and their tactical goals.  The segmentation is
 performed using three simple heuristics inspired by motorsport
 engineering practice:
@@ -34,13 +34,13 @@ Parameters
 ----------
 records:
     Telemetry samples in chronological order. Each instance must implement
-    :class:`~tnfr_lfs.core.interfaces.SupportsTelemetrySample` and satisfy
-    :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord` so the
+    :class:`~tnfr_core.interfaces.SupportsTelemetrySample` and satisfy
+    :class:`~tnfr_core.interfaces.SupportsContextRecord` so the
     contextual weighting heuristics can access the required signals.
 bundles:
-    Computed :class:`~tnfr_lfs.core.interfaces.SupportsEPIBundle` entries for
+    Computed :class:`~tnfr_core.interfaces.SupportsEPIBundle` entries for
     the same timestamps as ``records``. Every bundle must also implement the
-    :class:`~tnfr_lfs.core.interfaces.SupportsContextBundle` contract.
+    :class:`~tnfr_core.interfaces.SupportsContextBundle` contract.
 
 Returns
 -------

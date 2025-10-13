@@ -1,7 +1,7 @@
 """Detection utilities for on-track operator events.
 
 Each detection routine analyses a windowed sequence of
-:class:`~tnfr_lfs.core.interfaces.SupportsTelemetrySample` objects and yields
+:class:`~tnfr_core.operators.interfaces.SupportsTelemetrySample` objects and yields
 event descriptors when the observed behaviour exceeds the
 configured thresholds.  The detectors are intentionally lightweight so that
 they can be executed on every microsector without adding measurable overhead
@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import Any, Dict, List, Mapping, Sequence, Tuple, Union
 
-from tnfr_lfs.core.interfaces import SupportsTelemetrySample
-from tnfr_lfs.core.structural_time import compute_structural_timestamps
+from tnfr_core.operators.interfaces import SupportsTelemetrySample
+from tnfr_core.operators.structural_time import compute_structural_timestamps
 
 __all__ = [
     "OperatorEvent",

@@ -24,17 +24,17 @@ from typing import (
     cast,
 )
 
-from tnfr_lfs.core.constants import WHEEL_SUFFIXES
+from tnfr_core.equations.constants import WHEEL_SUFFIXES
 
-from tnfr_lfs.core.contextual_delta import (
+from tnfr_core.equations.contextual_delta import (
     apply_contextual_delta,
     load_context_matrix,
     resolve_context_from_bundle,
     resolve_series_context,
 )
-from tnfr_lfs.core.metrics import compute_window_metrics
-from tnfr_lfs.core.dissonance import compute_useful_dissonance_stats
-from tnfr_lfs.core.epi import (
+from tnfr_core.metrics.metrics import compute_window_metrics
+from tnfr_core.equations.dissonance import compute_useful_dissonance_stats
+from tnfr_core.equations.epi import (
     EPIExtractor,
     NaturalFrequencyAnalyzer,
     TelemetryRecord,
@@ -42,7 +42,7 @@ from tnfr_lfs.core.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from tnfr_lfs.core.epi_models import (
+from tnfr_core.equations.epi_models import (
     EPIBundle,
     BrakesNode,
     ChassisNode,
@@ -52,13 +52,13 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_lfs.core.phases import LEGACY_PHASE_MAP
-from tnfr_lfs.core.archetypes import ARCHETYPE_MEDIUM
-from tnfr_lfs.core.operator_detection import (
+from tnfr_core.equations.phases import LEGACY_PHASE_MAP
+from tnfr_core.equations.archetypes import ARCHETYPE_MEDIUM
+from tnfr_core.operators.operator_detection import (
     normalize_structural_operator_identifier,
     silence_event_payloads,
 )
-from tnfr_lfs.core.interfaces import (
+from tnfr_core.operators.interfaces import (
     SupportsChassisNode,
     SupportsEPIBundle,
     SupportsMicrosector,

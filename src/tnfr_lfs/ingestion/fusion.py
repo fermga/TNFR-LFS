@@ -20,7 +20,7 @@ from tnfr_lfs.analysis.brake_thermal import (
     BrakeThermalEstimator,
     merge_brake_config,
 )
-from tnfr_lfs.core.epi import EPIExtractor, EPIBundle, TelemetryRecord
+from tnfr_core.equations.epi import EPIExtractor, EPIBundle, TelemetryRecord
 from tnfr_lfs.math.conversions import _safe_float
 from tnfr_lfs.ingestion.outsim_udp import OutSimPacket, OutSimWheelState
 from tnfr_lfs.ingestion.outgauge_udp import OutGaugePacket

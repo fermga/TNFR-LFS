@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
+from tnfr_core.metrics import WindowMetrics, compute_window_metrics
 
 from tests.helpers import build_support_bundle, build_telemetry_record
 

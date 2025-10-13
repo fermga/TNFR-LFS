@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.constants` module
+# `tnfr_core.constants` module
 Centralised constant definitions shared across TNFR × LFS modules.
 
 ## Attributes

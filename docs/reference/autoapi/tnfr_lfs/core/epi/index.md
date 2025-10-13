@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.epi` module
+# `tnfr_core.epi` module
 EPI extraction and ΔNFR/ΔSi computations.
 
 ## Classes

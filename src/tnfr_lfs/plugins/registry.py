@@ -27,7 +27,7 @@ class PluginMetadataError(ValueError):
 
 @lru_cache(maxsize=1)
 def _known_operator_identifiers() -> frozenset[OperatorName]:
-    from tnfr_lfs.core import operators as _operators
+    from tnfr_core import operators as _operators
 
     return frozenset(_operators.__all__)
 

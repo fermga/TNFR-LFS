@@ -35,7 +35,7 @@ optimisations against your own telemetry recordings.
 
 The ``benchmarks/spectrum_goertzel_benchmark.py`` module compares the dense FFT
 cross-spectrum against the sparse Goertzel helper introduced in
-``tnfr_lfs.core.spectrum``. When the analysis only needs the dominant bin, the
+``tnfr_core.spectrum``. When the analysis only needs the dominant bin, the
 Goertzel path evaluates a fixed list of candidate frequencies in ``O(n·k)``
 operations. With ``k`` constant, this becomes linear in the number of samples,
 which translates into faster feedback for high-resolution stints. Install the

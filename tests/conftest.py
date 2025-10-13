@@ -91,10 +91,10 @@ from tests.helpers import (
 )
 from tnfr_lfs.cli import run_cli
 
-from tnfr_lfs.core.cache_settings import CacheOptions
+from tnfr_core.cache_settings import CacheOptions
 
-from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
-from tnfr_lfs.core.epi_models import (
+from tnfr_core.epi import EPIExtractor, TelemetryRecord
+from tnfr_core.epi_models import (
     BrakesNode,
     ChassisNode,
     DriverNode,
@@ -104,7 +104,7 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_lfs.core.segmentation import Goal, Microsector, segment_microsectors
+from tnfr_core.segmentation import Goal, Microsector, segment_microsectors
 from tnfr_lfs.cli.osd import TelemetryHUD
 from tnfr_lfs.recommender.rules import RuleContext, ThresholdProfile
 
@@ -1128,7 +1128,7 @@ _CLI_CONFIG_CASES: Dict[str, CliConfigCase] = {
     ),
     "explicit-sections": CliConfigCase(
         toml_text="""
-        [tool.tnfr_lfs.core]
+        [tool.tnfr_core]
         host = "192.0.2.1"
 
         [tool.tnfr_lfs.performance]

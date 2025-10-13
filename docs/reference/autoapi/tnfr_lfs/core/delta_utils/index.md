@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.delta_utils` module
+# `tnfr_core.delta_utils` module
 Common helpers for ΔNFR distribution logic.
 
 ## Functions

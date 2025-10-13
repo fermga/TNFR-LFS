@@ -12,7 +12,7 @@ This index was generated from the source tree and mirrors the ``tnfr_lfs`` packa
 - [`tnfr_lfs.cli`](tnfr_lfs/cli/index.md)
 - [`tnfr_lfs.common`](tnfr_lfs/common/index.md)
 - [`tnfr_lfs.configuration`](tnfr_lfs/configuration/index.md)
-- [`tnfr_lfs.core`](tnfr_lfs/core/index.md)
+- [`tnfr_core`](tnfr_core/index.md)
 - [`tnfr_lfs.data`](tnfr_lfs/data/index.md)
 - [`tnfr_lfs.examples`](tnfr_lfs/examples/index.md)
 - [`tnfr_lfs.exporters`](tnfr_lfs/exporters/index.md)

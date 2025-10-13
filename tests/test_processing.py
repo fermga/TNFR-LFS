@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from tnfr_lfs.analysis import compute_session_robustness
-from tnfr_lfs.core.epi import EPIExtractor
-from tnfr_lfs.core.segmentation import segment_microsectors
+from tnfr_core.epi import EPIExtractor
+from tnfr_core.segmentation import segment_microsectors
 from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
 
 from tests.helpers import preloaded_profile_manager

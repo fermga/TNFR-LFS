@@ -60,6 +60,7 @@ version = { attr = "tnfr_lfs._version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["tnfr_lfs*", "tnfr_core*"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -89,6 +90,14 @@ output = "stderr"
 format = "json"
 
 [tool.tnfr_lfs.core]
+host = "127.0.0.1"
+outsim_port = 4123
+outgauge_port = 3000
+insim_port = 29999
+udp_timeout = 0.01
+udp_retries = 3
+
+[tool.tnfr_core]
 host = "127.0.0.1"
 outsim_port = 4123
 outgauge_port = 3000

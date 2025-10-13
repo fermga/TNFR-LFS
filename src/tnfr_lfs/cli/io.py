@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from tnfr_lfs.configuration import load_project_config
-from tnfr_lfs.core.cache_settings import CacheOptions
+from tnfr_core.operators.cache_settings import CacheOptions
 from tnfr_lfs.ingestion import OutSimClient
 from tnfr_lfs.ingestion.offline import (
     ReplayCSVBundleReader,
@@ -19,7 +19,7 @@ from tnfr_lfs.ingestion.offline import (
     read_raf,
     write_run,
 )
-from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_core.equations.epi import TelemetryRecord
 from tnfr_lfs.cli.errors import CliError
 
 CONFIG_ENV_VAR = "TNFR_LFS_CONFIG"

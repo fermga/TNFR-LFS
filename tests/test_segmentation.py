@@ -7,15 +7,15 @@ from typing import Mapping, Tuple
 
 from tests.helpers import build_dynamic_record
 
-from tnfr_lfs.core.archetypes import archetype_phase_targets
-from tnfr_lfs.core import segmentation as segmentation_module
-from tnfr_lfs.core.contextual_delta import (
+from tnfr_core.archetypes import archetype_phase_targets
+from tnfr_core import segmentation as segmentation_module
+from tnfr_core.contextual_delta import (
     ContextFactors,
     apply_contextual_delta,
     load_context_matrix,
 )
-from tnfr_lfs.core.coherence import sense_index
-from tnfr_lfs.core.epi import (
+from tnfr_core.coherence import sense_index
+from tnfr_core.epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
     EPIExtractor,
@@ -23,8 +23,8 @@ from tnfr_lfs.core.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias, phase_family
-from tnfr_lfs.core.metrics import (
+from tnfr_core.phases import PHASE_SEQUENCE, expand_phase_alias, phase_family
+from tnfr_core.metrics import (
     AeroCoherence,
     BrakeHeadroom,
     BumpstopHistogram,
@@ -33,8 +33,8 @@ from tnfr_lfs.core.metrics import (
     SuspensionVelocityBands,
     WindowMetrics,
 )
-from tnfr_lfs.core.operator_detection import silence_event_payloads
-from tnfr_lfs.core.segmentation import (
+from tnfr_core.operator_detection import silence_event_payloads
+from tnfr_core.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
     microsector_stability_metrics,

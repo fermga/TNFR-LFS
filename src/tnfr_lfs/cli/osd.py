@@ -32,7 +32,7 @@ from tnfr_lfs.ingestion import (
     OutSimUDPClient,
     TelemetryFusion,
 )
-from tnfr_lfs.core.constants import (
+from tnfr_core.equations.constants import (
     BRAKE_TEMPERATURE_MEAN_KEYS,
     BRAKE_TEMPERATURE_STD_KEYS,
     PRESSURE_MEAN_KEYS,
@@ -42,8 +42,8 @@ from tnfr_lfs.core.constants import (
     WHEEL_LABELS,
     WHEEL_SUFFIXES,
 )
-from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord
-from tnfr_lfs.core.metrics import (
+from tnfr_core.equations.epi import EPIExtractor, TelemetryRecord
+from tnfr_core.metrics.metrics import (
     AeroBalanceDrift,
     AeroBalanceDriftBin,
     BrakeHeadroom,
@@ -51,11 +51,11 @@ from tnfr_lfs.core.metrics import (
     WindowMetrics,
     compute_window_metrics,
 )
-from tnfr_lfs.core.operators import orchestrate_delta_metrics
-from tnfr_lfs.core.operator_detection import canonical_operator_label, silence_event_payloads
-from tnfr_lfs.core.phases import PHASE_SEQUENCE, phase_family
-from tnfr_lfs.core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
-from tnfr_lfs.core.segmentation import (
+from tnfr_core.operators.operators import orchestrate_delta_metrics
+from tnfr_core.operators.operator_detection import canonical_operator_label, silence_event_payloads
+from tnfr_core.equations.phases import PHASE_SEQUENCE, phase_family
+from tnfr_core.metrics.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
+from tnfr_core.metrics.segmentation import (
     Goal,
     Microsector,
     detect_quiet_microsector_streaks,

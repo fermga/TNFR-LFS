@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.cache_settings` module
+# `tnfr_core.cache_settings` module
 Runtime cache configuration models.
 
 ## Classes

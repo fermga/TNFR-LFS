@@ -9,8 +9,8 @@ import pytest
 
 from tests.helpers import build_calibration_record
 
-from tnfr_lfs.core.coherence_calibration import CoherenceCalibrationStore
-from tnfr_lfs.core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
+from tnfr_core.coherence_calibration import CoherenceCalibrationStore
+from tnfr_core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
 
 
 def _make_stint(vertical_load: float, *, nfr: float = 0.7, samples: int = 5) -> List[TelemetryRecord]:

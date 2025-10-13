@@ -10,17 +10,20 @@ modern layout adopted by the project.
 
 from tnfr_lfs._version import __version__
 from tnfr_lfs.cli import format_session_messages
-from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
-from tnfr_lfs.core.epi import (
+from tnfr_core import (
     DeltaCalculator,
+    EPIBundle,
     EPIExtractor,
     NaturalFrequencyAnalyzer,
     NaturalFrequencySettings,
     TelemetryRecord,
+    Goal,
+    Microsector,
+    compute_node_delta_nfr,
     delta_nfr_by_node,
+    segment_microsectors,
+    sense_index,
 )
-from tnfr_lfs.core.epi_models import EPIBundle
-from tnfr_lfs.core.segmentation import Goal, Microsector, segment_microsectors
 from tnfr_lfs.ingestion.live import OutSimClient
 from tnfr_lfs.recommender.rules import Recommendation, RecommendationEngine
 from tnfr_lfs.analysis.insights import InsightsResult, compute_insights

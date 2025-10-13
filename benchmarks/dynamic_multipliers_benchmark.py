@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from tnfr_lfs.resources import data_root
-from tnfr_lfs.core.cache_settings import CacheOptions
-from tnfr_lfs.core.epi import NaturalFrequencyAnalyzer, NaturalFrequencySettings, TelemetryRecord
-from tnfr_lfs.core.spectrum import cross_spectrum, estimate_sample_rate, power_spectrum
+from tnfr_core.cache_settings import CacheOptions
+from tnfr_core.epi import NaturalFrequencyAnalyzer, NaturalFrequencySettings, TelemetryRecord
+from tnfr_core.spectrum import cross_spectrum, estimate_sample_rate, power_spectrum
 from tnfr_lfs.ingestion.offline import ReplayCSVBundleReader
 
 _DEFAULT_BUNDLE = data_root() / "test1.zip"

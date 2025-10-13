@@ -6,8 +6,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
-from tnfr_lfs.core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
-from tnfr_lfs.core.epi_models import (
+from tnfr_core.epi import DeltaCalculator, TelemetryRecord, _ackermann_parallel_delta
+from tnfr_core.epi_models import (
     BrakesNode,
     ChassisNode,
     DriverNode,
@@ -17,7 +17,7 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
+from tnfr_core.metrics import WindowMetrics, compute_window_metrics
 
 
 def build_steering_record(

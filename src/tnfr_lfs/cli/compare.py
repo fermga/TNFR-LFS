@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from tnfr_lfs.analysis import SUPPORTED_LAP_METRICS, ab_compare_by_lap
-from tnfr_lfs.core.operators import orchestrate_delta_metrics
+from tnfr_core.operators.operators import orchestrate_delta_metrics
 from tnfr_lfs.cli.session import format_session_messages
 
 from tnfr_lfs.cli.common import (

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from tnfr_lfs.core.cache import LRUCache
-from tnfr_lfs.core.epi_models import EPIBundle
-from tnfr_lfs.core.segmentation import Microsector
+from tnfr_core.cache import LRUCache
+from tnfr_core.epi_models import EPIBundle
+from tnfr_core.segmentation import Microsector
 from tnfr_lfs.recommender import RecommendationEngine
 import tnfr_lfs.recommender.search as search_module
 from tnfr_lfs.recommender.search import (

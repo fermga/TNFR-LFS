@@ -4,7 +4,7 @@ import pytest
 
 from tests.helpers import build_dynamic_record
 
-from tnfr_lfs.core.resonance import analyse_modal_resonance
+from tnfr_core.resonance import analyse_modal_resonance
 
 
 def test_modal_analysis_reports_excitation_ratio() -> None:

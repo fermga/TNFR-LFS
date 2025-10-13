@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Mapping, MutableMapping, Sequence
 
 if False:  # pragma: no cover - type-checker hint without runtime import
-    from tnfr_lfs.core.epi import NaturalFrequencySnapshot
+    from tnfr_core.equations.epi import NaturalFrequencySnapshot
 
 
 @dataclass
@@ -72,7 +72,7 @@ class TNFRPlugin(ABC):
         ----------
         snapshot:
             The spectral snapshot returned by
-            :class:`~tnfr_lfs.core.epi.NaturalFrequencyAnalyzer`.
+            :class:`~tnfr_core.equations.epi.NaturalFrequencyAnalyzer`.
         """
 
         self._nu_f_by_node = dict(snapshot.by_node)

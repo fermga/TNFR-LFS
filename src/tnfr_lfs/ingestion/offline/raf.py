@@ -4,7 +4,7 @@ The RAF (Replay Analyser Format) files produced by Live for Speed contain a
 compact binary snapshot of a car's static configuration followed by a stream of
 per-frame telemetry samples.  The helpers in this module expose the RAF
 structure through small ``dataclass`` based containers and provide conversions
-to :class:`~tnfr_lfs.core.epi.TelemetryRecord` instances so that callers can use
+to :class:`~tnfr_core.equations.epi.TelemetryRecord` instances so that callers can use
 RAF recordings with the rest of the telemetry tooling.
 """
 
@@ -16,7 +16,7 @@ import math
 import struct
 from typing import BinaryIO, Mapping, Sequence
 
-from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_core.equations.epi import TelemetryRecord
 
 _MAGIC = b"LFSRAF"
 _U16 = struct.Struct("<H")

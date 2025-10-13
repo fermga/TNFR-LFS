@@ -6,7 +6,7 @@ from typing import Callable, Mapping
 
 import pytest
 
-from tnfr_lfs.core.metrics import (
+from tnfr_core.metrics import (
     AeroBalanceDrift,
     AeroCoherence,
     BrakeHeadroom,
@@ -26,18 +26,18 @@ from tnfr_lfs.core.metrics import (
     psi_support,
     resolve_aero_mechanical_coherence,
 )
-from tnfr_lfs.core.spectrum import motor_input_correlations, phase_to_latency_ms
+from tnfr_core.spectrum import motor_input_correlations, phase_to_latency_ms
 from dataclasses import replace
 from statistics import pvariance, pstdev
 from types import SimpleNamespace
-from tnfr_lfs.core.contextual_delta import (
+from tnfr_core.contextual_delta import (
     apply_contextual_delta,
     load_context_matrix,
     resolve_context_from_bundle,
     resolve_context_from_record,
 )
-from tnfr_lfs.core.epi import TelemetryRecord, _ackermann_parallel_delta
-from tnfr_lfs.core.epi_models import (
+from tnfr_core.epi import TelemetryRecord, _ackermann_parallel_delta
+from tnfr_core.epi_models import (
     BrakesNode,
     ChassisNode,
     DriverNode,
@@ -47,7 +47,7 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_lfs.core.utils import normalised_entropy
+from tnfr_core.utils import normalised_entropy
 
 from tests.helpers import (
     build_node_bundle,
@@ -449,7 +449,7 @@ def test_compute_window_metrics_entropy_maps(monkeypatch) -> None:
         return contributions[record.timestamp]
 
     monkeypatch.setattr(
-        "tnfr_lfs.core.metrics.delta_nfr_by_node",
+        "tnfr_core.equations.epi.delta_nfr_by_node",
         _fake_distribution,
     )
 

@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.archetypes` module
+# `tnfr_core.archetypes` module
 Archetype metadata shared across segmentation and recommendation layers.
 
 ## Classes

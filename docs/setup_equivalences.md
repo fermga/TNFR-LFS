@@ -108,4 +108,4 @@ recommendation clears.
 ---
 
 For deeper insight into how the `∇NFR⊥`, `ν_f`, and `C(t)` metrics are computed,
-review the `tnfr_lfs.core` modules described in the [API reference](api_reference.md).
+review the `tnfr_core` modules described in the [API reference](api_reference.md).

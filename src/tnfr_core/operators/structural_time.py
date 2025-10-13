@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Mapping, Sequence
 
-from tnfr_lfs.core.interfaces import SupportsTelemetrySample
+from tnfr_core.operators.interfaces import SupportsTelemetrySample
 
 __all__ = ["compute_structural_timestamps", "resolve_time_axis"]
 

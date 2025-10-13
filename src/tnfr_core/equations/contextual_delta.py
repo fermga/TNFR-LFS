@@ -19,7 +19,7 @@ except ModuleNotFoundError:  # pragma: no cover - fall back to ``tomli`` in 3.10
     import tomli as tomllib  # type: ignore
 
 from tnfr_lfs.data import CONTEXT_FACTORS_RESOURCE
-from tnfr_lfs.core.interfaces import SupportsContextBundle, SupportsContextRecord
+from tnfr_core.operators.interfaces import SupportsContextBundle, SupportsContextRecord
 
 __all__ = [
     "ContextFactors",
@@ -251,7 +251,7 @@ def resolve_context_from_record(
     *,
     baseline_vertical_load: float | None = None,
 ) -> ContextFactors:
-    """Derive factors from a :class:`~tnfr_lfs.core.epi.TelemetryRecord`-like payload."""
+    """Derive factors from a :class:`~tnfr_core.equations.epi.TelemetryRecord`-like payload."""
 
     if isinstance(record, Mapping):
         lateral = abs(float(record.get("lateral_accel", 0.0)))

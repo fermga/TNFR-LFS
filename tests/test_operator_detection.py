@@ -10,8 +10,8 @@ from typing import Callable, List, Mapping, Sequence
 
 import pytest
 
-from tnfr_lfs.core.epi import TelemetryRecord
-from tnfr_lfs.core.operator_detection import (
+from tnfr_core.epi import TelemetryRecord
+from tnfr_core.operator_detection import (
     canonical_operator_label,
     detect_al,
     detect_il,
@@ -444,9 +444,9 @@ def _build_thol_series() -> List[TelemetryRecord]:
 
 def _resolve_detect_thol() -> Callable[[Sequence[TelemetryRecord]], SequenceABC[Mapping[str, object]]]:
     module_candidates = (
-        "tnfr_lfs.core.thol_detection",
-        "tnfr_lfs.core.thol",
-        "tnfr_lfs.core.operator_detection_thol",
+        "tnfr_core.thol_detection",
+        "tnfr_core.thol",
+        "tnfr_core.operator_detection_thol",
         "tnfr_lfs.plugins.thol",
         "tnfr_lfs.tools.thol",
     )

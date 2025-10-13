@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.utils` module
+# `tnfr_core.utils` module
 Shared helper utilities for TNFR × LFS core modules.
 
 ## Functions

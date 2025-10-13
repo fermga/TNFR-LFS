@@ -88,6 +88,10 @@ def load_project_config(path: Path) -> tuple[dict[str, Any], Path] | None:
 
     config = _as_dict(cli_section)
 
+    core_section = tool_section.get("tnfr_core")
+    if isinstance(core_section, ABCMapping):
+        config.setdefault("core", _as_dict(core_section))
+
     return config, pyproject_path
 
 

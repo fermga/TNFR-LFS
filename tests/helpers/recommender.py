@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Tuple
 
-from tnfr_lfs.core.epi_models import EPIBundle
-from tnfr_lfs.core.segmentation import Goal, Microsector
+from tnfr_core.epi_models import EPIBundle
+from tnfr_core.segmentation import Goal, Microsector
 
 from tests.helpers.epi import build_axis_bundle
 from tests.helpers.microsector import build_goal, build_microsector

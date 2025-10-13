@@ -16,7 +16,7 @@
 - Definition of the resonance states (latent, activated, expanded, cascading).
 - Transition equations between states with coupling parameters \(\alpha\), \(\beta\), \(\gamma\), and \(\delta\).
 - Example table by domain (glyphic art, cultural networks, biological systems).
-- In the reference implementation each EPI node keeps its natural frequency ``nu_f`` (Hz) according to the `NU_F_NODE_DEFAULTS` table, enabling explicit integration of ``dEPI/dt`` through the :func:`evolve_epi` operator in ``tnfr_lfs.core.operators``.
+- In the reference implementation each EPI node keeps its natural frequency ``nu_f`` (Hz) according to the `NU_F_NODE_DEFAULTS` table, enabling explicit integration of ``dEPI/dt`` through the :func:`evolve_epi` operator in ``tnfr_core.operators``.
 
 ## 3. Nodal architecture and symbiotic protocols
 - Node design (symbiotic core, interaction envelope, glyphic interfaces).
@@ -42,7 +42,7 @@
 
 The software implementation extends each telemetry sample ``TelemetryRecord`` with orientation (``yaw``, ``pitch``, ``roll``), normalised brake pressure, and an ABS/TC locking flag. These fields combine with the classic magnitudes (Fz load, lateral/longitudinal accelerations, slip ratio, ΔNFR, and Sense Index) to estimate each vehicle node’s contribution.
 
-The :func:`tnfr_lfs.core.epi.delta_nfr_by_node` algorithm compares a sample against its baseline and generates a ΔNFR distribution per subsystem. For example, relative to a baseline with ``nfr = 500`` and no brake input, a sample with ``nfr = 508``, ``brake_pressure = 0.85``, and ``locking = 1`` yields a distribution where the brake node absorbs most of the ΔNFR while suspension and tyres share the remaining response. The calculation relies on the absolute differences of each signal and empirical weightings:
+The :func:`tnfr_core.epi.delta_nfr_by_node` algorithm compares a sample against its baseline and generates a ΔNFR distribution per subsystem. For example, relative to a baseline with ``nfr = 500`` and no brake input, a sample with ``nfr = 508``, ``brake_pressure = 0.85``, and ``locking = 1`` yields a distribution where the brake node absorbs most of the ΔNFR while suspension and tyres share the remaining response. The calculation relies on the absolute differences of each signal and empirical weightings:
 
 | Node | Key signals |
 | ------------- | -------------------------------------------------------- |
@@ -54,13 +54,13 @@ The :func:`tnfr_lfs.core.epi.delta_nfr_by_node` algorithm compares a sample agai
 | ``track`` | Δ(load × lateral acceleration), Δyaw |
 | ``driver`` | ΔSense Index, Δyaw, Δpitch/Δroll |
 
-The sum of the individual ΔNFR values always matches the global ΔNFR of the record, guaranteeing coherence with the entropy-penalised Sense Index computed by :func:`tnfr_lfs.core.coherence.sense_index`. The metric is now evaluated as ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H`` so each node’s natural rhythm and phase are considered; the interpretation is detailed in :doc:`api_reference`.
+The sum of the individual ΔNFR values always matches the global ΔNFR of the record, guaranteeing coherence with the entropy-penalised Sense Index computed by :func:`tnfr_core.coherence.sense_index`. The metric is now evaluated as ``1 / (1 + Σ w · |ΔNFR| · g(ν_f)) - λ·H`` so each node’s natural rhythm and phase are considered; the interpretation is detailed in :doc:`api_reference`.
 
 The natural-frequency estimator persists target bands per vehicle category (GT, formula cars, prototypes, …) through ``NaturalFrequencySettings.frequency_bands``. Each sample exposes a ``ν_f`` classification (very low, optimal, very high, …) and a structural index ``C(t)`` derived from the event density along the structural axis. Both parameters are normalised with the objectives managed by ``ProfileManager`` so the same scale applies when comparing stints with different Sense Index goals.
 
 ### Memory and mutation operators
 
-To maintain continuity between samples and microsectors the pipeline relies on two stateful operators in ``tnfr_lfs.core.operators``:
+To maintain continuity between samples and microsectors the pipeline relies on two stateful operators in ``tnfr_core.operators``:
 
 * ``recursivity_operator`` keeps a per-microsector trace and exponentially filters thermal/style metrics (``thermal_load`` and ``style_index``) together with per-wheel temperatures/pressures (``tyre_temp_*``/``tyre_pressure_*``). Memory is now segmented by session (``car_model``/``track_name``/``tyre_compound``), maintaining a stint history in ``operator_state["recursivity"]``. It also computes ``dT/dt`` derivatives per wheel, stores ``ΔNFR_flat`` as a reference, and applies stop criteria (convergence, sample limits, or time gaps) to start new stints when the dynamics change. The operator detects phase changes (entry, apex, exit) and resets memory when needed so the filter does not pollute abrupt transitions; the full history is exposed via ``orchestrate_delta_metrics`` as ``network_memory`` so the HUD and exporters can access the network memory. When OutGauge does not transmit the extended block (per-wheel temperatures and pressures) the HUD/exporters display the literal ``"no data"`` marker to highlight that Live for Speed telemetry was unavailable.
 * ``mutation_operator`` observes the ΔNFR distribution entropy and the filtered style deviations to decide when the tactical archetype should mutate toward an alternative candidate or return to a recovery mode.

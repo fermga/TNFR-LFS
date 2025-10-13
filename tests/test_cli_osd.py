@@ -13,7 +13,7 @@ from tnfr_lfs.cli import osd as osd_module
 from tnfr_lfs.cli import app as cli_app
 from tnfr_lfs.cli.osd import HUDPager, MacroStatus, OSDController, TelemetryHUD
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
-from tnfr_lfs.core.metrics import (
+from tnfr_core.metrics import (
     AeroAxisCoherence,
     AeroBalanceDrift,
     AeroBalanceDriftBin,
@@ -24,9 +24,9 @@ from tnfr_lfs.core.metrics import (
     SlideCatchBudget,
     WindowMetrics,
 )
-from tnfr_lfs.core.operator_detection import canonical_operator_label
+from tnfr_core.operator_detection import canonical_operator_label
 from tnfr_lfs.recommender.rules import RuleProfileObjectives
-from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_core.epi import TelemetryRecord
 from tests.helpers import (
     DummyHUD,
     _populate_hud,

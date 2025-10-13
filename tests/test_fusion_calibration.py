@@ -3,7 +3,7 @@ from dataclasses import replace
 
 import pytest
 
-from tnfr_lfs.core.epi import delta_nfr_by_node, resolve_nu_f_by_node
+from tnfr_core.epi import delta_nfr_by_node, resolve_nu_f_by_node
 from tnfr_lfs.ingestion.live import TelemetryFusion
 
 from tests.helpers import build_outgauge_sample, build_outsim_sample
