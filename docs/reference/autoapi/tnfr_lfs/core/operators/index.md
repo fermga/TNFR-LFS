@@ -49,8 +49,6 @@ change produced during ``dt``.
   - Convert raw telemetry records into EPI bundles.
 - `coherence_operator(series: Sequence[float], window: int = 3) -> List[float]`
   - Smooth a numeric series while preserving its average value.
-- `plugin_coherence_operator(plugin: TNFRPlugin, series: Sequence[float], window: int = 3) -> List[float]`
-  - Run :func:`coherence_operator` and push the result into ``plugin``.
 - `dissonance_operator(series: Sequence[float], target: float) -> float`
   - Compute the mean absolute deviation relative to a target value.
 - `dissonance_breakdown_operator(series: Sequence[float], target: float, *, microsectors: Sequence[SupportsMicrosector] | None = None, bundles: Sequence[SupportsEPIBundle] | None = None) -> DissonanceBreakdown`
