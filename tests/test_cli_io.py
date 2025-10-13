@@ -7,7 +7,6 @@ import sys
 import types
 from typing import Callable
 from pathlib import Path
-from textwrap import dedent
 
 import pytest
 
@@ -17,67 +16,48 @@ from tnfr_lfs.core.cache_settings import CacheOptions
 from tnfr_lfs.cli import common as cli_common
 from tnfr_lfs.cli import io as cli_io
 from tnfr_lfs.cli.common import CliError
+from tests.conftest import write_pyproject
 from tests.helpers import DummyRecord, build_load_parquet_args, build_persist_parquet_args
 
 
-def test_load_cli_config_promotes_cache_settings_from_pyproject(tmp_path: Path) -> None:
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text(
-        dedent(
+@pytest.mark.parametrize(
+    ("toml_text", "expected_sections"),
+    [
+        (
             """
             [tool.tnfr_lfs.cache]
             cache_enabled = "yes"
             nu_f_cache_size = "48"
-            """
+            """,
+            {
+                "performance": CacheOptions(
+                    enable_delta_cache=True,
+                    nu_f_cache_size=48,
+                    telemetry_cache_size=48,
+                    recommender_cache_size=48,
+                ).to_performance_config(),
+            },
         ),
-        encoding="utf8",
-    )
-
-    config = cli_io.load_cli_config(pyproject_path)
-
-    assert config["_config_path"] == str(pyproject_path.resolve())
-    performance_cfg = config["performance"]
-    expected = CacheOptions(
-        enable_delta_cache=True,
-        nu_f_cache_size=48,
-        telemetry_cache_size=48,
-        recommender_cache_size=48,
-    ).to_performance_config()
-    assert performance_cfg == expected
-
-
-def test_load_cli_config_normalises_performance_section(tmp_path: Path) -> None:
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text(
-        dedent(
+        (
             """
             [tool.tnfr_lfs.performance]
             cache_enabled = "no"
             max_cache_size = "12"
             telemetry_buffer_size = 42
-            """
+            """,
+            {
+                "performance": {
+                    **CacheOptions(
+                        enable_delta_cache=False,
+                        nu_f_cache_size=0,
+                        telemetry_cache_size=0,
+                        recommender_cache_size=0,
+                    ).to_performance_config(),
+                    "telemetry_buffer_size": 42,
+                },
+            },
         ),
-        encoding="utf8",
-    )
-
-    config = cli_io.load_cli_config(pyproject_path)
-
-    expected = CacheOptions(
-        enable_delta_cache=False,
-        nu_f_cache_size=0,
-        telemetry_cache_size=0,
-        recommender_cache_size=0,
-    ).to_performance_config()
-    performance_cfg = config["performance"]
-    for key, value in expected.items():
-        assert performance_cfg[key] == value
-    assert performance_cfg["telemetry_buffer_size"] == 42
-
-
-def test_load_cli_config_reads_pyproject(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text(
-        dedent(
+        (
             """
             [tool.tnfr_lfs.core]
             host = "192.0.2.1"
@@ -85,69 +65,88 @@ def test_load_cli_config_reads_pyproject(monkeypatch: pytest.MonkeyPatch, tmp_pa
             [tool.tnfr_lfs.performance]
             cache_enabled = true
             max_cache_size = 48
-            """
+            """,
+            {
+                "core": {"host": "192.0.2.1"},
+                "performance": CacheOptions(
+                    enable_delta_cache=True,
+                    nu_f_cache_size=48,
+                    telemetry_cache_size=48,
+                    recommender_cache_size=48,
+                ).to_performance_config(),
+            },
         ),
-        encoding="utf8",
-    )
-
-    monkeypatch.chdir(tmp_path)
-    config = cli_io.load_cli_config()
-
-    assert config["_config_path"] == str(pyproject_path.resolve())
-    assert config["core"]["host"] == "192.0.2.1"
-    performance_cfg = config["performance"]
-    assert performance_cfg["cache_enabled"] is True
-    assert performance_cfg["max_cache_size"] == 48
-
-
-def test_load_cli_config_uses_pyproject_when_multiple_directories(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    secondary = tmp_path / "secondary"
-    secondary.mkdir()
-    (secondary / "pyproject.toml").write_text("", encoding="utf8")
-
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text(
-        dedent(
+        (
             """
             [tool.tnfr_lfs.logging]
             level = "warning"
             format = "text"
             output = "stdout"
-            """
+            """,
+            {
+                "__setup__": lambda root: (
+                    (root / "secondary").mkdir(),
+                    write_pyproject(root / "secondary", ""),
+                ),
+                "logging": {
+                    "level": "warning",
+                    "format": "text",
+                    "output": "stdout",
+                },
+            },
         ),
-        encoding="utf8",
-    )
+    ],
+    ids=[
+        "cache-section",
+        "normalised-performance",
+        "explicit-sections",
+        "prefers-top-level",
+    ],
+)
+def test_load_cli_config_from_pyproject(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    toml_text: str,
+    expected_sections: dict[str, object],
+) -> None:
+    pyproject_path = write_pyproject(tmp_path, toml_text)
+    sections = dict(expected_sections)
+    setup = sections.pop("__setup__", None)
+    if callable(setup):
+        setup(tmp_path)
 
     monkeypatch.chdir(tmp_path)
     config = cli_io.load_cli_config()
 
     assert config["_config_path"] == str(pyproject_path.resolve())
-    logging_cfg = config["logging"]
-    assert logging_cfg["level"] == "warning"
-    assert logging_cfg["format"] == "text"
-    assert logging_cfg["output"] == "stdout"
+    for section, expected in sections.items():
+        assert config[section] == expected
 
 
-def test_load_cli_config_accepts_explicit_pyproject_path(tmp_path: Path) -> None:
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    pyproject_path = config_dir / "pyproject.toml"
-    pyproject_path.write_text(
-        dedent(
+@pytest.mark.parametrize(
+    ("toml_text", "expected_sections"),
+    [
+        (
             """
             [tool.tnfr_lfs.logging]
             level = "debug"
-            """
+            """,
+            {"logging": {"level": "debug"}},
         ),
-        encoding="utf8",
-    )
+    ],
+)
+def test_load_cli_config_accepts_explicit_pyproject_path(
+    tmp_path: Path, toml_text: str, expected_sections: dict[str, object]
+) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    pyproject_path = write_pyproject(config_dir, toml_text)
 
     config = cli_io.load_cli_config(pyproject_path)
 
     assert config["_config_path"] == str(pyproject_path.resolve())
-    assert config["logging"]["level"] == "debug"
+    for section, expected in expected_sections.items():
+        assert config[section] == expected
 
 
 @pytest.mark.parametrize(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -85,39 +86,52 @@ def test_example_pipeline_accepts_custom_data_root(tmp_path: Path) -> None:
     assert resolved["targets"]["balance"]["delta_nfr"] == pytest.approx(0.3)
 
 
-def test_parse_cache_options_defaults() -> None:
-    options = parse_cache_options({})
+@pytest.mark.parametrize(
+    ("raw_config", "expected"),
+    [
+        (
+            {},
+            CacheOptions(
+                enable_delta_cache=True,
+                nu_f_cache_size=DEFAULT_DYNAMIC_CACHE_SIZE,
+                telemetry_cache_size=DEFAULT_DYNAMIC_CACHE_SIZE,
+                recommender_cache_size=DEFAULT_DYNAMIC_CACHE_SIZE,
+            ),
+        ),
+        (
+            {"performance": {"cache_enabled": False, "max_cache_size": 16}},
+            CacheOptions(
+                enable_delta_cache=False,
+                nu_f_cache_size=0,
+                telemetry_cache_size=0,
+                recommender_cache_size=0,
+            ),
+        ),
+        (
+            {
+                "cache": {
+                    "cache_enabled": "true",
+                    "nu_f_cache_size": "64",
+                    "telemetry": {"telemetry_cache_size": "12"},
+                }
+            },
+            CacheOptions(
+                enable_delta_cache=True,
+                nu_f_cache_size=64,
+                telemetry_cache_size=12,
+                recommender_cache_size=64,
+            ),
+        ),
+    ],
+    ids=["defaults", "performance-overrides", "legacy-cache-section"],
+)
+def test_parse_cache_options_variants(
+    raw_config: Mapping[str, object], expected: CacheOptions
+) -> None:
+    options = parse_cache_options(raw_config)
+
     assert isinstance(options, CacheOptions)
-    assert options.enable_delta_cache is True
-    assert options.nu_f_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
-    assert options.recommender_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
-    assert options.telemetry_cache_size == DEFAULT_DYNAMIC_CACHE_SIZE
-
-
-def test_parse_cache_options_overrides() -> None:
-    raw = {"performance": {"cache_enabled": False, "max_cache_size": 16}}
-    options = parse_cache_options(raw)
-    assert options.enable_delta_cache is False
-    assert options.nu_f_cache_size == 0
-    assert options.recommender_cache_size == 0
-    assert options.telemetry_cache_size == 0
-
-
-def test_parse_cache_options_supports_legacy_cache_section() -> None:
-    raw = {
-        "cache": {
-            "cache_enabled": "true",
-            "nu_f_cache_size": "64",
-            "telemetry": {"telemetry_cache_size": "12"},
-        }
-    }
-
-    options = parse_cache_options(raw)
-
-    assert options.enable_delta_cache is True
-    assert options.nu_f_cache_size == 64
-    assert options.recommender_cache_size == 64
-    assert options.telemetry_cache_size == 12
+    assert options == expected
 
 
 def test_parse_cache_options_uses_pack_defaults(tmp_path: Path) -> None:
