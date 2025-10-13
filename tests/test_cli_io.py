@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import builtins
 import json
 import sys
 import types
@@ -17,12 +16,7 @@ from tnfr_lfs.cli import common as cli_common
 from tnfr_lfs.cli import io as cli_io
 from tnfr_lfs.cli.common import CliError
 from tests.conftest import write_pyproject
-from tests.helpers import (
-    DummyRecord,
-    build_load_parquet_args,
-    build_persist_parquet_args,
-    pandas_engine_failure,
-)
+from tests.helpers import DummyRecord, build_load_parquet_args, build_persist_parquet_args
 
 
 @pytest.mark.parametrize(
@@ -182,63 +176,51 @@ def test_load_records_converts_json_payload(monkeypatch: pytest.MonkeyPatch, tmp
 @pytest.mark.parametrize(
     ("target", "arguments_builder", "mode"),
     [
-        (cli_io._load_records, build_load_parquet_args, "load"),
-        (cli_io._persist_records, build_persist_parquet_args, "persist"),
+        pytest.param(
+            cli_io._load_records,
+            build_load_parquet_args,
+            "load",
+            id="load",
+        ),
+        pytest.param(
+            cli_io._persist_records,
+            build_persist_parquet_args,
+            "persist",
+            id="persist",
+        ),
     ],
-    ids=["load", "persist"],
 )
-def test_parquet_engine_requires_compatible_backend(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("simulate", "expected_match"),
+    [
+        pytest.param(
+            "parquet_engine_failure",
+            "compatible engine",
+            id="engine-incompatibility",
+        ),
+        pytest.param(
+            "pandas_absence",
+            "requires the 'pandas' package",
+            id="missing-pandas",
+        ),
+    ],
+)
+def test_parquet_requirements(
+    request: pytest.FixtureRequest,
     tmp_path: Path,
     target,
     arguments_builder,
     mode: str,
+    simulate: str,
+    expected_match: str,
 ) -> None:
     args, kwargs, destination = arguments_builder(tmp_path)
 
-    pandas_engine_failure(monkeypatch, mode)
+    simulator = request.getfixturevalue(simulate)
+    simulator(mode)
 
-    with pytest.raises(RuntimeError, match="compatible engine"):
+    with pytest.raises(RuntimeError, match=expected_match):
         target(*args, **kwargs)
-
-    if destination is not None:
-        assert not destination.exists()
-
-
-@pytest.mark.parametrize(
-    ("target", "arguments_builder"),
-    [
-        (cli_io._load_records, build_load_parquet_args),
-        (cli_io._persist_records, build_persist_parquet_args),
-    ],
-    ids=["load", "persist"],
-)
-def test_parquet_operations_require_pandas(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    target,
-    arguments_builder,
-) -> None:
-    args, kwargs, destination = arguments_builder(tmp_path)
-
-    original = sys.modules.pop("pandas", None)
-    original_import = builtins.__import__
-
-    def fake_import(name: str, *f_args, **f_kwargs):  # type: ignore[no-untyped-def]
-        if name == "pandas":
-            raise ModuleNotFoundError("No module named 'pandas'")
-        return original_import(name, *f_args, **f_kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-
-    try:
-        with pytest.raises(RuntimeError, match="requires the 'pandas' package"):
-            target(*args, **kwargs)
-    finally:
-        if original is not None:
-            sys.modules["pandas"] = original
-        else:
-            sys.modules.pop("pandas", None)
 
     if destination is not None:
         assert not destination.exists()
