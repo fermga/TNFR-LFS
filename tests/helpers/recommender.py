@@ -8,8 +8,8 @@ from typing import Tuple
 from tnfr_lfs.core.epi_models import EPIBundle
 from tnfr_lfs.core.segmentation import Goal, Microsector
 
-from .epi import build_axis_bundle
-from .microsector import build_goal, build_microsector
+from tests.helpers.epi import build_axis_bundle
+from tests.helpers.microsector import build_goal, build_microsector
 
 
 __all__ = (

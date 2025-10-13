@@ -16,7 +16,7 @@ from tnfr_lfs.core.epi_models import (
     TyresNode,
 )
 
-from .constants import BASE_NU_F
+from tests.helpers.constants import BASE_NU_F
 
 NodeFactory = Callable[..., Any]
 
