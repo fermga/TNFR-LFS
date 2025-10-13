@@ -181,42 +181,49 @@ def test_resolve_cache_size(
     )
 
 
-def test_load_records_from_namespace_prefers_replay(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("cache_options", "expected_cache_size"),
+    [
+        pytest.param(None, None, id="returns-expected-object"),
+        pytest.param(
+            CacheOptions(
+                enable_delta_cache=True,
+                nu_f_cache_size=128,
+                telemetry_cache_size=0,
+            ),
+            0,
+            id="threads-cache-size",
+        ),
+    ],
+)
+def test_load_records_from_namespace_prefers_replay_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    cache_options: CacheOptions | None,
+    expected_cache_size: int | None,
+) -> None:
     bundle_path = tmp_path / "bundle.zip"
     bundle_path.write_bytes(b"dummy")
     expected = [object()]
-    monkeypatch.setattr(
-        cli_common, "_load_replay_bundle", lambda path, **_: expected
-    )
+    captured: dict[str, Path | int | None] = {}
+
+    def _fake_loader(path: Path, *, cache_size: int | None = None):
+        captured["path"] = path
+        captured["cache_size"] = cache_size
+        return expected
+
+    monkeypatch.setattr(cli_common, "_load_replay_bundle", _fake_loader)
     namespace = argparse.Namespace(replay_csv_bundle=bundle_path, telemetry=None)
+    if cache_options is not None:
+        namespace.cache_options = cache_options
 
     records, resolved = cli_common._load_records_from_namespace(namespace)
 
     assert records is expected
     assert resolved == bundle_path
     assert namespace.telemetry == bundle_path
-
-
-def test_load_records_from_namespace_threads_cache_size(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    bundle_path = tmp_path / "bundle.zip"
-    bundle_path.write_bytes(b"dummy")
-    captured: dict[str, int | None] = {}
-
-    def _fake_loader(path: Path, *, cache_size: int | None = None):
-        captured["path"] = path
-        captured["cache_size"] = cache_size
-        return []
-
-    monkeypatch.setattr(cli_common, "_load_replay_bundle", _fake_loader)
-    namespace = argparse.Namespace(replay_csv_bundle=bundle_path, telemetry=None)
-    namespace.cache_options = CacheOptions(
-        enable_delta_cache=True, nu_f_cache_size=128, telemetry_cache_size=0
-    )
-
-    cli_common._load_records_from_namespace(namespace)
-
     assert captured["path"] == bundle_path
-    assert captured["cache_size"] == 0
+    assert captured["cache_size"] == expected_cache_size
 
 
 def test_load_records_from_namespace_requires_path() -> None:
