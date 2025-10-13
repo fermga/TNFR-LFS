@@ -268,15 +268,33 @@ def test_structural_operator_aliases(
     assert func(alias) == expected
 
 
-def test_silence_event_payloads_accepts_case_insensitive_identifier() -> None:
-    payload = {"duration": 1.2}
-    events = {"silence": (payload,)}
-    result = silence_event_payloads(events)
-    assert result == (payload,)
+def _silence_tuple_event(payload: dict) -> dict:
+    return {"silence": (payload,)}
 
 
-def test_silence_event_payloads_accepts_spanish_alias() -> None:
-    payload = {"duration": 0.6}
-    events = {"SILENCIO": payload}
+def _silencio_event(payload: dict) -> dict:
+    return {"SILENCIO": payload}
+
+
+@pytest.mark.parametrize(
+    ("events_factory", "duration"),
+    [
+        pytest.param(
+            _silence_tuple_event,
+            1.2,
+            id="english-alias-case-insensitive",
+        ),
+        pytest.param(
+            _silencio_event,
+            0.6,
+            id="spanish-alias",
+        ),
+    ],
+)
+def test_silence_event_payloads_accepts_aliases(
+    events_factory, duration: float
+) -> None:
+    payload = {"duration": duration}
+    events = events_factory(payload)
     result = silence_event_payloads(events)
     assert result == (payload,)
