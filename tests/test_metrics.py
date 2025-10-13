@@ -930,110 +930,119 @@ def test_compute_window_metrics_aero_balance_drift_balance_slopes() -> None:
     assert "μβ sensitivity" in drift.guidance or drift.guidance == ""
 
 
-def test_compute_window_metrics_brake_headroom_components() -> None:
-    longitudinal = [-4.0, -6.5, -8.0, -7.2, -5.5]
-    locking = [0.0, 0.2, 0.7, 0.85, 0.92]
-    slip_profiles = [
-        (-0.02, -0.03, -0.01, -0.02),
-        (-0.08, -0.12, -0.07, -0.09),
-        (-0.4, -0.32, -0.18, -0.22),
-        (-0.5, -0.47, -0.38, -0.2),
-        (-0.1, -0.08, -0.07, -0.06),
-    ]
-    records = [
-        replace(
-            build_telemetry_record(float(index), 100.0 + index * 2.0),
-            longitudinal_accel=longitudinal[index],
-            locking=locking[index],
-            slip_ratio_fl=slip_profiles[index][0],
-            slip_ratio_fr=slip_profiles[index][1],
-            slip_ratio_rl=slip_profiles[index][2],
-            slip_ratio_rr=slip_profiles[index][3],
-        )
-        for index in range(len(longitudinal))
-    ]
+_BRAKE_FADE_DECELS = [9.0, 8.6, 8.2, 7.0]
+_BRAKE_FADE_TIMESTAMPS = [0.0, 0.4, 0.8, 1.2]
+_BRAKE_FADE_TEMPS = [
+    (620.0, 625.0, 610.0, 615.0),
+    (650.0, 655.0, 640.0, 645.0),
+    (680.0, 685.0, 670.0, 675.0),
+    (710.0, 715.0, 700.0, 705.0),
+]
+_BRAKE_FADE_MEAN_TEMP = sum(
+    (sum(profile) / len(profile)) for profile in _BRAKE_FADE_TEMPS
+) / len(_BRAKE_FADE_TEMPS)
+
+
+@pytest.mark.parametrize(
+    "window_config, expectations",
+    [
+        (
+            {
+                "longitudinal_profile": [-4.0, -6.5, -8.0, -7.2, -5.5],
+                "locking_profile": [0.0, 0.2, 0.7, 0.85, 0.92],
+                "slip_profiles": [
+                    (-0.02, -0.03, -0.01, -0.02),
+                    (-0.08, -0.12, -0.07, -0.09),
+                    (-0.4, -0.32, -0.18, -0.22),
+                    (-0.5, -0.47, -0.38, -0.2),
+                    (-0.1, -0.08, -0.07, -0.06),
+                ],
+            },
+            {
+                "peak_decel": pytest.approx(8.0),
+                "abs_activation_ratio": pytest.approx((0.0 + 0.2 + 0.7 + 0.85 + 0.92) / 5.0),
+                "partial_locking_ratio": pytest.approx(0.6, rel=1e-6),
+                "sustained_locking_ratio": pytest.approx(0.4, rel=1e-6),
+                "value": pytest.approx(0.08324, rel=1e-5),
+            },
+        ),
+        (
+            {
+                "timestamps": _BRAKE_FADE_TIMESTAMPS,
+                "longitudinal_profile": [-value for value in _BRAKE_FADE_DECELS],
+                "temperature_profile": _BRAKE_FADE_TEMPS,
+                "brake_pressure": 0.92,
+                "with_brake_fade": True,
+            },
+            {
+                "fade_slope": pytest.approx(
+                    (_BRAKE_FADE_DECELS[0] - _BRAKE_FADE_DECELS[-1])
+                    / (_BRAKE_FADE_TIMESTAMPS[-1] - _BRAKE_FADE_TIMESTAMPS[0]),
+                    rel=1e-6,
+                ),
+                "fade_ratio": pytest.approx(
+                    (_BRAKE_FADE_DECELS[0] - _BRAKE_FADE_DECELS[-1])
+                    / _BRAKE_FADE_DECELS[0],
+                    rel=1e-6,
+                ),
+                "temperature_peak": pytest.approx(715.0, rel=1e-6),
+                "temperature_mean": pytest.approx(_BRAKE_FADE_MEAN_TEMP, rel=1e-6),
+                "ventilation_alert": "critical",
+                "ventilation_index": pytest.approx(1.0, rel=1e-6),
+                "value": ("lt", 0.5),
+            },
+        ),
+        (
+            {
+                "timestamps": [index * 0.5 for index in range(4)],
+                "longitudinal_profile": [-6.0] * 4,
+                "brake_pressure": 0.95,
+                "temperature_profile": [
+                    (math.nan, math.nan, math.nan, math.nan)
+                    for _ in range(4)
+                ],
+            },
+            {
+                "temperature_available": ("is", False),
+                "temperature_peak": ("isnan", None),
+                "temperature_mean": ("isnan", None),
+                "fade_ratio": ("isnan", None),
+                "fade_slope": ("isnan", None),
+                "ventilation_index": ("isnan", None),
+                "fade_available": ("is", False),
+            },
+        ),
+    ],
+    ids=[
+        "locking-profiles",
+        "brake-fade",
+        "missing-temperatures",
+    ],
+)
+def test_compute_window_metrics_brake_headroom_profiles(
+    synthetic_window_factory: Callable[..., list[TelemetryRecord]],
+    window_config: Mapping[str, object],
+    expectations: Mapping[str, object],
+) -> None:
+    records = synthetic_window_factory(**window_config)
 
     metrics = compute_window_metrics(records)
-
-    headroom = metrics.brake_headroom
-    assert headroom.peak_decel == pytest.approx(8.0)
-    assert headroom.abs_activation_ratio == pytest.approx(sum(locking) / len(locking))
-    assert headroom.partial_locking_ratio == pytest.approx(0.6, rel=1e-6)
-    assert headroom.sustained_locking_ratio == pytest.approx(0.4, rel=1e-6)
-    assert headroom.value == pytest.approx(0.08324, rel=1e-5)
-
-
-def test_compute_window_metrics_brake_fade_and_ventilation() -> None:
-    base = build_telemetry_record(0.0, 100.0)
-    timestamps = [0.0, 0.4, 0.8, 1.2]
-    decels = [9.0, 8.6, 8.2, 7.0]
-    brake_profiles = [
-        (620.0, 625.0, 610.0, 615.0),
-        (650.0, 655.0, 640.0, 645.0),
-        (680.0, 685.0, 670.0, 675.0),
-        (710.0, 715.0, 700.0, 705.0),
-    ]
-    records = []
-    for idx, timestamp in enumerate(timestamps):
-        temps = brake_profiles[idx]
-        records.append(
-            replace(
-                base,
-                timestamp=timestamp,
-                longitudinal_accel=-decels[idx],
-                brake_pressure=0.92,
-                brake_temp_fl=temps[0],
-                brake_temp_fr=temps[1],
-                brake_temp_rl=temps[2],
-                brake_temp_rr=temps[3],
-            )
-        )
-
-    metrics = compute_window_metrics(records)
     headroom = metrics.brake_headroom
 
-    duration = timestamps[-1] - timestamps[0]
-    drop = decels[0] - decels[-1]
-    expected_slope = drop / duration
-    expected_ratio = drop / decels[0]
-    expected_peak = max(temp for profile in brake_profiles for temp in profile)
-    expected_mean = sum(sum(profile) / len(profile) for profile in brake_profiles) / len(brake_profiles)
-
-    assert headroom.fade_slope == pytest.approx(expected_slope, rel=1e-6)
-    assert headroom.fade_ratio == pytest.approx(expected_ratio, rel=1e-6)
-    assert headroom.temperature_peak == pytest.approx(expected_peak, rel=1e-6)
-    assert headroom.temperature_mean == pytest.approx(expected_mean, rel=1e-6)
-    assert headroom.ventilation_alert == "critical"
-    assert headroom.ventilation_index == pytest.approx(1.0, rel=1e-6)
-    assert headroom.value < 0.5
-
-
-def test_compute_window_metrics_without_brake_temperature_samples() -> None:
-    base = build_telemetry_record(0.0, 100.0)
-    records = [
-        replace(
-            base,
-            timestamp=index * 0.5,
-            brake_pressure=0.95,
-            longitudinal_accel=-6.0,
-            brake_temp_fl=math.nan,
-            brake_temp_fr=math.nan,
-            brake_temp_rl=math.nan,
-            brake_temp_rr=math.nan,
-        )
-        for index in range(4)
-    ]
-
-    metrics = compute_window_metrics(records)
-    headroom = metrics.brake_headroom
-
-    assert headroom.temperature_available is False
-    assert math.isnan(headroom.temperature_peak)
-    assert math.isnan(headroom.temperature_mean)
-    assert math.isnan(headroom.fade_ratio)
-    assert math.isnan(headroom.fade_slope)
-    assert math.isnan(headroom.ventilation_index)
-    assert headroom.fade_available is False
+    for attribute, expectation in expectations.items():
+        actual = getattr(headroom, attribute)
+        if isinstance(expectation, tuple):
+            marker, value = expectation
+            if marker == "lt":
+                assert actual < value
+            elif marker == "isnan":
+                assert math.isnan(actual)
+            elif marker == "is":
+                assert actual is value
+            else:  # pragma: no cover - defensive guard for future markers
+                raise AssertionError(f"Unsupported expectation marker: {marker}")
+        else:
+            assert actual == expectation
 
 
 def test_slide_catch_budget_aggregates_components() -> None:

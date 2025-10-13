@@ -9,7 +9,7 @@ import uuid
 import warnings
 import zipfile
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, cast
@@ -85,6 +85,7 @@ from tests.helpers import (
     build_microsector,
     build_outgauge_payload,
     build_outsim_payload,
+    build_telemetry_record,
     pandas_engine_failure,
     run_cli_in_tmp,
 )
@@ -243,6 +244,94 @@ def rule_scenario_factory() -> Callable[
         return context, goal, microsector
 
     return factory
+
+
+@pytest.fixture
+def synthetic_window_factory() -> Callable[..., list[TelemetryRecord]]:
+    """Return a builder for synthetic telemetry windows used in metrics tests."""
+
+    def _factory(
+        *,
+        timestamps: Sequence[float] | None = None,
+        longitudinal_profile: Sequence[float] | None = None,
+        locking_profile: Sequence[float] | None = None,
+        slip_profiles: Sequence[tuple[float, float, float, float]] | None = None,
+        temperature_profile: Sequence[tuple[float, float, float, float]] | None = None,
+        brake_pressure: float | Sequence[float] | None = None,
+        speed_profile: Sequence[float] | None = None,
+        base_nfr: float = 100.0,
+        with_brake_fade: bool = False,
+    ) -> list[TelemetryRecord]:
+        sequences: list[Sequence[object]] = [
+            seq
+            for seq in (
+                longitudinal_profile,
+                locking_profile,
+                slip_profiles,
+                temperature_profile,
+                speed_profile,
+            )
+            if seq is not None
+        ]
+
+        if timestamps is not None:
+            total = len(timestamps)
+            for seq in sequences:
+                if len(seq) != total:
+                    raise ValueError("Profiles must align with provided timestamps")
+            timeline = [float(value) for value in timestamps]
+        elif sequences:
+            total = len(sequences[0])
+            for seq in sequences[1:]:
+                if len(seq) != total:
+                    raise ValueError("All provided profiles must share the same length")
+            timeline = [float(index) for index in range(total)]
+        else:
+            raise ValueError("synthetic_window_factory requires at least one profile")
+
+        base = build_telemetry_record(0.0, base_nfr)
+        records: list[TelemetryRecord] = []
+
+        def _resolve_pressure(index: int) -> float:
+            if isinstance(brake_pressure, (list, tuple)):
+                return float(brake_pressure[index])
+            if isinstance(brake_pressure, float):
+                return brake_pressure
+            if brake_pressure is not None:
+                return float(brake_pressure)  # type: ignore[arg-type]
+            return 0.95 if with_brake_fade else base.brake_pressure
+
+        for index, timestamp in enumerate(timeline):
+            payload: dict[str, float] = {"timestamp": timestamp, "nfr": base_nfr}
+            if longitudinal_profile is not None:
+                payload["longitudinal_accel"] = float(longitudinal_profile[index])
+            if locking_profile is not None:
+                payload["locking"] = float(locking_profile[index])
+            if slip_profiles is not None:
+                sr_fl, sr_fr, sr_rl, sr_rr = slip_profiles[index]
+                payload.update(
+                    slip_ratio_fl=float(sr_fl),
+                    slip_ratio_fr=float(sr_fr),
+                    slip_ratio_rl=float(sr_rl),
+                    slip_ratio_rr=float(sr_rr),
+                )
+            if temperature_profile is not None:
+                t_fl, t_fr, t_rl, t_rr = temperature_profile[index]
+                payload.update(
+                    brake_temp_fl=float(t_fl),
+                    brake_temp_fr=float(t_fr),
+                    brake_temp_rl=float(t_rl),
+                    brake_temp_rr=float(t_rr),
+                )
+            if speed_profile is not None:
+                payload["speed"] = float(speed_profile[index])
+
+            payload["brake_pressure"] = _resolve_pressure(index)
+            records.append(replace(base, **payload))
+
+        return records
+
+    return _factory
 
 
 @pytest.fixture(params=("outgauge", "outsim"), name="udp_client_spec")
