@@ -1,8 +1,6 @@
-"""Synthetic tests for the propagation (RA) detector."""
-
 from __future__ import annotations
 
-import pytest
+from math import pi, sin
 
 from tnfr_core.operators.operator_detection import detect_ra
 
@@ -20,8 +18,8 @@ _BASE_PAYLOAD = dict(
     brake_pressure=0.1,
     locking=0.0,
     nfr=80.0,
-    si=0.2,
-    speed=25.0,
+    si=0.6,
+    speed=42.0,
     yaw_rate=0.04,
     slip_angle=0.0,
     steer=0.05,
@@ -37,57 +35,61 @@ _BASE_PAYLOAD = dict(
 )
 
 
-def _build_series(samples: list[dict]) -> list:
-    series = []
-    for index, payload in enumerate(samples):
-        data = dict(_BASE_PAYLOAD)
-        data.update(payload)
-        data.setdefault("timestamp", index * 0.1)
-        series.append(build_telemetry_record(**data))
-    return series
+def _series(payloads: list[dict]) -> list:
+    samples = []
+    for index, overrides in enumerate(payloads):
+        payload = dict(_BASE_PAYLOAD)
+        payload.update(overrides)
+        payload.setdefault("timestamp", index * 0.05)
+        samples.append(build_telemetry_record(**payload))
+    return samples
 
 
-def test_detect_ra_identifies_high_delta_diffusion() -> None:
-    samples = [
-        {"nfr": 80.0, "si": 0.2, "speed": 30.0},
-        {"nfr": 115.0, "si": 0.36, "speed": 36.0},
-        {"nfr": 150.0, "si": 0.44, "speed": 39.0},
-        {"nfr": 205.0, "si": 0.5, "speed": 42.0},
-        {"nfr": 250.0, "si": 0.55, "speed": 45.0},
-        {"nfr": 252.0, "si": 0.56, "speed": 43.0},
-        {"nfr": 210.0, "si": 0.48, "speed": 40.0},
-    ]
-    series = _build_series(samples)
+def test_detect_ra_identifies_resonant_band_power() -> None:
+    samples: list[dict] = []
+    for index in range(24):
+        t = index * 0.05
+        nfr = 60.0 + 12.0 * sin(2.0 * pi * 1.5 * t)
+        samples.append({"nfr": nfr, "si": 0.62, "speed": 44.0})
+    samples.extend(
+        {"nfr": 40.0 + index, "si": 0.4, "speed": 30.0, "timestamp": (24 + idx) * 0.05}
+        for idx in range(6)
+    )
+    series = _series(samples)
 
     events = detect_ra(
         series,
-        window=4,
-        nfr_rate_threshold=30.0,
-        si_span_threshold=0.2,
-        speed_threshold=30.0,
+        window=12,
+        nu_band=(1.0, 3.0),
+        si_min=0.58,
+        delta_nfr_max=15.0,
+        k_min=2,
     )
 
     assert events
     event = events[0]
     assert event["name"] == "Propagation"
-    assert event["nfr_rate_mean"] >= 30.0
-    assert event["si_span"] >= 0.2
-    assert event["speed_mean"] >= 30.0
+    assert event["band_power"] > 0.0
+    assert event["si_mean"] >= 0.58
+    assert event["delta_nfr_dispersion"] <= 15.0
 
 
-@pytest.mark.parametrize(
-    "samples",
-    [
-        [{"nfr": 100.0 + index, "si": 0.25, "speed": 22.0} for index in range(6)],
-        [
-            {"nfr": 100.0, "si": 0.2, "speed": 45.0},
-            {"nfr": 102.0, "si": 0.22, "speed": 44.0},
-            {"nfr": 104.0, "si": 0.23, "speed": 43.0},
-            {"nfr": 106.0, "si": 0.24, "speed": 42.0},
-        ],
-    ],
-)
-def test_detect_ra_skips_low_diffusion(samples: list[dict]) -> None:
-    series = _build_series(samples)
-    events = detect_ra(series, window=3, nfr_rate_threshold=30.0, si_span_threshold=0.2, speed_threshold=28.0)
+def test_detect_ra_requires_sustained_windows() -> None:
+    samples: list[dict] = []
+    for index in range(20):
+        t = index * 0.05
+        nfr = 60.0 + 12.0 * sin(2.0 * pi * 1.5 * t)
+        si = 0.45 + 0.05 * sin(2.0 * pi * 0.3 * t)
+        samples.append({"nfr": nfr, "si": si, "speed": 38.0})
+    series = _series(samples)
+
+    events = detect_ra(
+        series,
+        window=12,
+        nu_band=(1.0, 3.0),
+        si_min=0.58,
+        delta_nfr_max=15.0,
+        k_min=2,
+    )
+
     assert events == []

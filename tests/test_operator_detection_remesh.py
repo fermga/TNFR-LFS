@@ -1,10 +1,6 @@
-"""Synthetic tests for the remeshing (REMESH) detector."""
-
 from __future__ import annotations
 
-import math
-
-import pytest
+from math import sin, tau
 
 from tnfr_core.operators.operator_detection import detect_remesh
 
@@ -37,74 +33,74 @@ _BASE_PAYLOAD = dict(
     suspension_velocity_rear=0.02,
     rpm=5600.0,
     line_deviation=0.1,
-    structural_timestamp=0.0,
 )
 
 
-def _build_series(samples: list[dict]) -> list:
-    series = []
-    structural = 0.0
-    for index, payload in enumerate(samples):
-        data = dict(_BASE_PAYLOAD)
-        data.update(payload)
-        data.setdefault("timestamp", index * 0.1)
-        structural = data.get("structural_timestamp", structural + 0.1)
-        data["structural_timestamp"] = structural
-        series.append(build_telemetry_record(**data))
-    return series
+def _series(payloads: list[dict]) -> list:
+    samples = []
+    for index, overrides in enumerate(payloads):
+        payload = dict(_BASE_PAYLOAD)
+        payload.update(overrides)
+        payload.setdefault("timestamp", index * 0.1)
+        samples.append(build_telemetry_record(**payload))
+    return samples
 
 
-def test_detect_remesh_marks_structural_discontinuities() -> None:
-    samples = [
-        {"line_deviation": 0.0, "yaw_rate": 0.01, "structural_timestamp": 0.0},
-        {"line_deviation": 0.3, "yaw_rate": 0.12, "structural_timestamp": 0.5},
-        {"line_deviation": 0.8, "yaw_rate": 0.4, "structural_timestamp": 1.3},
-        {"line_deviation": 1.4, "yaw_rate": 0.75, "structural_timestamp": 2.5},
-        {"line_deviation": 1.7, "yaw_rate": 0.9, "structural_timestamp": 3.3},
-        {"line_deviation": 1.8, "yaw_rate": 0.95, "structural_timestamp": 3.9},
-        {"line_deviation": 1.6, "yaw_rate": 0.6, "structural_timestamp": 4.2},
-    ]
-    series = _build_series(samples)
+def test_detect_remesh_marks_repeated_patterns() -> None:
+    samples = []
+    for index in range(20):
+        t = index * 0.1
+        line = 0.4 * sin(tau * 0.5 * t) + 0.05 * sin(tau * t)
+        samples.append({"line_deviation": line})
+    samples.extend({"line_deviation": 0.0, "timestamp": (20 + idx) * 0.1} for idx in range(5))
+    series = _series(samples)
 
     events = detect_remesh(
         series,
-        window=5,
-        line_gradient_threshold=0.25,
-        yaw_rate_gradient_threshold=0.22,
-        structural_gap_threshold=0.5,
+        window=10,
+        tau_candidates=(0.2, 0.4, 0.6),
+        acf_min=0.7,
+        min_repeats=2,
     )
 
     assert events
     event = events[0]
     assert event["name"] == "Remeshing"
-    assert event["line_gradient_mean"] >= 0.25
-    assert event["yaw_rate_gradient_mean"] >= 0.22
-    assert event["structural_gap_mean"] >= 0.5
+    assert event["matched_lags"] >= 2
+    assert event["best_correlation"] >= 0.7
 
 
-@pytest.mark.parametrize(
-    "samples",
-    [
-        [
-            {"line_deviation": 0.1 + index * 0.02, "yaw_rate": 0.05 + index * 0.01, "structural_timestamp": index * 0.1}
-            for index in range(6)
-        ],
-        [
-            {"line_deviation": 0.0, "yaw_rate": 0.02, "structural_timestamp": 0.0},
-            {"line_deviation": math.nan, "yaw_rate": 0.02, "structural_timestamp": 0.2},
-            {"line_deviation": 0.02, "yaw_rate": 0.02, "structural_timestamp": 0.4},
-            {"line_deviation": 0.04, "yaw_rate": 0.03, "structural_timestamp": 0.6},
-            {"line_deviation": 0.05, "yaw_rate": 0.03, "structural_timestamp": 0.8},
-        ],
-    ],
-)
-def test_detect_remesh_requires_sharp_gradients(samples: list[dict]) -> None:
-    series = _build_series(samples)
+def test_detect_remesh_requires_repetition() -> None:
+    baseline_noise = [
+        -0.17616723516683763,
+        -0.3491508260754981,
+        0.15093447303985374,
+        -0.42756371333245724,
+        0.0358820043066892,
+        -0.13431108308741446,
+        -0.4420010752252932,
+        0.007435733189420257,
+        -0.4625043415580151,
+        -0.06635431633761413,
+        -0.43014457642538106,
+        -0.40928698665613494,
+        -0.07548081085748604,
+        0.32685212467203806,
+        -0.3761980388503544,
+        -0.27676103539298547,
+        0.1274332224055893,
+        0.44770894245700565,
+        0.07710294861749867,
+        -0.10331952534921984,
+    ]
+    samples = _series([{ "line_deviation": value } for value in baseline_noise])
+
     events = detect_remesh(
-        series,
-        window=4,
-        line_gradient_threshold=0.25,
-        yaw_rate_gradient_threshold=0.22,
-        structural_gap_threshold=0.5,
+        samples,
+        window=10,
+        tau_candidates=(0.2, 0.4, 0.6),
+        acf_min=0.7,
+        min_repeats=2,
     )
+
     assert events == []

@@ -1,10 +1,4 @@
-"""Synthetic tests for the reception (EN) detector."""
-
 from __future__ import annotations
-
-import math
-
-import pytest
 
 from tnfr_core.operators.operator_detection import detect_en
 
@@ -21,22 +15,26 @@ _BASE_PAYLOAD = dict(
     roll=0.0,
     brake_pressure=0.2,
     locking=0.0,
-    nfr=90.0,
-    si=0.45,
-    speed=38.0,
-    yaw_rate=0.02,
+    nfr=20.0,
+    si=0.2,
+    speed=40.0,
+    yaw_rate=0.05,
     slip_angle=0.0,
-    steer=0.1,
-    throttle=0.25,
+    steer=0.0,
+    throttle=0.3,
     gear=3,
     vertical_load_front=2600.0,
     vertical_load_rear=2600.0,
-    mu_eff_front=1.05,
+    mu_eff_front=1.02,
     mu_eff_rear=1.01,
     suspension_travel_front=0.03,
     suspension_travel_rear=0.03,
-    suspension_velocity_front=0.01,
-    suspension_velocity_rear=0.01,
+    suspension_velocity_front=0.0,
+    suspension_velocity_rear=0.0,
+    wheel_load_fl=650.0,
+    wheel_load_fr=650.0,
+    wheel_load_rl=650.0,
+    wheel_load_rr=650.0,
     tyre_temp_fl=80.0,
     tyre_temp_fr=79.0,
     tyre_temp_rl=76.0,
@@ -50,57 +48,135 @@ _BASE_PAYLOAD = dict(
 )
 
 
-def _build_series(samples: list[dict]) -> list:
-    series = []
-    for index, payload in enumerate(samples):
-        data = dict(_BASE_PAYLOAD)
-        data.update(payload)
-        data.setdefault("timestamp", index * 0.1)
-        series.append(build_telemetry_record(**data))
-    return series
+def _series(payloads: list[dict]) -> list:
+    samples = []
+    for index, overrides in enumerate(payloads):
+        payload = dict(_BASE_PAYLOAD)
+        payload.update(overrides)
+        payload.setdefault("timestamp", index * 0.1)
+        samples.append(build_telemetry_record(**payload))
+    return samples
 
 
-def test_detect_en_emits_event_with_high_si_and_stable_nfr() -> None:
-    samples = [
-        {"si": 0.58, "nfr": 100.0, "throttle": 0.4},
-        {"si": 0.64, "nfr": 101.5, "throttle": 0.52},
-        {"si": 0.69, "nfr": 102.0, "throttle": 0.55},
-        {"si": 0.73, "nfr": 100.8, "throttle": 0.58},
-        {"si": 0.72, "nfr": 102.2, "throttle": 0.6, "yaw_rate": float("nan")},
-        {"si": 0.45, "nfr": 140.0, "throttle": 0.15},
-    ]
-    series = _build_series(samples)
+def test_detect_en_integrates_psi_flux_and_epi_growth() -> None:
+    samples = _series(
+        [
+            {
+                "suspension_velocity_front": 0.28,
+                "suspension_velocity_rear": 0.26,
+                "steer": 0.02,
+                "nfr": 18.0,
+                "si": 0.21,
+            },
+            {
+                "suspension_velocity_front": 0.3,
+                "suspension_velocity_rear": 0.29,
+                "steer": 0.05,
+                "nfr": 19.5,
+                "si": 0.23,
+            },
+            {
+                "suspension_velocity_front": 0.34,
+                "suspension_velocity_rear": 0.31,
+                "steer": 0.08,
+                "nfr": 21.0,
+                "si": 0.25,
+                "vertical_load": 5205.0,
+            },
+            {
+                "suspension_velocity_front": 0.36,
+                "suspension_velocity_rear": 0.34,
+                "steer": 0.11,
+                "nfr": 22.5,
+                "si": 0.27,
+                "vertical_load": 5208.0,
+            },
+            {
+                "suspension_velocity_front": 0.33,
+                "suspension_velocity_rear": 0.32,
+                "steer": 0.14,
+                "nfr": 24.0,
+                "si": 0.28,
+                "vertical_load": 5210.0,
+            },
+            {
+                "suspension_velocity_front": 0.3,
+                "suspension_velocity_rear": 0.28,
+                "steer": 0.16,
+                "nfr": 25.5,
+                "si": 0.3,
+                "vertical_load": 5211.0,
+            },
+            {
+                "suspension_velocity_front": 0.1,
+                "suspension_velocity_rear": 0.09,
+                "steer": 0.05,
+                "nfr": 40.0,
+                "si": 0.18,
+            },
+        ]
+    )
 
-    events = detect_en(series, window=4, si_threshold=0.6, nfr_span_threshold=5.0, throttle_threshold=0.4)
+    events = detect_en(samples, window=6, psi_threshold=0.6, epi_norm_max=80.0)
 
     assert events
     event = events[0]
     assert event["name"] == "Reception"
-    assert event["severity"] >= 1.0
-    assert event["si_mean"] >= 0.6
-    assert event["nfr_span"] <= 5.0
-    assert event["throttle_mean"] >= 0.4
+    assert event["start_index"] == 0
+    assert event["end_index"] >= 5
+    assert event["psi_integral"] >= 0.6
+    assert event["epi_norm_end"] >= event["epi_norm_start"]
+    assert event["epi_norm_peak"] <= 80.0
 
 
-@pytest.mark.parametrize(
-    "samples",
-    [
-        [{"si": 0.4, "nfr": 100.0, "throttle": 0.5} for _ in range(5)],
+def test_detect_en_requires_rising_epi_norm() -> None:
+    samples = _series(
         [
-            {"si": 0.65, "nfr": 100.0, "throttle": 0.5},
-            {"si": 0.66, "nfr": 100.0, "throttle": 0.2},
-            {"si": 0.67, "nfr": 112.0, "throttle": 0.55},
-            {"si": 0.68, "nfr": 120.0, "throttle": 0.6},
-        ],
-        [
-            {"si": 0.62, "nfr": 100.0, "throttle": 0.38},
-            {"si": 0.63, "nfr": 101.0, "throttle": 0.4},
-            {"si": math.nan, "nfr": 103.0, "throttle": 0.41},
-            {"si": 0.61, "nfr": 109.0, "throttle": 0.39},
-        ],
-    ],
-)
-def test_detect_en_ignores_series_below_threshold(samples: list[dict]) -> None:
-    series = _build_series(samples)
-    events = detect_en(series, window=3, si_threshold=0.6, nfr_span_threshold=4.0, throttle_threshold=0.45)
+            {
+                "suspension_velocity_front": 0.3,
+                "suspension_velocity_rear": 0.28,
+                "steer": 0.04,
+                "nfr": 30.0,
+                "si": 0.26,
+            },
+            {
+                "suspension_velocity_front": 0.29,
+                "suspension_velocity_rear": 0.27,
+                "steer": 0.06,
+                "nfr": 28.0,
+                "si": 0.24,
+            },
+            {
+                "suspension_velocity_front": 0.28,
+                "suspension_velocity_rear": 0.26,
+                "steer": 0.08,
+                "nfr": 26.0,
+                "si": 0.22,
+            },
+            {
+                "suspension_velocity_front": 0.27,
+                "suspension_velocity_rear": 0.25,
+                "steer": 0.1,
+                "nfr": 24.0,
+                "si": 0.2,
+            },
+            {
+                "suspension_velocity_front": 0.26,
+                "suspension_velocity_rear": 0.24,
+                "steer": 0.11,
+                "nfr": 22.0,
+                "si": 0.18,
+            },
+            {
+                "suspension_velocity_front": 0.25,
+                "suspension_velocity_rear": 0.23,
+                "steer": 0.12,
+                "nfr": 20.0,
+                "si": 0.16,
+            },
+        ]
+    )
+
+    events = detect_en(samples, window=6, psi_threshold=0.55, epi_norm_max=80.0)
+
     assert events == []

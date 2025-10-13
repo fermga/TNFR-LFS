@@ -1,8 +1,4 @@
-"""Synthetic tests for the contraction (NUL) detector."""
-
 from __future__ import annotations
-
-import pytest
 
 from tnfr_core.operators.operator_detection import detect_nul
 
@@ -19,8 +15,8 @@ _BASE_PAYLOAD = dict(
     roll=0.0,
     brake_pressure=0.2,
     locking=0.0,
-    nfr=150.0,
-    si=0.35,
+    nfr=22.0,
+    si=0.25,
     speed=45.0,
     yaw_rate=0.02,
     slip_angle=0.01,
@@ -33,60 +29,68 @@ _BASE_PAYLOAD = dict(
     mu_eff_rear=1.0,
     suspension_velocity_front=0.01,
     suspension_velocity_rear=0.01,
+    wheel_load_fl=360.0,
+    wheel_load_fr=360.0,
+    wheel_load_rl=350.0,
+    wheel_load_rr=350.0,
     rpm=5800.0,
 )
 
 
-def _build_series(samples: list[dict]) -> list:
-    series = []
-    for index, payload in enumerate(samples):
-        data = dict(_BASE_PAYLOAD)
-        data.update(payload)
-        data.setdefault("timestamp", index * 0.1)
-        series.append(build_telemetry_record(**data))
-    return series
+def _series(payloads: list[dict]) -> list:
+    samples = []
+    for index, overrides in enumerate(payloads):
+        payload = dict(_BASE_PAYLOAD)
+        payload.update(overrides)
+        payload.setdefault("timestamp", index * 0.1)
+        samples.append(build_telemetry_record(**payload))
+    return samples
 
 
-def test_detect_nul_detects_braking_contraction() -> None:
-    samples = [
-        {"longitudinal_accel": -0.5, "speed": 48.0, "brake_pressure": 0.3},
-        {"longitudinal_accel": -1.2, "speed": 42.0, "brake_pressure": 0.55},
-        {"longitudinal_accel": -2.0, "speed": 36.0, "brake_pressure": 0.6},
-        {"longitudinal_accel": -2.4, "speed": 31.0, "brake_pressure": 0.62},
-        {"longitudinal_accel": -1.8, "speed": 29.0, "brake_pressure": 0.58},
-        {"longitudinal_accel": -0.4, "speed": 35.0, "brake_pressure": 0.4},
-    ]
-    series = _build_series(samples)
+def test_detect_nul_detects_support_contraction() -> None:
+    samples = _series(
+        [
+            {"nfr": 22.0, "si": 0.25, "wheel_load_fl": 360.0, "wheel_load_fr": 360.0},
+            {"nfr": 24.0, "si": 0.28, "wheel_load_fl": 320.0, "wheel_load_fr": 320.0},
+            {"nfr": 26.0, "si": 0.31, "wheel_load_fl": 250.0, "wheel_load_fr": 250.0},
+            {"nfr": 28.0, "si": 0.34, "wheel_load_fl": 180.0, "wheel_load_fr": 180.0},
+            {"nfr": 29.0, "si": 0.36, "wheel_load_fl": 160.0, "wheel_load_fr": 160.0},
+            {"nfr": 27.0, "si": 0.33, "wheel_load_fl": 150.0, "wheel_load_fr": 150.0},
+        ]
+    )
 
     events = detect_nul(
-        series,
+        samples,
         window=4,
-        decel_threshold=1.5,
-        speed_drop_threshold=10.0,
-        brake_pressure_threshold=0.5,
+        active_nodes_delta_max=-2,
+        epi_concentration_min=0.55,
+        active_node_load_min=250.0,
     )
 
     assert events
     event = events[0]
     assert event["name"] == "Contraction"
-    assert event["decel_peak"] >= 1.5
-    assert event["speed_drop"] >= 10.0
-    assert event["brake_pressure_mean"] >= 0.5
+    assert event["active_nodes_delta"] <= -2
+    assert event["epi_concentration_peak"] >= 0.55
 
 
-@pytest.mark.parametrize(
-    "samples",
-    [
-        [{"longitudinal_accel": -0.6, "speed": 40.0, "brake_pressure": 0.3} for _ in range(5)],
+def test_detect_nul_requires_concentration_threshold() -> None:
+    samples = _series(
         [
-            {"longitudinal_accel": -2.2, "speed": 45.0, "brake_pressure": 0.4},
-            {"longitudinal_accel": -2.4, "speed": 43.0, "brake_pressure": 0.42},
-            {"longitudinal_accel": -2.3, "speed": 42.0, "brake_pressure": 0.43},
-            {"longitudinal_accel": -2.1, "speed": 41.0, "brake_pressure": 0.41},
-        ],
-    ],
-)
-def test_detect_nul_requires_speed_drop_and_pressure(samples: list[dict]) -> None:
-    series = _build_series(samples)
-    events = detect_nul(series, window=3, decel_threshold=1.5, speed_drop_threshold=10.0, brake_pressure_threshold=0.5)
+            {"nfr": 0.32, "si": 0.3, "wheel_load_fl": 300.0, "wheel_load_fr": 300.0},
+            {"nfr": 0.31, "si": 0.29, "wheel_load_fl": 240.0, "wheel_load_fr": 240.0},
+            {"nfr": 0.3, "si": 0.28, "wheel_load_fl": 230.0, "wheel_load_fr": 230.0},
+            {"nfr": 0.29, "si": 0.27, "wheel_load_fl": 220.0, "wheel_load_fr": 220.0},
+            {"nfr": 0.28, "si": 0.26, "wheel_load_fl": 210.0, "wheel_load_fr": 210.0},
+        ]
+    )
+
+    events = detect_nul(
+        samples,
+        window=4,
+        active_nodes_delta_max=-2,
+        epi_concentration_min=0.55,
+        active_node_load_min=250.0,
+    )
+
     assert events == []

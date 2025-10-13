@@ -53,6 +53,10 @@ def _base_record() -> TelemetryRecord:
         suspension_travel_rear=0.02,
         suspension_velocity_front=0.0,
         suspension_velocity_rear=0.0,
+        wheel_load_fl=600.0,
+        wheel_load_fr=600.0,
+        wheel_load_rl=600.0,
+        wheel_load_rr=600.0,
     )
 
 
@@ -85,6 +89,7 @@ def _synthetic_series(samples: int) -> list[TelemetryRecord]:
             timestamp=t,
             vertical_load=front_load + rear_load,
             slip_ratio=0.01 * oscillation,
+            slip_angle=0.02 * oscillation,
             lateral_accel=lateral,
             longitudinal_accel=longitudinal,
             yaw=0.0,
@@ -103,6 +108,10 @@ def _synthetic_series(samples: int) -> list[TelemetryRecord]:
             mu_eff_rear=mu_rear,
             suspension_velocity_front=suspension_front,
             suspension_velocity_rear=suspension_rear,
+            wheel_load_fl=front_load * 0.5 + 150.0,
+            wheel_load_fr=front_load * 0.5 + 140.0,
+            wheel_load_rl=rear_load * 0.5 + 130.0,
+            wheel_load_rr=rear_load * 0.5 + 120.0,
             line_deviation=line_dev,
             structural_timestamp=structural,
         )
@@ -140,13 +149,13 @@ def main() -> None:
     series = _synthetic_series(max(1, args.samples))
     iterations = max(1, args.iterations)
     scenarios: list[tuple[str, Callable[..., Sequence[dict]], dict[str, float]]] = [
-        ("detect_en", detect_en, dict(si_threshold=0.6, nfr_span_threshold=40.0, throttle_threshold=0.35)),
-        ("detect_um", detect_um, dict(mu_delta_threshold=0.22, load_ratio_threshold=0.06, suspension_delta_threshold=0.02)),
-        ("detect_ra", detect_ra, dict(nfr_rate_threshold=28.0, si_span_threshold=0.18, speed_threshold=28.0)),
-        ("detect_val", detect_val, dict(lateral_threshold=1.7, throttle_threshold=0.5, load_span_threshold=450.0)),
-        ("detect_nul", detect_nul, dict(decel_threshold=1.4, speed_drop_threshold=7.5, brake_pressure_threshold=0.4)),
-        ("detect_thol", detect_thol, dict(suspension_span_threshold=0.05, steer_span_threshold=0.08, yaw_rate_span_threshold=0.2)),
-        ("detect_zhir", detect_zhir, dict(si_delta_threshold=0.22, nfr_delta_threshold=55.0, line_deviation_threshold=0.45)),
+        ("detect_en", detect_en, dict(psi_threshold=0.9, epi_norm_max=120.0)),
+        ("detect_um", detect_um, dict(rho_min=0.6, phase_max=0.15, min_duration=0.3)),
+        ("detect_ra", detect_ra, dict(nu_band=(1.0, 3.0), si_min=0.55, delta_nfr_max=18.0, k_min=2)),
+        ("detect_val", detect_val, dict(epi_growth_min=0.35, active_nodes_delta_min=2, active_node_load_min=250.0)),
+        ("detect_nul", detect_nul, dict(active_nodes_delta_max=-1, epi_concentration_min=0.55, active_node_load_min=250.0)),
+        ("detect_thol", detect_thol, dict(epi_accel_min=5.0, stability_window=0.3, stability_tolerance=0.05)),
+        ("detect_zhir", detect_zhir, dict(xi_min=0.3, min_persistence=0.3, phase_jump_min=0.2)),
         (
             "detect_remesh",
             detect_remesh,
