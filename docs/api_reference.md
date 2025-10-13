@@ -25,7 +25,7 @@ These links point straight to the most common modules in the AutoAPI tree:
 - [`tnfr_lfs.ingestion`](reference/autoapi/tnfr_lfs/ingestion/index.md) covers
   live telemetry capture, file replay helpers and session configuration
   loaders.
-- [`tnfr_lfs.core.epi`](reference/autoapi/tnfr_lfs/core/epi/index.md) documents
+- [`tnfr_core.epi`](reference/autoapi/tnfr_core/epi/index.md) documents
   the event processing interfaces consumed by downstream analytics.
 - [`tnfr_lfs.recommender`](reference/autoapi/tnfr_lfs/recommender/index.md)
   describes the recommendation engines that pair telemetry with setup

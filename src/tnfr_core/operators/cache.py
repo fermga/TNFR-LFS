@@ -6,7 +6,7 @@ from collections import OrderedDict
 import threading
 from typing import Callable, Generic, Hashable, Mapping, Sequence, Tuple, TypeVar
 
-from tnfr_lfs.core.cache_settings import CacheOptions, DEFAULT_DYNAMIC_CACHE_SIZE
+from tnfr_core.operators.cache_settings import CacheOptions, DEFAULT_DYNAMIC_CACHE_SIZE
 
 _T = TypeVar("_T")
 _K = TypeVar("_K", bound=Hashable)

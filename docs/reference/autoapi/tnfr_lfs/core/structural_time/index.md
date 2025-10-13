@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.structural_time` module
+# `tnfr_core.structural_time` module
 Structural time helpers based on event density heuristics.
 
 ## Functions

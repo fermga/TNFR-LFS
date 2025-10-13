@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence, Tuple
 
-from tnfr_lfs.core.epi import TelemetryRecord, _MISSING_FLOAT
+from tnfr_core.equations.epi import TelemetryRecord, _MISSING_FLOAT
 
 RUNS_DIR = Path("runs")
 
@@ -27,7 +27,7 @@ def write_run(
     Parameters
     ----------
     records:
-        Sequence of :class:`~tnfr_lfs.core.epi.TelemetryRecord` objects to serialise.
+        Sequence of :class:`~tnfr_core.equations.epi.TelemetryRecord` objects to serialise.
     path:
         Destination file.  Parent directories are created automatically.
     compress:

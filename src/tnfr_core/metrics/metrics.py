@@ -10,16 +10,17 @@ from dataclasses import dataclass, field
 from statistics import mean, pvariance, pstdev
 from typing import Iterable, Iterator, Mapping, Sequence, Tuple
 
-from tnfr_lfs.core.contextual_delta import (
+import tnfr_core.equations.epi as _epi
+
+from tnfr_core.equations.contextual_delta import (
     ContextMatrix,
     apply_contextual_delta,
     load_context_matrix,
     resolve_context_from_bundle,
     resolve_context_from_record,
 )
-from tnfr_lfs.core.dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
-from tnfr_lfs.core.epi import delta_nfr_by_node
-from tnfr_lfs.core.interfaces import (
+from tnfr_core.equations.dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
+from tnfr_core.operators.interfaces import (
     SupportsChassisNode,
     SupportsContextBundle,
     SupportsContextRecord,
@@ -29,21 +30,23 @@ from tnfr_lfs.core.interfaces import (
     SupportsTelemetrySample,
     SupportsTyresNode,
 )
-from tnfr_lfs.core.phases import replicate_phase_aliases
-from tnfr_lfs.core.spectrum import (
+from tnfr_core.equations.phases import replicate_phase_aliases
+from tnfr_core.metrics.spectrum import (
     PhaseCorrelation,
     motor_input_correlations,
     phase_alignment,
     phase_to_latency_ms,
 )
-from tnfr_lfs.core.resonance import estimate_excitation_frequency
-from tnfr_lfs.core.structural_time import resolve_time_axis
-from tnfr_lfs.core.utils import normalised_entropy
+from tnfr_core.metrics.resonance import estimate_excitation_frequency
+from tnfr_core.operators.structural_time import resolve_time_axis
+from tnfr_core.equations.utils import normalised_entropy
 
 __all__ = [
     "AeroBalanceDrift",
     "AeroBalanceDriftBin",
     "AeroCoherence",
+    "AeroAxisCoherence",
+    "AeroBandCoherence",
     "BrakeHeadroom",
     "SlideCatchBudget",
     "LockingWindowScore",
@@ -63,7 +66,11 @@ __all__ = [
     "psi_support",
     "bifurcation_threshold",
     "mutation_threshold",
+    "delta_nfr_by_node",
 ]
+
+
+delta_nfr_by_node = _epi.delta_nfr_by_node
 
 
 _BUMPSTOP_DEPTH_BINS: tuple[float, ...] = (0.25, 0.5, 0.75, 1.0)
@@ -377,7 +384,7 @@ def _aggregate_node_delta(
     for index in iterator:
         if not 0 <= index < len(records):
             continue
-        distribution = delta_nfr_by_node(records[index])
+        distribution = _epi.delta_nfr_by_node(records[index])
         for node, contribution in distribution.items():
             try:
                 magnitude = abs(float(contribution))
@@ -1202,14 +1209,14 @@ def compute_window_metrics(
     ----------
     records:
         Ordered window of telemetry samples implementing
-        :class:`~tnfr_lfs.core.interfaces.SupportsTelemetrySample`. Entries
-        must also satisfy :class:`~tnfr_lfs.core.interfaces.SupportsContextRecord`
+        :class:`~tnfr_core.operators.interfaces.SupportsTelemetrySample`. Entries
+        must also satisfy :class:`~tnfr_core.operators.interfaces.SupportsContextRecord`
         when contextual weighting is applied.
     bundles:
         Optional precomputed insight series implementing
-        :class:`~tnfr_lfs.core.interfaces.SupportsEPIBundle` and matching
+        :class:`~tnfr_core.operators.interfaces.SupportsEPIBundle` and matching
         ``records``. Each bundle must adhere to
-        :class:`~tnfr_lfs.core.interfaces.SupportsContextBundle` so the node
+        :class:`~tnfr_core.operators.interfaces.SupportsContextBundle` so the node
         metrics remain accessible to the contextual helpers.
     fallback_to_chronological:
         When ``True`` the metric computation gracefully falls back to the
@@ -2870,7 +2877,7 @@ def compute_aero_coherence(
     """Compute aero balance deltas at low and high speed.
 
     The helper inspects ΔNFR contributions attributed to μ_eff front/rear terms
-    in the :attr:`~tnfr_lfs.core.interfaces.SupportsEPIBundle.delta_breakdown`
+    in the :attr:`~tnfr_core.operators.interfaces.SupportsEPIBundle.delta_breakdown`
     payload.
     When the optional ``bundles`` sequence is not provided or lacks breakdown
     data the function gracefully returns a neutral :class:`AeroCoherence`

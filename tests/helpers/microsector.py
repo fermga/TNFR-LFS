@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from tnfr_lfs.core import Goal, Microsector
-from tnfr_lfs.core.constants import WHEEL_SUFFIXES
-from tnfr_lfs.core.phases import PHASE_SEQUENCE, expand_phase_alias
+from tnfr_core import Goal, Microsector
+from tnfr_core.constants import WHEEL_SUFFIXES
+from tnfr_core.phases import PHASE_SEQUENCE, expand_phase_alias
 
 
 def build_goal(
@@ -30,7 +30,7 @@ def build_goal(
     dominant_nodes: Sequence[str] = ("tyres",),
     **overrides: Any,
 ) -> Goal:
-    """Construct a :class:`~tnfr_lfs.core.Goal` with convenient defaults."""
+    """Construct a :class:`~tnfr_core.Goal` with convenient defaults."""
 
     aliases = expand_phase_alias(phase)
     canonical_phase = aliases[-1] if aliases else phase
@@ -90,7 +90,7 @@ def build_microsector(
     include_cphi: bool = True,
     **overrides: Any,
 ) -> Microsector:
-    """Construct a :class:`~tnfr_lfs.core.Microsector` with reusable defaults."""
+    """Construct a :class:`~tnfr_core.Microsector` with reusable defaults."""
 
     selected_phases: tuple[str, ...]
     if phases is None:

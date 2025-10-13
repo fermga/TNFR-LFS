@@ -278,7 +278,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--core",
         action="store_true",
-        help="Scan src/tnfr_lfs/core for theory references.",
+        help="Scan src/tnfr_core for theory references.",
     )
     parser.add_argument(
         "--tests",

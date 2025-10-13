@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.coherence_calibration` module
+# `tnfr_core.coherence_calibration` module
 Coherence calibration utilities for persistent ΔNFR baselines.
 
 ## Classes

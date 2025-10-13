@@ -15,7 +15,7 @@ modern layout adopted by the project.
 - [`tnfr_lfs.cli`](cli/index.md)
 - [`tnfr_lfs.common`](common/index.md)
 - [`tnfr_lfs.configuration`](configuration/index.md)
-- [`tnfr_lfs.core`](core/index.md)
+- [`tnfr_core`](core/index.md)
 - [`tnfr_lfs.data`](data/index.md)
 - [`tnfr_lfs.examples`](examples/index.md)
 - [`tnfr_lfs.exporters`](exporters/index.md)

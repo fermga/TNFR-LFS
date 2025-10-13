@@ -14,10 +14,10 @@ from tests.helpers import (
     clone_protocol_series,
 )
 
-from tnfr_lfs.core.cache_settings import CacheOptions
-from tnfr_lfs.core import cache as cache_helpers
-from tnfr_lfs.core import epi as epi_module
-from tnfr_lfs.core.epi import (
+from tnfr_core.cache_settings import CacheOptions
+from tnfr_core import cache as cache_helpers
+from tnfr_core import epi as epi_module
+from tnfr_core.epi import (
     DeltaCalculator,
     EPIExtractor,
     NaturalFrequencyAnalyzer,
@@ -27,8 +27,8 @@ from tnfr_lfs.core.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from tnfr_lfs.core.interfaces import SupportsTelemetrySample
-from tnfr_lfs.core.epi_models import (
+from tnfr_core.interfaces import SupportsTelemetrySample
+from tnfr_core.epi_models import (
     BrakesNode,
     ChassisNode,
     DriverNode,
@@ -38,7 +38,7 @@ from tnfr_lfs.core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_lfs.core.spectrum import (
+from tnfr_core.spectrum import (
     apply_window,
     cross_spectrum,
     detrend,

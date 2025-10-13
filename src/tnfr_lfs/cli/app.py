@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from tnfr_lfs.ingestion.config_loader import parse_cache_options
-from tnfr_lfs.core import cache as cache_helpers
+from tnfr_core import cache as cache_helpers
 from tnfr_lfs.logging.config import setup_logging
 
 from tnfr_lfs.cli import common as _common_module

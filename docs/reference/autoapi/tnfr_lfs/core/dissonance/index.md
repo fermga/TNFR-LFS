@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.dissonance` module
+# `tnfr_core.dissonance` module
 Shared helpers for ΔNFR dissonance diagnostics.
 
 ## Functions

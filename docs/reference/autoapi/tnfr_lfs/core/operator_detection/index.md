@@ -1,8 +1,8 @@
-# `tnfr_lfs.core.operator_detection` module
+# `tnfr_core.operator_detection` module
 Detection utilities for on-track operator events.
 
 Each detection routine analyses a windowed sequence of
-:class:`~tnfr_lfs.core.interfaces.SupportsTelemetrySample` objects and yields
+:class:`~tnfr_core.interfaces.SupportsTelemetrySample` objects and yields
 event descriptors when the observed behaviour exceeds the
 configured thresholds.  The detectors are intentionally lightweight so that
 they can be executed on every microsector without adding measurable overhead

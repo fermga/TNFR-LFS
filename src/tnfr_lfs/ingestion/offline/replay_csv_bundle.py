@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_core.equations.epi import TelemetryRecord
 
 _KMH_TO_MS = 1000.0 / 3600.0
 _G_TO_MS2 = 9.80665

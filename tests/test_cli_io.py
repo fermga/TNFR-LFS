@@ -12,7 +12,7 @@ import pytest
 
 pytest.importorskip("numpy")
 
-from tnfr_lfs.core.cache_settings import CacheOptions
+from tnfr_core.cache_settings import CacheOptions
 from tnfr_lfs.cli import common as cli_common
 from tnfr_lfs.cli import io as cli_io
 from tnfr_lfs.cli.common import CliError

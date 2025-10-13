@@ -11,13 +11,13 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from tnfr_lfs.resources import data_root
-from tnfr_lfs.core.cache import (
+from tnfr_core.cache import (
     clear_delta_cache,
     clear_dynamic_cache,
     configure_cache_from_options,
 )
-from tnfr_lfs.core.cache_settings import CacheOptions
-from tnfr_lfs.core.epi import (
+from tnfr_core.cache_settings import CacheOptions
+from tnfr_core.epi import (
     NaturalFrequencyAnalyzer,
     TelemetryRecord,
     delta_nfr_by_node,

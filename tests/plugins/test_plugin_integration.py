@@ -4,12 +4,12 @@ from typing import Sequence
 
 import math
 
-from tnfr_lfs.core.epi import (
+from tnfr_core.epi import (
     NaturalFrequencySnapshot,
     apply_plugin_nu_f_snapshot,
     resolve_plugin_nu_f,
 )
-from tnfr_lfs.core.operators import plugin_coherence_operator
+from tnfr_core.operators import plugin_coherence_operator
 from tnfr_lfs.plugins import TNFRPlugin
 
 from tests.helpers import build_telemetry_record

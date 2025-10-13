@@ -7,8 +7,8 @@ import math
 import pytest
 
 from tests.helpers import BASE_NU_F
-from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
-from tnfr_lfs.core.utils import normalised_entropy
+from tnfr_core.coherence import compute_node_delta_nfr, sense_index
+from tnfr_core.utils import normalised_entropy
 
 
 PHASE_WEIGHTS = {

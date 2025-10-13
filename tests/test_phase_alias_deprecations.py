@@ -6,8 +6,8 @@ from collections.abc import Callable
 
 import pytest
 
-from tnfr_lfs.core.metrics import CPHIReport, CPHIWheel, CPHIWheelComponents
-from tnfr_lfs.core.phases import (
+from tnfr_core.metrics import CPHIReport, CPHIWheel, CPHIWheelComponents
+from tnfr_core.phases import (
     LEGACY_PHASE_MAP,
     expand_phase_alias,
     phase_family,

@@ -5,7 +5,7 @@ import pytest
 from tests.helpers import build_contextual_delta_record
 from tests.helpers.epi import build_epi_bundle
 
-from tnfr_lfs.core.contextual_delta import (
+from tnfr_core.contextual_delta import (
     ContextFactors,
     apply_contextual_delta,
     load_context_matrix,
@@ -13,7 +13,7 @@ from tnfr_lfs.core.contextual_delta import (
     resolve_context_from_record,
     resolve_series_context,
 )
-from tnfr_lfs.core.interfaces import SupportsContextBundle, SupportsContextRecord
+from tnfr_core.interfaces import SupportsContextBundle, SupportsContextRecord
 
 
 def test_apply_contextual_delta_clamps_multiplier():

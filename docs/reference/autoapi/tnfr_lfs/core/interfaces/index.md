@@ -1,8 +1,8 @@
-# `tnfr_lfs.core.interfaces` module
+# `tnfr_core.interfaces` module
 Structural typing interfaces for telemetry and contextual helpers.
 
 This module groups :class:`typing.Protocol` definitions that describe the
-attributes consumed by the analytical helpers in :mod:`tnfr_lfs.core`.  The
+attributes consumed by the analytical helpers in :mod:`tnfr_core`.  The
 protocols enable structural typing across the codebase so that third party
 implementations can interoperate with the analytics layer without relying on
 the concrete dataclasses used by the default ingestion pipeline.
@@ -12,7 +12,7 @@ the concrete dataclasses used by the default ingestion pipeline.
 Telemetry payload exposing analytics fields and optional metadata.
 
 Implementations provide the numerical signals consumed by the
-:mod:`tnfr_lfs.core` analytics along with optional descriptive metadata such
+:mod:`tnfr_core` analytics along with optional descriptive metadata such
 as ``car_model``, ``track_name``, and ``tyre_compound``.
 
 ### `SupportsEPINode` (Protocol)

@@ -42,7 +42,7 @@ from tnfr_lfs.ingestion.live import (
     TelemetryFusion,
 )
 from tnfr_lfs.cli.osd import OSDController, TelemetryHUD
-from tnfr_lfs.core.constants import (
+from tnfr_core.equations.constants import (
     PRESSURE_MEAN_KEYS,
     PRESSURE_STD_KEYS,
     TEMPERATURE_MEAN_KEYS,
@@ -50,12 +50,12 @@ from tnfr_lfs.core.constants import (
     WHEEL_LABELS,
     WHEEL_SUFFIXES,
 )
-from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
-from tnfr_lfs.core.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
-from tnfr_lfs.core.operators import orchestrate_delta_metrics
-from tnfr_lfs.core.phases import replicate_phase_aliases
-from tnfr_lfs.core.resonance import analyse_modal_resonance
-from tnfr_lfs.core.segmentation import (
+from tnfr_core.equations.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
+from tnfr_core.metrics.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
+from tnfr_core.operators.operators import orchestrate_delta_metrics
+from tnfr_core.equations.phases import replicate_phase_aliases
+from tnfr_core.metrics.resonance import analyse_modal_resonance
+from tnfr_core.metrics.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
     microsector_stability_metrics,

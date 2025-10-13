@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from tnfr_lfs.analysis import ABResult
-from tnfr_lfs.core.epi_models import EPIBundle
+from tnfr_core.epi_models import EPIBundle
 from tnfr_lfs.exporters import (
     CAR_MODEL_PREFIXES,
     coherence_map_exporter,
@@ -21,7 +21,7 @@ from tnfr_lfs.exporters import (
     normalise_set_output_name,
     operator_trajectory_exporter,
 )
-from tnfr_lfs.core.operator_detection import canonical_operator_label
+from tnfr_core.operator_detection import canonical_operator_label
 from tnfr_lfs.exporters.setup_plan import serialise_setup_plan
 from tests.helpers import (
     BASE_NU_F,

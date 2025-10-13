@@ -12,7 +12,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from tnfr_lfs.core.archetypes import PhaseArchetypeTargets
+from tnfr_core.equations.archetypes import PhaseArchetypeTargets
 from tnfr_lfs.recommender.rules import (
     DEFAULT_THRESHOLD_LIBRARY,
     DEFAULT_THRESHOLD_PROFILE,

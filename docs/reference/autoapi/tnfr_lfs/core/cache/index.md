@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.cache` module
+# `tnfr_core.cache` module
 Caching helpers for ΔNFR maps and dynamic ν_f multipliers.
 
 ## Classes

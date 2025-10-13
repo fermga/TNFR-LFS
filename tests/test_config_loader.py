@@ -13,7 +13,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
+from tnfr_core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
 from tnfr_lfs.ingestion.config_loader import (
     Car,
     CacheOptions,

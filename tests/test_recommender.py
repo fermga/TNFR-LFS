@@ -7,11 +7,11 @@ from dataclasses import dataclass, field, replace
 from types import SimpleNamespace
 from statistics import mean
 
-from tnfr_lfs.core.epi_models import EPIBundle
+from tnfr_core.epi_models import EPIBundle
 from collections.abc import Mapping
 
-from tnfr_lfs.core.segmentation import Goal, Microsector
-from tnfr_lfs.core.operator_detection import canonical_operator_label
+from tnfr_core.segmentation import Goal, Microsector
+from tnfr_core.operator_detection import canonical_operator_label
 from tnfr_lfs.ingestion.offline import AeroProfile, ProfileManager
 from tnfr_lfs.recommender.rules import (
     AeroCoherenceRule,
@@ -33,7 +33,7 @@ from tnfr_lfs.recommender.rules import (
     UsefulDissonanceRule,
     ThresholdProfile,
 )
-from tnfr_lfs.core.operators import tyre_balance_controller
+from tnfr_core.operators import tyre_balance_controller
 
 from tests.helpers import (
     BASE_NU_F,

@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.operators` module
+# `tnfr_core.operators` module
 High-level TNFR × LFS operators for telemetry analytics pipelines.
 
 ## Classes

@@ -2,8 +2,8 @@ from dataclasses import replace
 
 import pytest
 
-from tnfr_lfs.core.metrics import compute_window_metrics
-from tnfr_lfs.core.structural_time import compute_structural_timestamps
+from tnfr_core.metrics import compute_window_metrics
+from tnfr_core.structural_time import compute_structural_timestamps
 
 from tests.helpers import build_telemetry_record
 

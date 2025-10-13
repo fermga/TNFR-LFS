@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from tnfr_lfs.cli.osd import MacroStatus, TelemetryHUD
-from tnfr_lfs.core.epi import TelemetryRecord
-from tnfr_lfs.core.metrics import WindowMetrics
+from tnfr_core.epi import TelemetryRecord
+from tnfr_core.metrics import WindowMetrics
 from tnfr_lfs.exporters.setup_plan import SetupPlan
 
 from tests.helpers.steering import build_parallel_window_metrics

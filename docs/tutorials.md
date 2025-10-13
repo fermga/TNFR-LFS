@@ -92,14 +92,14 @@ CLI, and exporters have access to the full data set.【F:tnfr_lfs/ingestion/fusi
   the engine regime, pedals, and ABS/TC flags provided by OutGauge to
   resolve the nodal gradient.  The ∇NFR∥/∇NFR⊥ projections are components of
   that gradient and do not replace the raw load channels; always cross-check
-  recommendations against the `Fz`/`ΔFz` logs when you need absolute forces.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】
+  recommendations against the `Fz`/`ΔFz` logs when you need absolute forces.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_core/epi.py†L604-L676】
 - **ν_f (natural frequency)** – requires load split, slip ratios/angles,
   and yaw rate/velocity from OutSim, plus driver style signals (throttle,
   gear) resolved via OutGauge to tailor node categories and spectral
-  windows.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L648-L710】
+  windows.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_core/epi.py†L648-L710】
 - **C(t) (structural coherence)** – builds on the ΔNFR distribution and
   ν_f bands, leveraging the same OutSim data, the derived `mu_eff_*`
-  coefficients, and the ABS/TC flags that OutGauge exposes.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_lfs/core/epi.py†L604-L676】【F:tnfr_lfs/core/coherence.py†L65-L125】
+  coefficients, and the ABS/TC flags that OutGauge exposes.【F:tnfr_lfs/ingestion/fusion.py†L200-L284】【F:tnfr_core/epi.py†L604-L676】【F:tnfr_core/coherence.py†L65-L125】
 - **Ackermann / slide-catch budgets** – use only the `slip_angle_*`
   channels and `yaw_rate` broadcast by OutSim to measure parallel-steer
   deltas and slide-recovery headroom; when these signals are absent the
@@ -107,7 +107,7 @@ CLI, and exporters have access to the full data set.【F:tnfr_lfs/ingestion/fusi
   values.
 - **Aero balance drift** – derives rake trends exclusively from OutSim
   `pitch` plus front/rear suspension travel so the drift guidance mirrors
-  native LFS telemetry even if `AeroCoherence` appears neutral.【F:tnfr_lfs/core/metrics.py†L1650-L1735】
+  native LFS telemetry even if `AeroCoherence` appears neutral.【F:tnfr_core/metrics.py†L1650-L1735】
 - **Tyre temperatures/pressures** – TNFR × LFS now consumes the values
   emitted by the OutGauge extended payload when they are finite and
   positive; when the block is disabled the fusion keeps the historical

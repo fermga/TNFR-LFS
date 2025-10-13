@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.coherence` module
+# `tnfr_core.coherence` module
 Utilities for analysing ΔNFR coherence and entropy penalties.
 
 ## Functions

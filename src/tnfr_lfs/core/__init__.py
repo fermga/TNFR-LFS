@@ -1,112 +1,25 @@
-"""Core computation utilities for TNFR × LFS."""
+"""Compatibility bridge re-exporting :mod:`tnfr_core` symbols."""
 
-from tnfr_lfs.core.cache_settings import CacheOptions, DEFAULT_RECOMMENDER_CACHE_SIZE
-from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
-from tnfr_lfs.core.coherence_calibration import (
-    CalibrationSnapshot,
-    CoherenceCalibrationStore,
-)
-from tnfr_lfs.core.epi import (
-    DeltaCalculator,
-    EPIExtractor,
-    NaturalFrequencyAnalyzer,
-    NaturalFrequencySnapshot,
-    NaturalFrequencySettings,
-    TelemetryRecord,
-    compute_delta_nfr,
-    delta_nfr_by_node,
-)
-from tnfr_lfs.core.epi_models import EPIBundle
-from tnfr_lfs.core.metrics import (
-    AeroBalanceDrift,
-    AeroCoherence,
-    BrakeHeadroom,
-    LockingWindowScore,
-    WindowMetrics,
-    compute_aero_coherence,
-    compute_window_metrics,
-    resolve_aero_mechanical_coherence,
-    phase_synchrony_index,
-)
-from tnfr_lfs.core.operators import (
-    DissonanceBreakdown,
-    acoplamiento_operator,
-    coupling_operator,
-    coherence_operator,
-    dissonance_breakdown_operator,
-    dissonance_operator,
-    evolve_epi,
-    emission_operator,
-    mutation_operator,
-    orchestrate_delta_metrics,
-    reception_operator,
-    recursivity_operator,
-    recursive_filter_operator,
-    recursividad_operator,
-    resonance_operator,
-    TyreBalanceControlOutput,
-    tyre_balance_controller,
-)
-from tnfr_lfs.core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
-from tnfr_lfs.core.segmentation import (
-    Goal,
-    Microsector,
-    detect_quiet_microsector_streaks,
-    microsector_stability_metrics,
-    segment_microsectors,
-)
-from tnfr_lfs.core.structural_time import compute_structural_timestamps, resolve_time_axis
+from __future__ import annotations
 
-__all__ = [
-    "CacheOptions",
-    "DEFAULT_RECOMMENDER_CACHE_SIZE",
-    "TelemetryRecord",
-    "EPIExtractor",
-    "NaturalFrequencyAnalyzer",
-    "NaturalFrequencySettings",
-    "NaturalFrequencySnapshot",
-    "DeltaCalculator",
-    "EPIBundle",
-    "compute_delta_nfr",
-    "delta_nfr_by_node",
-    "compute_node_delta_nfr",
-    "sense_index",
-    "CoherenceCalibrationStore",
-    "CalibrationSnapshot",
-    "compute_window_metrics",
-    "compute_aero_coherence",
-    "resolve_aero_mechanical_coherence",
-    "phase_synchrony_index",
-    "compute_structural_timestamps",
-    "resolve_time_axis",
-    "AeroBalanceDrift",
-    "AeroCoherence",
-    "BrakeHeadroom",
-    "WindowMetrics",
-    "LockingWindowScore",
-    "emission_operator",
-    "reception_operator",
-    "coherence_operator",
-    "dissonance_operator",
-    "dissonance_breakdown_operator",
-    "DissonanceBreakdown",
-    "coupling_operator",
-    "acoplamiento_operator",
-    "resonance_operator",
-    "recursivity_operator",
-    "mutation_operator",
-    "recursive_filter_operator",
-    "recursividad_operator",
-    "orchestrate_delta_metrics",
-    "evolve_epi",
-    "tyre_balance_controller",
-    "TyreBalanceControlOutput",
-    "Goal",
-    "Microsector",
-    "detect_quiet_microsector_streaks",
-    "microsector_stability_metrics",
-    "segment_microsectors",
-    "analyse_modal_resonance",
-    "ModalPeak",
-    "ModalAnalysis",
-]
+import warnings
+
+import tnfr_core as _core
+from tnfr_core import equations, metrics, operators
+from tnfr_core import *  # noqa: F401,F403
+
+warnings.warn(
+    "'tnfr_core' is deprecated and will be removed in a future release; "
+    "import from 'tnfr_core' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+__all__ = list(_core.__all__)
+
+# Surface the reorganised modules to ease the migration path.
+equations = equations
+metrics = metrics
+operators = operators
+
+del _core

@@ -5,7 +5,7 @@ from __future__ import annotations
 from tempfile import NamedTemporaryFile
 
 from tnfr_lfs.ingestion.live import OutSimClient
-from tnfr_lfs.core import EPIExtractor, segment_microsectors
+from tnfr_core import EPIExtractor, segment_microsectors
 from tnfr_lfs.recommender import RecommendationEngine
 
 

@@ -9,8 +9,8 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Protocol, Sequence, Tuple
 
-from tnfr_lfs.core.epi_models import EPIBundle
-from tnfr_lfs.core.operator_detection import canonical_operator_label
+from tnfr_core.equations.epi_models import EPIBundle
+from tnfr_core.operators.operator_detection import canonical_operator_label
 from tnfr_lfs.exporters.setup_plan import (
     SetupPlan,
     phase_axis_summary_lines,

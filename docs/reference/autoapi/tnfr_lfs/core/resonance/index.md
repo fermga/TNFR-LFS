@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.resonance` module
+# `tnfr_core.resonance` module
 Modal resonance analysis helpers.
 
 ## Classes

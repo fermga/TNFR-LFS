@@ -1,4 +1,4 @@
-# `tnfr_lfs.core.epi_models` module
+# `tnfr_core.epi_models` module
 Structured models for Event Performance Indicator computations.
 
 ## Classes

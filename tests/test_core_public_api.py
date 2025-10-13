@@ -1,4 +1,4 @@
-"""Verify that tnfr_lfs.core public modules expose the expected symbols."""
+"""Verify that tnfr_core public modules expose the expected symbols."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 
 
 MODULE_PUBLIC_EXPORTS: dict[str, set[str]] = {
-    "tnfr_lfs.core.epi": {
+    "tnfr_core.equations.epi": {
         "TelemetryRecord",
         "EPIExtractor",
         "NaturalFrequencyAnalyzer",
@@ -20,25 +20,25 @@ MODULE_PUBLIC_EXPORTS: dict[str, set[str]] = {
         "apply_plugin_nu_f_snapshot",
         "resolve_plugin_nu_f",
     },
-    "tnfr_lfs.core.epi_models": {"EPIBundle"},
-    "tnfr_lfs.core.coherence": {"compute_node_delta_nfr", "sense_index"},
-    "tnfr_lfs.core.segmentation": {
+    "tnfr_core.equations.epi_models": {"EPIBundle"},
+    "tnfr_core.equations.coherence": {"compute_node_delta_nfr", "sense_index"},
+    "tnfr_core.metrics.segmentation": {
         "Goal",
         "Microsector",
         "detect_quiet_microsector_streaks",
         "microsector_stability_metrics",
         "segment_microsectors",
     },
-    "tnfr_lfs.core.resonance": {
+    "tnfr_core.metrics.resonance": {
         "ModalPeak",
         "ModalAnalysis",
         "analyse_modal_resonance",
     },
-    "tnfr_lfs.core.structural_time": {
+    "tnfr_core.operators.structural_time": {
         "compute_structural_timestamps",
         "resolve_time_axis",
     },
-    "tnfr_lfs.core.delta_utils": set(),
+    "tnfr_core.equations.delta_utils": set(),
 }
 
 

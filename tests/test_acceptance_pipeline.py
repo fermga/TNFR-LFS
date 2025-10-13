@@ -4,13 +4,13 @@ from statistics import mean
 
 import pytest
 
-from tnfr_lfs.core.coherence import sense_index
-from tnfr_lfs.core.contextual_delta import (
+from tnfr_core.coherence import sense_index
+from tnfr_core.contextual_delta import (
     apply_contextual_delta,
     load_context_matrix,
     resolve_context_from_bundle,
 )
-from tnfr_lfs.core.operators import (
+from tnfr_core.operators import (
     coherence_operator,
     coupling_operator,
     orchestrate_delta_metrics,
@@ -19,7 +19,7 @@ from tnfr_lfs.core.operators import (
     recursivity_operator,
     resonance_operator,
 )
-from tnfr_lfs.core.phases import expand_phase_alias
+from tnfr_core.phases import expand_phase_alias
 
 
 def _is_monotonic(series: list[float]) -> bool:
@@ -40,7 +40,10 @@ def test_acceptance_pipeline_monotonicity_and_coupling(
         assert len(records) == len(expected_bundles)
         return expected_bundles
 
-    monkeypatch.setattr("tnfr_lfs.core.operators.reception_operator", fake_reception)
+    monkeypatch.setattr(
+        "tnfr_core.operators.operators.reception_operator",
+        fake_reception,
+    )
 
     result = orchestrate_delta_metrics(
         [acceptance_records],

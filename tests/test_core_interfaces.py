@@ -7,7 +7,7 @@ from typing import Mapping, Tuple
 
 import pytest
 
-from tnfr_lfs.core.interfaces import (
+from tnfr_core.interfaces import (
     SupportsBrakesNode,
     SupportsChassisNode,
     SupportsDriverNode,
@@ -17,8 +17,8 @@ from tnfr_lfs.core.interfaces import (
     SupportsTransmissionNode,
     SupportsTyresNode,
 )
-from tnfr_lfs.core.metrics import WindowMetrics, compute_window_metrics
-from tnfr_lfs.core.operators import DissonanceBreakdown, dissonance_breakdown_operator
+from tnfr_core.metrics import WindowMetrics, compute_window_metrics
+from tnfr_core.operators import DissonanceBreakdown, dissonance_breakdown_operator
 from tests.helpers import build_telemetry_record
 
 

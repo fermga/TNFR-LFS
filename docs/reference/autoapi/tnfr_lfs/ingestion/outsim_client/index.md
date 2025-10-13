@@ -4,7 +4,7 @@ Simplified OutSim telemetry ingestion client.
 The original TNFR project ingests data from an OutSim UDP stream that
 encodes suspension loads, slip angles, and wheel data.  For the
 purposes of this library we implement a light-weight client that reads
-CSV-formatted telemetry into :class:`~tnfr_lfs.core.epi.TelemetryRecord`
+CSV-formatted telemetry into :class:`~tnfr_core.epi.TelemetryRecord`
 instances.  RAF captures produced by Live for Speed can be converted
 into the same :class:`TelemetryRecord` structure via
 ``raf_to_telemetry_records(read_raf(...))``, making ``.raf`` files a

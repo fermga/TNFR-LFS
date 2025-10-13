@@ -20,7 +20,7 @@ Lifecycle helpers are available so implementers can respond to pipeline events:
 
 * `reset_state()` clears the cached spectral data and invokes `on_reset()`.
 * `apply_natural_frequency_snapshot(snapshot)` copies data from a
-  [`NaturalFrequencySnapshot`](../src/tnfr_lfs/core/epi.py) and triggers
+  [`NaturalFrequencySnapshot`](../src/tnfr_core/epi.py) and triggers
   `on_nu_f_updated(snapshot)`.
 * `apply_coherence_index(value, series=None)` and `apply_coherence_series(series)`
   update the coherence state before calling `on_coherence_updated(...)`.
@@ -33,10 +33,10 @@ state containers and ensure coherent behaviour across plugins.
 Two helper functions wire plugins into the existing spectral flow so that each
 instance can operate autonomously:
 
-* `resolve_plugin_nu_f(...)` (in `tnfr_lfs.core.epi`) wraps
+* `resolve_plugin_nu_f(...)` (in `tnfr_core.epi`) wraps
   `resolve_nu_f_by_node`, applies the resulting snapshot to the plugin, and
   returns the snapshot for further processing.
-* `plugin_coherence_operator(...)` (in `tnfr_lfs.core.operators`) runs the
+* `plugin_coherence_operator(...)` (in `tnfr_core.operators`) runs the
   smoothing operator on a numeric series and propagates the resulting coherence
   series to the plugin.
 
@@ -50,7 +50,7 @@ Plugins declare their dependencies on TNFR operators through the
 `tnfr_lfs.plugins.register_plugin_metadata` helper (or its
 `tnfr_lfs.plugins.plugin_metadata` decorator variant).  Each plugin registers a
 sequence of operator identifiers that correspond to the public names exported by
-[`tnfr_lfs.core.operators`](../src/tnfr_lfs/core/operators.py).  The identifiers
+[`tnfr_core.operators`](../src/tnfr_core/operators.py).  The identifiers
 are validated against the module's `__all__` contents so pipelines can rely on
 the metadata at runtime.  The canonical list of identifiers can be retrieved via
 `tnfr_lfs.plugins.available_operator_identifiers()`.
@@ -74,8 +74,8 @@ before activating a plugin instance.
 
 ```python
 from tnfr_lfs.plugins import TNFRPlugin
-from tnfr_lfs.core.epi import resolve_plugin_nu_f
-from tnfr_lfs.core.operators import plugin_coherence_operator
+from tnfr_core.epi import resolve_plugin_nu_f
+from tnfr_core.operators import plugin_coherence_operator
 
 
 class SamplePlugin(TNFRPlugin):
