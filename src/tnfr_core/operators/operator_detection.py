@@ -1169,7 +1169,7 @@ def detect_thol(
     events: List[Mapping[str, float | str | int]] = []
     index = 2
     while index < len(records):
-        accel = abs(second_derivative[index])
+        accel = second_derivative[index]
         if accel < epi_accel_min:
             index += 1
             continue

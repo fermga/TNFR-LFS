@@ -92,3 +92,25 @@ def test_detect_thol_requires_post_acceleration_stability() -> None:
     )
 
     assert events == []
+
+
+def test_detect_thol_ignores_negative_epi_acceleration() -> None:
+    samples = _series(
+        [
+            {"nfr": 40.0, "si": 0.0},
+            {"nfr": 30.0, "si": 0.0},
+            {"nfr": 15.0, "si": 0.0},
+            {"nfr": 15.0, "si": 0.0},
+            {"nfr": 15.0, "si": 0.0},
+            {"nfr": 15.0, "si": 0.0},
+        ]
+    )
+
+    events = detect_thol(
+        samples,
+        epi_accel_min=2.0,
+        stability_window=0.2,
+        stability_tolerance=0.05,
+    )
+
+    assert events == []
