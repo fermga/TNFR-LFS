@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import tnfr_lfs.recommender.search as search_module
 from tnfr_lfs.core.cache_settings import (
     CacheOptions,
@@ -29,39 +31,46 @@ def test_planner_cache_helper_supports_legacy_size() -> None:
     assert search_module._resolve_planner_cache_size(cache_size=-5) == 0
 
 
-def test_setup_planner_uses_cache_helper(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "cache_options_value, cache_size_value, resolver_return",
+    [
+        pytest.param(
+            CacheOptions(recommender_cache_size=64),
+            None,
+            42,
+            id="options",
+        ),
+        pytest.param(
+            None,
+            21,
+            13,
+            id="legacy-size",
+        ),
+    ],
+)
+def test_setup_planner_cache_resolution(
+    monkeypatch, cache_options_value, cache_size_value, resolver_return
+) -> None:
     captured: dict[str, object] = {}
 
     def _resolver(cache_options=None, cache_size=None):  # type: ignore[no-untyped-def]
         captured["cache_options"] = cache_options
         captured["cache_size"] = cache_size
-        return 42
+        return resolver_return
 
     monkeypatch.setattr(search_module, "_resolve_planner_cache_size", _resolver)
 
-    options = CacheOptions(recommender_cache_size=64)
-    planner = search_module.SetupPlanner(cache_options=options)
+    init_kwargs: dict[str, object] = {}
+    if cache_options_value is not None:
+        init_kwargs["cache_options"] = cache_options_value
+    if cache_size_value is not None:
+        init_kwargs["cache_size"] = cache_size_value
 
-    assert captured["cache_options"] is options
-    assert captured["cache_size"] is None
-    assert planner.cache_size == 42
+    planner = search_module.SetupPlanner(**init_kwargs)
 
-
-def test_setup_planner_supports_legacy_cache_size(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    def _resolver(cache_options=None, cache_size=None):  # type: ignore[no-untyped-def]
-        captured["cache_options"] = cache_options
-        captured["cache_size"] = cache_size
-        return 13
-
-    monkeypatch.setattr(search_module, "_resolve_planner_cache_size", _resolver)
-
-    planner = search_module.SetupPlanner(cache_size=21)
-
-    assert captured["cache_options"] is None
-    assert captured["cache_size"] == 21
-    assert planner.cache_size == 13
+    assert captured["cache_options"] is cache_options_value
+    assert captured["cache_size"] == cache_size_value
+    assert planner.cache_size == resolver_return
 
 
 def test_sweep_candidates_uses_cache_helper(monkeypatch) -> None:
