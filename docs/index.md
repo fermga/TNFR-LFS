@@ -57,7 +57,7 @@ quantitative objectives:
 3. **Brake headroom ≥ 0.40** – the minimum margin before brake-bias or
    cooling interventions become mandatory.【F:tnfr_lfs/recommender/rules.py†L604-L615】
 4. **Aerodynamic Δμ ≤ 0.12** – the tolerance applied when normalising
-   aero-mechanical coherence and drift alerts.【F:tnfr_core/metrics.py†L2558-L2575】
+   aero-mechanical coherence and drift alerts.【F:src/tnfr_core/metrics/metrics.py†L2558-L2575】
 
 The HUD/CLI summarises these objectives under a “Checklist” line that marks
 completed goals with ✅ and highlights pending work with ⚠️ using the
@@ -81,7 +81,7 @@ provienen de los detectores `AL`, `EN`, `IL`, `NAV`, `NUL`, `OZ`, `RA`,
 `REMESH`, `SILENCE`, `THOL`, `UM`, `VAL` y `ZHIR`, que `canonical_operator_label`
 traduce a sus etiquetas canónicas (Support, Reception, Coherence, Transition,
 Contraction, Dissonance, Propagation, Remeshing, Structural silence,
-Auto-organisation, Coupling, Amplification y Transformation).【F:src/tnfr_core/operator_detection.py†L43-L68】
+Auto-organisation, Coupling, Amplification y Transformation).【F:src/tnfr_core/operators/operator_detection.py†L43-L68】
 
 La ecuación nodal extendida que guía el índice de sentido pondera cada nodo por
 su aporte ΔNFR, su frecuencia natural y la entropía estructural:
