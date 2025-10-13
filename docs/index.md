@@ -83,6 +83,35 @@ traduce a sus etiquetas canónicas (Support, Reception, Coherence, Transition,
 Contraction, Dissonance, Propagation, Remeshing, Structural silence,
 Auto-organisation, Coupling, Amplification y Transformation).【F:src/tnfr_core/operators/operator_detection.py†L43-L68】
 
+Los detectores estructurales pueden consultarse directamente desde
+``tnfr_core.operators.operator_detection``. Junto a `detect_al`, `detect_oz`,
+`detect_il`, `detect_silence` y `detect_nav`, el núcleo expone
+``detect_en`` (Reception), ``detect_um`` (Coupling), ``detect_ra`` (Propagation),
+``detect_val`` (Amplification), ``detect_nul`` (Contraction), ``detect_thol``
+(Auto-organisation), ``detect_zhir`` (Transformation) y ``detect_remesh``
+(Remeshing). Cada función sigue el mismo patrón de escaneo por ventanas y
+ofrece umbrales explícitos:
+
+* ``detect_en`` emplea ``si_threshold``, ``nfr_span_threshold`` y
+  ``throttle_threshold`` para validar intervalos de recepción estable.
+* ``detect_um`` contrasta ``mu_delta_threshold``, ``load_ratio_threshold`` y
+  ``suspension_delta_threshold`` para medir el acoplamiento nodal.
+* ``detect_ra`` valora la difusión ΔNFR con ``nfr_rate_threshold``,
+  ``si_span_threshold`` y ``speed_threshold``.
+* ``detect_val`` utiliza ``lateral_threshold``, ``throttle_threshold`` y
+  ``load_span_threshold`` como disparadores de amplificación.
+* ``detect_nul`` monitoriza ``decel_threshold``, ``speed_drop_threshold`` y
+  ``brake_pressure_threshold`` para detectar contracciones.
+* ``detect_thol`` observa la reorganización del chasis con
+  ``suspension_span_threshold``, ``steer_span_threshold`` y
+  ``yaw_rate_span_threshold``.
+* ``detect_zhir`` identifica transformaciones profundas con
+  ``si_delta_threshold``, ``nfr_delta_threshold`` y
+  ``line_deviation_threshold``.
+* ``detect_remesh`` marca discontinuidades empleando
+  ``line_gradient_threshold``, ``yaw_rate_gradient_threshold`` y
+  ``structural_gap_threshold``.
+
 La ecuación nodal extendida que guía el índice de sentido pondera cada nodo por
 su aporte ΔNFR, su frecuencia natural y la entropía estructural:
 

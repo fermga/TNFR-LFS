@@ -3,18 +3,18 @@
 | Category | Identifier | Description | Core references | Tests references |
 | --- | --- | --- | --- | --- |
 | Detector | `AL` | Support | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
-| Detector | `EN` | Reception | Pending | Pending |
+| Detector | `EN` | Reception | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection_en.py |
 | Detector | `IL` | Coherence | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
 | Detector | `NAV` | Transition | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
-| Detector | `NUL` | Contraction | Pending | Pending |
+| Detector | `NUL` | Contraction | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection_nul.py |
 | Detector | `OZ` | Dissonance | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
-| Detector | `RA` | Propagation | Pending | Pending |
-| Detector | `REMESH` | Remeshing | Pending | Pending |
+| Detector | `RA` | Propagation | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection_ra.py |
+| Detector | `REMESH` | Remeshing | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection_remesh.py |
 | Detector | `SILENCE` | Structural silence | src/tnfr_core/metrics/segmentation.py<br />src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection.py<br />tests/test_theory_contract.py |
-| Detector | `THOL` | Auto-organisation | Pending | Pending |
-| Detector | `UM` | Coupling | Pending | Pending |
-| Detector | `VAL` | Amplification | Pending | Pending |
-| Detector | `ZHIR` | Transformation | Pending | Pending |
+| Detector | `THOL` | Auto-organisation | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection_thol.py |
+| Detector | `UM` | Coupling | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection_um.py |
+| Detector | `VAL` | Amplification | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection_val.py |
+| Detector | `ZHIR` | Transformation | src/tnfr_core/operators/operator_detection.py | tests/test_operator_detection_zhir.py |
 | Operator | `acoplamiento_operator` | Compatibility alias for the coupling operator. | src/tnfr_core/operators/operators.py | tests/test_core_operators.py |
 | Operator | `coherence_operator` | Smooth numeric series while preserving averages. | src/tnfr_core/operators/operators.py | tests/plugins/test_interfaces.py<br />tests/plugins/test_plugin_integration.py<br />tests/plugins/test_registry.py<br />(+2 more) |
 | Operator | `coupling_operator` | Return normalised coupling between two series. | src/tnfr_core/operators/operators.py | tests/test_acceptance_pipeline.py<br />tests/test_core_operators.py |
