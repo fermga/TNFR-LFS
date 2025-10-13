@@ -6,6 +6,7 @@ import json
 import re
 import argparse
 from collections.abc import Callable, Iterable, Mapping
+from typing import cast
 from textwrap import dedent
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,17 +38,11 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreter
     import tomli as tomllib  # type: ignore
 
 
-@pytest.fixture
-def prepare_diagnose_environment(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Callable[[Mapping[str, tuple[bool, str]] | None], Path]:
-    def _prepare(stub_overrides: Mapping[str, tuple[bool, str]] | None = None) -> Path:
-        lfs_root = tmp_path / "LFS"
-        cfg_dir = lfs_root / "cfg"
-        cfg_dir.mkdir(parents=True)
-        cfg_path = cfg_dir / "cfg.txt"
-        cfg_path.write_text(
-            """\
+StubMessageFactory = Callable[..., str]
+StubOverride = Callable[..., tuple[bool, str]] | tuple[bool, str | StubMessageFactory]
+
+DEFAULT_DIAGNOSE_CFG = dedent(
+    """\
 OutSim Mode 1
 OutSim IP 127.0.0.1
 OutSim Port 4123
@@ -56,40 +51,67 @@ OutGauge IP 127.0.0.1
 OutGauge Port 3000
 InSim IP 127.0.0.1
 InSim Port 29999
-""",
-            encoding="utf8",
-        )
+"""
+)
 
-        defaults: dict[str, tuple[bool, str]] = {
-            "_outsim_ping": (True, "OutSim responded"),
-            "_outgauge_ping": (True, "OutGauge responded"),
-            "_insim_handshake": (True, "InSim responded"),
-            "_check_setups_directory": (True, "Permissions ok"),
+
+@pytest.fixture
+def prepare_diagnose_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Callable[[Mapping[str, StubOverride] | None], Path]:
+    def _create_stub(
+        default: StubOverride, override: StubOverride | None
+    ) -> Callable[..., tuple[bool, str]]:
+        value: StubOverride = override if override is not None else default
+        if callable(value):
+            return cast(Callable[..., tuple[bool, str]], value)
+
+        ok, message = value
+        if callable(message):
+            def _stub(*args, _ok=ok, _message=message, **kwargs) -> tuple[bool, str]:
+                return _ok, _message(*args, **kwargs)
+
+        else:
+            def _stub(*args, _ok=ok, _message=message, **kwargs) -> tuple[bool, str]:
+                return _ok, _message
+
+        return _stub
+
+    def _prepare(
+        stub_overrides: Mapping[str, StubOverride] | None = None,
+        *,
+        cfg_text: str | None = None,
+    ) -> Path:
+        lfs_root = tmp_path / "LFS"
+        cfg_dir = lfs_root / "cfg"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        cfg_path = cfg_dir / "cfg.txt"
+        cfg_path.write_text(cfg_text or DEFAULT_DIAGNOSE_CFG, encoding="utf8")
+
+        defaults: dict[str, StubOverride] = {
+            "_outsim_ping": (
+                True,
+                lambda host, port, timeout: f"OutSim responded from {host}:{port}",
+            ),
+            "_outgauge_ping": (
+                True,
+                lambda host, port, timeout: f"OutGauge responded from {host}:{port}",
+            ),
+            "_insim_handshake": (True, lambda *args, **kwargs: "InSim responded with version 9"),
+            "_check_setups_directory": (
+                True,
+                lambda path: f"Write permissions confirmed in {path}",
+            ),
         }
-        if stub_overrides:
-            defaults.update(stub_overrides)
 
+        overrides = dict(stub_overrides or {})
         for module in (cli_module, workflows_module):
-            monkeypatch.setattr(
-                module,
-                "_outsim_ping",
-                lambda host, port, timeout, result=defaults["_outsim_ping"]: result,
-            )
-            monkeypatch.setattr(
-                module,
-                "_outgauge_ping",
-                lambda host, port, timeout, result=defaults["_outgauge_ping"]: result,
-            )
-            monkeypatch.setattr(
-                module,
-                "_insim_handshake",
-                lambda host, port, timeout, result=defaults["_insim_handshake"]: result,
-            )
-            monkeypatch.setattr(
-                module,
-                "_check_setups_directory",
-                lambda path, result=defaults["_check_setups_directory"]: result,
-            )
+            for attr, default in defaults.items():
+                monkeypatch.setattr(
+                    module,
+                    attr,
+                    _create_stub(default, overrides.get(attr)),
+                )
 
         return cfg_path
 
@@ -1331,13 +1353,21 @@ def test_repository_pyproject_configures_default_ports_and_profiles() -> None:
     assert limits["exit"] == pytest.approx(0.6, rel=1e-3)
 
 
-def test_diagnose_reports_success(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
-    lfs_root = tmp_path / "LFS"
-    cfg_dir = lfs_root / "cfg"
-    cfg_dir.mkdir(parents=True)
-    cfg_path = cfg_dir / "cfg.txt"
-    cfg_path.write_text(
-        """
+@pytest.mark.parametrize(
+    (
+        "cfg_text",
+        "stub_overrides",
+        "cli_args",
+        "expect_exit",
+        "stdout_contains",
+        "result_contains",
+        "clipboard_expected",
+        "exception_fragment",
+    ),
+    [
+        pytest.param(
+            dedent(
+                """\
 OutSim Mode 1
 OutSim IP 127.0.0.1
 OutSim Port 4123
@@ -1346,82 +1376,100 @@ OutGauge IP 127.0.0.1
 OutGauge Port 3000
 InSim IP 127.0.0.1
 InSim Port 29999
-""",
-        encoding="utf8",
-    )
-
-    for module in (cli_module, workflows_module):
-        monkeypatch.setattr(
-            module,
-            "_outsim_ping",
-            lambda host, port, timeout: (True, f"OutSim responded from {host}:{port}"),
-        )
-        monkeypatch.setattr(
-            module,
-            "_outgauge_ping",
-            lambda host, port, timeout: (True, f"OutGauge responded from {host}:{port}"),
-        )
-        monkeypatch.setattr(
-            module,
-            "_insim_handshake",
-            lambda host, port, timeout: (True, "InSim responded with version 9"),
-        )
-        monkeypatch.setattr(
-            module,
-            "_check_setups_directory",
-            lambda path: (True, "Write permissions confirmed in /fake/setups"),
-        )
-
-    result = run_cli(["diagnose", str(cfg_path), "--timeout", "0.05"])
-    captured = capsys.readouterr()
-    assert "Status: ok" in captured.out
-    assert "OutSim responded" in result
-    assert "OutGauge responded" in result
-    assert "InSim responded" in result
-    assert "Write permissions confirmed" in result
-
-
-def test_diagnose_detects_disabled_modes(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
-    lfs_root = tmp_path / "LFS"
-    cfg_dir = lfs_root / "cfg"
-    cfg_dir.mkdir(parents=True)
-    cfg_path = cfg_dir / "cfg.txt"
-    cfg_path.write_text(
-        """
+"""
+            ),
+            None,
+            ["--timeout", "0.05"],
+            False,
+            ["Status: ok"],
+            [
+                "OutSim responded",
+                "OutGauge responded",
+                "InSim responded",
+                "Write permissions confirmed",
+            ],
+            None,
+            None,
+            id="ok",
+        ),
+        pytest.param(
+            dedent(
+                """\
 OutSim Mode 0
 OutSim IP 127.0.0.1
 OutSim Port 4123
 OutGauge Mode 0
 OutGauge IP 127.0.0.1
 OutGauge Port 3000
-""",
-        encoding="utf8",
-    )
+"""
+            ),
+            None,
+            [],
+            True,
+            [
+                "/outsim 1 127.0.0.1 4123",
+                "/outgauge 1 127.0.0.1 3000",
+                "Commands copied to the clipboard.",
+            ],
+            [],
+            ["/outsim 1 127.0.0.1 4123"],
+            "OutSim Mode",
+            id="modes-disabled",
+        ),
+    ],
+)
+def test_diagnose_modes(
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+    prepare_diagnose_environment: Callable[[Mapping[str, StubOverride] | None], Path],
+    cfg_text: str,
+    stub_overrides: Mapping[str, StubOverride] | None,
+    cli_args: list[str],
+    expect_exit: bool,
+    stdout_contains: Iterable[str],
+    result_contains: Iterable[str],
+    clipboard_expected: Iterable[str] | None,
+    exception_fragment: str | None,
+) -> None:
+    clipboard: list[list[str]] = []
+    if clipboard_expected is not None:
+        def fake_copy(commands: Iterable[str]) -> bool:
+            clipboard.append(list(commands))
+            return True
 
-    copied: list[list[str]] = []
+        monkeypatch.setattr(cli_module, "_copy_to_clipboard", fake_copy)
+        monkeypatch.setattr(workflows_module, "_copy_to_clipboard", fake_copy)
 
-    def fake_copy(commands: Iterable[str]) -> bool:
-        copied.append(list(commands))
-        return True
+    cfg_path = prepare_diagnose_environment(stub_overrides, cfg_text=cfg_text)
+    args = ["diagnose", str(cfg_path), *cli_args]
 
-    monkeypatch.setattr(cli_module, "_copy_to_clipboard", fake_copy)
-    monkeypatch.setattr(workflows_module, "_copy_to_clipboard", fake_copy)
-    for module in (cli_module, workflows_module):
-        monkeypatch.setattr(
-            module,
-            "_check_setups_directory",
-            lambda path: (True, "Write permissions confirmed in /fake/setups"),
-        )
-
-    with pytest.raises(SystemExit) as excinfo:
-        run_cli(["diagnose", str(cfg_path)])
+    result: str | None = None
+    excinfo: pytest.ExceptionInfo[SystemExit] | None = None
+    if expect_exit:
+        with pytest.raises(SystemExit) as caught:
+            run_cli(args)
+        excinfo = caught
+    else:
+        result = run_cli(args)
 
     captured = capsys.readouterr()
-    assert "/outsim 1 127.0.0.1 4123" in captured.out
-    assert "/outgauge 1 127.0.0.1 3000" in captured.out
-    assert "Commands copied to the clipboard." in captured.out
-    assert copied and "/outsim 1 127.0.0.1 4123" in copied[0]
-    assert "OutSim Mode" in str(excinfo.value.__cause__)
+    for expected in stdout_contains:
+        assert expected in captured.out
+
+    if result_contains:
+        assert result is not None
+        for expected in result_contains:
+            assert expected in result
+
+    if expect_exit and exception_fragment is not None:
+        assert excinfo is not None
+        assert exception_fragment in str(excinfo.value.__cause__)
+
+    if clipboard_expected is not None:
+        assert clipboard
+        recorded = clipboard[0]
+        for expected in clipboard_expected:
+            assert expected in recorded
 
 
 def test_profiles_persist_and_adjust(
@@ -1611,7 +1659,7 @@ def test_diagnose_reports_errors(
     stub_result: tuple[bool, str],
     expected_message: str,
     capsys,
-    prepare_diagnose_environment: Callable[[Mapping[str, tuple[bool, str]] | None], Path],
+    prepare_diagnose_environment: Callable[[Mapping[str, StubOverride] | None], Path],
 ) -> None:
     cfg_path = prepare_diagnose_environment({failing_stub: stub_result})
 
