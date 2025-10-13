@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
+from collections.abc import Mapping as MappingABC
+from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
-from typing import Callable, List, Sequence
+from typing import Callable, List, Mapping, Sequence
 
 import pytest
 
@@ -155,34 +158,31 @@ def _build_series(samples: List[dict]) -> List[TelemetryRecord]:
 
 
 _AL_COMMON_KWARGS = dict(window=3, lateral_threshold=1.5, load_threshold=200.0)
-_AL_STEADY_SERIES = _build_series(
-    [
-        {"lateral_accel": 0.2},
-        {"lateral_accel": 0.3},
-        {"lateral_accel": 2.1, "vertical_load": 5300.0},
-        {"lateral_accel": 2.0, "vertical_load": 5450.0},
-        {"lateral_accel": 1.9, "vertical_load": 5600.0},
-        {"lateral_accel": 2.2, "vertical_load": 5700.0},
-        {"lateral_accel": 0.5},
-        {"lateral_accel": 0.3},
-    ]
-)
-_AL_INTENSE_SERIES = _build_series(
-    [
-        {"lateral_accel": 0.2},
-        {"lateral_accel": 0.3},
-        {"lateral_accel": 2.8, "vertical_load": 5400.0},
-        {"lateral_accel": 2.6, "vertical_load": 5600.0},
-        {"lateral_accel": 2.9, "vertical_load": 5750.0},
-        {"lateral_accel": 0.4},
-    ]
-)
-_AL_SHORT_WINDOW_SERIES = _build_series(
-    [
-        {"lateral_accel": 2.5, "vertical_load": 5500.0},
-        {"lateral_accel": 0.2},
-    ]
-)
+_AL_STEADY_SAMPLES = [
+    {"lateral_accel": 0.2},
+    {"lateral_accel": 0.3},
+    {"lateral_accel": 2.1, "vertical_load": 5300.0},
+    {"lateral_accel": 2.0, "vertical_load": 5450.0},
+    {"lateral_accel": 1.9, "vertical_load": 5600.0},
+    {"lateral_accel": 2.2, "vertical_load": 5700.0},
+    {"lateral_accel": 0.5},
+    {"lateral_accel": 0.3},
+]
+_AL_STEADY_SERIES = _build_series(_AL_STEADY_SAMPLES)
+_AL_INTENSE_SAMPLES = [
+    {"lateral_accel": 0.2},
+    {"lateral_accel": 0.3},
+    {"lateral_accel": 2.8, "vertical_load": 5400.0},
+    {"lateral_accel": 2.6, "vertical_load": 5600.0},
+    {"lateral_accel": 2.9, "vertical_load": 5750.0},
+    {"lateral_accel": 0.4},
+]
+_AL_INTENSE_SERIES = _build_series(_AL_INTENSE_SAMPLES)
+_AL_SHORT_WINDOW_SAMPLES = [
+    {"lateral_accel": 2.5, "vertical_load": 5500.0},
+    {"lateral_accel": 0.2},
+]
+_AL_SHORT_WINDOW_SERIES = _build_series(_AL_SHORT_WINDOW_SAMPLES)
 
 
 _AL_CASES = [
@@ -231,31 +231,28 @@ def test_detect_al_tracks_duration_and_severity(case: OperatorCase) -> None:
 
 
 _OZ_COMMON_KWARGS = dict(window=3, slip_threshold=0.12, yaw_threshold=0.25)
-_OZ_BASELINE_SERIES = _build_series(
-    [
-        {"slip_angle": 0.05, "yaw_rate": 0.1},
-        {"slip_angle": 0.06, "yaw_rate": 0.12},
-        {"slip_angle": 0.08, "yaw_rate": 0.2},
-        {"slip_angle": 0.05, "yaw_rate": 0.1},
-    ]
-)
-_OZ_OVERSTEER_SERIES = _build_series(
-    [
-        {"slip_angle": 0.05, "yaw_rate": 0.1},
-        {"slip_angle": 0.18, "yaw_rate": 0.32},
-        {"slip_angle": 0.2, "yaw_rate": 0.35},
-        {"slip_angle": 0.22, "yaw_rate": 0.38},
-        {"slip_angle": 0.07, "yaw_rate": 0.12},
-    ]
-)
-_OZ_MILDER_SERIES = _build_series(
-    [
-        {"slip_angle": 0.05, "yaw_rate": 0.1},
-        {"slip_angle": 0.16, "yaw_rate": 0.29},
-        {"slip_angle": 0.15, "yaw_rate": 0.28},
-        {"slip_angle": 0.07, "yaw_rate": 0.2},
-    ]
-)
+_OZ_BASELINE_SAMPLES = [
+    {"slip_angle": 0.05, "yaw_rate": 0.1},
+    {"slip_angle": 0.06, "yaw_rate": 0.12},
+    {"slip_angle": 0.08, "yaw_rate": 0.2},
+    {"slip_angle": 0.05, "yaw_rate": 0.1},
+]
+_OZ_BASELINE_SERIES = _build_series(_OZ_BASELINE_SAMPLES)
+_OZ_OVERSTEER_SAMPLES = [
+    {"slip_angle": 0.05, "yaw_rate": 0.1},
+    {"slip_angle": 0.18, "yaw_rate": 0.32},
+    {"slip_angle": 0.2, "yaw_rate": 0.35},
+    {"slip_angle": 0.22, "yaw_rate": 0.38},
+    {"slip_angle": 0.07, "yaw_rate": 0.12},
+]
+_OZ_OVERSTEER_SERIES = _build_series(_OZ_OVERSTEER_SAMPLES)
+_OZ_MILDER_SAMPLES = [
+    {"slip_angle": 0.05, "yaw_rate": 0.1},
+    {"slip_angle": 0.16, "yaw_rate": 0.29},
+    {"slip_angle": 0.15, "yaw_rate": 0.28},
+    {"slip_angle": 0.07, "yaw_rate": 0.2},
+]
+_OZ_MILDER_SERIES = _build_series(_OZ_MILDER_SAMPLES)
 
 
 _OZ_CASES = [
@@ -303,30 +300,27 @@ def test_detect_oz_requires_slip_and_yaw_alignment(case: OperatorCase) -> None:
 
 
 _IL_COMMON_KWARGS = dict(window=3, base_threshold=0.3, speed_gain=0.015)
-_IL_SLOW_SERIES = _build_series(
-    [
-        {"speed": 10.0, "line_deviation": 0.45},
-        {"speed": 10.0, "line_deviation": 0.46},
-        {"speed": 10.0, "line_deviation": 0.47},
-        {"speed": 10.0, "line_deviation": 0.2},
-    ]
-)
-_IL_FAST_SERIES = _build_series(
-    [
-        {"speed": 40.0, "line_deviation": 0.3},
-        {"speed": 40.0, "line_deviation": 1.02},
-        {"speed": 40.0, "line_deviation": 1.05},
-        {"speed": 40.0, "line_deviation": 1.1},
-        {"speed": 40.0, "line_deviation": 0.4},
-    ]
-)
-_IL_BELOW_THRESHOLD_SERIES = _build_series(
-    [
-        {"speed": 25.0, "line_deviation": 0.2},
-        {"speed": 25.0, "line_deviation": 0.25},
-        {"speed": 25.0, "line_deviation": 0.24},
-    ]
-)
+_IL_SLOW_SAMPLES = [
+    {"speed": 10.0, "line_deviation": 0.45},
+    {"speed": 10.0, "line_deviation": 0.46},
+    {"speed": 10.0, "line_deviation": 0.47},
+    {"speed": 10.0, "line_deviation": 0.2},
+]
+_IL_SLOW_SERIES = _build_series(_IL_SLOW_SAMPLES)
+_IL_FAST_SAMPLES = [
+    {"speed": 40.0, "line_deviation": 0.3},
+    {"speed": 40.0, "line_deviation": 1.02},
+    {"speed": 40.0, "line_deviation": 1.05},
+    {"speed": 40.0, "line_deviation": 1.1},
+    {"speed": 40.0, "line_deviation": 0.4},
+]
+_IL_FAST_SERIES = _build_series(_IL_FAST_SAMPLES)
+_IL_BELOW_THRESHOLD_SAMPLES = [
+    {"speed": 25.0, "line_deviation": 0.2},
+    {"speed": 25.0, "line_deviation": 0.25},
+    {"speed": 25.0, "line_deviation": 0.24},
+]
+_IL_BELOW_THRESHOLD_SERIES = _build_series(_IL_BELOW_THRESHOLD_SAMPLES)
 
 
 _IL_CASES = [
@@ -377,35 +371,118 @@ _SILENCE_COMMON_KWARGS = dict(
     structural_density_threshold=0.05,
     min_duration=0.4,
 )
-_SILENCE_QUIET_SERIES = _build_series(
-    [
-        {
-            "lateral_accel": 1.25,
-            "longitudinal_accel": 0.05,
-            "vertical_load": 4800.0,
-            "nfr": 102.0,
-            "brake_pressure": 0.04,
-            "throttle": 0.18,
-            "yaw_rate": 0.02,
-            "steer": 0.03,
-        }
-        for _ in range(16)
-    ]
-)
-_SILENCE_NOISY_SERIES = _build_series(
-    [
-        {
-            "lateral_accel": 2.2,
-            "longitudinal_accel": 0.4,
-            "vertical_load": 5200.0 + (index * 50.0),
-            "nfr": 120.0 + index * 3.0,
-            "throttle": 0.6,
-            "yaw_rate": 0.12,
-            "steer": 0.2,
-        }
-        for index in range(16)
-    ]
-)
+_SILENCE_QUIET_SAMPLES = [
+    {
+        "lateral_accel": 1.25,
+        "longitudinal_accel": 0.05,
+        "vertical_load": 4800.0,
+        "nfr": 102.0,
+        "brake_pressure": 0.04,
+        "throttle": 0.18,
+        "yaw_rate": 0.02,
+        "steer": 0.03,
+    }
+    for _ in range(16)
+]
+_SILENCE_QUIET_SERIES = _build_series(_SILENCE_QUIET_SAMPLES)
+_SILENCE_NOISY_SAMPLES = [
+    {
+        "lateral_accel": 2.2,
+        "longitudinal_accel": 0.4,
+        "vertical_load": 5200.0 + (index * 50.0),
+        "nfr": 120.0 + index * 3.0,
+        "throttle": 0.6,
+        "yaw_rate": 0.12,
+        "steer": 0.2,
+    }
+    for index in range(16)
+]
+_SILENCE_NOISY_SERIES = _build_series(_SILENCE_NOISY_SAMPLES)
+
+_THOL_BASELINE_SAMPLES = [
+    {
+        "lateral_accel": 0.2,
+        "longitudinal_accel": 0.05,
+        "vertical_load": 5000.0,
+        "slip_angle": 0.04,
+        "yaw_rate": 0.08,
+        "line_deviation": 0.05,
+        "speed": 22.0,
+        "nfr": 100.0,
+        "throttle": 0.2,
+        "brake_pressure": 0.05,
+    }
+    for _ in range(6)
+]
+
+
+def _stack_samples(*segments: Sequence[dict]) -> List[TelemetryRecord]:
+    combined: List[dict] = []
+    timestamp_index = 0
+    for segment in segments:
+        for payload in segment:
+            entry = dict(payload)
+            entry["timestamp"] = timestamp_index * 0.1
+            combined.append(entry)
+            timestamp_index += 1
+    return _build_series(combined)
+
+
+def _build_thol_series() -> List[TelemetryRecord]:
+    return _stack_samples(
+        _THOL_BASELINE_SAMPLES,
+        _AL_STEADY_SAMPLES,
+        _THOL_BASELINE_SAMPLES,
+        _OZ_OVERSTEER_SAMPLES,
+        _THOL_BASELINE_SAMPLES,
+        _IL_FAST_SAMPLES,
+        _THOL_BASELINE_SAMPLES,
+        _SILENCE_QUIET_SAMPLES,
+    )
+
+
+def _resolve_detect_thol() -> Callable[[Sequence[TelemetryRecord]], SequenceABC[Mapping[str, object]]]:
+    module_candidates = (
+        "tnfr_lfs.core.thol_detection",
+        "tnfr_lfs.core.thol",
+        "tnfr_lfs.core.operator_detection_thol",
+        "tnfr_lfs.plugins.thol",
+        "tnfr_lfs.tools.thol",
+    )
+    for module_name in module_candidates:
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        detector = getattr(module, "detect_thol", None)
+        if callable(detector):
+            return detector
+    pytest.skip("THOL detector is not available in this environment")
+
+
+def _collect_event_names(result: object) -> set[str]:
+    names: set[str] = set()
+
+    def _extract_items(value: object) -> List[object]:
+        if isinstance(value, MappingABC):
+            items: List[object] = []
+            for payload in value.values():
+                items.extend(_extract_items(payload))
+            return items
+        if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+            items = []
+            for item in value:
+                items.extend(_extract_items(item))
+            return items
+        return [value]
+
+    for entry in _extract_items(result):
+        if isinstance(entry, MappingABC):
+            name = entry.get("name")
+            if isinstance(name, str):
+                names.add(name)
+
+    return names
 
 
 _SILENCE_CASES = [
@@ -439,6 +516,59 @@ _SILENCE_CASES = [
 @pytest.mark.parametrize("case", _SILENCE_CASES)
 def test_detect_silence_flags_quiet_structural_intervals(case: OperatorCase) -> None:
     _run_operator_case(detect_silence, case)
+
+
+_THOL_DETECTOR_CASES = [
+    pytest.param(
+        detect_al,
+        _AL_COMMON_KWARGS,
+        canonical_operator_label("AL"),
+        id="al",
+    ),
+    pytest.param(
+        detect_oz,
+        _OZ_COMMON_KWARGS,
+        canonical_operator_label("OZ"),
+        id="oz",
+    ),
+    pytest.param(
+        detect_il,
+        _IL_COMMON_KWARGS,
+        canonical_operator_label("IL"),
+        id="il",
+    ),
+    pytest.param(
+        detect_silence,
+        _SILENCE_COMMON_KWARGS,
+        canonical_operator_label("SILENCE"),
+        id="silence",
+    ),
+]
+
+
+@pytest.mark.parametrize("detector, kwargs, expected_name", _THOL_DETECTOR_CASES)
+def test_thol_series_triggers_structural_detectors(
+    detector: Callable[..., List[Mapping[str, object]]],
+    kwargs: Mapping[str, object],
+    expected_name: str,
+) -> None:
+    series = _build_thol_series()
+    events = detector(series, **kwargs)
+    assert any(event.get("name") == expected_name for event in events)
+
+
+def test_detect_thol_aggregates_structural_events() -> None:
+    detect_thol = _resolve_detect_thol()
+    series = _build_thol_series()
+    result = detect_thol(series)
+    names = _collect_event_names(result)
+    expected = {
+        canonical_operator_label("AL"),
+        canonical_operator_label("OZ"),
+        canonical_operator_label("IL"),
+        canonical_operator_label("SILENCE"),
+    }
+    assert expected <= names
 
 
 @pytest.mark.parametrize(
