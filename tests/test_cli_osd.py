@@ -259,82 +259,11 @@ def test_osd_controller_blocks_macro_when_preflight_fails():
     assert "⚠️" in page_d
 
 
-def test_render_page_c_marks_risks(synthetic_records):
-    hud = _populate_hud(synthetic_records[:60])
-    thresholds = hud._thresholds
-    plan = build_minimal_setup_plan(
-        car_model="FZR",
-        sci=0.842,
-        changes=[
-            {
-                "parameter": "front_arb_steps",
-                "delta": 1.0,
-                "expected_effect": "Better support",
-            }
-        ],
-        sensitivities={"sense_index": {"front_arb_steps": 0.12}},
-        clamped_parameters=("front_arb_steps",),
-        sci_breakdown={
-            "sense": 0.512,
-            "delta": 0.198,
-            "udr": 0.085,
-            "bottoming": 0.025,
-            "aero": 0.012,
-        },
-    )
-    output = osd_module._render_page_c(None, plan, thresholds, None)
-    assert "risks" in output
-    assert "front_arb_steps" in output
-    assert "dSi" in output
-    assert "SCI 0.842" in output
-    assert "sense 0.512" in output
+def _empty_render_kwargs() -> dict[str, object]:
+    return {}
 
 
-def test_render_page_c_includes_aero_guidance(synthetic_records):
-    hud = _populate_hud(synthetic_records[:60])
-    thresholds = hud._thresholds
-    plan = build_minimal_setup_plan(
-        car_model="FZR",
-        sci=0.731,
-        aero_guidance="High speed → add rear wing",
-        aero_metrics={
-            "low_speed_imbalance": 0.02,
-            "high_speed_imbalance": 0.3,
-            "aero_mechanical_coherence": 0.68,
-        },
-    )
-    output = osd_module._render_page_c(None, plan, thresholds, None)
-    assert "Aero High speed" in output
-    assert "Δaero high" in output
-    assert "C(c/d/a) 0.68" in output
-
-
-def test_render_page_c_includes_phase_axis_summary_map(synthetic_records):
-    hud = _populate_hud(synthetic_records[:60])
-    thresholds = hud._thresholds
-    plan = build_minimal_setup_plan(
-        car_model="FZR",
-        sci=0.731,
-        phase_axis_targets={
-            "entry": {"longitudinal": 0.4, "lateral": 0.1},
-            "apex": {"longitudinal": 0.05, "lateral": 0.3},
-        },
-        phase_axis_weights={
-            "entry": {"longitudinal": 0.7, "lateral": 0.3},
-            "apex": {"longitudinal": 0.2, "lateral": 0.8},
-        },
-    )
-    output = osd_module._render_page_c(None, plan, thresholds, None)
-    assert "ΔNFR phase map" in output
-    assert "⇈+0.40" in output
-    assert "Entry ∥ ⇈+0.40" in output
-
-
-def test_render_page_c_adds_operational_checklist(synthetic_records):
-    hud = _populate_hud(synthetic_records[:60])
-    thresholds = hud._thresholds
-    plan = build_minimal_setup_plan(car_model="FZR")
-    sense_state = {"average": 0.78}
+def _operational_checklist_kwargs() -> dict[str, object]:
     window_metrics = SimpleNamespace(
         brake_headroom=SimpleNamespace(value=0.35),
         aero_coherence=SimpleNamespace(high_speed_imbalance=0.18),
@@ -349,23 +278,111 @@ def test_render_page_c_adds_operational_checklist(synthetic_records):
         target_brake_headroom=0.4,
     )
     session_hints = {"delta_reference": 6.0, "aero_reference": 0.12}
-    output = osd_module._render_page_c(
-        None,
-        plan,
-        thresholds,
-        None,
-        sense_state=sense_state,
-        window_metrics=window_metrics,
-        objectives=objectives,
-        session_hints=session_hints,
-        bundles=bundles,
-    )
-    assert "Checklist" in output
-    assert "Si.78≥.75" in output
-    assert "Δ∫5.5≤6" in output
-    assert "Hd.35≥.4" in output
-    assert "Δμ.18≤.12" in output
-    assert output.count("⚠️") >= 1
+    return {
+        "sense_state": {"average": 0.78},
+        "window_metrics": window_metrics,
+        "objectives": objectives,
+        "session_hints": session_hints,
+        "bundles": bundles,
+    }
+
+
+_RENDER_PAGE_C_CASES = [
+    {
+        "case_id": "marks-risks",
+        "plan_kwargs": {
+            "car_model": "FZR",
+            "sci": 0.842,
+            "changes": [
+                {
+                    "parameter": "front_arb_steps",
+                    "delta": 1.0,
+                    "expected_effect": "Better support",
+                }
+            ],
+            "sensitivities": {"sense_index": {"front_arb_steps": 0.12}},
+            "clamped_parameters": ("front_arb_steps",),
+            "sci_breakdown": {
+                "sense": 0.512,
+                "delta": 0.198,
+                "udr": 0.085,
+                "bottoming": 0.025,
+                "aero": 0.012,
+            },
+        },
+        "expected_tokens": ("risks", "front_arb_steps", "dSi", "SCI 0.842", "sense 0.512"),
+        "render_kwargs_factory": _empty_render_kwargs,
+        "min_warning_count": 0,
+    },
+    {
+        "case_id": "aero-guidance",
+        "plan_kwargs": {
+            "car_model": "FZR",
+            "sci": 0.731,
+            "aero_guidance": "High speed → add rear wing",
+            "aero_metrics": {
+                "low_speed_imbalance": 0.02,
+                "high_speed_imbalance": 0.3,
+                "aero_mechanical_coherence": 0.68,
+            },
+        },
+        "expected_tokens": (
+            "Aero High speed",
+            "Δaero high",
+            "C(c/d/a) 0.68",
+        ),
+        "render_kwargs_factory": _empty_render_kwargs,
+        "min_warning_count": 0,
+    },
+    {
+        "case_id": "phase-axis-summary",
+        "plan_kwargs": {
+            "car_model": "FZR",
+            "sci": 0.731,
+            "phase_axis_targets": {
+                "entry": {"longitudinal": 0.4, "lateral": 0.1},
+                "apex": {"longitudinal": 0.05, "lateral": 0.3},
+            },
+            "phase_axis_weights": {
+                "entry": {"longitudinal": 0.7, "lateral": 0.3},
+                "apex": {"longitudinal": 0.2, "lateral": 0.8},
+            },
+        },
+        "expected_tokens": ("ΔNFR phase map", "⇈+0.40", "Entry ∥ ⇈+0.40"),
+        "render_kwargs_factory": _empty_render_kwargs,
+        "min_warning_count": 0,
+    },
+    {
+        "case_id": "operational-checklist",
+        "plan_kwargs": {"car_model": "FZR"},
+        "expected_tokens": (
+            "Checklist",
+            "Si.78≥.75",
+            "Δ∫5.5≤6",
+            "Hd.35≥.4",
+            "Δμ.18≤.12",
+        ),
+        "render_kwargs_factory": _operational_checklist_kwargs,
+        "min_warning_count": 1,
+    },
+]
+
+
+@pytest.mark.parametrize(
+    "case",
+    _RENDER_PAGE_C_CASES,
+    ids=[case["case_id"] for case in _RENDER_PAGE_C_CASES],
+)
+def test_render_page_c_renders_expected_sections(osd_hud, case):
+    hud = osd_hud(stop=60)
+    thresholds = hud._thresholds
+    plan = build_minimal_setup_plan(**case["plan_kwargs"])
+    render_kwargs = case["render_kwargs_factory"]()
+    output = osd_module._render_page_c(None, plan, thresholds, None, **render_kwargs)
+    for token in case["expected_tokens"]:
+        assert token in output, f"{case['case_id']} missing {token}"
+    if case.get("min_warning_count", 0):
+        assert output.count("⚠️") >= case["min_warning_count"]
 
 
 def test_build_setup_plan_includes_phase_axis_summary() -> None:
