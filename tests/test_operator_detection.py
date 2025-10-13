@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import List
 
+import pytest
+
 from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.core.operator_detection import (
     canonical_operator_label,
@@ -251,17 +253,19 @@ def test_detect_silence_flags_quiet_structural_intervals() -> None:
     )
 
 
-def test_normalize_structural_operator_identifier_is_case_insensitive() -> None:
-    assert normalize_structural_operator_identifier("silence") == "SILENCE"
-
-
-def test_normalize_structural_operator_identifier_aliases_spanish_label() -> None:
-    assert normalize_structural_operator_identifier("SILENCIO") == "SILENCE"
-    assert normalize_structural_operator_identifier("silencio") == "SILENCE"
-
-
-def test_canonical_operator_label_maps_spanish_alias_to_english() -> None:
-    assert canonical_operator_label("silencio") == "Structural silence"
+@pytest.mark.parametrize(
+    ("func", "alias", "expected"),
+    [
+        (normalize_structural_operator_identifier, "silence", "SILENCE"),
+        (normalize_structural_operator_identifier, "SILENCIO", "SILENCE"),
+        (normalize_structural_operator_identifier, "silencio", "SILENCE"),
+        (canonical_operator_label, "silencio", "Structural silence"),
+    ],
+)
+def test_structural_operator_aliases(
+    func, alias: str, expected: str
+) -> None:
+    assert func(alias) == expected
 
 
 def test_silence_event_payloads_accepts_case_insensitive_identifier() -> None:
