@@ -36,39 +36,76 @@ __all__ = [
 
 STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
     "AL": "Support",
-    "OZ": "Dissonance",
+    "EN": "Reception",
     "IL": "Coherence",
+    "OZ": "Dissonance",
+    "UM": "Coupling",
+    "RA": "Propagation",
     "SILENCE": "Structural silence",
-    "AUTOORGANISATION": "Auto-organisation",
-    "TRANSITION": "Transition",
+    "VAL": "Amplification",
+    "NUL": "Contraction",
+    "THOL": "Auto-organisation",
+    "ZHIR": "Transformation",
+    "NAV": "Transition",
+    "REMESH": "Remeshing",
 }
 
 _STRUCTURAL_IDENTIFIER_ALIASES: Mapping[str, str] = {
-    "AUTO-ORGANISATION": "AUTOORGANISATION",
-    "AUTO ORGANISATION": "AUTOORGANISATION",
-    "AUTOORGANIZATION": "AUTOORGANISATION",
-    "AUTO-ORGANIZATION": "AUTOORGANISATION",
-    "AUTO ORGANIZATION": "AUTOORGANISATION",
+    "A'L": "AL",
+    "A\u2019L": "AL",
+    "E'N": "EN",
+    "E\u2019N": "EN",
+    "I'L": "IL",
+    "I\u2019L": "IL",
+    "O'Z": "OZ",
+    "O\u2019Z": "OZ",
+    "U'M": "UM",
+    "U\u2019M": "UM",
+    "R'A": "RA",
+    "R\u2019A": "RA",
+    "SH'A": "SILENCE",
+    "SH\u2019A": "SILENCE",
+    "SHA": "SILENCE",
+    "VA'L": "VAL",
+    "VA\u2019L": "VAL",
+    "NU'L": "NUL",
+    "NU\u2019L": "NUL",
+    "T'HOL": "THOL",
+    "T\u2019HOL": "THOL",
+    "AUTOORGANISATION": "THOL",
+    "AUTO ORGANISATION": "THOL",
+    "AUTO-ORGANISATION": "THOL",
+    "AUTOORGANIZATION": "THOL",
+    "AUTO ORGANIZATION": "THOL",
+    "AUTO-ORGANIZATION": "THOL",
+    "AUTOORGANIZACION": "THOL",
+    "AUTO ORGANIZACION": "THOL",
+    "AUTO-ORGANIZACION": "THOL",
+    "AUTOORGANIZACIÓN": "THOL",
+    "AUTO ORGANIZACIÓN": "THOL",
+    "AUTO-ORGANIZACIÓN": "THOL",
+    "Z'HIR": "ZHIR",
+    "Z\u2019HIR": "ZHIR",
+    "NA'V": "NAV",
+    "NA\u2019V": "NAV",
+    "NAV": "NAV",
+    "TRANSITION": "NAV",
+    "TRANSICION": "NAV",
+    "TRANSICIÓN": "NAV",
+    "REMESH": "REMESH",
+    "RE'MESH": "REMESH",
+    "RE\u2019MESH": "REMESH",
 }
-
-_STRUCTURAL_IDENTIFIER_ALIASES.update(
-    {
-        "TRANSITION": "TRANSITION",
-        "TRANSICION": "TRANSITION",
-        "TRANSICIÓN": "TRANSITION",
-        "NA'V": "TRANSITION",
-        "NAV": "TRANSITION",
-    }
-)
 
 try:
     if isinstance(STRUCTURAL_OPERATOR_LABELS, Mapping):
         labels = dict(STRUCTURAL_OPERATOR_LABELS)
-        labels.setdefault("TRANSITION", "Transition")
+        labels.setdefault("NAV", "Transition")
+        labels.setdefault("THOL", "Auto-organisation")
         STRUCTURAL_OPERATOR_LABELS = labels
     else:
         STRUCTURAL_OPERATOR_LABELS = tuple(  # type: ignore[assignment]
-            sorted(set(STRUCTURAL_OPERATOR_LABELS) | {"TRANSITION"})
+            sorted(set(STRUCTURAL_OPERATOR_LABELS) | {"NAV", "THOL"})
         )
 except Exception:
     pass
@@ -90,7 +127,7 @@ def normalize_structural_operator_identifier(identifier: str) -> str:
             DeprecationWarning,
             stacklevel=2,
         )
-        return _DEPRECATED_STRUCTURAL_IDENTIFIER_ALIASES[key]
+        key = _DEPRECATED_STRUCTURAL_IDENTIFIER_ALIASES[key]
     return _STRUCTURAL_IDENTIFIER_ALIASES.get(key, key)
 
 

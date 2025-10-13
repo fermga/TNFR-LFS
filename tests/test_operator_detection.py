@@ -572,18 +572,41 @@ def test_detect_thol_aggregates_structural_events() -> None:
     assert expected <= names
 
 
-@pytest.mark.parametrize(
-    ("func", "alias", "expected"),
-    [
+def test_structural_operator_aliases() -> None:
+    expected_labels = {
+        "AL": "Support",
+        "EN": "Reception",
+        "IL": "Coherence",
+        "OZ": "Dissonance",
+        "UM": "Coupling",
+        "RA": "Propagation",
+        "SILENCE": "Structural silence",
+        "VAL": "Amplification",
+        "NUL": "Contraction",
+        "THOL": "Auto-organisation",
+        "ZHIR": "Transformation",
+        "NAV": "Transition",
+        "REMESH": "Remeshing",
+    }
+
+    assert len(expected_labels) == 13
+
+    for identifier, label in expected_labels.items():
+        assert canonical_operator_label(identifier) == label
+
+    alias_expectations = [
         (normalize_structural_operator_identifier, "silence", "SILENCE"),
-        (normalize_structural_operator_identifier, "SILENCE", "SILENCE"),
+        (normalize_structural_operator_identifier, "SHA", "SILENCE"),
+        (normalize_structural_operator_identifier, "AUTOORGANISATION", "THOL"),
+        (normalize_structural_operator_identifier, "TRANSICIÓN", "NAV"),
         (canonical_operator_label, "silence", "Structural silence"),
-    ],
-)
-def test_structural_operator_aliases(
-    func, alias: str, expected: str
-) -> None:
-    assert func(alias) == expected
+        (canonical_operator_label, "SHA", "Structural silence"),
+        (canonical_operator_label, "AUTO ORGANIZATION", "Auto-organisation"),
+        (canonical_operator_label, "NA'V", "Transition"),
+    ]
+
+    for func, alias, expected in alias_expectations:
+        assert func(alias) == expected
 
 
 def _silence_tuple_event(payload: dict) -> dict:
@@ -703,7 +726,7 @@ def test_detect_nav_per_node_negative(
 
 def test_transition_aliases_canonical() -> None:
     for alias in ("TRANSICION", "TRANSICIÓN", "NA'V", "NAV"):
-        assert normalize_structural_operator_identifier(alias) == "TRANSITION"
+        assert normalize_structural_operator_identifier(alias) == "NAV"
         assert canonical_operator_label(alias) == "Transition"
 
 
