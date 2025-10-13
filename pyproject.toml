@@ -8,9 +8,12 @@ dynamic = ["version"]
 description = "Fractal-Resonant Telemetry Analytics for Live for Speed toolkit"
 readme = "docs/index.md"
 authors = [{ name = "TNFR Team" }]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
@@ -64,7 +67,7 @@ addopts = "-ra --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing"
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 88
 src = ["src", "tests", "examples"]
 
@@ -73,10 +76,10 @@ per-file-ignores = {"tests/conftest.py" = ["E402"]}
 
 [tool.black]
 line-length = 88
-target-version = ["py39"]
+target-version = ["py310"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 files = ["src", "tests"]
 warn_unused_configs = true
 
