@@ -1,5 +1,5 @@
 # `tnfr_lfs.telemetry` package
-Unified telemetry ingestion package.
+Unified telemetry package for TNFR × LFS.
 
 ## Submodules
 - [`tnfr_lfs.telemetry._reorder_buffer`](_reorder_buffer/index.md)

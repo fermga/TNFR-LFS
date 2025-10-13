@@ -9,8 +9,9 @@ provides quick links to the modules that teams consult most often.
 ## How the reference is organised
 
 1. **Package index** – Start at the [AutoAPI index](reference/autoapi/index.md)
-   to browse the `tnfr_lfs` package tree.  Every submodule is grouped by
-   package name, mirroring the layout under `src/tnfr_lfs/`.
+   to browse the `tnfr_core` and `tnfr_lfs` package trees.  Every submodule is
+   grouped by package name, mirroring the layout under `src/tnfr_core/` and
+   `src/tnfr_lfs/`.
 2. **Module details** – Each module page lists public classes, functions and
    constants with short excerpts from the in-code documentation.  Use the
    sidebar or page table of contents to jump to individual symbols.

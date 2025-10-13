@@ -16,7 +16,7 @@ Simple container that yields telemetry samples deterministically.
 Parameters
 ----------
 records:
-    Sequence of :class:`~tnfr_core.epi.TelemetryRecord` objects to serialise.
+    Sequence of :class:`~tnfr_core.equations.epi.TelemetryRecord` objects to serialise.
 path:
     Destination file.  Parent directories are created automatically.
 compress:
