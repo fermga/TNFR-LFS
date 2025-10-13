@@ -33,16 +33,16 @@ state containers and ensure coherent behaviour across plugins.
 Two helper functions wire plugins into the existing spectral flow so that each
 instance can operate autonomously:
 
-* `resolve_plugin_nu_f(...)` (in `tnfr_core.epi`) wraps
+* `resolve_plugin_nu_f(...)` (in `tnfr_lfs.analysis.plugin_ops`) wraps
   `resolve_nu_f_by_node`, applies the resulting snapshot to the plugin, and
   returns the snapshot for further processing.
-* `plugin_coherence_operator(...)` (in `tnfr_core.operators`) runs the
+* `plugin_coherence_operator(...)` (in `tnfr_lfs.analysis.plugin_ops`) runs the
   smoothing operator on a numeric series and propagates the resulting coherence
   series to the plugin.
 
 When finer-grained control is required the `apply_plugin_nu_f_snapshot(...)`
-helper can be used to push an existing snapshot into the plugin without
-recomputing it.
+helper in `tnfr_lfs.analysis.plugin_ops` can be used to push an existing
+snapshot into the plugin without recomputing it.
 
 ## Metadata registry
 
@@ -74,8 +74,10 @@ before activating a plugin instance.
 
 ```python
 from tnfr_lfs.plugins import TNFRPlugin
-from tnfr_core.epi import resolve_plugin_nu_f
-from tnfr_core.operators import plugin_coherence_operator
+from tnfr_lfs.analysis.plugin_ops import (
+    plugin_coherence_operator,
+    resolve_plugin_nu_f,
+)
 
 
 class SamplePlugin(TNFRPlugin):

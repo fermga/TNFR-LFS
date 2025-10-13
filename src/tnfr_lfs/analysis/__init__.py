@@ -3,6 +3,11 @@
 from tnfr_lfs.analysis.abtest import ABResult, SUPPORTED_LAP_METRICS, ab_compare_by_lap
 from tnfr_lfs.analysis.brake_thermal import BrakeThermalConfig, BrakeThermalEstimator
 from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
+from tnfr_lfs.analysis.plugin_ops import (
+    apply_plugin_nu_f_snapshot,
+    plugin_coherence_operator,
+    resolve_plugin_nu_f,
+)
 from tnfr_lfs.analysis.robustness import compute_session_robustness
 
 __all__ = [
@@ -11,7 +16,10 @@ __all__ = [
     "BrakeThermalEstimator",
     "SUPPORTED_LAP_METRICS",
     "ab_compare_by_lap",
+    "apply_plugin_nu_f_snapshot",
     "compute_session_robustness",
     "InsightsResult",
     "compute_insights",
+    "plugin_coherence_operator",
+    "resolve_plugin_nu_f",
 ]

@@ -17,8 +17,6 @@ MODULE_PUBLIC_EXPORTS: dict[str, set[str]] = {
         "DeltaCalculator",
         "compute_delta_nfr",
         "delta_nfr_by_node",
-        "apply_plugin_nu_f_snapshot",
-        "resolve_plugin_nu_f",
     },
     "tnfr_core.equations.epi_models": {"EPIBundle"},
     "tnfr_core.equations.coherence": {"compute_node_delta_nfr", "sense_index"},
