@@ -154,6 +154,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            pyproject.toml
       - name: Install dependencies
         run: |
           # Install project + dev extras (brings in numpy/pandas before pytest)
@@ -181,10 +184,10 @@ jobs:
 
           if [[ -z "$PYTEST_ARGS" ]]; then
             echo "Running full pytest suite"
-            pytest --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing
+            pytest -q --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing
           else
             echo "Running targeted pytest selection for area '$PYTEST_AREA': $PYTEST_ARGS"
-            pytest --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing $PYTEST_ARGS
+            pytest -q --cov=tnfr_lfs --cov-report=xml --cov-report=term-missing $PYTEST_ARGS
           fi
       - name: Upload coverage report
         if: always()
@@ -228,6 +231,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            pyproject.toml
       - name: Install dependencies
         run: |
           # Install project + dev extras (brings in numpy/pandas before pytest)
