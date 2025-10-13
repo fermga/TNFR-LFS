@@ -58,52 +58,71 @@ def _clear_epi_cache_state():
     cache_helpers.clear_dynamic_cache()
 
 
-def test_should_use_delta_cache_defaults_to_global_state():
-    cache_helpers.configure_cache(enable_delta_cache=False)
-    assert not cache_helpers.should_use_delta_cache(None)
+CACHE_RESOLVER_CASES = (
+    (
+        cache_helpers.should_use_delta_cache,
+        {"enable_delta_cache": False},
+        {"enable_delta_cache": True},
+        CacheOptions(
+            enable_delta_cache=False,
+            nu_f_cache_size=64,
+            telemetry_cache_size=1,
+        ),
+        CacheOptions(
+            enable_delta_cache=True,
+            nu_f_cache_size=64,
+            telemetry_cache_size=1,
+        ),
+    ),
+    (
+        cache_helpers.should_use_dynamic_cache,
+        {"nu_f_cache_size": 0},
+        {"nu_f_cache_size": 8},
+        CacheOptions(
+            enable_delta_cache=True,
+            nu_f_cache_size=0,
+            telemetry_cache_size=1,
+        ),
+        CacheOptions(
+            enable_delta_cache=False,
+            nu_f_cache_size=8,
+            telemetry_cache_size=1,
+        ),
+    ),
+)
 
-    cache_helpers.configure_cache(enable_delta_cache=True)
-    assert cache_helpers.should_use_delta_cache(None)
+
+GLOBAL_CACHE_TOGGLE_CASES = [
+    (resolver, disable_kwargs, enable_kwargs)
+    for resolver, disable_kwargs, enable_kwargs, _, _ in CACHE_RESOLVER_CASES
+]
 
 
-def test_should_use_dynamic_cache_defaults_to_global_state():
-    cache_helpers.configure_cache(nu_f_cache_size=0)
-    assert not cache_helpers.should_use_dynamic_cache(None)
+@pytest.mark.parametrize(
+    ("cache_resolver", "disable_kwargs", "enable_kwargs"),
+    GLOBAL_CACHE_TOGGLE_CASES,
+)
+def test_cache_usage_defaults_to_global_state(
+    cache_resolver,
+    disable_kwargs: Dict[str, object],
+    enable_kwargs: Dict[str, object],
+) -> None:
+    cache_helpers.configure_cache(**disable_kwargs)
+    assert not cache_resolver(None)
 
-    cache_helpers.configure_cache(nu_f_cache_size=16)
-    assert cache_helpers.should_use_dynamic_cache(None)
+    cache_helpers.configure_cache(**enable_kwargs)
+    assert cache_resolver(None)
+
+
+OVERRIDE_CACHE_CASES = [
+    (resolver, disabled_options, enabled_options)
+    for resolver, _, _, disabled_options, enabled_options in CACHE_RESOLVER_CASES
+]
 
 
 @pytest.mark.parametrize(
     ("cache_resolver", "disabled_options", "enabled_options"),
-    (
-        (
-            cache_helpers.should_use_delta_cache,
-            CacheOptions(
-                enable_delta_cache=False,
-                nu_f_cache_size=64,
-                telemetry_cache_size=1,
-            ),
-            CacheOptions(
-                enable_delta_cache=True,
-                nu_f_cache_size=64,
-                telemetry_cache_size=1,
-            ),
-        ),
-        (
-            cache_helpers.should_use_dynamic_cache,
-            CacheOptions(
-                enable_delta_cache=True,
-                nu_f_cache_size=0,
-                telemetry_cache_size=1,
-            ),
-            CacheOptions(
-                enable_delta_cache=False,
-                nu_f_cache_size=8,
-                telemetry_cache_size=1,
-            ),
-        ),
-    ),
+    OVERRIDE_CACHE_CASES,
 )
 def test_cache_usage_honours_overrides(
     cache_resolver,
