@@ -14,8 +14,10 @@ import math
 import warnings
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
-from statistics import mean
+from statistics import fmean, mean, pstdev
 from typing import Any, Dict, List, Mapping, Sequence, Tuple, Union
+
+import numpy as np
 
 from tnfr_core.operators.interfaces import SupportsTelemetrySample
 from tnfr_core.operators.structural_time import compute_structural_timestamps
@@ -276,93 +278,328 @@ def _span(values: Sequence[float]) -> float:
     return max(values) - min(values)
 
 
+def _sample_times(records: Sequence[SupportsTelemetrySample]) -> List[float]:
+    times: List[float] = []
+    for index, record in enumerate(records):
+        timestamp = _clean_numeric(getattr(record, "timestamp", index))
+        if timestamp is None:
+            timestamp = float(index)
+        times.append(timestamp)
+    return times
+
+
+def _safe_dt(times: Sequence[float], index: int) -> float:
+    if index <= 0:
+        return 0.0
+    dt = float(times[index] - times[index - 1])
+    return dt if dt > 0.0 else 0.0
+
+
+def _epi_norm(sample: SupportsTelemetrySample) -> float:
+    nfr = _clean_numeric(getattr(sample, "nfr", 0.0)) or 0.0
+    si = _clean_numeric(getattr(sample, "si", 0.0)) or 0.0
+    return float(math.hypot(nfr, si))
+
+
+def _epi_concentration(sample: SupportsTelemetrySample) -> float:
+    nfr = abs(_clean_numeric(getattr(sample, "nfr", 0.0)) or 0.0)
+    si = abs(_clean_numeric(getattr(sample, "si", 0.0)) or 0.0)
+    if not math.isfinite(nfr):
+        nfr = 0.0
+    if not math.isfinite(si):
+        si = 0.0
+    total = nfr + si
+    if total <= 1e-9:
+        return 0.0
+    return max(nfr, si) / total
+
+
+def _phase_features(sample: SupportsTelemetrySample) -> List[float]:
+    features: List[float] = []
+    for attribute in (
+        "mu_eff_front",
+        "mu_eff_rear",
+        "slip_angle",
+        "slip_ratio",
+        "si",
+    ):
+        numeric = _clean_numeric(getattr(sample, attribute, None))
+        if numeric is None or not math.isfinite(numeric):
+            features.append(math.nan)
+        else:
+            features.append(float(numeric))
+    return features
+
+
+def _phase_metric(sample: SupportsTelemetrySample) -> float:
+    metrics = [value for value in _phase_features(sample) if math.isfinite(value)]
+    return fmean(metrics) if metrics else 0.0
+
+
+def _count_active_support_nodes(
+    sample: SupportsTelemetrySample, *, load_min: float
+) -> int:
+    loads: List[float] = []
+    for attribute in (
+        "wheel_load_fl",
+        "wheel_load_fr",
+        "wheel_load_rl",
+        "wheel_load_rr",
+    ):
+        numeric = _clean_numeric(getattr(sample, attribute, None))
+        if numeric is not None and math.isfinite(numeric):
+            loads.append(numeric)
+    if not loads:
+        for attribute in ("vertical_load_front", "vertical_load_rear"):
+            numeric = _clean_numeric(getattr(sample, attribute, None))
+            if numeric is not None and math.isfinite(numeric):
+                loads.append(numeric * 0.5)
+    active = 0
+    for load in loads:
+        if load >= load_min:
+            active += 1
+    return active
+
+
+def _integrate_series(
+    values: Sequence[float],
+    times: Sequence[float],
+    start_index: int,
+    end_index: int,
+) -> float:
+    if end_index <= start_index:
+        return 0.0
+    integral = 0.0
+    for index in range(start_index + 1, end_index + 1):
+        dt = float(times[index] - times[index - 1])
+        if dt <= 0.0:
+            continue
+        left = values[index - 1]
+        right = values[index]
+        integral += 0.5 * (left + right) * dt
+    return float(integral)
+
+
+def _compute_first_derivative(
+    values: Sequence[float], times: Sequence[float]
+) -> List[float]:
+    derivative: List[float] = [0.0] * len(values)
+    for index in range(1, len(values)):
+        dt = float(times[index] - times[index - 1])
+        if dt <= 0.0:
+            derivative[index] = 0.0
+            continue
+        derivative[index] = (values[index] - values[index - 1]) / dt
+    return derivative
+
+
+def _compute_second_derivative(
+    values: Sequence[float], times: Sequence[float]
+) -> List[float]:
+    first = _compute_first_derivative(values, times)
+    second: List[float] = [0.0] * len(values)
+    for index in range(2, len(values)):
+        dt = float(times[index] - times[index - 1])
+        if dt <= 0.0:
+            continue
+        second[index] = (first[index] - first[index - 1]) / dt
+    return second
+
+
+def _band_power(
+    values: Sequence[float],
+    times: Sequence[float],
+    nu_band: Tuple[float, float],
+) -> float:
+    length = len(values)
+    if length < 3:
+        return 0.0
+    duration = float(times[-1] - times[0])
+    if duration <= 0.0:
+        return 0.0
+    sample_rate = (length - 1) / duration
+    if sample_rate <= 0.0:
+        return 0.0
+
+    window = np.array(values, dtype=float)
+    if not np.any(np.isfinite(window)):
+        return 0.0
+    window = np.nan_to_num(window - np.nanmean(window))
+    spectrum = np.fft.rfft(window)
+    frequencies = np.fft.rfftfreq(length, d=1.0 / sample_rate)
+    lower, upper = nu_band
+    mask = (frequencies >= lower) & (frequencies <= upper)
+    if not np.any(mask):
+        return 0.0
+    power = np.abs(spectrum[mask]) ** 2
+    return float(np.sum(power))
+
+
+def _phase_lag(times: Sequence[float], a: Sequence[float], b: Sequence[float]) -> float:
+    if not a or not b:
+        return float("inf")
+    a_index = _argmax_abs(a)
+    b_index = _argmax_abs(b)
+    if a_index is None or b_index is None:
+        return float("inf")
+    return abs(float(times[a_index] - times[b_index]))
+
+
+def _argmax_abs(values: Sequence[float]) -> int | None:
+    best_index: int | None = None
+    best_value = 0.0
+    for index, value in enumerate(values):
+        try:
+            numeric = abs(float(value))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(numeric):
+            continue
+        if best_index is None or numeric > best_value:
+            best_value = numeric
+            best_index = index
+    return best_index
+
+
+def _autocorrelation(series: Sequence[float], lag: int) -> float:
+    if lag <= 0 or lag >= len(series):
+        return 0.0
+    x = np.asarray(series, dtype=float)
+    if x.size < (lag + 2):
+        return 0.0
+    x = np.nan_to_num(x)
+    a = x[:-lag]
+    b = x[lag:]
+    if a.size < 2 or b.size < 2:
+        return 0.0
+    a_centered = a - np.mean(a)
+    b_centered = b - np.mean(b)
+    numerator = float(np.dot(a_centered, b_centered))
+    denominator = float(np.linalg.norm(a_centered) * np.linalg.norm(b_centered))
+    if denominator <= 1e-12:
+        return 0.0
+    return numerator / denominator
+
+
 def detect_en(
     records: Sequence[SupportsTelemetrySample],
     *,
-    window: int = 5,
-    si_threshold: float = 0.6,
-    nfr_span_threshold: float = 35.0,
-    throttle_threshold: float = 0.3,
+    window: int = 6,
+    psi_threshold: float = 0.9,
+    epi_norm_max: float = 120.0,
 ) -> List[Mapping[str, float | str | int]]:
-    """Detect reception (EN) intervals where Si stabilises incoming ΔNFR.
+    """Detect reception (EN) when ψ flux excites a rising low-norm EPI.
 
-    The heuristic analyses rolling windows looking for a sustained sense index
-    above ``si_threshold`` while ΔNFR variation and the throttle budget remain
-    within the ``nfr_span_threshold`` and ``throttle_threshold`` limits.
-    Windows failing to gather enough samples (``len(window) < window``) are
-    skipped, mirroring the existing structural detectors.
+    The detector integrates a ψ-like flux assembled from suspension velocities,
+    steering rate, yaw rate, and vertical micro-vibrations across a rolling
+    ``window``.  An event is emitted whenever the integrated flux exceeds
+    ``psi_threshold`` while the |EPI| proxy remains
+    below ``epi_norm_max`` and is non-decreasing across the same window.
+    ``NaN`` samples are ignored so that sparse telemetry does not trigger false
+    positives.
     """
 
-    if not records:
+    if len(records) < 2:
         return []
 
     window = max(2, int(window))
-    events: List[Mapping[str, float | str | int]] = []
-    active_start: int | None = None
-    peak_value = 0.0
-    best_metrics: Dict[str, float] = {}
+    times = _sample_times(records)
+    psi_flux: List[float] = []
+    epi_norms: List[float] = []
 
     for index, record in enumerate(records):
-        window_records = _window(records, index, window)
-        if len(window_records) < window:
-            continue
+        dt = _safe_dt(times, index)
+        susp_front = abs(_clean_numeric(getattr(record, "suspension_velocity_front", 0.0)) or 0.0)
+        susp_rear = abs(_clean_numeric(getattr(record, "suspension_velocity_rear", 0.0)) or 0.0)
 
-        si_samples = _clean_sequence([getattr(sample, "si", 0.0) for sample in window_records])
-        si_mean = mean(si_samples) if si_samples else 0.0
-        nfr_values = _clean_sequence([getattr(sample, "nfr", 0.0) for sample in window_records])
-        nfr_span = _span(nfr_values)
-        throttle_samples = _clean_sequence(
-            [getattr(sample, "throttle", 0.0) for sample in window_records]
-        )
-        throttle_mean = mean(throttle_samples) if throttle_samples else 0.0
-        yaw_samples = _clean_sequence(
-            [abs(getattr(sample, "yaw_rate", 0.0)) for sample in window_records]
-        )
-        yaw_rate_mean = mean(yaw_samples) if yaw_samples else 0.0
+        steer_value = _clean_numeric(getattr(record, "steer", 0.0)) or 0.0
+        if index > 0:
+            prev_steer = _clean_numeric(getattr(records[index - 1], "steer", 0.0)) or steer_value
+        else:
+            prev_steer = steer_value
+        steer_rate = abs((steer_value - prev_steer) / dt) if dt > 0.0 else 0.0
+
+        yaw_rate = abs(_clean_numeric(getattr(record, "yaw_rate", 0.0)) or 0.0)
+
+        vertical = _clean_numeric(getattr(record, "vertical_load", 0.0))
+        if index > 0:
+            prev_vertical = _clean_numeric(getattr(records[index - 1], "vertical_load", 0.0))
+        else:
+            prev_vertical = vertical
+        micro_vibration = 0.0
+        if (
+            vertical is not None
+            and prev_vertical is not None
+            and dt > 0.0
+            and math.isfinite(vertical)
+            and math.isfinite(prev_vertical)
+        ):
+            micro_vibration = abs(vertical - prev_vertical) / dt
+
+        flux = (0.5 * (susp_front + susp_rear)) + steer_rate + yaw_rate + micro_vibration
+        psi_flux.append(float(flux))
+        epi_norms.append(_epi_norm(record))
+
+    events: List[Mapping[str, float | str | int]] = []
+    active_start: int | None = None
+    peak_integral = 0.0
+    best_metrics: Dict[str, float] = {}
+
+    for index in range(len(records)):
+        start_index = max(0, index - window + 1)
+        duration = float(times[index] - times[start_index]) if index > start_index else 0.0
+        psi_integral = _integrate_series(psi_flux, times, start_index, index)
+        epi_window = epi_norms[start_index : index + 1]
+        if not epi_window:
+            continue
+        epi_start = epi_window[0]
+        epi_end = epi_window[-1]
+        epi_peak = max(epi_window)
+        epi_rising = epi_end >= epi_start - 1e-6
 
         meets_threshold = (
-            si_mean >= si_threshold
-            and nfr_span <= nfr_span_threshold
-            and throttle_mean >= throttle_threshold
+            psi_integral >= psi_threshold
+            and epi_peak <= epi_norm_max
+            and epi_rising
         )
 
         metrics = {
-            "si_mean": float(si_mean),
-            "nfr_span": float(nfr_span),
-            "throttle_mean": float(throttle_mean),
-            "yaw_rate_mean": float(yaw_rate_mean),
+            "psi_integral": float(psi_integral),
+            "window_duration": float(duration),
+            "epi_norm_start": float(epi_start),
+            "epi_norm_end": float(epi_end),
+            "epi_norm_peak": float(epi_peak),
         }
 
         if meets_threshold:
             if active_start is None:
-                active_start = max(0, index - window + 1)
-                peak_value = si_mean
+                active_start = start_index
+                peak_integral = psi_integral
                 best_metrics = metrics
             else:
-                peak_value = max(peak_value, si_mean)
-                if si_mean >= best_metrics.get("si_mean", 0.0):
+                if psi_integral >= peak_integral:
                     best_metrics = metrics
+                peak_integral = max(peak_integral, psi_integral)
         elif active_start is not None:
             event = _finalise_event(
                 canonical_operator_label("EN"),
                 records,
                 active_start,
                 index - 1,
-                peak_value,
-                si_threshold,
+                peak_integral,
+                psi_threshold,
             )
             payload = event.as_mapping()
             payload.update(best_metrics)
             payload.update(
                 {
-                    "si_threshold": float(si_threshold),
-                    "nfr_span_threshold": float(nfr_span_threshold),
-                    "throttle_threshold": float(throttle_threshold),
+                    "psi_threshold": float(psi_threshold),
+                    "epi_norm_max": float(epi_norm_max),
                 }
             )
             events.append(payload)
             active_start = None
-            peak_value = 0.0
+            peak_integral = 0.0
             best_metrics = {}
 
     if active_start is not None:
@@ -371,856 +608,816 @@ def detect_en(
             records,
             active_start,
             len(records) - 1,
-            peak_value,
-            si_threshold,
+            peak_integral,
+            psi_threshold,
         )
         payload = event.as_mapping()
         payload.update(best_metrics)
         payload.update(
             {
-                "si_threshold": float(si_threshold),
-                "nfr_span_threshold": float(nfr_span_threshold),
-                "throttle_threshold": float(throttle_threshold),
+                "psi_threshold": float(psi_threshold),
+                "epi_norm_max": float(epi_norm_max),
             }
         )
         events.append(payload)
 
     return events
-
 
 def detect_um(
     records: Sequence[SupportsTelemetrySample],
     *,
-    window: int = 5,
-    mu_delta_threshold: float = 0.2,
-    load_ratio_threshold: float = 0.08,
-    suspension_delta_threshold: float = 0.015,
+    window: int = 8,
+    rho_min: float = 0.65,
+    phase_max: float = 0.25,
+    min_duration: float = 0.35,
 ) -> List[Mapping[str, float | str | int]]:
-    """Detect coupling (UM) deviations between front and rear nodes.
+    """Detect coupling (UM) when slip responses align with yaw dynamics.
 
-    Coupling is flagged when the mean μ effectiveness gap exceeds
-    ``mu_delta_threshold`` while the front/rear load ratio and suspension
-    velocities diverge beyond ``load_ratio_threshold`` and
-    ``suspension_delta_threshold`` respectively.
+    Pairwise coupling across slip ratios, slip angles, steering input, and yaw
+    rate is evaluated on sliding windows of size ``window``.  An opportunity is
+    emitted when the strongest correlation exceeds ``rho_min`` while the
+    resulting phase lag stays within ``phase_max`` for at least ``min_duration``
+    seconds.
     """
 
-    if not records:
+    if len(records) < 2:
         return []
 
-    window = max(2, int(window))
+    window = max(3, int(window))
+    from tnfr_core.operators.operators import pairwise_coupling_operator
+
+    times = _sample_times(records)
+
+    def _series(attribute: str, *, absolute: bool = False) -> List[float]:
+        values: List[float] = []
+        for record in records:
+            numeric = _clean_numeric(getattr(record, attribute, 0.0))
+            value = float(numeric) if numeric is not None else 0.0
+            if absolute:
+                value = abs(value)
+            if not math.isfinite(value):
+                value = 0.0
+            values.append(value)
+        return values
+
+    slip_ratio_series = _series('slip_ratio', absolute=True)
+    slip_angle_series = _series('slip_angle', absolute=True)
+    steer_series = _series('steer')
+    yaw_series = _series('yaw_rate')
+
     events: List[Mapping[str, float | str | int]] = []
     active_start: int | None = None
-    peak_value = 0.0
+    peak_correlation = 0.0
     best_metrics: Dict[str, float] = {}
 
-    for index, record in enumerate(records):
-        window_records = _window(records, index, window)
-        if len(window_records) < window:
+    for index in range(len(records)):
+        start_index = max(0, index - window + 1)
+        length = index - start_index + 1
+        if length < 3:
             continue
 
-        mu_front_samples = _clean_sequence(
-            [getattr(sample, "mu_eff_front", 0.0) for sample in window_records]
-        )
-        mu_rear_samples = _clean_sequence(
-            [getattr(sample, "mu_eff_rear", 0.0) for sample in window_records]
-        )
-        mu_front_mean = mean(mu_front_samples) if mu_front_samples else 0.0
-        mu_rear_mean = mean(mu_rear_samples) if mu_rear_samples else 0.0
-        mu_delta = abs(mu_front_mean - mu_rear_mean)
+        window_times = times[start_index : index + 1]
+        ratio_window = slip_ratio_series[start_index : index + 1]
+        angle_window = slip_angle_series[start_index : index + 1]
+        steer_window = steer_series[start_index : index + 1]
+        yaw_window = yaw_series[start_index : index + 1]
 
-        load_ratios: List[float] = []
-        for sample in window_records:
-            front = _clean_numeric(getattr(sample, "vertical_load_front", 0.0))
-            rear = _clean_numeric(getattr(sample, "vertical_load_rear", 0.0))
-            if front is None or rear is None:
-                continue
-            total = front + rear
-            if total <= 1e-9:
-                continue
-            load_ratios.append(front / total)
-        load_ratio_delta = _span(load_ratios)
+        correlations = pairwise_coupling_operator(
+            {
+                'slip_ratio': ratio_window,
+                'slip_angle': angle_window,
+                'steer': steer_window,
+                'yaw': yaw_window,
+            },
+            pairs=(
+                ('slip_ratio', 'yaw'),
+                ('slip_angle', 'yaw'),
+                ('steer', 'yaw'),
+            ),
+        )
+        relevant = [abs(value) for value in correlations.values() if math.isfinite(value)]
+        max_corr = max(relevant) if relevant else 0.0
 
-        suspension_front = _clean_sequence(
-            [getattr(sample, "suspension_velocity_front", 0.0) for sample in window_records]
-        )
-        suspension_rear = _clean_sequence(
-            [getattr(sample, "suspension_velocity_rear", 0.0) for sample in window_records]
-        )
-        suspension_delta = abs(
-            (mean(suspension_front) if suspension_front else 0.0)
-            - (mean(suspension_rear) if suspension_rear else 0.0)
-        )
-
+        phase_lag = _phase_lag(window_times, steer_window, yaw_window)
+        duration = window_times[-1] - window_times[0]
         meets_threshold = (
-            mu_delta >= mu_delta_threshold
-            and load_ratio_delta >= load_ratio_threshold
-            and suspension_delta >= suspension_delta_threshold
+            max_corr >= rho_min
+            and math.isfinite(phase_lag)
+            and phase_lag <= phase_max
+            and duration > 0.0
         )
 
         metrics = {
-            "mu_front_mean": float(mu_front_mean),
-            "mu_rear_mean": float(mu_rear_mean),
-            "mu_delta": float(mu_delta),
-            "load_ratio_delta": float(load_ratio_delta),
-            "suspension_velocity_delta": float(suspension_delta),
+            'max_coupling': float(max_corr),
+            'phase_lag': float(phase_lag),
+            'window_duration': float(duration),
+            'slip_ratio_yaw': float(correlations.get('slip_ratio↔yaw', 0.0)),
+            'slip_angle_yaw': float(correlations.get('slip_angle↔yaw', 0.0)),
+            'steer_yaw': float(correlations.get('steer↔yaw', 0.0)),
         }
 
         if meets_threshold:
             if active_start is None:
-                active_start = max(0, index - window + 1)
-                peak_value = mu_delta
+                active_start = start_index
+                peak_correlation = max_corr
                 best_metrics = metrics
             else:
-                peak_value = max(peak_value, mu_delta)
-                if mu_delta >= best_metrics.get("mu_delta", 0.0):
+                if max_corr >= peak_correlation:
                     best_metrics = metrics
+                peak_correlation = max(peak_correlation, max_corr)
         elif active_start is not None:
+            end_index = index - 1
+            duration_total = float(times[end_index] - times[active_start]) if end_index > active_start else 0.0
+            if duration_total >= min_duration:
+                event = _finalise_event(
+                    canonical_operator_label('UM'),
+                    records,
+                    active_start,
+                    end_index,
+                    peak_correlation,
+                    rho_min,
+                )
+                payload = event.as_mapping()
+                payload.update(best_metrics)
+                payload.update(
+                    {
+                        'rho_min': float(rho_min),
+                        'phase_max': float(phase_max),
+                        'min_duration': float(min_duration),
+                    }
+                )
+                events.append(payload)
+            active_start = None
+            peak_correlation = 0.0
+            best_metrics = {}
+
+    if active_start is not None:
+        end_index = len(records) - 1
+        duration_total = float(times[end_index] - times[active_start]) if end_index > active_start else 0.0
+        if duration_total >= min_duration:
             event = _finalise_event(
-                canonical_operator_label("UM"),
+                canonical_operator_label('UM'),
                 records,
                 active_start,
-                index - 1,
-                peak_value,
-                mu_delta_threshold,
+                end_index,
+                peak_correlation,
+                rho_min,
             )
             payload = event.as_mapping()
             payload.update(best_metrics)
             payload.update(
                 {
-                    "mu_delta_threshold": float(mu_delta_threshold),
-                    "load_ratio_threshold": float(load_ratio_threshold),
-                    "suspension_delta_threshold": float(suspension_delta_threshold),
+                    'rho_min': float(rho_min),
+                    'phase_max': float(phase_max),
+                    'min_duration': float(min_duration),
                 }
             )
             events.append(payload)
-            active_start = None
-            peak_value = 0.0
-            best_metrics = {}
-
-    if active_start is not None:
-        event = _finalise_event(
-            canonical_operator_label("UM"),
-            records,
-            active_start,
-            len(records) - 1,
-            peak_value,
-            mu_delta_threshold,
-        )
-        payload = event.as_mapping()
-        payload.update(best_metrics)
-        payload.update(
-            {
-                "mu_delta_threshold": float(mu_delta_threshold),
-                "load_ratio_threshold": float(load_ratio_threshold),
-                "suspension_delta_threshold": float(suspension_delta_threshold),
-            }
-        )
-        events.append(payload)
 
     return events
-
 
 def detect_ra(
     records: Sequence[SupportsTelemetrySample],
     *,
-    window: int = 5,
-    nfr_rate_threshold: float = 25.0,
-    si_span_threshold: float = 0.15,
-    speed_threshold: float = 20.0,
+    window: int = 12,
+    nu_band: Tuple[float, float] = (1.0, 3.0),
+    si_min: float = 0.55,
+    delta_nfr_max: float = 12.0,
+    k_min: int = 2,
 ) -> List[Mapping[str, float | str | int]]:
-    """Detect propagation (RA) bursts from ΔNFR diffusion.
+    """Detect propagation (RA) bursts sustained around a natural frequency band.
 
-    The detector tracks the mean ΔNFR rate of change per window. Propagation is
-    reported when that mean exceeds ``nfr_rate_threshold`` while the sense index
-    span is above ``si_span_threshold`` and the mean absolute speed stays above
-    ``speed_threshold``.
+    The detector analyses ΔNFR spectra inside ``nu_band`` using a lightweight
+    FFT projection.  Propagation is confirmed when the band power remains high
+    while the mean sense index exceeds ``si_min`` and the ΔNFR dispersion stays
+    below ``delta_nfr_max`` for at least ``k_min`` consecutive windows.
     """
 
-    if not records:
+    if len(records) < max(3, window):
         return []
 
-    window = max(2, int(window))
+    window = max(3, int(window))
+    k_min = max(1, int(k_min))
+    times = _sample_times(records)
+
+    nfr_series: List[float] = []
+    si_series: List[float] = []
+    for record in records:
+        nfr_value = _clean_numeric(getattr(record, 'nfr', 0.0))
+        si_value = _clean_numeric(getattr(record, 'si', 0.0))
+        nfr_series.append(float(nfr_value) if nfr_value is not None and math.isfinite(nfr_value) else 0.0)
+        si_series.append(float(si_value) if si_value is not None and math.isfinite(si_value) else 0.0)
+
     events: List[Mapping[str, float | str | int]] = []
     active_start: int | None = None
-    peak_value = 0.0
+    first_window_start: int | None = None
+    sustained_windows = 0
+    peak_power = 0.0
     best_metrics: Dict[str, float] = {}
 
-    for index, record in enumerate(records):
-        window_records = _window(records, index, window)
-        if len(window_records) < window:
+    for index in range(len(records)):
+        start_index = max(0, index - window + 1)
+        length = index - start_index + 1
+        if length < window:
             continue
 
-        nfr_sequence = [
-            _clean_numeric(getattr(sample, "nfr", 0.0)) for sample in window_records
-        ]
-        nfr_rates: List[float] = []
-        prev_value: float | None = None
-        for value in nfr_sequence:
-            if value is None:
-                continue
-            if prev_value is not None:
-                nfr_rates.append(abs(value - prev_value))
-            prev_value = value
-        nfr_rate_mean = mean(nfr_rates) if nfr_rates else 0.0
+        window_times = times[start_index : index + 1]
+        nfr_window = nfr_series[start_index : index + 1]
+        si_window = si_series[start_index : index + 1]
 
-        si_values = _clean_sequence([getattr(sample, "si", 0.0) for sample in window_records])
-        si_span = _span(si_values)
-
-        speed_samples = _clean_sequence(
-            [abs(getattr(sample, "speed", 0.0)) for sample in window_records]
-        )
-        speed_mean = mean(speed_samples) if speed_samples else 0.0
+        band_power = _band_power(nfr_window, window_times, nu_band)
+        si_mean = fmean(si_window) if si_window else 0.0
+        dispersion = pstdev(nfr_window) if len(nfr_window) > 1 else 0.0
 
         meets_threshold = (
-            nfr_rate_mean >= nfr_rate_threshold
-            and si_span >= si_span_threshold
-            and speed_mean >= speed_threshold
+            band_power > 0.0
+            and si_mean >= si_min
+            and dispersion <= delta_nfr_max
         )
 
         metrics = {
-            "nfr_rate_mean": float(nfr_rate_mean),
-            "si_span": float(si_span),
-            "speed_mean": float(speed_mean),
+            'band_power': float(band_power),
+            'si_mean': float(si_mean),
+            'delta_nfr_dispersion': float(dispersion),
         }
 
         if meets_threshold:
-            if active_start is None:
-                active_start = max(0, index - window + 1)
-                peak_value = nfr_rate_mean
-                best_metrics = metrics
-            else:
-                peak_value = max(peak_value, nfr_rate_mean)
-                if nfr_rate_mean >= best_metrics.get("nfr_rate_mean", 0.0):
+            sustained_windows += 1
+            if first_window_start is None:
+                first_window_start = start_index
+            if sustained_windows >= k_min:
+                if active_start is None:
+                    active_start = first_window_start
+                    peak_power = band_power
                     best_metrics = metrics
-        elif active_start is not None:
-            event = _finalise_event(
-                canonical_operator_label("RA"),
-                records,
-                active_start,
-                index - 1,
-                peak_value,
-                nfr_rate_threshold,
-            )
-            payload = event.as_mapping()
-            payload.update(best_metrics)
-            payload.update(
-                {
-                    "nfr_rate_threshold": float(nfr_rate_threshold),
-                    "si_span_threshold": float(si_span_threshold),
-                    "speed_threshold": float(speed_threshold),
-                }
-            )
-            events.append(payload)
+                else:
+                    if band_power >= peak_power:
+                        best_metrics = metrics
+                    peak_power = max(peak_power, band_power)
+        else:
+            if active_start is not None and sustained_windows >= k_min:
+                end_index = index - 1
+                threshold = max(best_metrics.get('band_power', peak_power), 1e-9)
+                event = _finalise_event(
+                    canonical_operator_label('RA'),
+                    records,
+                    active_start,
+                    end_index,
+                    peak_power,
+                    threshold,
+                )
+                payload = event.as_mapping()
+                payload.update(best_metrics)
+                payload.update(
+                    {
+                        'nu_band': tuple(float(value) for value in nu_band),
+                        'si_min': float(si_min),
+                        'delta_nfr_max': float(delta_nfr_max),
+                        'k_min': int(k_min),
+                    }
+                )
+                events.append(payload)
             active_start = None
-            peak_value = 0.0
+            first_window_start = None
+            sustained_windows = 0
+            peak_power = 0.0
             best_metrics = {}
 
-    if active_start is not None:
+    if active_start is not None and sustained_windows >= k_min:
+        end_index = len(records) - 1
+        threshold = max(best_metrics.get('band_power', peak_power), 1e-9)
         event = _finalise_event(
-            canonical_operator_label("RA"),
+            canonical_operator_label('RA'),
             records,
             active_start,
-            len(records) - 1,
-            peak_value,
-            nfr_rate_threshold,
+            end_index,
+            peak_power,
+            threshold,
         )
         payload = event.as_mapping()
         payload.update(best_metrics)
         payload.update(
             {
-                "nfr_rate_threshold": float(nfr_rate_threshold),
-                "si_span_threshold": float(si_span_threshold),
-                "speed_threshold": float(speed_threshold),
+                'nu_band': tuple(float(value) for value in nu_band),
+                'si_min': float(si_min),
+                'delta_nfr_max': float(delta_nfr_max),
+                'k_min': int(k_min),
             }
         )
         events.append(payload)
 
     return events
-
 
 def detect_val(
     records: Sequence[SupportsTelemetrySample],
     *,
-    window: int = 5,
-    lateral_threshold: float = 1.8,
-    throttle_threshold: float = 0.55,
-    load_span_threshold: float = 600.0,
+    window: int = 6,
+    epi_growth_min: float = 0.4,
+    active_nodes_delta_min: int = 1,
+    active_node_load_min: float = 250.0,
 ) -> List[Mapping[str, float | str | int]]:
-    """Detect amplification (VAL) opportunities based on support demand.
+    """Detect amplification (VAL) phases where EPI growth recruits support nodes.
 
-    Windows that exceed the lateral, throttle, and vertical load thresholds are
-    marked as amplification candidates. The detector focuses on the maximum
-    lateral acceleration and throttle observed within the window.
+    The detector tracks the rate of change of the |EPI| proxy across the rolling
+    ``window`` together with the change in active support nodes.  An event is
+    emitted once the growth rate exceeds ``epi_growth_min`` while the active node
+    count increases by at least ``active_nodes_delta_min``.
     """
 
-    if not records:
+    if len(records) < max(3, window):
         return []
 
-    window = max(2, int(window))
+    window = max(3, int(window))
+    times = _sample_times(records)
+
+    epi_norms = [_epi_norm(record) for record in records]
+    active_nodes = [
+        _count_active_support_nodes(record, load_min=float(active_node_load_min))
+        for record in records
+    ]
+
     events: List[Mapping[str, float | str | int]] = []
     active_start: int | None = None
-    peak_value = 0.0
+    peak_growth = 0.0
     best_metrics: Dict[str, float] = {}
 
-    for index, record in enumerate(records):
-        window_records = _window(records, index, window)
-        if len(window_records) < window:
+    for index in range(len(records)):
+        start_index = max(0, index - window + 1)
+        if index == start_index:
             continue
 
-        lateral_samples = _clean_sequence(
-            [abs(getattr(sample, "lateral_accel", 0.0)) for sample in window_records]
-        )
-        lateral_peak = max(lateral_samples) if lateral_samples else 0.0
-        throttle_samples = _clean_sequence(
-            [getattr(sample, "throttle", 0.0) for sample in window_records]
-        )
-        throttle_peak = max(throttle_samples) if throttle_samples else 0.0
-        load_values = _clean_sequence(
-            [getattr(sample, "vertical_load", 0.0) for sample in window_records]
-        )
-        load_span = _span(load_values)
-        longitudinal_samples = _clean_sequence(
-            [abs(getattr(sample, "longitudinal_accel", 0.0)) for sample in window_records]
-        )
-        longitudinal_mean = mean(longitudinal_samples) if longitudinal_samples else 0.0
+        duration = float(times[index] - times[start_index])
+        if duration <= 0.0:
+            continue
+
+        epi_start = epi_norms[start_index]
+        epi_end = epi_norms[index]
+        growth_rate = (epi_end - epi_start) / duration
+
+        nodes_start = active_nodes[start_index]
+        nodes_end = active_nodes[index]
+        node_delta = nodes_end - nodes_start
 
         meets_threshold = (
-            lateral_peak >= lateral_threshold
-            and throttle_peak >= throttle_threshold
-            and load_span >= load_span_threshold
+            growth_rate >= epi_growth_min
+            and node_delta >= active_nodes_delta_min
         )
 
         metrics = {
-            "lateral_peak": float(lateral_peak),
-            "throttle_peak": float(throttle_peak),
-            "load_span": float(load_span),
-            "longitudinal_mean": float(longitudinal_mean),
+            'epi_growth_rate': float(growth_rate),
+            'epi_norm_start': float(epi_start),
+            'epi_norm_end': float(epi_end),
+            'active_nodes_start': int(nodes_start),
+            'active_nodes_end': int(nodes_end),
+            'active_nodes_delta': int(node_delta),
+            'window_duration': float(duration),
         }
 
         if meets_threshold:
             if active_start is None:
-                active_start = max(0, index - window + 1)
-                peak_value = max(lateral_peak, throttle_peak)
+                active_start = start_index
+                peak_growth = growth_rate
                 best_metrics = metrics
             else:
-                peak_value = max(peak_value, lateral_peak, throttle_peak)
-                if peak_value >= max(best_metrics.get("lateral_peak", 0.0), best_metrics.get("throttle_peak", 0.0)):
+                if growth_rate >= peak_growth:
                     best_metrics = metrics
+                peak_growth = max(peak_growth, growth_rate)
         elif active_start is not None:
             event = _finalise_event(
-                canonical_operator_label("VAL"),
+                canonical_operator_label('VAL'),
                 records,
                 active_start,
                 index - 1,
-                peak_value,
-                max(lateral_threshold, throttle_threshold),
+                peak_growth,
+                epi_growth_min,
             )
             payload = event.as_mapping()
             payload.update(best_metrics)
             payload.update(
                 {
-                    "lateral_threshold": float(lateral_threshold),
-                    "throttle_threshold": float(throttle_threshold),
-                    "load_span_threshold": float(load_span_threshold),
+                    'epi_growth_min': float(epi_growth_min),
+                    'active_nodes_delta_min': int(active_nodes_delta_min),
+                    'active_node_load_min': float(active_node_load_min),
                 }
             )
             events.append(payload)
             active_start = None
-            peak_value = 0.0
+            peak_growth = 0.0
             best_metrics = {}
 
     if active_start is not None:
         event = _finalise_event(
-            canonical_operator_label("VAL"),
+            canonical_operator_label('VAL'),
             records,
             active_start,
             len(records) - 1,
-            peak_value,
-            max(lateral_threshold, throttle_threshold),
+            peak_growth,
+            epi_growth_min,
         )
         payload = event.as_mapping()
         payload.update(best_metrics)
         payload.update(
             {
-                "lateral_threshold": float(lateral_threshold),
-                "throttle_threshold": float(throttle_threshold),
-                "load_span_threshold": float(load_span_threshold),
+                'epi_growth_min': float(epi_growth_min),
+                'active_nodes_delta_min': int(active_nodes_delta_min),
+                'active_node_load_min': float(active_node_load_min),
             }
         )
         events.append(payload)
 
     return events
-
 
 def detect_nul(
     records: Sequence[SupportsTelemetrySample],
     *,
-    window: int = 5,
-    decel_threshold: float = 1.6,
-    speed_drop_threshold: float = 5.0,
-    brake_pressure_threshold: float = 0.45,
+    window: int = 6,
+    active_nodes_delta_max: int = -1,
+    epi_concentration_min: float = 0.6,
+    active_node_load_min: float = 250.0,
 ) -> List[Mapping[str, float | str | int]]:
-    """Detect contraction (NUL) phases driven by heavy braking.
+    """Detect contraction (NUL) by shrinking support under rising EPI concentration.
 
-    The routine searches for windows with a large negative longitudinal
-    acceleration peak (``decel_threshold``), a significant speed drop, and a
-    sustained brake pressure budget.
+    Contraction is flagged when the active support node count decreases by at
+    least ``active_nodes_delta_max`` (a negative value) while the EPI
+    concentration measured across the window exceeds ``epi_concentration_min``.
     """
 
-    if not records:
+    if len(records) < max(3, window):
         return []
 
-    window = max(2, int(window))
+    window = max(3, int(window))
+    times = _sample_times(records)
+
+    active_nodes = [
+        _count_active_support_nodes(record, load_min=float(active_node_load_min))
+        for record in records
+    ]
+    epi_concentration = [_epi_concentration(record) for record in records]
+
     events: List[Mapping[str, float | str | int]] = []
     active_start: int | None = None
-    peak_value = 0.0
+    peak_concentration = 0.0
     best_metrics: Dict[str, float] = {}
 
-    for index, record in enumerate(records):
-        window_records = _window(records, index, window)
-        if len(window_records) < window:
+    for index in range(len(records)):
+        start_index = max(0, index - window + 1)
+        if index == start_index:
             continue
 
-        longitudinal_samples = _clean_sequence(
-            [getattr(sample, "longitudinal_accel", 0.0) for sample in window_records]
-        )
-        longitudinal_min = min(longitudinal_samples) if longitudinal_samples else 0.0
-        decel_peak = abs(longitudinal_min)
+        nodes_start = active_nodes[start_index]
+        nodes_end = active_nodes[index]
+        node_delta = nodes_end - nodes_start
 
-        speed_samples = _clean_sequence(
-            [getattr(sample, "speed", 0.0) for sample in window_records]
-        )
-        speed_drop = _span(speed_samples)
-
-        brake_samples = _clean_sequence(
-            [getattr(sample, "brake_pressure", 0.0) for sample in window_records]
-        )
-        brake_mean = mean(brake_samples) if brake_samples else 0.0
+        concentration_window = epi_concentration[start_index : index + 1]
+        concentration_peak = max(concentration_window) if concentration_window else 0.0
 
         meets_threshold = (
-            decel_peak >= decel_threshold
-            and speed_drop >= speed_drop_threshold
-            and brake_mean >= brake_pressure_threshold
+            node_delta <= active_nodes_delta_max
+            and concentration_peak >= epi_concentration_min
         )
 
         metrics = {
-            "decel_peak": float(decel_peak),
-            "speed_drop": float(speed_drop),
-            "brake_pressure_mean": float(brake_mean),
+            'active_nodes_start': int(nodes_start),
+            'active_nodes_end': int(nodes_end),
+            'active_nodes_delta': int(node_delta),
+            'epi_concentration_peak': float(concentration_peak),
+            'window_duration': float(times[index] - times[start_index]),
         }
 
         if meets_threshold:
             if active_start is None:
-                active_start = max(0, index - window + 1)
-                peak_value = decel_peak
+                active_start = start_index
+                peak_concentration = concentration_peak
                 best_metrics = metrics
             else:
-                peak_value = max(peak_value, decel_peak)
-                if decel_peak >= best_metrics.get("decel_peak", 0.0):
+                if concentration_peak >= peak_concentration:
                     best_metrics = metrics
+                peak_concentration = max(peak_concentration, concentration_peak)
         elif active_start is not None:
             event = _finalise_event(
-                canonical_operator_label("NUL"),
+                canonical_operator_label('NUL'),
                 records,
                 active_start,
                 index - 1,
-                peak_value,
-                decel_threshold,
+                peak_concentration,
+                epi_concentration_min,
             )
             payload = event.as_mapping()
             payload.update(best_metrics)
             payload.update(
                 {
-                    "decel_threshold": float(decel_threshold),
-                    "speed_drop_threshold": float(speed_drop_threshold),
-                    "brake_pressure_threshold": float(brake_pressure_threshold),
+                    'active_nodes_delta_max': int(active_nodes_delta_max),
+                    'epi_concentration_min': float(epi_concentration_min),
+                    'active_node_load_min': float(active_node_load_min),
                 }
             )
             events.append(payload)
             active_start = None
-            peak_value = 0.0
+            peak_concentration = 0.0
             best_metrics = {}
 
     if active_start is not None:
         event = _finalise_event(
-            canonical_operator_label("NUL"),
+            canonical_operator_label('NUL'),
             records,
             active_start,
             len(records) - 1,
-            peak_value,
-            decel_threshold,
+            peak_concentration,
+            epi_concentration_min,
         )
         payload = event.as_mapping()
         payload.update(best_metrics)
         payload.update(
             {
-                "decel_threshold": float(decel_threshold),
-                "speed_drop_threshold": float(speed_drop_threshold),
-                "brake_pressure_threshold": float(brake_pressure_threshold),
+                'active_nodes_delta_max': int(active_nodes_delta_max),
+                'epi_concentration_min': float(epi_concentration_min),
+                'active_node_load_min': float(active_node_load_min),
             }
         )
         events.append(payload)
 
     return events
-
 
 def detect_thol(
     records: Sequence[SupportsTelemetrySample],
     *,
-    window: int = 7,
-    suspension_span_threshold: float = 0.04,
-    steer_span_threshold: float = 0.1,
-    yaw_rate_span_threshold: float = 0.15,
+    epi_accel_min: float = 0.8,
+    stability_window: float = 0.4,
+    stability_tolerance: float = 0.05,
 ) -> List[Mapping[str, float | str | int]]:
-    """Detect auto-organisation (THOL) phases during regime transitions.
+    """Detect auto-organisation (THOL) from EPI acceleration followed by stability.
 
-    Auto-organisation is identified when suspension activity spikes while
-    steering and yaw variations remain tightly bounded, suggesting the chassis
-    is reorganising without large heading changes.
+    The detector observes the second derivative of the |EPI| proxy and emits an
+    event when it exceeds ``epi_accel_min`` and is followed by a period of
+    duration ``stability_window`` where the first derivative remains within
+    ``±stability_tolerance``.
     """
 
-    if not records:
+    if len(records) < 3:
         return []
 
-    window = max(3, int(window))
-    events: List[Mapping[str, float | str | int]] = []
-    active_start: int | None = None
-    peak_value = 0.0
-    best_metrics: Dict[str, float] = {}
+    times = _sample_times(records)
+    epi_norms = [_epi_norm(record) for record in records]
+    first_derivative = _compute_first_derivative(epi_norms, times)
+    second_derivative = _compute_second_derivative(epi_norms, times)
 
-    for index, record in enumerate(records):
-        window_records = _window(records, index, window)
-        if len(window_records) < window:
+    events: List[Mapping[str, float | str | int]] = []
+    index = 2
+    while index < len(records):
+        accel = abs(second_derivative[index])
+        if accel < epi_accel_min:
+            index += 1
             continue
 
-        suspension_front = _clean_sequence(
-            [getattr(sample, "suspension_velocity_front", 0.0) for sample in window_records]
-        )
-        suspension_rear = _clean_sequence(
-            [getattr(sample, "suspension_velocity_rear", 0.0) for sample in window_records]
-        )
-        suspension_activity = _span(suspension_front) + _span(suspension_rear)
+        stability_limit = times[index] + stability_window
+        j = index + 1
+        last_stable: int | None = None
+        stable_run = 0
+        triggered = False
 
-        steer_values = _clean_sequence(
-            [getattr(sample, "steer", 0.0) for sample in window_records]
-        )
-        steer_span = _span(steer_values)
-
-        yaw_values = _clean_sequence(
-            [getattr(sample, "yaw_rate", 0.0) for sample in window_records]
-        )
-        yaw_span = _span(yaw_values)
-
-        meets_threshold = (
-            suspension_activity >= suspension_span_threshold
-            and steer_span <= steer_span_threshold
-            and yaw_span <= yaw_rate_span_threshold
-        )
-
-        metrics = {
-            "suspension_activity": float(suspension_activity),
-            "steer_span": float(steer_span),
-            "yaw_rate_span": float(yaw_span),
-        }
-
-        if meets_threshold:
-            if active_start is None:
-                active_start = max(0, index - window + 1)
-                peak_value = suspension_activity
-                best_metrics = metrics
+        while j < len(records) and times[j] <= stability_limit + 1e-9:
+            if abs(first_derivative[j]) <= stability_tolerance:
+                stable_run += 1
+                last_stable = j
+                if times[last_stable] - times[index] >= stability_window:
+                    start_index = max(0, index - 1)
+                    end_index = last_stable
+                    event = _finalise_event(
+                        canonical_operator_label('THOL'),
+                        records,
+                        start_index,
+                        end_index,
+                        accel,
+                        epi_accel_min,
+                    )
+                    payload = event.as_mapping()
+                    payload.update(
+                        {
+                            'epi_second_derivative': float(accel),
+                            'stability_duration': float(times[end_index] - times[index]),
+                            'stability_tolerance': float(stability_tolerance),
+                            'stable_samples': int(stable_run),
+                        }
+                    )
+                    events.append(payload)
+                    index = end_index + 1
+                    triggered = True
+                    break
             else:
-                peak_value = max(peak_value, suspension_activity)
-                if suspension_activity >= best_metrics.get("suspension_activity", 0.0):
-                    best_metrics = metrics
-        elif active_start is not None:
-            event = _finalise_event(
-                canonical_operator_label("THOL"),
-                records,
-                active_start,
-                index - 1,
-                peak_value,
-                suspension_span_threshold,
-            )
-            payload = event.as_mapping()
-            payload.update(best_metrics)
-            payload.update(
-                {
-                    "suspension_span_threshold": float(suspension_span_threshold),
-                    "steer_span_threshold": float(steer_span_threshold),
-                    "yaw_rate_span_threshold": float(yaw_rate_span_threshold),
-                }
-            )
-            events.append(payload)
-            active_start = None
-            peak_value = 0.0
-            best_metrics = {}
+                stable_run = 0
+                last_stable = None
+            j += 1
 
-    if active_start is not None:
-        event = _finalise_event(
-            canonical_operator_label("THOL"),
-            records,
-            active_start,
-            len(records) - 1,
-            peak_value,
-            suspension_span_threshold,
-        )
-        payload = event.as_mapping()
-        payload.update(best_metrics)
-        payload.update(
-            {
-                "suspension_span_threshold": float(suspension_span_threshold),
-                "steer_span_threshold": float(steer_span_threshold),
-                "yaw_rate_span_threshold": float(yaw_rate_span_threshold),
-            }
-        )
-        events.append(payload)
+        if not triggered:
+            index += 1
 
     return events
-
 
 def detect_zhir(
     records: Sequence[SupportsTelemetrySample],
     *,
-    window: int = 7,
-    si_delta_threshold: float = 0.25,
-    nfr_delta_threshold: float = 50.0,
-    line_deviation_threshold: float = 0.4,
+    window: int = 8,
+    xi_min: float = 0.35,
+    min_persistence: float = 0.4,
+    phase_jump_min: float = 0.2,
 ) -> List[Mapping[str, float | str | int]]:
-    """Detect transformation (ZHIR) bursts reflecting deep archetype shifts."""
+    """Detect transformation (ZHIR) events via phase change-point analysis.
 
-    if not records:
+    The detector applies a bidirectional window change detector on phase metrics
+    (μ regime, slip angles/ratios, Si) and confirms the event once the |EPI|
+    derivative exceeds ``xi_min`` for at least ``min_persistence`` seconds.
+    """
+
+    if len(records) < max(3, window):
         return []
 
-    window = max(3, int(window))
-    events: List[Mapping[str, float | str | int]] = []
-    active_start: int | None = None
-    peak_value = 0.0
-    best_metrics: Dict[str, float] = {}
+    window = max(4, int(window))
+    half = max(1, window // 2)
+    times = _sample_times(records)
+    phase_vectors = np.array([_phase_features(record) for record in records], dtype=float)
+    if phase_vectors.ndim == 1:
+        phase_vectors = phase_vectors.reshape(len(records), -1)
+    phase_metrics = [_phase_metric(record) for record in records]
+    epi_norms = [_epi_norm(record) for record in records]
+    epi_derivative = _compute_first_derivative(epi_norms, times)
 
-    for index, record in enumerate(records):
-        window_records = _window(records, index, window)
-        if len(window_records) < window:
+    events: List[Mapping[str, float | str | int]] = []
+    index = half
+    while index < len(records) - half:
+        past = phase_metrics[index - half : index]
+        future = phase_metrics[index : index + half]
+        if not past or not future:
+            index += 1
+            continue
+        with np.errstate(invalid='ignore'):
+            past_mean = np.nanmean(phase_vectors[index - half : index], axis=0)
+            future_mean = np.nanmean(phase_vectors[index : index + half], axis=0)
+
+        valid = np.isfinite(past_mean) & np.isfinite(future_mean)
+        if not np.any(valid):
+            index += 1
             continue
 
-        si_values = _clean_sequence([getattr(sample, "si", 0.0) for sample in window_records])
-        nfr_values = _clean_sequence([getattr(sample, "nfr", 0.0) for sample in window_records])
-        line_values = _clean_sequence(
-            [getattr(sample, "line_deviation", 0.0) for sample in window_records]
-        )
+        diff = future_mean[valid] - past_mean[valid]
+        phase_jump = float(np.linalg.norm(diff))
+        derivative = abs(epi_derivative[index])
 
-        if len(si_values) >= 2:
-            si_delta = abs(si_values[-1] - si_values[0])
-        else:
-            si_delta = 0.0
-        if len(nfr_values) >= 2:
-            nfr_delta = abs(nfr_values[-1] - nfr_values[0])
-        else:
-            nfr_delta = 0.0
-        line_span = _span(line_values)
-
-        meets_threshold = (
-            si_delta >= si_delta_threshold
-            and nfr_delta >= nfr_delta_threshold
-            and line_span >= line_deviation_threshold
-        )
-
-        metrics = {
-            "si_delta": float(si_delta),
-            "nfr_delta": float(nfr_delta),
-            "line_deviation_span": float(line_span),
-        }
-
-        if meets_threshold:
-            if active_start is None:
-                active_start = max(0, index - window + 1)
-                peak_value = max(si_delta, nfr_delta)
-                best_metrics = metrics
-            else:
-                peak_value = max(peak_value, si_delta, nfr_delta)
-                if peak_value >= max(
-                    best_metrics.get("si_delta", 0.0), best_metrics.get("nfr_delta", 0.0)
-                ):
-                    best_metrics = metrics
-        elif active_start is not None:
-            event = _finalise_event(
-                canonical_operator_label("ZHIR"),
-                records,
-                active_start,
-                index - 1,
-                peak_value,
-                max(si_delta_threshold, nfr_delta_threshold),
-            )
-            payload = event.as_mapping()
-            payload.update(best_metrics)
-            payload.update(
-                {
-                    "si_delta_threshold": float(si_delta_threshold),
-                    "nfr_delta_threshold": float(nfr_delta_threshold),
-                    "line_deviation_threshold": float(line_deviation_threshold),
-                }
-            )
-            events.append(payload)
-            active_start = None
-            peak_value = 0.0
-            best_metrics = {}
-
-    if active_start is not None:
-        event = _finalise_event(
-            canonical_operator_label("ZHIR"),
-            records,
-            active_start,
-            len(records) - 1,
-            peak_value,
-            max(si_delta_threshold, nfr_delta_threshold),
-        )
-        payload = event.as_mapping()
-        payload.update(best_metrics)
-        payload.update(
-            {
-                "si_delta_threshold": float(si_delta_threshold),
-                "nfr_delta_threshold": float(nfr_delta_threshold),
-                "line_deviation_threshold": float(line_deviation_threshold),
-            }
-        )
-        events.append(payload)
+        if phase_jump >= phase_jump_min and derivative >= xi_min:
+            start_index = max(0, index - half)
+            end_index = index
+            while (
+                end_index + 1 < len(records)
+                and abs(epi_derivative[end_index + 1]) >= xi_min
+            ):
+                end_index += 1
+            duration = float(times[end_index] - times[start_index])
+            if duration >= min_persistence:
+                event = _finalise_event(
+                    canonical_operator_label('ZHIR'),
+                    records,
+                    start_index,
+                    end_index,
+                    phase_jump,
+                    phase_jump_min,
+                )
+                payload = event.as_mapping()
+                payload.update(
+                    {
+                        'phase_jump': float(phase_jump),
+                        'epi_derivative': float(derivative),
+                        'persistence': float(duration),
+                    }
+                )
+                payload.update(
+                    {
+                        'xi_min': float(xi_min),
+                        'min_persistence': float(min_persistence),
+                        'phase_jump_min': float(phase_jump_min),
+                    }
+                )
+                events.append(payload)
+                index = end_index + 1
+                continue
+        index += 1
 
     return events
-
 
 def detect_remesh(
     records: Sequence[SupportsTelemetrySample],
     *,
-    window: int = 5,
-    line_gradient_threshold: float = 0.25,
-    yaw_rate_gradient_threshold: float = 0.25,
-    structural_gap_threshold: float = 0.6,
+    window: int = 8,
+    tau_candidates: Sequence[float] = (0.2, 0.4, 0.6),
+    acf_min: float = 0.75,
+    min_repeats: int = 2,
 ) -> List[Mapping[str, float | str | int]]:
-    """Detect remeshing (REMESH) opportunities from structural discontinuities."""
+    """Detect remeshing (REMESH) by repeating spatial patterns.
 
-    if not records:
+    Autocorrelation scores are evaluated at lags ``tau_candidates`` and an event
+    is emitted when at least ``min_repeats`` candidates exceed ``acf_min``.
+    """
+
+    if len(records) < max(3, window):
         return []
 
-    window = max(2, int(window))
+    window = max(3, int(window))
+    times = _sample_times(records)
+    line_series = [
+        float(_clean_numeric(getattr(record, 'line_deviation', 0.0)) or 0.0)
+        for record in records
+    ]
+
     events: List[Mapping[str, float | str | int]] = []
     active_start: int | None = None
-    peak_value = 0.0
+    peak_similarity = 0.0
     best_metrics: Dict[str, float] = {}
 
-    for index, record in enumerate(records):
-        window_records = _window(records, index, window)
-        if len(window_records) < window:
+    for index in range(len(records)):
+        start_index = max(0, index - window + 1)
+        length = index - start_index + 1
+        if length < 3:
             continue
 
-        line_gradients: List[float] = []
-        yaw_gradients: List[float] = []
-        structural_gaps: List[float] = []
+        window_times = times[start_index : index + 1]
+        line_window = line_series[start_index : index + 1]
+        duration = float(window_times[-1] - window_times[0])
+        if duration <= 0.0:
+            continue
+        avg_dt = duration / max(length - 1, 1)
 
-        prev_line: float | None = None
-        prev_yaw: float | None = None
-        prev_struct: float | None = None
-        prev_time: float | None = None
+        matches = 0
+        best_corr = 0.0
+        for tau in tau_candidates:
+            if tau <= 0.0:
+                continue
+            lag = max(1, int(round(tau / avg_dt)))
+            if lag >= length:
+                continue
+            corr = _autocorrelation(line_window, lag)
+            if corr >= acf_min:
+                matches += 1
+            best_corr = max(best_corr, corr)
 
-        for sample in window_records:
-            line_value = _clean_numeric(getattr(sample, "line_deviation", 0.0))
-            yaw_value = _clean_numeric(getattr(sample, "yaw_rate", 0.0))
-            struct_value = _clean_numeric(getattr(sample, "structural_timestamp", None))
-            time_value = _clean_numeric(getattr(sample, "timestamp", 0.0))
-
-            if line_value is not None and prev_line is not None:
-                line_gradients.append(abs(line_value - prev_line))
-            if yaw_value is not None and prev_yaw is not None:
-                yaw_gradients.append(abs(yaw_value - prev_yaw))
-            if (
-                struct_value is not None
-                and prev_struct is not None
-                and time_value is not None
-                and prev_time is not None
-            ):
-                dt = time_value - prev_time
-                if dt > 1e-9:
-                    structural_delta = struct_value - prev_struct
-                    structural_gaps.append(abs(structural_delta - dt))
-
-            prev_line = line_value if line_value is not None else prev_line
-            prev_yaw = yaw_value if yaw_value is not None else prev_yaw
-            prev_struct = struct_value if struct_value is not None else prev_struct
-            prev_time = time_value if time_value is not None else prev_time
-
-        line_gradient_mean = mean(line_gradients) if line_gradients else 0.0
-        yaw_gradient_mean = mean(yaw_gradients) if yaw_gradients else 0.0
-        structural_gap_mean = mean(structural_gaps) if structural_gaps else 0.0
-
-        meets_threshold = (
-            line_gradient_mean >= line_gradient_threshold
-            and yaw_gradient_mean >= yaw_rate_gradient_threshold
-            and structural_gap_mean >= structural_gap_threshold
-        )
+        meets_threshold = matches >= min_repeats and best_corr >= acf_min
 
         metrics = {
-            "line_gradient_mean": float(line_gradient_mean),
-            "yaw_rate_gradient_mean": float(yaw_gradient_mean),
-            "structural_gap_mean": float(structural_gap_mean),
+            'matched_lags': int(matches),
+            'best_correlation': float(best_corr),
+            'avg_dt': float(avg_dt),
         }
 
         if meets_threshold:
             if active_start is None:
-                active_start = max(0, index - window + 1)
-                peak_value = max(line_gradient_mean, yaw_gradient_mean, structural_gap_mean)
+                active_start = start_index
+                peak_similarity = best_corr
                 best_metrics = metrics
             else:
-                candidate_peak = max(line_gradient_mean, yaw_gradient_mean, structural_gap_mean)
-                peak_value = max(peak_value, candidate_peak)
-                if candidate_peak >= max(
-                    best_metrics.get("line_gradient_mean", 0.0),
-                    best_metrics.get("yaw_rate_gradient_mean", 0.0),
-                    best_metrics.get("structural_gap_mean", 0.0),
-                ):
+                if best_corr >= peak_similarity:
                     best_metrics = metrics
+                peak_similarity = max(peak_similarity, best_corr)
         elif active_start is not None:
             event = _finalise_event(
-                canonical_operator_label("REMESH"),
+                canonical_operator_label('REMESH'),
                 records,
                 active_start,
                 index - 1,
-                peak_value,
-                max(line_gradient_threshold, yaw_rate_gradient_threshold),
+                peak_similarity,
+                acf_min,
             )
             payload = event.as_mapping()
             payload.update(best_metrics)
             payload.update(
                 {
-                    "line_gradient_threshold": float(line_gradient_threshold),
-                    "yaw_rate_gradient_threshold": float(yaw_rate_gradient_threshold),
-                    "structural_gap_threshold": float(structural_gap_threshold),
+                    'tau_candidates': tuple(float(value) for value in tau_candidates),
+                    'acf_min': float(acf_min),
+                    'min_repeats': int(min_repeats),
                 }
             )
             events.append(payload)
             active_start = None
-            peak_value = 0.0
+            peak_similarity = 0.0
             best_metrics = {}
 
     if active_start is not None:
         event = _finalise_event(
-            canonical_operator_label("REMESH"),
+            canonical_operator_label('REMESH'),
             records,
             active_start,
             len(records) - 1,
-            peak_value,
-            max(line_gradient_threshold, yaw_rate_gradient_threshold),
+            peak_similarity,
+            acf_min,
         )
         payload = event.as_mapping()
         payload.update(best_metrics)
         payload.update(
             {
-                "line_gradient_threshold": float(line_gradient_threshold),
-                "yaw_rate_gradient_threshold": float(yaw_rate_gradient_threshold),
-                "structural_gap_threshold": float(structural_gap_threshold),
+                'tau_candidates': tuple(float(value) for value in tau_candidates),
+                'acf_min': float(acf_min),
+                'min_repeats': int(min_repeats),
             }
         )
         events.append(payload)
 
     return events
-
 
 @dataclass(frozen=True)
 class OperatorEvent:

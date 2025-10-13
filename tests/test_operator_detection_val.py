@@ -1,8 +1,4 @@
-"""Synthetic tests for the amplification (VAL) detector."""
-
 from __future__ import annotations
-
-import pytest
 
 from tnfr_core.operators.operator_detection import detect_val
 
@@ -19,8 +15,8 @@ _BASE_PAYLOAD = dict(
     roll=0.0,
     brake_pressure=0.1,
     locking=0.0,
-    nfr=120.0,
-    si=0.4,
+    nfr=20.0,
+    si=0.2,
     speed=40.0,
     yaw_rate=0.05,
     slip_angle=0.02,
@@ -33,61 +29,68 @@ _BASE_PAYLOAD = dict(
     mu_eff_rear=1.0,
     suspension_velocity_front=0.015,
     suspension_velocity_rear=0.01,
+    wheel_load_fl=400.0,
+    wheel_load_fr=400.0,
+    wheel_load_rl=150.0,
+    wheel_load_rr=150.0,
     rpm=6200.0,
 )
 
 
-def _build_series(samples: list[dict]) -> list:
-    series = []
-    for index, payload in enumerate(samples):
-        data = dict(_BASE_PAYLOAD)
-        data.update(payload)
-        data.setdefault("timestamp", index * 0.1)
-        series.append(build_telemetry_record(**data))
-    return series
+def _series(payloads: list[dict]) -> list:
+    samples = []
+    for index, overrides in enumerate(payloads):
+        payload = dict(_BASE_PAYLOAD)
+        payload.update(overrides)
+        payload.setdefault("timestamp", index * 0.1)
+        samples.append(build_telemetry_record(**payload))
+    return samples
 
 
-def test_detect_val_emits_event_on_high_lateral_and_throttle() -> None:
-    samples = [
-        {"lateral_accel": 0.8, "throttle": 0.45, "vertical_load": 5200.0},
-        {"lateral_accel": 1.2, "throttle": 0.55, "vertical_load": 5400.0},
-        {"lateral_accel": 2.1, "throttle": 0.62, "vertical_load": 5900.0},
-        {"lateral_accel": 2.4, "throttle": 0.68, "vertical_load": 6100.0},
-        {"lateral_accel": 2.5, "throttle": 0.7, "vertical_load": 6350.0},
-        {"lateral_accel": 1.8, "throttle": 0.6, "vertical_load": 6000.0},
-        {"lateral_accel": 1.0, "throttle": 0.35, "vertical_load": 5400.0},
-    ]
-    series = _build_series(samples)
+def test_detect_val_emits_event_on_epi_growth_and_nodes() -> None:
+    samples = _series(
+        [
+            {"nfr": 18.0, "si": 0.18, "wheel_load_rl": 120.0, "wheel_load_rr": 120.0},
+            {"nfr": 20.0, "si": 0.22, "wheel_load_rl": 180.0, "wheel_load_rr": 180.0},
+            {"nfr": 23.5, "si": 0.28, "wheel_load_rl": 260.0, "wheel_load_rr": 260.0},
+            {"nfr": 27.0, "si": 0.35, "wheel_load_rl": 320.0, "wheel_load_rr": 320.0},
+            {"nfr": 30.0, "si": 0.4, "wheel_load_rl": 330.0, "wheel_load_rr": 330.0},
+            {"nfr": 28.0, "si": 0.36, "wheel_load_rl": 280.0, "wheel_load_rr": 280.0},
+        ]
+    )
 
     events = detect_val(
-        series,
+        samples,
         window=4,
-        lateral_threshold=1.8,
-        throttle_threshold=0.55,
-        load_span_threshold=500.0,
+        epi_growth_min=0.3,
+        active_nodes_delta_min=2,
+        active_node_load_min=200.0,
     )
 
     assert events
     event = events[0]
     assert event["name"] == "Amplification"
-    assert event["lateral_peak"] >= 1.8
-    assert event["throttle_peak"] >= 0.55
-    assert event["load_span"] >= 500.0
+    assert event["epi_growth_rate"] >= 0.3
+    assert event["active_nodes_delta"] >= 2
 
 
-@pytest.mark.parametrize(
-    "samples",
-    [
-        [{"lateral_accel": 0.5, "throttle": 0.3, "vertical_load": 5200.0} for _ in range(5)],
+def test_detect_val_requires_node_growth() -> None:
+    samples = _series(
         [
-            {"lateral_accel": 2.0, "throttle": 0.4, "vertical_load": 5400.0},
-            {"lateral_accel": 2.1, "throttle": 0.45, "vertical_load": 5450.0},
-            {"lateral_accel": 2.2, "throttle": 0.47, "vertical_load": 5500.0},
-            {"lateral_accel": 2.3, "throttle": 0.48, "vertical_load": 5550.0},
-        ],
-    ],
-)
-def test_detect_val_requires_all_thresholds(samples: list[dict]) -> None:
-    series = _build_series(samples)
-    events = detect_val(series, window=3, lateral_threshold=1.8, throttle_threshold=0.55, load_span_threshold=500.0)
+            {"nfr": 18.0, "si": 0.2, "wheel_load_rl": 260.0, "wheel_load_rr": 260.0},
+            {"nfr": 21.0, "si": 0.23, "wheel_load_rl": 255.0, "wheel_load_rr": 255.0},
+            {"nfr": 24.0, "si": 0.26, "wheel_load_rl": 250.0, "wheel_load_rr": 250.0},
+            {"nfr": 27.0, "si": 0.29, "wheel_load_rl": 245.0, "wheel_load_rr": 245.0},
+            {"nfr": 29.0, "si": 0.32, "wheel_load_rl": 240.0, "wheel_load_rr": 240.0},
+        ]
+    )
+
+    events = detect_val(
+        samples,
+        window=4,
+        epi_growth_min=0.3,
+        active_nodes_delta_min=2,
+        active_node_load_min=200.0,
+    )
+
     assert events == []

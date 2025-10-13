@@ -1,8 +1,4 @@
-"""Synthetic tests for the coupling (UM) detector."""
-
 from __future__ import annotations
-
-import pytest
 
 from tnfr_core.operators.operator_detection import detect_um
 
@@ -19,13 +15,13 @@ _BASE_PAYLOAD = dict(
     roll=0.0,
     brake_pressure=0.2,
     locking=0.0,
-    nfr=110.0,
+    nfr=100.0,
     si=0.5,
-    speed=35.0,
-    yaw_rate=0.03,
+    speed=40.0,
+    yaw_rate=0.0,
     slip_angle=0.0,
-    steer=0.1,
-    throttle=0.32,
+    steer=0.0,
+    throttle=0.35,
     gear=3,
     vertical_load_front=2500.0,
     vertical_load_rear=2700.0,
@@ -33,103 +29,89 @@ _BASE_PAYLOAD = dict(
     mu_eff_rear=1.0,
     suspension_travel_front=0.03,
     suspension_travel_rear=0.03,
-    suspension_velocity_front=0.005,
-    suspension_velocity_rear=0.005,
-    rpm=5000.0,
+    suspension_velocity_front=0.01,
+    suspension_velocity_rear=0.01,
 )
 
 
-def _build_series(samples: list[dict]) -> list:
-    series = []
-    for index, payload in enumerate(samples):
-        data = dict(_BASE_PAYLOAD)
-        data.update(payload)
-        data.setdefault("timestamp", index * 0.1)
-        series.append(build_telemetry_record(**data))
-    return series
+def _series(payloads: list[dict]) -> list:
+    samples = []
+    for index, overrides in enumerate(payloads):
+        payload = dict(_BASE_PAYLOAD)
+        payload.update(overrides)
+        payload.setdefault("timestamp", index * 0.1)
+        samples.append(build_telemetry_record(**payload))
+    return samples
 
 
-def test_detect_um_flags_large_mu_delta_and_load_shift() -> None:
-    samples = [
-        {
-            "mu_eff_front": 1.2,
-            "mu_eff_rear": 0.85,
-            "vertical_load_front": 3000.0,
-            "vertical_load_rear": 2400.0,
-            "suspension_velocity_front": 0.04,
-            "suspension_velocity_rear": -0.02,
-        },
-        {
-            "mu_eff_front": 1.18,
-            "mu_eff_rear": 0.82,
-            "vertical_load_front": 3050.0,
-            "vertical_load_rear": 2350.0,
-            "suspension_velocity_front": 0.05,
-            "suspension_velocity_rear": -0.03,
-        },
-        {
-            "mu_eff_front": 1.17,
-            "mu_eff_rear": 0.81,
-            "vertical_load_front": 3100.0,
-            "vertical_load_rear": 2300.0,
-            "suspension_velocity_front": 0.06,
-            "suspension_velocity_rear": -0.04,
-        },
-        {
-            "mu_eff_front": 1.16,
-            "mu_eff_rear": 0.8,
-            "vertical_load_front": 3120.0,
-            "vertical_load_rear": 2280.0,
-            "suspension_velocity_front": 0.05,
-            "suspension_velocity_rear": -0.05,
-        },
-        {
-            "mu_eff_front": 1.12,
-            "mu_eff_rear": 0.79,
-            "vertical_load_front": 2800.0,
-            "vertical_load_rear": 2400.0,
-            "suspension_velocity_front": 0.02,
-            "suspension_velocity_rear": -0.01,
-        },
-        {
-            "mu_eff_front": 1.0,
-            "mu_eff_rear": 0.99,
-            "vertical_load_front": 2550.0,
-            "vertical_load_rear": 2650.0,
-            "suspension_velocity_front": 0.01,
-            "suspension_velocity_rear": 0.0,
-        },
-    ]
-    series = _build_series(samples)
+def test_detect_um_identifies_coupled_slip_and_yaw() -> None:
+    samples = []
+    for index in range(8):
+        steer = 0.02 * index
+        yaw_rate = 0.018 * index + 0.002
+        slip_ratio = 0.015 * index
+        slip_angle = 0.012 * index
+        samples.append(
+            {
+                "steer": steer,
+                "yaw_rate": yaw_rate,
+                "slip_ratio": slip_ratio,
+                "slip_angle": slip_angle,
+            }
+        )
+    samples.extend(
+        [
+            {
+                "steer": 0.0,
+                "yaw_rate": 0.0,
+                "slip_ratio": 0.0,
+                "slip_angle": 0.0,
+                "timestamp": (8 + idx) * 0.1,
+            }
+            for idx in range(2)
+        ]
+    )
+    series = _series(samples)
 
     events = detect_um(
         series,
-        window=4,
-        mu_delta_threshold=0.25,
-        load_ratio_threshold=0.05,
-        suspension_delta_threshold=0.02,
+        window=6,
+        rho_min=0.6,
+        phase_max=0.12,
+        min_duration=0.3,
     )
 
     assert events
     event = events[0]
     assert event["name"] == "Coupling"
-    assert event["mu_delta"] >= 0.25
-    assert event["load_ratio_delta"] >= 0.05
-    assert event["suspension_velocity_delta"] >= 0.02
+    assert event["max_coupling"] >= 0.6
+    assert event["phase_lag"] <= 0.12
+    assert event["duration"] >= 0.3
 
 
-def test_detect_um_rejects_balanced_series() -> None:
-    samples = [
-        {
-            "mu_eff_front": 1.05,
-            "mu_eff_rear": 1.02,
-            "vertical_load_front": 2700.0,
-            "vertical_load_rear": 2500.0,
-            "suspension_velocity_front": 0.01,
-            "suspension_velocity_rear": 0.015,
-        }
-        for _ in range(6)
-    ]
-    series = _build_series(samples)
-    events = detect_um(series, window=4, mu_delta_threshold=0.25, load_ratio_threshold=0.05)
+def test_detect_um_rejects_large_phase_lag() -> None:
+    samples = []
+    for index in range(10):
+        steer = 0.02 * index
+        yaw_rate = 0.0
+        slip_ratio = 0.015 * index
+        slip_angle = 0.012 * index
+        samples.append(
+            {
+                "steer": steer,
+                "yaw_rate": yaw_rate,
+                "slip_ratio": slip_ratio,
+                "slip_angle": slip_angle,
+            }
+        )
+    series = _series(samples)
+
+    events = detect_um(
+        series,
+        window=6,
+        rho_min=0.6,
+        phase_max=0.12,
+        min_duration=0.3,
+    )
+
     assert events == []
