@@ -11,6 +11,7 @@ Usage examples::
 from __future__ import annotations
 
 import argparse
+import ast
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
@@ -21,6 +22,8 @@ DEFAULT_CORE_DIRECTORIES: tuple[Path, ...] = (
 )
 
 DEFAULT_TEST_DIRECTORIES: tuple[Path, ...] = (Path("tests"),)
+
+OPERATOR_DETECTION_MODULE = Path("src/tnfr_core/operators/operator_detection.py")
 
 THEORY_OPERATORS: Mapping[str, Mapping[str, object]] = {
     "emission_operator": {
@@ -187,6 +190,7 @@ class TheoryEntry:
     identifier: str
     description: str
     tokens: tuple[str, ...]
+    status: str | None = None
 
 
 def _resolve_repo_root() -> Path:
@@ -229,7 +233,77 @@ def _format_hits(matches: Sequence[str]) -> str:
     return f"{visible}<br />(+{len(matches) - 3} more)"
 
 
-def _build_entries() -> list[TheoryEntry]:
+def _build_detector_entries(repo_root: Path) -> list[TheoryEntry]:
+    module_path = repo_root / OPERATOR_DETECTION_MODULE
+    if not module_path.exists():
+        return []
+
+    try:
+        source = module_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    tree = ast.parse(source)
+
+    labels: dict[str, str] = {}
+    detector_functions: set[str] = set()
+
+    def _constant_str(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
+
+    class _DetectorVisitor(ast.NodeVisitor):
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # type: ignore[override]
+            if node.name.startswith("detect_"):
+                detector_functions.add(node.name)
+            self.generic_visit(node)
+
+        def _extract_mapping(self, value: ast.AST) -> None:
+            if not isinstance(value, ast.Dict):
+                return
+            for key_node, value_node in zip(value.keys, value.values):
+                key = _constant_str(key_node)
+                label = _constant_str(value_node)
+                if key is None:
+                    continue
+                labels[key] = label or ""
+
+        def visit_Assign(self, node: ast.Assign) -> None:  # type: ignore[override]
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "STRUCTURAL_OPERATOR_LABELS":
+                    self._extract_mapping(node.value)
+            self.generic_visit(node)
+
+        def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # type: ignore[override]
+            target = node.target
+            if isinstance(target, ast.Name) and target.id == "STRUCTURAL_OPERATOR_LABELS":
+                if node.value is not None:
+                    self._extract_mapping(node.value)
+            self.generic_visit(node)
+
+    _DetectorVisitor().visit(tree)
+
+    entries: list[TheoryEntry] = []
+    for identifier, description in sorted(labels.items()):
+        function_name = f"detect_{identifier.lower()}"
+        implemented = function_name in detector_functions
+        tokens: tuple[str, ...] = (function_name,) if implemented else ()
+        status = None if implemented else "Pending"
+        entries.append(
+            TheoryEntry(
+                category="Detector",
+                identifier=identifier,
+                description=description or "",
+                tokens=tokens,
+                status=status,
+            )
+        )
+
+    return entries
+
+
+def _build_entries(repo_root: Path) -> list[TheoryEntry]:
     entries: list[TheoryEntry] = []
     for identifier, payload in THEORY_OPERATORS.items():
         entries.append(
@@ -240,6 +314,7 @@ def _build_entries() -> list[TheoryEntry]:
                 tokens=tuple(str(token) for token in payload.get("tokens", ())),
             )
         )
+    entries.extend(_build_detector_entries(repo_root))
     for identifier, payload in THEORY_VARIABLES.items():
         entries.append(
             TheoryEntry(
@@ -260,7 +335,7 @@ def generate_report(
     if not output_path.is_absolute():
         output_path = (repo_root / output_path).resolve()
 
-    entries = _build_entries()
+    entries = _build_entries(repo_root)
     lines = ["# TNFR theory implementation matrix", ""]
     lines.append("| Category | Identifier | Description | Core references | Tests references |")
     lines.append("| --- | --- | --- | --- | --- |")
@@ -268,13 +343,19 @@ def generate_report(
     for entry in entries:
         core_hits = _collect_matches(core_paths, entry.tokens)
         tests_hits = _collect_matches(tests_paths, entry.tokens)
+        if entry.status:
+            core_cell = entry.status
+            tests_cell = entry.status
+        else:
+            core_cell = _format_hits(core_hits)
+            tests_cell = _format_hits(tests_hits)
         lines.append(
             "| {category} | `{identifier}` | {description} | {core_hits} | {tests_hits} |".format(
                 category=entry.category,
                 identifier=entry.identifier,
                 description=entry.description,
-                core_hits=_format_hits(core_hits),
-                tests_hits=_format_hits(tests_hits),
+                core_hits=core_cell,
+                tests_hits=tests_cell,
             )
         )
 
