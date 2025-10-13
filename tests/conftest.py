@@ -80,6 +80,8 @@ from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPC
 from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
 
 from tests.helpers import (
+    build_goal,
+    build_microsector,
     build_outgauge_payload,
     build_outsim_payload,
     pandas_engine_failure,
@@ -100,7 +102,7 @@ from tnfr_lfs.core.epi_models import (
     TyresNode,
 )
 from tnfr_lfs.core.segmentation import Goal, Microsector, segment_microsectors
-from tnfr_lfs.recommender.rules import ThresholdProfile
+from tnfr_lfs.recommender.rules import RuleContext, ThresholdProfile
 
 
 @pytest.fixture(scope="session")
@@ -156,6 +158,88 @@ def parquet_engine_failure(
             sys.modules["pandas"] = original
         else:
             sys.modules.pop("pandas", None)
+
+
+@pytest.fixture
+def rule_scenario_factory() -> Callable[
+    [Dict[str, Any] | None, Dict[str, Any] | None, Dict[str, Any] | None],
+    tuple[RuleContext, Goal, Microsector],
+]:
+    """Provide a helper to assemble rule scenarios with overridable defaults."""
+
+    def factory(
+        goal_overrides: Dict[str, Any] | None = None,
+        microsector_overrides: Dict[str, Any] | None = None,
+        context_overrides: Dict[str, Any] | None = None,
+    ) -> tuple[RuleContext, Goal, Microsector]:
+        goal_payload: Dict[str, Any] = {
+            "phase": "apex",
+            "target_delta_nfr": 0.4,
+            "nu_f_target": 0.25,
+            "nu_exc_target": 0.25,
+            "rho_target": 1.0,
+            "measured_phase_alignment": 0.88,
+            "slip_lat_window": (-0.4, 0.4),
+            "slip_long_window": (-0.3, 0.3),
+            "yaw_rate_window": (-0.5, 0.5),
+        }
+        if goal_overrides:
+            goal_payload.update(goal_overrides)
+        goal = build_goal(**goal_payload)
+
+        microsector_payload: Dict[str, Any] = {
+            "index": 5,
+            "start_time": 0.0,
+            "end_time": 0.4,
+            "curvature": 1.2,
+            "brake_event": True,
+            "support_event": True,
+            "delta_nfr_signature": 0.5,
+            "phases": ("apex",),
+            "goals": (goal,),
+            "phase_boundaries": {"apex": (0, 4)},
+            "phase_samples": {"apex": (0, 1, 2, 3)},
+            "active_phase": "apex",
+            "dominant_nodes": {"apex": ("tyres",)},
+            "phase_weights": {"apex": {"__default__": 1.0}},
+            "phase_lag": {"apex": 0.0},
+            "phase_alignment": {"apex": goal.measured_phase_alignment},
+            "phase_synchrony": {"apex": goal.measured_phase_synchrony},
+            "filtered_measures": {
+                "thermal_load": 5150.0,
+                "style_index": 0.82,
+                "grip_rel": 1.0,
+                "d_nfr_flat": -0.32,
+            },
+            "window_occupancy": {"apex": {}},
+            "operator_events": {},
+            "include_cphi": False,
+        }
+        if microsector_overrides:
+            microsector_payload.update(microsector_overrides)
+        if "goals" not in microsector_payload:
+            microsector_payload["goals"] = (goal,)
+        microsector = build_microsector(**microsector_payload)
+
+        thresholds = ThresholdProfile(
+            entry_delta_tolerance=0.6,
+            apex_delta_tolerance=0.6,
+            exit_delta_tolerance=0.6,
+            piano_delta_tolerance=0.5,
+            rho_detune_threshold=0.4,
+        )
+        context_payload: Dict[str, Any] = {
+            "car_model": "FZR",
+            "track_name": "AS5",
+            "thresholds": thresholds,
+            "tyre_offsets": {"pressure_front": -0.02},
+        }
+        if context_overrides:
+            context_payload.update(context_overrides)
+        context = RuleContext(**context_payload)
+        return context, goal, microsector
+
+    return factory
 
 
 @pytest.fixture(params=("outgauge", "outsim"), name="udp_client_spec")

@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from typing import Iterable, Sequence, Tuple
-from dataclasses import replace
+from typing import Any, Callable, Iterable, Sequence, Tuple
+from dataclasses import dataclass, field, replace
 from types import SimpleNamespace
 from statistics import mean
 
@@ -53,6 +53,277 @@ from tests.helpers import (
     build_steering_record,
     build_udr_bundle_series,
 )
+
+
+@dataclass(frozen=True)
+class RuleCase:
+    """Container describing a scenario for rule-based recommendations."""
+
+    description: str
+    goal_overrides: Mapping[str, Any] = field(default_factory=dict)
+    microsector_overrides: Mapping[str, Any] = field(default_factory=dict)
+    context_overrides: Mapping[str, Any] = field(default_factory=dict)
+    rule_kwargs: Mapping[str, Any] = field(default_factory=dict)
+    expected_parameters: tuple[str, ...] = ()
+    expected_deltas: Mapping[str, float] = field(default_factory=dict)
+    message_contains: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    forbidden_parameters: tuple[str, ...] = ()
+    expected_count: int | None = None
+
+
+def _assert_rule_outcome(
+    recommendations: Sequence[Recommendation],
+    case: RuleCase,
+) -> None:
+    """Validate rule recommendations against the declarative case definition."""
+
+    if not case.expected_parameters:
+        assert not recommendations
+    else:
+        assert recommendations
+        if case.expected_count is not None:
+            assert len(recommendations) == case.expected_count
+        for parameter in case.expected_parameters:
+            match = next((rec for rec in recommendations if rec.parameter == parameter), None)
+            assert match is not None
+            if parameter in case.expected_deltas:
+                assert match.delta == pytest.approx(case.expected_deltas[parameter])
+            for needle in case.message_contains.get(parameter, ()):  # pragma: no branch - simple loop
+                assert needle.lower() in match.message.lower()
+    for forbidden in case.forbidden_parameters:
+        assert all(rec.parameter != forbidden for rec in recommendations)
+
+TYRE_BALANCE_CASES = [
+    RuleCase(
+        description="balanced-microsector-no-guidance",
+    ),
+    RuleCase(
+        description="suppresses-low-dispersion",
+        microsector_overrides={
+            "support_event": False,
+            "goals": (),
+            "phase_boundaries": {"apex": (0, 3)},
+            "phase_samples": {"apex": (0, 1, 2)},
+            "dominant_nodes": {"apex": ()},
+            "phase_weights": {"apex": {}},
+            "phase_lag": {},
+            "phase_alignment": {},
+            "filtered_measures": {
+                "thermal_load": 5150.0,
+                "style_index": 0.82,
+                "grip_rel": 1.0,
+                "d_nfr_flat": -0.32,
+            },
+            "window_occupancy": {"apex": {}},
+            "operator_events": {},
+        },
+    ),
+    RuleCase(
+        description="neutral-when-cphi-missing",
+        microsector_overrides={
+            "index": 4,
+            "filtered_measures": {
+                "thermal_load": 5200.0,
+                "style_index": 0.83,
+                "grip_rel": 1.0,
+                "d_nfr_flat": -0.28,
+                "cphi_fl": float("nan"),
+                "cphi_fr": None,
+                "cphi_rl": float("nan"),
+                "cphi_rr": None,
+                "cphi_fl_temperature": None,
+                "cphi_fr_temperature": float("nan"),
+                "cphi_rl_temperature": None,
+                "cphi_rr_temperature": float("nan"),
+                "cphi_fl_gradient": None,
+                "cphi_fr_gradient": float("nan"),
+                "cphi_rl_gradient": None,
+                "cphi_rr_gradient": float("nan"),
+                "cphi_fl_mu": None,
+                "cphi_fr_mu": float("nan"),
+                "cphi_rl_mu": None,
+                "cphi_rr_mu": float("nan"),
+                "cphi_fl_temp_delta": None,
+                "cphi_fr_temp_delta": float("nan"),
+                "cphi_rl_temp_delta": None,
+                "cphi_rr_temp_delta": float("nan"),
+                "cphi_fl_gradient_rate": None,
+                "cphi_fr_gradient_rate": float("nan"),
+                "cphi_rl_gradient_rate": None,
+                "cphi_rr_gradient_rate": float("nan"),
+            },
+        },
+        context_overrides={"tyre_offsets": {}},
+    ),
+    RuleCase(
+        description="skips-when-cphi-healthy",
+        microsector_overrides={
+            "index": 6,
+            "filtered_measures": {
+                "thermal_load": 5100.0,
+                "style_index": 0.84,
+                "grip_rel": 1.0,
+                "d_nfr_flat": -0.22,
+            },
+        },
+    ),
+]
+
+TYRE_BALANCE_IDS = [case.description for case in TYRE_BALANCE_CASES]
+
+
+_parallel_negative_metrics = build_parallel_window_metrics(
+    [(0.04, 0.015), (0.034, 0.018), (0.03, 0.02)],
+    yaw_sign=1.0,
+)
+_parallel_positive_metrics = build_parallel_window_metrics(
+    [(0.082, 0.012), (0.078, 0.015), (0.074, 0.018)],
+    yaw_sign=1.0,
+)
+_parallel_budget_metrics = build_parallel_window_metrics(
+    [(0.02, 0.019), (0.022, 0.0215), (0.18, 0.01)],
+    yaw_sign=1.0,
+    yaw_rates=[0.0, 1.5, -1.5],
+    steer_series=[0.0, 2.5, -2.5],
+)
+
+PARALLEL_STEER_CASES = [
+    RuleCase(
+        description="increase-parallel-steer-on-negative-index",
+        microsector_overrides={
+            "index": 7,
+            "filtered_measures": {
+                "ackermann_parallel_index": -0.12,
+                "slide_catch_budget": _parallel_negative_metrics.slide_catch_budget.value,
+                "slide_catch_budget_yaw": _parallel_negative_metrics.slide_catch_budget.yaw_acceleration_ratio,
+                "slide_catch_budget_steer": _parallel_negative_metrics.slide_catch_budget.steer_velocity_ratio,
+                "slide_catch_budget_overshoot": _parallel_negative_metrics.slide_catch_budget.overshoot_ratio,
+            },
+        },
+        rule_kwargs={"priority": 16, "threshold": 0.05, "delta_step": 0.2},
+        expected_parameters=("parallel_steer",),
+        expected_deltas={"parallel_steer": 0.2},
+        message_contains={"parallel_steer": ("parallel steer",)},
+        forbidden_parameters=("steering_lock_deg",),
+        expected_count=1,
+    ),
+    RuleCase(
+        description="reduce-parallel-steer-on-positive-index",
+        microsector_overrides={
+            "index": 5,
+            "filtered_measures": {
+                "ackermann_parallel_index": 0.11,
+                "slide_catch_budget": _parallel_positive_metrics.slide_catch_budget.value,
+                "slide_catch_budget_yaw": _parallel_positive_metrics.slide_catch_budget.yaw_acceleration_ratio,
+                "slide_catch_budget_steer": _parallel_positive_metrics.slide_catch_budget.steer_velocity_ratio,
+                "slide_catch_budget_overshoot": _parallel_positive_metrics.slide_catch_budget.overshoot_ratio,
+            },
+        },
+        rule_kwargs={"priority": 16, "threshold": 0.05, "delta_step": 0.15},
+        expected_parameters=("parallel_steer",),
+        expected_deltas={"parallel_steer": -0.15},
+        message_contains={"parallel_steer": ("parallel steer",)},
+        forbidden_parameters=("steering_lock_deg",),
+        expected_count=1,
+    ),
+    RuleCase(
+        description="add-lock-when-budget-limited",
+        microsector_overrides={
+            "index": 3,
+            "filtered_measures": {
+                "ackermann_parallel_index": -0.16,
+                "slide_catch_budget": _parallel_budget_metrics.slide_catch_budget.value,
+                "slide_catch_budget_yaw": _parallel_budget_metrics.slide_catch_budget.yaw_acceleration_ratio,
+                "slide_catch_budget_steer": _parallel_budget_metrics.slide_catch_budget.steer_velocity_ratio,
+                "slide_catch_budget_overshoot": _parallel_budget_metrics.slide_catch_budget.overshoot_ratio,
+            },
+        },
+        rule_kwargs={
+            "priority": 16,
+            "threshold": 0.05,
+            "delta_step": 0.1,
+            "lock_step": 0.75,
+        },
+        expected_parameters=("parallel_steer", "steering_lock_deg"),
+        expected_deltas={"parallel_steer": 0.1, "steering_lock_deg": 0.75},
+        message_contains={
+            "parallel_steer": ("parallel steer",),
+            "steering_lock_deg": ("steering lock",),
+        },
+        expected_count=2,
+    ),
+]
+
+PARALLEL_STEER_IDS = [case.description for case in PARALLEL_STEER_CASES]
+
+
+LOCKING_WINDOW_CASES = [
+    RuleCase(
+        description="open-power-lock-when-on-threshold-crossed",
+        microsector_overrides={
+            "index": 4,
+            "active_phase": "exit",
+            "filtered_measures": {
+                "locking_window_score": 0.35,
+                "locking_window_score_on": 0.4,
+                "locking_window_score_off": 0.82,
+                "locking_window_transitions": 3,
+            },
+        },
+        rule_kwargs={
+            "priority": 27,
+            "on_threshold": 0.7,
+            "off_threshold": 0.6,
+            "min_transitions": 1,
+            "power_lock_step": 6.0,
+        },
+        expected_parameters=("diff_power_lock",),
+        expected_deltas={"diff_power_lock": -6.0},
+        message_contains={"diff_power_lock": ("lsd",)},
+        expected_count=1,
+    ),
+    RuleCase(
+        description="reduce-preload-when-locking-high",
+        microsector_overrides={
+            "index": 6,
+            "active_phase": "exit",
+            "filtered_measures": {
+                "locking_window_score": 0.42,
+                "locking_window_score_on": 0.72,
+                "locking_window_score_off": 0.55,
+                "locking_window_transitions": 4,
+            },
+        },
+        rule_kwargs={
+            "priority": 29,
+            "on_threshold": 0.5,
+            "off_threshold": 0.7,
+            "min_transitions": 2,
+            "preload_step": 50.0,
+        },
+        expected_parameters=("diff_preload_nm",),
+        expected_deltas={"diff_preload_nm": -50.0},
+        message_contains={"diff_preload_nm": ("reduce preload",)},
+        expected_count=1,
+    ),
+    RuleCase(
+        description="skip-when-transitions-low",
+        microsector_overrides={
+            "index": 2,
+            "active_phase": "exit",
+            "filtered_measures": {
+                "locking_window_score": 0.3,
+                "locking_window_score_on": 0.4,
+                "locking_window_score_off": 0.45,
+                "locking_window_transitions": 1,
+            },
+        },
+        rule_kwargs={"min_transitions": 3},
+    ),
+]
+
+LOCKING_WINDOW_IDS = [case.description for case in LOCKING_WINDOW_CASES]
+
 
 @pytest.fixture
 def bottoming_microsectors() -> Tuple[Microsector, Microsector]:
@@ -132,375 +403,55 @@ def test_recommendation_engine_uses_session_weights() -> None:
     assert context.session_hints["slip_ratio_bias"] == "aggressive"
 
 
-def test_tyre_balance_rule_generates_guidance():
-    goal = build_goal(
-        "apex",
-        0.4,
-        description="",
-        nu_f_target=0.25,
-        nu_exc_target=0.25,
-        rho_target=1.0,
-        measured_phase_alignment=0.88,
-        slip_lat_window=(-0.4, 0.4),
-        slip_long_window=(-0.3, 0.3),
-        yaw_rate_window=(-0.5, 0.5),
-    )
-    microsector = build_microsector(
-        index=5,
-        start_time=0.0,
-        end_time=0.4,
-        curvature=1.2,
-        brake_event=False,
-        support_event=False,
-        delta_nfr_signature=0.5,
-        phases=("apex",),
-        goals=(goal,),
-        phase_boundaries={"apex": (0, 4)},
-        phase_samples={"apex": (0, 1, 2, 3)},
-        active_phase="apex",
-        dominant_nodes={"apex": ("tyres",)},
-        phase_weights={"apex": {"__default__": 1.0}},
-        phase_lag={"apex": 0.0},
-        phase_alignment={"apex": 0.9},
-        phase_synchrony={"apex": goal.measured_phase_synchrony},
-        filtered_measures={
-            "thermal_load": 5150.0,
-            "style_index": 0.82,
-            "grip_rel": 1.0,
-            "d_nfr_flat": -0.32,
-        },
-        window_occupancy={"apex": {}},
-        operator_events={},
-        include_cphi=False,
-    )
-    thresholds = ThresholdProfile(
-        entry_delta_tolerance=0.6,
-        apex_delta_tolerance=0.6,
-        exit_delta_tolerance=0.6,
-        piano_delta_tolerance=0.5,
-        rho_detune_threshold=0.4,
-    )
-    context = RuleContext(
-        car_model="FZR",
-        track_name="AS5",
-        thresholds=thresholds,
-        tyre_offsets={"pressure_front": -0.02},
-    )
-    rule = TyreBalanceRule(priority=18)
-
-    recommendations = list(rule.evaluate([], [microsector], context))
-    assert recommendations == []
-
-
-def test_tyre_balance_rule_suppresses_actions_when_dispersion_low(
-    car_track_thresholds,
+@pytest.mark.parametrize("case", TYRE_BALANCE_CASES, ids=TYRE_BALANCE_IDS)
+def test_tyre_balance_rule_scenarios(
+    rule_scenario_factory: Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], tuple[RuleContext, Goal, Microsector]],
+    case: RuleCase,
 ) -> None:
-    microsector = Microsector(
-        index=5,
-        start_time=0.0,
-        end_time=0.3,
-        curvature=1.4,
-        brake_event=True,
-        support_event=False,
-        delta_nfr_signature=0.3,
-        goals=(),
-        phase_boundaries={"apex": (0, 3)},
-        phase_samples={"apex": (0, 1, 2)},
-        active_phase="apex",
-        dominant_nodes={"apex": ()},
-        phase_weights={},
-        grip_rel=1.0,
-        phase_lag={},
-        phase_alignment={},
-        filtered_measures={
-            "thermal_load": 5150.0,
-            "style_index": 0.82,
-            "grip_rel": 1.0,
-            "d_nfr_flat": -0.32,
-        },
-        recursivity_trace=(),
-        last_mutation=None,
-        window_occupancy={"apex": {}},
-        operator_events={},
+    context, _, microsector = rule_scenario_factory(
+        goal_overrides=dict(case.goal_overrides),
+        microsector_overrides=dict(case.microsector_overrides),
+        context_overrides=dict(case.context_overrides),
     )
-    thresholds = ThresholdProfile(
-        entry_delta_tolerance=0.6,
-        apex_delta_tolerance=0.6,
-        exit_delta_tolerance=0.6,
-        piano_delta_tolerance=0.5,
-        rho_detune_threshold=0.4,
-    )
-    context = RuleContext(
-        car_model="FZR",
-        track_name="AS5",
-        thresholds=thresholds,
-        tyre_offsets={"pressure_front": -0.02},
-    )
-    rule = TyreBalanceRule(priority=18)
+    rule_kwargs = {"priority": 18}
+    rule_kwargs.update(dict(case.rule_kwargs))
+    rule = TyreBalanceRule(**rule_kwargs)
 
     recommendations = list(rule.evaluate([], [microsector], context))
-    assert recommendations == []
+    _assert_rule_outcome(recommendations, case)
 
-
-def test_tyre_balance_rule_neutral_with_missing_cphi(car_track_thresholds) -> None:
-    microsector = Microsector(
-        index=4,
-        start_time=0.0,
-        end_time=0.3,
-        curvature=1.2,
-        brake_event=True,
-        support_event=True,
-        delta_nfr_signature=0.35,
-        goals=(),
-        phase_boundaries={"apex": (0, 3)},
-        phase_samples={"apex": (0, 1, 2)},
-        active_phase="apex",
-        dominant_nodes={"apex": ()},
-        phase_weights={},
-        grip_rel=1.0,
-        phase_lag={},
-        phase_alignment={},
-        filtered_measures={
-            "thermal_load": 5200.0,
-            "style_index": 0.83,
-            "grip_rel": 1.0,
-            "d_nfr_flat": -0.28,
-            "cphi_fl": float("nan"),
-            "cphi_fr": None,
-            "cphi_rl": float("nan"),
-            "cphi_rr": None,
-            "cphi_fl_temperature": None,
-            "cphi_fr_temperature": float("nan"),
-            "cphi_rl_temperature": None,
-            "cphi_rr_temperature": float("nan"),
-            "cphi_fl_gradient": None,
-            "cphi_fr_gradient": float("nan"),
-            "cphi_rl_gradient": None,
-            "cphi_rr_gradient": float("nan"),
-            "cphi_fl_mu": None,
-            "cphi_fr_mu": float("nan"),
-            "cphi_rl_mu": None,
-            "cphi_rr_mu": float("nan"),
-            "cphi_fl_temp_delta": None,
-            "cphi_fr_temp_delta": float("nan"),
-            "cphi_rl_temp_delta": None,
-            "cphi_rr_temp_delta": float("nan"),
-            "cphi_fl_gradient_rate": None,
-            "cphi_fr_gradient_rate": float("nan"),
-            "cphi_rl_gradient_rate": None,
-            "cphi_rr_gradient_rate": float("nan"),
-        },
-        recursivity_trace=(),
-        last_mutation=None,
-        window_occupancy={"apex": {}},
-        operator_events={},
+@pytest.mark.parametrize("case", PARALLEL_STEER_CASES, ids=PARALLEL_STEER_IDS)
+def test_parallel_steer_rule_scenarios(
+    rule_scenario_factory: Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], tuple[RuleContext, Goal, Microsector]],
+    case: RuleCase,
+) -> None:
+    context, _, microsector = rule_scenario_factory(
+        goal_overrides=dict(case.goal_overrides),
+        microsector_overrides=dict(case.microsector_overrides),
+        context_overrides=dict(case.context_overrides),
     )
-    thresholds = ThresholdProfile(
-        entry_delta_tolerance=0.6,
-        apex_delta_tolerance=0.6,
-        exit_delta_tolerance=0.6,
-        piano_delta_tolerance=0.5,
-        rho_detune_threshold=0.4,
-    )
-    context = RuleContext(
-        car_model="FZR",
-        track_name="AS5",
-        thresholds=thresholds,
-        tyre_offsets={},
-    )
-    rule = TyreBalanceRule(priority=18)
+    rule_kwargs = {"priority": 16, "threshold": 0.05, "delta_step": 0.2}
+    rule_kwargs.update(dict(case.rule_kwargs))
+    rule = ParallelSteerRule(**rule_kwargs)
 
     recommendations = list(rule.evaluate([], [microsector], context))
-    assert recommendations == []
+    _assert_rule_outcome(recommendations, case)
 
 
-def test_tyre_balance_rule_skips_when_cphi_healthy(car_track_thresholds) -> None:
-    microsector = Microsector(
-        index=6,
-        start_time=0.0,
-        end_time=0.3,
-        curvature=1.4,
-        brake_event=True,
-        support_event=True,
-        delta_nfr_signature=0.4,
-        goals=(),
-        phase_boundaries={"apex": (0, 3)},
-        phase_samples={"apex": (0, 1, 2)},
-        active_phase="apex",
-        dominant_nodes={"apex": ()},
-        phase_weights={},
-        grip_rel=1.0,
-        phase_lag={},
-        phase_alignment={},
-        filtered_measures={
-            "thermal_load": 5100.0,
-            "style_index": 0.84,
-            "grip_rel": 1.0,
-            "d_nfr_flat": -0.22,
-        },
-        recursivity_trace=(),
-        last_mutation=None,
-        window_occupancy={"apex": {}},
-        operator_events={},
+@pytest.mark.parametrize("case", LOCKING_WINDOW_CASES, ids=LOCKING_WINDOW_IDS)
+def test_locking_window_rule_scenarios(
+    rule_scenario_factory: Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], tuple[RuleContext, Goal, Microsector]],
+    case: RuleCase,
+) -> None:
+    context, _, microsector = rule_scenario_factory(
+        goal_overrides=dict(case.goal_overrides),
+        microsector_overrides=dict(case.microsector_overrides),
+        context_overrides=dict(case.context_overrides),
     )
-    thresholds = ThresholdProfile(
-        entry_delta_tolerance=0.6,
-        apex_delta_tolerance=0.6,
-        exit_delta_tolerance=0.6,
-        piano_delta_tolerance=0.5,
-        rho_detune_threshold=0.4,
-    )
-    context = RuleContext(
-        car_model="FZR",
-        track_name="AS5",
-        thresholds=thresholds,
-        tyre_offsets={},
-    )
-    rule = TyreBalanceRule(priority=18)
+    rule = LockingWindowRule(**dict(case.rule_kwargs))
 
     recommendations = list(rule.evaluate([], [microsector], context))
-    assert recommendations == []
-
-def test_parallel_steer_rule_recommends_parallel_adjustment_on_negative_delta() -> None:
-    rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.2)
-    metrics = build_parallel_window_metrics(
-        [(0.04, 0.015), (0.034, 0.018), (0.03, 0.02)],
-        yaw_sign=1.0,
-    )
-    microsector = SimpleNamespace(
-        index=7,
-        filtered_measures={
-            "ackermann_parallel_index": -0.12,
-            "slide_catch_budget": metrics.slide_catch_budget.value,
-            "slide_catch_budget_yaw": metrics.slide_catch_budget.yaw_acceleration_ratio,
-            "slide_catch_budget_steer": metrics.slide_catch_budget.steer_velocity_ratio,
-            "slide_catch_budget_overshoot": metrics.slide_catch_budget.overshoot_ratio,
-        },
-    )
-    recommendations = list(rule.evaluate([], [microsector], None))
-    assert recommendations
-    parallel_rec = recommendations[0]
-    assert "parallel steer" in parallel_rec.message.lower()
-    assert parallel_rec.parameter == "parallel_steer"
-    assert parallel_rec.delta == pytest.approx(0.2)
-    assert not any(rec.parameter == "steering_lock_deg" for rec in recommendations)
-
-
-def test_parallel_steer_rule_recommends_reducing_parallel_on_positive_delta() -> None:
-    rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.15)
-    metrics = build_parallel_window_metrics(
-        [(0.082, 0.012), (0.078, 0.015), (0.074, 0.018)],
-        yaw_sign=1.0,
-    )
-    microsector = SimpleNamespace(
-        index=5,
-        filtered_measures={
-            "ackermann_parallel_index": 0.11,
-            "slide_catch_budget": metrics.slide_catch_budget.value,
-            "slide_catch_budget_yaw": metrics.slide_catch_budget.yaw_acceleration_ratio,
-            "slide_catch_budget_steer": metrics.slide_catch_budget.steer_velocity_ratio,
-            "slide_catch_budget_overshoot": metrics.slide_catch_budget.overshoot_ratio,
-        },
-    )
-    recommendations = list(rule.evaluate([], [microsector], None))
-    assert recommendations
-    parallel_rec = recommendations[0]
-    assert parallel_rec.parameter == "parallel_steer"
-    assert parallel_rec.delta == pytest.approx(-0.15)
-    assert "parallel steer" in parallel_rec.message.lower()
-
-
-def test_parallel_steer_rule_recommends_lock_when_budget_limited() -> None:
-    rule = ParallelSteerRule(priority=16, threshold=0.05, delta_step=0.1, lock_step=0.75)
-    metrics = build_parallel_window_metrics(
-        [(0.02, 0.019), (0.022, 0.0215), (0.18, 0.01)],
-        yaw_sign=1.0,
-        yaw_rates=[0.0, 1.5, -1.5],
-        steer_series=[0.0, 2.5, -2.5],
-    )
-    microsector = SimpleNamespace(
-        index=3,
-        filtered_measures={
-            "ackermann_parallel_index": -0.16,
-            "slide_catch_budget": metrics.slide_catch_budget.value,
-            "slide_catch_budget_yaw": metrics.slide_catch_budget.yaw_acceleration_ratio,
-            "slide_catch_budget_steer": metrics.slide_catch_budget.steer_velocity_ratio,
-            "slide_catch_budget_overshoot": metrics.slide_catch_budget.overshoot_ratio,
-        },
-    )
-    recommendations = list(rule.evaluate([], [microsector], None))
-    assert len(recommendations) == 2
-    parallel_rec = next(rec for rec in recommendations if rec.parameter == "parallel_steer")
-    lock_rec = next(rec for rec in recommendations if rec.parameter == "steering_lock_deg")
-    assert parallel_rec.delta == pytest.approx(0.1)
-    assert lock_rec.delta == pytest.approx(0.75)
-    assert "steering lock" in lock_rec.message.lower()
-
-
-def test_locking_window_rule_recommends_opening_power_lock() -> None:
-    rule = LockingWindowRule(
-        priority=27,
-        on_threshold=0.7,
-        off_threshold=0.6,
-        min_transitions=1,
-        power_lock_step=6.0,
-    )
-    microsector = SimpleNamespace(
-        index=4,
-        active_phase="exit",
-        filtered_measures={
-            "locking_window_score": 0.35,
-            "locking_window_score_on": 0.4,
-            "locking_window_score_off": 0.82,
-            "locking_window_transitions": 3,
-        },
-    )
-    recommendations = list(rule.evaluate([], [microsector], None))
-    assert recommendations
-    power_rec = recommendations[0]
-    assert power_rec.parameter == "diff_power_lock"
-    assert power_rec.delta == pytest.approx(-6.0)
-    assert "lsd" in power_rec.message.lower()
-
-
-def test_locking_window_rule_recommends_reducing_preload() -> None:
-    rule = LockingWindowRule(
-        priority=29,
-        on_threshold=0.5,
-        off_threshold=0.7,
-        min_transitions=2,
-        preload_step=50.0,
-    )
-    microsector = SimpleNamespace(
-        index=6,
-        active_phase="exit",
-        filtered_measures={
-            "locking_window_score": 0.42,
-            "locking_window_score_on": 0.72,
-            "locking_window_score_off": 0.55,
-            "locking_window_transitions": 4,
-        },
-    )
-    recommendations = list(rule.evaluate([], [microsector], None))
-    assert recommendations
-    preload_rec = next(rec for rec in recommendations if rec.parameter == "diff_preload_nm")
-    assert preload_rec.delta == pytest.approx(-50.0)
-    assert "reduce preload" in preload_rec.message.lower()
-
-
-def test_locking_window_rule_requires_transitions() -> None:
-    rule = LockingWindowRule(min_transitions=3)
-    microsector = SimpleNamespace(
-        index=2,
-        active_phase="exit",
-        filtered_measures={
-            "locking_window_score": 0.3,
-            "locking_window_score_on": 0.4,
-            "locking_window_score_off": 0.45,
-            "locking_window_transitions": 1,
-        },
-    )
-    assert list(rule.evaluate([], [microsector], None)) == []
+    _assert_rule_outcome(recommendations, case)
 
 
 def test_recommendation_engine_suppresses_when_quiet_sequence():
