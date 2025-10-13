@@ -31,6 +31,14 @@ STRUCTURAL_LABELS = {
     "detect_il",
     "detect_silence",
     "detect_nav",
+    "detect_en",
+    "detect_um",
+    "detect_ra",
+    "detect_val",
+    "detect_nul",
+    "detect_thol",
+    "detect_zhir",
+    "detect_remesh",
 ])
 def test_operator_detectors_are_public(detector_name: str) -> None:
     detector = getattr(operator_detection, detector_name)

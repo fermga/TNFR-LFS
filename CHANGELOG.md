@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+* Implement structural operator detectors for Reception (`detect_en`),
+  Coupling (`detect_um`), Propagation (`detect_ra`), Amplification (`detect_val`),
+  Contraction (`detect_nul`), Auto-organisation (`detect_thol`), Transformation
+  (`detect_zhir`) and Remeshing (`detect_remesh`), including documentation,
+  tests, and benchmarks.
+
 ### Changed
 
 * Rename the `tnfr_lfs.ingestion` package to `tnfr_lfs.telemetry`, provide a
