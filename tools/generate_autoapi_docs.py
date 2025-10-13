@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate lightweight AutoAPI-style Markdown documentation.
 
-This script walks the ``tnfr_lfs`` package under ``src`` and emits Markdown
+This script walks the configured packages under ``src`` and emits Markdown
 pages that loosely mirror MkDocs AutoAPI output.  It is intentionally minimal –
 we only need enough structure to unblock documentation builds in environments
 where the real AutoAPI plugin is unavailable.
@@ -10,14 +10,60 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import fnmatch
 from pathlib import Path
 import shutil
 import textwrap
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 
-PACKAGE_NAME = "tnfr_lfs"
-SRC_ROOT = Path("src") / PACKAGE_NAME
+import yaml
+
+MKDOCS_CONFIG = Path("mkdocs.yml")
+SRC_BASE = Path("src")
 DOCS_ROOT = Path("docs/reference/autoapi")
+
+
+def load_autoapi_config() -> tuple[List[str], List[str]]:
+    """Read the MkDocs configuration and extract AutoAPI settings."""
+
+    default_packages = ["tnfr_lfs"]
+    if not MKDOCS_CONFIG.exists():
+        return default_packages, []
+
+    data = yaml.safe_load(MKDOCS_CONFIG.read_text(encoding="utf-8")) or {}
+    packages: List[str] = []
+    ignores: List[str] = []
+    seen_packages: set[str] = set()
+    plugin_config: Optional[dict] = None
+    for plugin in data.get("plugins", []):
+        if not isinstance(plugin, dict):
+            continue
+        if "autoapi" in plugin:
+            plugin_config = plugin["autoapi"] or {}
+            break
+        if "mkdocs-autoapi" in plugin:
+            plugin_config = plugin["mkdocs-autoapi"] or {}
+            break
+
+    if plugin_config is None:
+        return default_packages, []
+
+    candidate = plugin_config.get("packages", [])
+    if isinstance(candidate, list):
+        for item in candidate:
+            if isinstance(item, str):
+                normalized = str(item)
+                if normalized not in seen_packages:
+                    seen_packages.add(normalized)
+                    packages.append(normalized)
+
+    ignore_candidate = plugin_config.get("autoapi_ignore", [])
+    if isinstance(ignore_candidate, list):
+        for item in ignore_candidate:
+            if isinstance(item, str):
+                ignores.append(str(item))
+
+    return (packages or default_packages, ignores)
 
 
 @dataclasses.dataclass
@@ -37,6 +83,7 @@ class ClassDoc:
 
 @dataclasses.dataclass
 class ModuleDoc:
+    package: str
     name: str
     path: Path
     docstring: str
@@ -145,13 +192,13 @@ def _extract_attributes(nodes: Iterable[ast.AST]) -> List[str]:
     return attrs
 
 
-def parse_module(path: Path) -> ModuleDoc:
-    module_path = path.relative_to(SRC_ROOT)
+def parse_module(package: str, src_root: Path, path: Path) -> ModuleDoc:
+    module_path = path.relative_to(src_root)
     if path.name == "__init__.py":
         parts = module_path.parts[:-1]
     else:
         parts = module_path.parts
-    module_name = ".".join((PACKAGE_NAME, *[part[:-3] if part.endswith(".py") else part for part in parts]))
+    module_name = ".".join((package, *[part[:-3] if part.endswith(".py") else part for part in parts]))
 
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -161,6 +208,7 @@ def parse_module(path: Path) -> ModuleDoc:
     attributes = _extract_attributes(tree.body)
     is_package = path.name == "__init__.py"
     return ModuleDoc(
+        package=package,
         name=module_name,
         path=module_path,
         docstring=docstring,
@@ -171,12 +219,15 @@ def parse_module(path: Path) -> ModuleDoc:
     )
 
 
-def discover_modules() -> List[ModuleDoc]:
+def discover_modules(package: str) -> List[ModuleDoc]:
     modules: List[ModuleDoc] = []
-    for path in sorted(SRC_ROOT.rglob("*.py")):
+    src_root = SRC_BASE / package
+    if not src_root.exists():
+        raise SystemExit(f"Could not find source package under {src_root!r}")
+    for path in sorted(src_root.rglob("*.py")):
         if path.name == "__main__.py":
             continue
-        modules.append(parse_module(path))
+        modules.append(parse_module(package, src_root, path))
     return modules
 
 
@@ -189,6 +240,15 @@ def ensure_output_dir() -> None:
 def _module_output_dir(module: ModuleDoc) -> Path:
     parts = module.name.split(".")
     return DOCS_ROOT.joinpath(*parts)
+
+
+def _should_ignore(module_name: str, patterns: List[str]) -> bool:
+    dotted_name = module_name
+    path_name = module_name.replace(".", "/")
+    for pattern in patterns:
+        if fnmatch.fnmatch(dotted_name, pattern) or fnmatch.fnmatch(path_name, pattern):
+            return True
+    return False
 
 
 def _render_markdown(module: ModuleDoc, children: List[str]) -> str:
@@ -245,8 +305,6 @@ def _render_markdown(module: ModuleDoc, children: List[str]) -> str:
 def _collect_children(modules: List[ModuleDoc]) -> dict[str, List[str]]:
     children: dict[str, List[str]] = {module.name: [] for module in modules}
     for module in modules:
-        if module.name == PACKAGE_NAME:
-            continue
         parent_name = ".".join(module.name.split(".")[:-1])
         if parent_name in children:
             children[parent_name].append(module.name)
@@ -264,27 +322,52 @@ def write_module_pages(modules: List[ModuleDoc]) -> None:
         (output_dir / "index.md").write_text(content + "\n", encoding="utf-8")
 
 
-def write_root_index(modules: List[ModuleDoc]) -> None:
-    top_level = [module for module in modules if module.name.count(".") == 1]
-    lines = ["# API index\n"]
-    lines.append("This index was generated from the source tree and mirrors the"
-                 " ``tnfr_lfs`` package layout.\n")
-    lines.append("- [`tnfr_lfs`](tnfr_lfs/index.md)\n")
-    lines.append("## Top-level modules\n")
-    for module in sorted(top_level, key=lambda m: m.name):
-        rel_path = "/".join(module.name.split(".")) + "/index.md"
-        lines.append(f"- [`{module.name}`]({rel_path})")
-    DOCS_ROOT.joinpath("index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+def write_root_index(package_modules: Dict[str, List[ModuleDoc]]) -> None:
+    package_names = sorted(package_modules)
+    lines: List[str] = ["# API index", ""]
+    if package_names:
+        package_list = ", ".join(f"``{name}``" for name in package_names)
+        lines.append(
+            "This index was generated from the source tree and mirrors the "
+            f"{package_list} package layout."
+        )
+        lines.append("")
+        for package in package_names:
+            lines.append(f"- [`{package}`]({package}/index.md)")
+        lines.append("")
+    lines.append("## Top-level modules")
+    lines.append("")
+    for package in package_names:
+        top_level = [module for module in package_modules[package] if module.name.count(".") == 1]
+        if not top_level:
+            continue
+        lines.append(f"### `{package}`")
+        lines.append("")
+        for module in sorted(top_level, key=lambda m: m.name):
+            rel_path = "/".join(module.name.split(".")) + "/index.md"
+            lines.append(f"- [`{module.name}`]({rel_path})")
+        lines.append("")
+    DOCS_ROOT.joinpath("index.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
 def main() -> None:
-    if not SRC_ROOT.exists():
-        raise SystemExit(f"Could not find source package under {SRC_ROOT!r}")
+    packages, ignore_patterns = load_autoapi_config()
     ensure_output_dir()
-    modules = discover_modules()
-    write_module_pages(modules)
-    write_root_index(modules)
-    print(f"Generated documentation for {len(modules)} modules under {DOCS_ROOT}")
+    package_modules: Dict[str, List[ModuleDoc]] = {}
+    total_modules = 0
+    for package in packages:
+        modules = [
+            module
+            for module in discover_modules(package)
+            if not _should_ignore(module.name, ignore_patterns)
+        ]
+        package_modules[package] = modules
+        write_module_pages(modules)
+        total_modules += len(modules)
+    write_root_index(package_modules)
+    print(
+        f"Generated documentation for {total_modules} modules across {len(package_modules)} packages under {DOCS_ROOT}"
+    )
 
 
 if __name__ == "__main__":

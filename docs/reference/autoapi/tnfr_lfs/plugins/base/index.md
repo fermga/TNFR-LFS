@@ -26,7 +26,7 @@ Parameters
 ----------
 snapshot:
     The spectral snapshot returned by
-    :class:`~tnfr_core.epi.NaturalFrequencyAnalyzer`.
+    :class:`~tnfr_core.equations.epi.NaturalFrequencyAnalyzer`.
 - `on_nu_f_updated(self, snapshot: 'NaturalFrequencySnapshot') -> None`
   - Hook executed after a new natural-frequency snapshot is applied.
 - `apply_coherence_index(self, coherence_index: float, *, series: Sequence[float] | None = None) -> None`

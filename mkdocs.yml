@@ -29,18 +29,23 @@ nav:
 
 plugins:
   - search
-  - autoapi:
+  - mkdocs-autoapi:
       packages:
         - tnfr_lfs
-      output_dir: reference/autoapi
+        - tnfr_core
+      autoapi_ignore:
+        - tnfr_lfs.core*
   - macros:
-      modules:
-        - docs.macros
+      modules: []
+      module_name: docs/macros
+  - mkdocstrings
   - i18n:
       default_language: en
       languages:
-        en:
+        - locale: en
           name: English
+          default: true
+          build: true
 markdown_extensions:
   - admonition
   - codehilite
