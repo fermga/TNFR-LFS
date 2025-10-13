@@ -12,7 +12,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from .epi import TelemetryRecord
+from tnfr_lfs.core.epi import TelemetryRecord
 
 TelemetryBaselineValue: TypeAlias = float | int | str | None
 
@@ -151,7 +151,7 @@ class CoherenceCalibrationStore:
     def register_lap(self, player_name: str, car_model: str, records: Sequence[TelemetryRecord]) -> None:
         if not records:
             return
-        from .epi import DeltaCalculator  # Local import to avoid circular dependency
+        from tnfr_lfs.core.epi import DeltaCalculator  # Local import to avoid circular dependency
 
         baseline = DeltaCalculator.derive_baseline(records)
         self.observe_baseline(player_name, car_model, baseline)

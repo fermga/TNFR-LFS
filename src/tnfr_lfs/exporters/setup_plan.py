@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
-from ..math.conversions import _safe_float
+from tnfr_lfs.math.conversions import _safe_float
 
 
 _PHASE_SUMMARY_ORDER: Tuple[str, ...] = ("entry", "apex", "exit")

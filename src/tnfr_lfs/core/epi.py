@@ -22,19 +22,19 @@ from typing import (
 import numpy as np
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
-    from .cache_settings import CacheOptions
-    from .coherence_calibration import CoherenceCalibrationStore
+    from tnfr_lfs.core.cache_settings import CacheOptions
+    from tnfr_lfs.core.coherence_calibration import CoherenceCalibrationStore
 
-from .cache import (
+from tnfr_lfs.core.cache import (
     cached_delta_nfr_map,
     cached_dynamic_multipliers,
     invalidate_dynamic_record,
     should_use_delta_cache,
     should_use_dynamic_cache,
 )
-from .coherence import compute_node_delta_nfr, sense_index
-from .delta_utils import distribute_weighted_delta
-from .epi_models import (
+from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
+from tnfr_lfs.core.delta_utils import distribute_weighted_delta
+from tnfr_lfs.core.epi_models import (
     BrakesNode,
     ChassisNode,
     DriverNode,
@@ -44,9 +44,9 @@ from .epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from .interfaces import SupportsTelemetrySample
-from .phases import expand_phase_alias, phase_family
-from ..plugins import TNFRPlugin
+from tnfr_lfs.core.interfaces import SupportsTelemetrySample
+from tnfr_lfs.core.phases import expand_phase_alias, phase_family
+from tnfr_lfs.plugins import TNFRPlugin
 
 __all__ = [
     "TelemetryRecord",
@@ -266,7 +266,7 @@ class NaturalFrequencyAnalyzer:
         if duration < max(0.0, self.settings.min_window_seconds - 1e-6):
             return {}, 0.0
 
-        from .spectrum import cross_spectrum, power_spectrum, estimate_sample_rate
+        from tnfr_lfs.core.spectrum import cross_spectrum, power_spectrum, estimate_sample_rate
 
         sample_rate = estimate_sample_rate(history)
         if sample_rate <= 0.0:
@@ -1551,7 +1551,7 @@ class DeltaCalculator:
         )
         previous_state = epi_value if prev_integrated_epi is None else prev_integrated_epi
         try:
-            from .operators import evolve_epi
+            from tnfr_lfs.core.operators import evolve_epi
         except ImportError:  # pragma: no cover - defensive fallback during circular import
             def evolve_epi(prev_epi: float, delta_map: Mapping[str, float], dt: float, nu_map: Mapping[str, float]):
                 nodal: Dict[str, tuple[float, float]] = {}

@@ -9,18 +9,18 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from ..configuration import load_project_config
-from ..core.cache_settings import CacheOptions
-from ..ingestion import OutSimClient
-from ..ingestion.offline import (
+from tnfr_lfs.configuration import load_project_config
+from tnfr_lfs.core.cache_settings import CacheOptions
+from tnfr_lfs.ingestion import OutSimClient
+from tnfr_lfs.ingestion.offline import (
     ReplayCSVBundleReader,
     iter_run,
     raf_to_telemetry_records,
     read_raf,
     write_run,
 )
-from ..core.epi import TelemetryRecord
-from .errors import CliError
+from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.cli.errors import CliError
 
 CONFIG_ENV_VAR = "TNFR_LFS_CONFIG"
 PROJECT_CONFIG_FILENAME = "pyproject.toml"

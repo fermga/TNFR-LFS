@@ -1,5 +1,5 @@
 """Common helpers shared across TNFR × LFS modules."""
 
-from . import immutables
+from tnfr_lfs.common import immutables
 
 __all__ = ["immutables"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from functools import lru_cache
 from typing import Dict, Tuple, Type
-from .base import TNFRPlugin
+from tnfr_lfs.plugins.base import TNFRPlugin
 
 OperatorName = str
 
@@ -27,7 +27,7 @@ class PluginMetadataError(ValueError):
 
 @lru_cache(maxsize=1)
 def _known_operator_identifiers() -> frozenset[OperatorName]:
-    from ..core import operators as _operators
+    from tnfr_lfs.core import operators as _operators
 
     return frozenset(_operators.__all__)
 

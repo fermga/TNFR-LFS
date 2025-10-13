@@ -1,9 +1,9 @@
 """Analysis helpers for TNFR × LFS."""
 
-from .abtest import ABResult, SUPPORTED_LAP_METRICS, ab_compare_by_lap
-from .brake_thermal import BrakeThermalConfig, BrakeThermalEstimator
-from .insights import InsightsResult, compute_insights
-from .robustness import compute_session_robustness
+from tnfr_lfs.analysis.abtest import ABResult, SUPPORTED_LAP_METRICS, ab_compare_by_lap
+from tnfr_lfs.analysis.brake_thermal import BrakeThermalConfig, BrakeThermalEstimator
+from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
+from tnfr_lfs.analysis.robustness import compute_session_robustness
 
 __all__ = [
     "ABResult",

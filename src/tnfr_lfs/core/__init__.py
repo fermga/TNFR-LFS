@@ -1,12 +1,12 @@
 """Core computation utilities for TNFR × LFS."""
 
-from .cache_settings import CacheOptions, DEFAULT_RECOMMENDER_CACHE_SIZE
-from .coherence import compute_node_delta_nfr, sense_index
-from .coherence_calibration import (
+from tnfr_lfs.core.cache_settings import CacheOptions, DEFAULT_RECOMMENDER_CACHE_SIZE
+from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
+from tnfr_lfs.core.coherence_calibration import (
     CalibrationSnapshot,
     CoherenceCalibrationStore,
 )
-from .epi import (
+from tnfr_lfs.core.epi import (
     DeltaCalculator,
     EPIExtractor,
     NaturalFrequencyAnalyzer,
@@ -15,8 +15,8 @@ from .epi import (
     TelemetryRecord,
     delta_nfr_by_node,
 )
-from .epi_models import EPIBundle
-from .metrics import (
+from tnfr_lfs.core.epi_models import EPIBundle
+from tnfr_lfs.core.metrics import (
     AeroBalanceDrift,
     AeroCoherence,
     BrakeHeadroom,
@@ -27,7 +27,7 @@ from .metrics import (
     resolve_aero_mechanical_coherence,
     phase_synchrony_index,
 )
-from .operators import (
+from tnfr_lfs.core.operators import (
     DissonanceBreakdown,
     acoplamiento_operator,
     coupling_operator,
@@ -46,15 +46,15 @@ from .operators import (
     TyreBalanceControlOutput,
     tyre_balance_controller,
 )
-from .resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
-from .segmentation import (
+from tnfr_lfs.core.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
+from tnfr_lfs.core.segmentation import (
     Goal,
     Microsector,
     detect_quiet_microsector_streaks,
     microsector_stability_metrics,
     segment_microsectors,
 )
-from .structural_time import compute_structural_timestamps, resolve_time_axis
+from tnfr_lfs.core.structural_time import compute_structural_timestamps, resolve_time_axis
 
 __all__ = [
     "CacheOptions",

@@ -8,23 +8,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
-from ..core.epi import TelemetryRecord
-from ..exporters import exporters_registry
-from ..ingestion.track_loader import (
+from tnfr_lfs.core.epi import TelemetryRecord
+from tnfr_lfs.exporters import exporters_registry
+from tnfr_lfs.ingestion.track_loader import (
     Track,
     TrackConfig,
     load_modifiers as load_track_modifiers,
     load_track as load_track_manifest,
     load_track_profiles,
 )
-from ..ingestion.config_loader import (
+from tnfr_lfs.ingestion.config_loader import (
     Car as PackCar,
     Profile as PackProfile,
     load_cars as _load_pack_cars_dataset,
     load_profiles as _load_pack_profiles_dataset,
 )
-from .errors import CliError
-from .io import Records, _load_records as _io_load_records, _load_replay_bundle
+from tnfr_lfs.cli.errors import CliError
+from tnfr_lfs.cli.io import Records, _load_records as _io_load_records, _load_replay_bundle
 
 __all__ = [
     "CliError",

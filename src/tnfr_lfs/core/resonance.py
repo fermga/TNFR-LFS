@@ -6,8 +6,8 @@ import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence
 
-from .interfaces import SupportsTelemetrySample
-from .spectrum import detrend, estimate_sample_rate, power_spectrum
+from tnfr_lfs.core.interfaces import SupportsTelemetrySample
+from tnfr_lfs.core.spectrum import detrend, estimate_sample_rate, power_spectrum
 
 __all__ = ["ModalPeak", "ModalAnalysis", "analyse_modal_resonance"]
 

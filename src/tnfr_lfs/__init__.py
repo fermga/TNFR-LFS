@@ -8,10 +8,10 @@ The Python sources now live under :mod:`src.tnfr_lfs`, matching the
 modern layout adopted by the project.
 """
 
-from ._version import __version__
-from .cli import format_session_messages
-from .core.coherence import compute_node_delta_nfr, sense_index
-from .core.epi import (
+from tnfr_lfs._version import __version__
+from tnfr_lfs.cli import format_session_messages
+from tnfr_lfs.core.coherence import compute_node_delta_nfr, sense_index
+from tnfr_lfs.core.epi import (
     DeltaCalculator,
     EPIExtractor,
     NaturalFrequencyAnalyzer,
@@ -19,13 +19,13 @@ from .core.epi import (
     TelemetryRecord,
     delta_nfr_by_node,
 )
-from .core.epi_models import EPIBundle
-from .core.segmentation import Goal, Microsector, segment_microsectors
-from .ingestion.live import OutSimClient
-from .recommender.rules import Recommendation, RecommendationEngine
-from .analysis.insights import InsightsResult, compute_insights
-from .exporters import exporters_registry
-from .ingestion.config_loader import (
+from tnfr_lfs.core.epi_models import EPIBundle
+from tnfr_lfs.core.segmentation import Goal, Microsector, segment_microsectors
+from tnfr_lfs.ingestion.live import OutSimClient
+from tnfr_lfs.recommender.rules import Recommendation, RecommendationEngine
+from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
+from tnfr_lfs.exporters import exporters_registry
+from tnfr_lfs.ingestion.config_loader import (
     Car,
     Profile,
     example_pipeline,
@@ -33,7 +33,7 @@ from .ingestion.config_loader import (
     load_profiles,
     resolve_targets,
 )
-from .ingestion.track_loader import (
+from tnfr_lfs.ingestion.track_loader import (
     Track,
     TrackConfig,
     assemble_session_weights,

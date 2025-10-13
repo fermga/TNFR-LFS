@@ -1,8 +1,8 @@
 """Recommendation engine used to produce setup suggestions."""
 
-from .pareto import ParetoPoint, pareto_front
-from .rules import Recommendation, RecommendationEngine
-from .search import (
+from tnfr_lfs.recommender.pareto import ParetoPoint, pareto_front
+from tnfr_lfs.recommender.rules import Recommendation, RecommendationEngine
+from tnfr_lfs.recommender.search import (
     axis_sweep_vectors,
     CoordinateDescentOptimizer,
     DecisionSpace,

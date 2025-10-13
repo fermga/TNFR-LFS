@@ -27,7 +27,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreters
     import tomli as tomllib  # type: ignore
 
-from ..ingestion.live import (
+from tnfr_lfs.ingestion.live import (
     ButtonLayout,
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT,
@@ -41,8 +41,8 @@ from ..ingestion.live import (
     OutSimUDPClient,
     TelemetryFusion,
 )
-from .osd import OSDController, TelemetryHUD
-from ..core.constants import (
+from tnfr_lfs.cli.osd import OSDController, TelemetryHUD
+from tnfr_lfs.core.constants import (
     PRESSURE_MEAN_KEYS,
     PRESSURE_STD_KEYS,
     TEMPERATURE_MEAN_KEYS,
@@ -50,23 +50,23 @@ from ..core.constants import (
     WHEEL_LABELS,
     WHEEL_SUFFIXES,
 )
-from ..core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
-from ..core.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
-from ..core.operators import orchestrate_delta_metrics
-from ..core.phases import replicate_phase_aliases
-from ..core.resonance import analyse_modal_resonance
-from ..core.segmentation import (
+from tnfr_lfs.core.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
+from tnfr_lfs.core.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
+from tnfr_lfs.core.operators import orchestrate_delta_metrics
+from tnfr_lfs.core.phases import replicate_phase_aliases
+from tnfr_lfs.core.resonance import analyse_modal_resonance
+from tnfr_lfs.core.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
     microsector_stability_metrics,
     segment_microsectors,
 )
-from ..analysis import compute_session_robustness
-from ..analysis.insights import InsightsResult, compute_insights
+from tnfr_lfs.analysis import compute_session_robustness
+from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
 
 
 logger = logging.getLogger(__name__)
-from ..exporters import (
+from tnfr_lfs.exporters import (
     REPORT_ARTIFACT_FORMATS,
     build_coherence_map_payload,
     build_delta_bifurcation_payload,
@@ -76,25 +76,25 @@ from ..exporters import (
     render_delta_bifurcation,
     render_operator_trajectories,
 )
-from ..exporters.setup_plan import SetupChange, SetupPlan
-from ..ingestion.offline import (
+from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
+from tnfr_lfs.ingestion.offline import (
     ProfileManager,
     ProfileObjectives,
     ProfileSnapshot,
     load_playbook,
     logs,
 )
-from ..recommender import Plan, RecommendationEngine, SetupPlanner
-from ..recommender.rules import ThresholdProfile
-from .session import format_session_messages
-from ..ingestion.track_loader import assemble_session_weights
-from ..ingestion.config_loader import (
+from tnfr_lfs.recommender import Plan, RecommendationEngine, SetupPlanner
+from tnfr_lfs.recommender.rules import ThresholdProfile
+from tnfr_lfs.cli.session import format_session_messages
+from tnfr_lfs.ingestion.track_loader import assemble_session_weights
+from tnfr_lfs.ingestion.config_loader import (
     Car as PackCar,
     Profile as PackProfile,
     load_lfs_class_overrides as load_pack_lfs_class_overrides,
     resolve_targets as resolve_pack_targets,
 )
-from .common import (
+from tnfr_lfs.cli.common import (
     CliError,
     TrackSelection,
     default_car_model,
@@ -110,7 +110,7 @@ from .common import (
     resolve_pack_root,
     resolve_track_argument,
 )
-from .io import Records, _persist_records
+from tnfr_lfs.cli.io import Records, _persist_records
 
 
 @dataclass(frozen=True, slots=True)
@@ -2905,7 +2905,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
 
 
 def _handle_compare(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    from . import compare as compare_command
+    from tnfr_lfs.cli import compare as compare_command
 
     return compare_command.handle(namespace, config=config)
 
@@ -3035,7 +3035,7 @@ def _handle_write_set(namespace: argparse.Namespace, *, config: Mapping[str, Any
 
 
 def _handle_pareto(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> str:
-    from . import pareto as pareto_command
+    from tnfr_lfs.cli import pareto as pareto_command
 
     return pareto_command.handle(namespace, config=config)
 

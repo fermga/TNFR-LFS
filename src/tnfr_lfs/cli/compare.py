@@ -6,11 +6,11 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict, Mapping
 
-from ..analysis import SUPPORTED_LAP_METRICS, ab_compare_by_lap
-from ..core.operators import orchestrate_delta_metrics
-from .session import format_session_messages
+from tnfr_lfs.analysis import SUPPORTED_LAP_METRICS, ab_compare_by_lap
+from tnfr_lfs.core.operators import orchestrate_delta_metrics
+from tnfr_lfs.cli.session import format_session_messages
 
-from .common import (
+from tnfr_lfs.cli.common import (
     CliError,
     add_export_argument,
     default_car_model,
@@ -26,7 +26,7 @@ from .common import (
     resolve_track_argument,
     validated_export,
 )
-from .workflows import assemble_session_payload
+from tnfr_lfs.cli.workflows import assemble_session_payload
 
 SUPPORTED_AB_METRICS: tuple[str, ...] = tuple(sorted(SUPPORTED_LAP_METRICS))
 

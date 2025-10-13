@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from warnings import warn
 
-from .core.cache import configure_cache_from_options
-from .core.cache_settings import (
+from tnfr_lfs.core.cache import configure_cache_from_options
+from tnfr_lfs.core.cache_settings import (
     CacheOptions,
     DEFAULT_DYNAMIC_CACHE_SIZE,
     DEFAULT_RECOMMENDER_CACHE_SIZE,

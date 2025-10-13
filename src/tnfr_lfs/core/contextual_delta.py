@@ -18,8 +18,8 @@ try:  # pragma: no cover - ``tomllib`` only ships with Python ≥ 3.11
 except ModuleNotFoundError:  # pragma: no cover - fall back to ``tomli`` in 3.10
     import tomli as tomllib  # type: ignore
 
-from ..data import CONTEXT_FACTORS_RESOURCE
-from .interfaces import SupportsContextBundle, SupportsContextRecord
+from tnfr_lfs.data import CONTEXT_FACTORS_RESOURCE
+from tnfr_lfs.core.interfaces import SupportsContextBundle, SupportsContextRecord
 
 __all__ = [
     "ContextFactors",

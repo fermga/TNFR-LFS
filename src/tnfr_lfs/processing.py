@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import warnings
 
-from .analysis.insights import InsightsResult, compute_insights
+from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
 
 warnings.warn(
     "'tnfr_lfs.processing' is deprecated; use 'tnfr_lfs.analysis.insights' instead.",

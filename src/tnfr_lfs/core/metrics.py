@@ -10,16 +10,16 @@ from dataclasses import dataclass, field
 from statistics import mean, pvariance, pstdev
 from typing import Iterable, Iterator, Mapping, Sequence, Tuple
 
-from .contextual_delta import (
+from tnfr_lfs.core.contextual_delta import (
     ContextMatrix,
     apply_contextual_delta,
     load_context_matrix,
     resolve_context_from_bundle,
     resolve_context_from_record,
 )
-from .dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
-from .epi import delta_nfr_by_node
-from .interfaces import (
+from tnfr_lfs.core.dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
+from tnfr_lfs.core.epi import delta_nfr_by_node
+from tnfr_lfs.core.interfaces import (
     SupportsChassisNode,
     SupportsContextBundle,
     SupportsContextRecord,
@@ -29,16 +29,16 @@ from .interfaces import (
     SupportsTelemetrySample,
     SupportsTyresNode,
 )
-from .phases import replicate_phase_aliases
-from .spectrum import (
+from tnfr_lfs.core.phases import replicate_phase_aliases
+from tnfr_lfs.core.spectrum import (
     PhaseCorrelation,
     motor_input_correlations,
     phase_alignment,
     phase_to_latency_ms,
 )
-from .resonance import estimate_excitation_frequency
-from .structural_time import resolve_time_axis
-from .utils import normalised_entropy
+from tnfr_lfs.core.resonance import estimate_excitation_frequency
+from tnfr_lfs.core.structural_time import resolve_time_axis
+from tnfr_lfs.core.utils import normalised_entropy
 
 __all__ = [
     "AeroBalanceDrift",

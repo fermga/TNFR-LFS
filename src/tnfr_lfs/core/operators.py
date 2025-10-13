@@ -23,24 +23,24 @@ from typing import (
     cast,
 )
 
-from .constants import WHEEL_SUFFIXES
+from tnfr_lfs.core.constants import WHEEL_SUFFIXES
 
-from .contextual_delta import (
+from tnfr_lfs.core.contextual_delta import (
     apply_contextual_delta,
     load_context_matrix,
     resolve_context_from_bundle,
     resolve_series_context,
 )
-from .metrics import compute_window_metrics
-from .dissonance import compute_useful_dissonance_stats
-from .epi import (
+from tnfr_lfs.core.metrics import compute_window_metrics
+from tnfr_lfs.core.dissonance import compute_useful_dissonance_stats
+from tnfr_lfs.core.epi import (
     EPIExtractor,
     NaturalFrequencyAnalyzer,
     TelemetryRecord,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from .epi_models import (
+from tnfr_lfs.core.epi_models import (
     EPIBundle,
     BrakesNode,
     ChassisNode,
@@ -50,13 +50,13 @@ from .epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from .phases import LEGACY_PHASE_MAP
-from .archetypes import ARCHETYPE_MEDIUM
-from .operator_detection import (
+from tnfr_lfs.core.phases import LEGACY_PHASE_MAP
+from tnfr_lfs.core.archetypes import ARCHETYPE_MEDIUM
+from tnfr_lfs.core.operator_detection import (
     normalize_structural_operator_identifier,
     silence_event_payloads,
 )
-from .interfaces import (
+from tnfr_lfs.core.interfaces import (
     SupportsChassisNode,
     SupportsEPIBundle,
     SupportsMicrosector,
@@ -64,7 +64,7 @@ from .interfaces import (
     SupportsTelemetrySample,
     SupportsTyresNode,
 )
-from ..plugins import TNFRPlugin
+from tnfr_lfs.plugins import TNFRPlugin
 
 
 _APEX_PHASE_CANDIDATES: Tuple[str, ...] = LEGACY_PHASE_MAP.get("apex", tuple())

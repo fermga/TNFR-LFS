@@ -1,5 +1,5 @@
 """Mathematical helpers for TNFR × LFS."""
 
-from . import conversions
+from tnfr_lfs.math import conversions
 
 __all__ = ["conversions"]
