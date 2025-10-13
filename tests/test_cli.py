@@ -5,8 +5,9 @@ import itertools
 import json
 import re
 import argparse
-from collections.abc import Callable, Iterable, Mapping
-from typing import cast
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Protocol, cast
 from textwrap import dedent
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,7 +25,7 @@ from tnfr_lfs.ingestion.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
 from tnfr_lfs.core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
 from tnfr_lfs.configuration import load_project_config
-from tests.conftest import write_pyproject
+from tests.conftest import _CLI_CONFIG_CASES, write_pyproject
 from tests.helpers import (
     DummyBundle,
     create_cli_config_pack,
@@ -118,86 +119,159 @@ def prepare_diagnose_environment(
     return _prepare
 
 
-def test_run_cli_dispatches_registered_handler(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, Mapping[str, object]]] = []
+class _DummyHandler(Protocol):
+    def __call__(
+        self, namespace: argparse.Namespace, *, config: Mapping[str, object]
+    ) -> object:
+        ...
 
-    def dummy_handler(
+
+@dataclass(slots=True)
+class _CliInvocation:
+    namespace: argparse.Namespace
+    config: Mapping[str, object]
+
+
+@dataclass(slots=True)
+class _RunCliCaseContext:
+    tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch
+    cli_config_case: tuple[
+        str, Mapping[str, object], Callable[[Path], None] | None
+    ] | None
+    expected_sections: Mapping[str, object] | None = None
+    pyproject_path: Path | None = None
+
+
+@dataclass(slots=True)
+class _RunCliCase:
+    id: str
+    args: Sequence[str]
+    handler: _DummyHandler
+    assertion: Callable[[
+        _RunCliCaseContext, list[_CliInvocation], object
+    ], None]
+    setup: Callable[[
+        _RunCliCaseContext
+    ], None] | None = None
+    cli_config_case_id: str | None = None
+
+
+def _build_dummy_cli(
+    monkeypatch: pytest.MonkeyPatch, handler: _DummyHandler
+) -> list[_CliInvocation]:
+    invocations: list[_CliInvocation] = []
+
+    def _recording_handler(
         namespace: argparse.Namespace, *, config: Mapping[str, object]
-    ) -> str:
-        calls.append((str(namespace.command), config))
-        return "dummy-result"
-
-    def register_dummy(
-        subparsers: argparse._SubParsersAction[argparse.ArgumentParser], *, config: Mapping[str, object]
-    ) -> None:
-        parser = subparsers.add_parser("dummy", help="Dummy command used for testing.")
-        parser.set_defaults(handler=dummy_handler)
-
-    def build_parser_stub(config: Mapping[str, object] | None = None) -> argparse.ArgumentParser:
-        parser = argparse.ArgumentParser()
-        subparsers = parser.add_subparsers(dest="command", required=True)
-        register_dummy(subparsers, config=config or {})
-        return parser
-
-    monkeypatch.setattr(cli_module, "build_parser", build_parser_stub)
-    monkeypatch.setattr(cli_module, "load_cli_config", lambda path: {})
-
-    result = run_cli(["dummy"])
-
-    assert result == "dummy-result"
-    assert len(calls) == 1
-    command, config = calls[0]
-    assert command == "dummy"
-    assert config.get("logging") == {
-        "level": "info",
-        "output": "stderr",
-        "format": "json",
-    }
-
-
-@pytest.mark.parametrize(
-    "cli_config_case",
-    [pytest.param("logging-disabled-cache", id="logging-disabled-cache")],
-    indirect=True,
-)
-def test_run_cli_loads_pyproject_config(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    cli_config_case: tuple[str, Mapping[str, object], Callable[[Path], None] | None],
-) -> None:
-    toml_text, expected_sections, setup = cli_config_case
-    monkeypatch.chdir(tmp_path)
-    pyproject_path = write_pyproject(tmp_path, toml_text)
-    if callable(setup):
-        setup(tmp_path)
-
-    captured_configs: list[Mapping[str, object]] = []
-
-    def dummy_handler(
-        namespace: argparse.Namespace, *, config: Mapping[str, object]
-    ) -> str:
-        captured_configs.append(config)
-        return "ok"
+    ) -> object:
+        invocations.append(_CliInvocation(namespace=namespace, config=config))
+        return handler(namespace, config=config)
 
     def build_parser_stub(
         config: Mapping[str, object] | None = None,
     ) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command", required=True)
-        parser_dummy = subparsers.add_parser("dummy")
-        parser_dummy.set_defaults(handler=dummy_handler)
+        parser_dummy = subparsers.add_parser(
+            "dummy", help="Dummy command used for testing."
+        )
+        parser_dummy.set_defaults(handler=_recording_handler)
         return parser
 
     monkeypatch.setattr(cli_module, "build_parser", build_parser_stub)
+    return invocations
 
-    result = run_cli(["dummy"])
 
+def _load_cli_config_case(
+    case_id: str,
+) -> tuple[str, Mapping[str, object], Callable[[Path], None] | None]:
+    case = _CLI_CONFIG_CASES[case_id]
+    return case.toml_text, dict(case.expected_sections), case.setup
+
+
+def _setup_dispatch_case(context: _RunCliCaseContext) -> None:
+    context.monkeypatch.setattr(cli_module, "load_cli_config", lambda path: {})
+
+
+def _assert_dispatch_case(
+    context: _RunCliCaseContext, invocations: list[_CliInvocation], result: object
+) -> None:
+    assert result == "dummy-result"
+    assert len(invocations) == 1
+    invocation = invocations[0]
+    assert invocation.namespace.command == "dummy"
+    assert invocation.config.get("logging") == {
+        "level": "info",
+        "output": "stderr",
+        "format": "json",
+    }
+
+
+def _setup_pyproject_case(context: _RunCliCaseContext) -> None:
+    assert context.cli_config_case is not None
+    toml_text, expected_sections, setup = context.cli_config_case
+    context.monkeypatch.chdir(context.tmp_path)
+    context.pyproject_path = write_pyproject(context.tmp_path, toml_text)
+    context.expected_sections = expected_sections
+    if callable(setup):
+        setup(context.tmp_path)
+
+
+def _assert_pyproject_case(
+    context: _RunCliCaseContext, invocations: list[_CliInvocation], result: object
+) -> None:
     assert result == "ok"
-    assert len(captured_configs) == 1
-    config = captured_configs[0]
-    assert config["_config_path"] == str(pyproject_path.resolve())
-    for section, expected in expected_sections.items():
-        assert config[section] == expected
+    assert len(invocations) == 1
+    invocation = invocations[0]
+    assert invocation.namespace.command == "dummy"
+    assert context.pyproject_path is not None
+    assert invocation.config["_config_path"] == str(
+        context.pyproject_path.resolve()
+    )
+    assert context.expected_sections is not None
+    for section, expected in context.expected_sections.items():
+        assert invocation.config[section] == expected
+
+
+_RUN_CLI_CASES: tuple[_RunCliCase, ...] = (
+    _RunCliCase(
+        id="dispatches-registered-handler",
+        args=("dummy",),
+        handler=lambda namespace, *, config: "dummy-result",
+        assertion=_assert_dispatch_case,
+        setup=_setup_dispatch_case,
+    ),
+    _RunCliCase(
+        id="loads-pyproject-config",
+        args=("dummy",),
+        handler=lambda namespace, *, config: "ok",
+        assertion=_assert_pyproject_case,
+        setup=_setup_pyproject_case,
+        cli_config_case_id="logging-disabled-cache",
+    ),
+)
+
+
+@pytest.mark.parametrize("case", _RUN_CLI_CASES, ids=lambda case: case.id)
+def test_run_cli_cases(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, case: _RunCliCase
+) -> None:
+    cli_config_case = (
+        _load_cli_config_case(case.cli_config_case_id)
+        if case.cli_config_case_id is not None
+        else None
+    )
+    context = _RunCliCaseContext(
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        cli_config_case=cli_config_case,
+    )
+    if case.setup is not None:
+        case.setup(context)
+    invocations = _build_dummy_cli(monkeypatch, case.handler)
+    result = run_cli(list(case.args))
+    case.assertion(context, invocations, result)
 
 
 def test_run_cli_requires_telemetry_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
