@@ -17,7 +17,12 @@ from tnfr_lfs.cli import common as cli_common
 from tnfr_lfs.cli import io as cli_io
 from tnfr_lfs.cli.common import CliError
 from tests.conftest import write_pyproject
-from tests.helpers import DummyRecord, build_load_parquet_args, build_persist_parquet_args
+from tests.helpers import (
+    DummyRecord,
+    build_load_parquet_args,
+    build_persist_parquet_args,
+    pandas_engine_failure,
+)
 
 
 @pytest.mark.parametrize(
@@ -258,22 +263,30 @@ def test_load_records_converts_json_payload(monkeypatch: pytest.MonkeyPatch, tmp
     assert records[0].payload["gear"] == 3
 
 
-def test_load_records_parquet_requires_engine(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize(
+    ("target", "arguments_builder", "mode"),
+    [
+        (cli_io._load_records, build_load_parquet_args, "load"),
+        (cli_io._persist_records, build_persist_parquet_args, "persist"),
+    ],
+    ids=["load", "persist"],
+)
+def test_parquet_engine_requires_compatible_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    target,
+    arguments_builder,
+    mode: str,
 ) -> None:
-    telemetry_path = tmp_path / "baseline.parquet"
-    telemetry_path.write_bytes(b"PAR1\x00\x00\x00PAR1")
+    args, kwargs, destination = arguments_builder(tmp_path)
 
-    dummy = types.ModuleType("pandas")
-
-    def read_parquet(path: Path) -> None:  # type: ignore[no-untyped-def]
-        raise ImportError("Unable to find a usable engine")
-
-    dummy.read_parquet = read_parquet  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "pandas", dummy)
+    pandas_engine_failure(monkeypatch, mode)
 
     with pytest.raises(RuntimeError, match="compatible engine"):
-        cli_io._load_records(telemetry_path)
+        target(*args, **kwargs)
+
+    if destination is not None:
+        assert not destination.exists()
 
 
 @pytest.mark.parametrize(
@@ -313,35 +326,4 @@ def test_parquet_operations_require_pandas(
 
     if destination is not None:
         assert not destination.exists()
-
-
-def test_persist_records_parquet_requires_engine(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    destination = tmp_path / "baseline.parquet"
-    records = [DummyRecord(1)]
-
-    original = sys.modules.pop("pandas", None)
-
-    class DummyFrame:
-        def __init__(self, data):  # type: ignore[no-untyped-def]
-            self.data = data
-
-        def to_parquet(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
-            raise ImportError("Unable to find a usable engine")
-
-    dummy = types.ModuleType("pandas")
-    dummy.DataFrame = lambda data: DummyFrame(data)  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "pandas", dummy)
-
-    try:
-        with pytest.raises(RuntimeError, match="compatible engine"):
-            cli_io._persist_records(records, destination, "parquet")
-    finally:
-        if original is not None:
-            sys.modules["pandas"] = original
-        else:
-            sys.modules.pop("pandas", None)
-
-    assert not destination.exists()
 
