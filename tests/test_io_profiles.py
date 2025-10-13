@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from tnfr_lfs.ingestion.offline import ProfileManager
+from tnfr_lfs.telemetry.offline import ProfileManager
 
 
 CAR_MODEL = "FZR"

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from tnfr_lfs.ingestion.offline import DeterministicReplayer, iter_run, write_run
+from tnfr_lfs.telemetry.offline import DeterministicReplayer, iter_run, write_run
 
 from tests.helpers import build_telemetry_record
 

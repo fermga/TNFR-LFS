@@ -13,9 +13,9 @@ import time
 
 import pytest
 
-from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
-from tnfr_lfs.ingestion import outsim_udp as outsim_module
-from tnfr_lfs.ingestion.live import (
+from tnfr_lfs.telemetry import outgauge_udp as outgauge_module
+from tnfr_lfs.telemetry import outsim_udp as outsim_module
+from tnfr_lfs.telemetry.live import (
     DEFAULT_SCHEMA,
     LEGACY_COLUMNS,
     OPTIONAL_SCHEMA_COLUMNS,
@@ -24,8 +24,8 @@ from tnfr_lfs.ingestion.live import (
     OutSimUDPClient,
     TelemetryFusion,
 )
-from tnfr_lfs.ingestion.outgauge_udp import FrozenOutGaugePacket, OutGaugePacket
-from tnfr_lfs.ingestion.outsim_udp import FrozenOutSimPacket, OutSimPacket
+from tnfr_lfs.telemetry.outgauge_udp import FrozenOutGaugePacket, OutGaugePacket
+from tnfr_lfs.telemetry.outsim_udp import FrozenOutSimPacket, OutSimPacket
 from tests.helpers import (
     QueueUDPSocket,
     assert_udp_pending_flush,

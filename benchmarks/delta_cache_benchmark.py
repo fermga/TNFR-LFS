@@ -23,7 +23,7 @@ from tnfr_core.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from tnfr_lfs.ingestion.offline import ReplayCSVBundleReader
+from tnfr_lfs.telemetry.offline import ReplayCSVBundleReader
 
 _DEFAULT_BUNDLE = data_root() / "test1.zip"
 

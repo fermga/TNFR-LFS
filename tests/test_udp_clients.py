@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from tnfr_lfs.ingestion.live import OutGaugePacket
+from tnfr_lfs.telemetry.live import OutGaugePacket
 
 from tests.helpers import (
     assert_async_client_close_wakes,
@@ -94,7 +94,7 @@ def test_udp_recv_returns_quickly_when_socket_idle(
     patch_udp_client_socket(
         monkeypatch, client, address=udp_client_spec["default_address"]
     )
-    monkeypatch.setattr("tnfr_lfs.ingestion._socket_poll.select.select", fake_select)
+    monkeypatch.setattr("tnfr_lfs.telemetry._socket_poll.select.select", fake_select)
 
     start = time.perf_counter()
     try:

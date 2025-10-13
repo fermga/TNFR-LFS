@@ -20,7 +20,7 @@ from typing import (
     Tuple,
 )
 
-from tnfr_lfs.ingestion import (
+from tnfr_lfs.telemetry import (
     ButtonEvent,
     ButtonLayout,
     InSimClient,

@@ -4,9 +4,9 @@ import struct
 from types import SimpleNamespace
 from typing import Any, Dict
 
-from tnfr_lfs.ingestion.live import OutSimWheelState
-from tnfr_lfs.ingestion.outgauge_udp import FrozenOutGaugePacket, OutGaugePacket
-from tnfr_lfs.ingestion.outsim_udp import (
+from tnfr_lfs.telemetry.live import OutSimWheelState
+from tnfr_lfs.telemetry.outgauge_udp import FrozenOutGaugePacket, OutGaugePacket
+from tnfr_lfs.telemetry.outsim_udp import (
     FrozenOutSimPacket,
     FrozenOutSimWheelState,
     OutSimPacket,

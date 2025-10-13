@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tnfr_lfs.ingestion.offline import ReplayCSVBundleReader
+from tnfr_lfs.telemetry.offline import ReplayCSVBundleReader
 from tnfr_lfs.resources import data_root
 from tests.helpers import (
     is_numeric_series,

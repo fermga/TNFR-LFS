@@ -10,12 +10,12 @@ To create a bespoke preset:
 
 1. Duplicate the closest preset file and adjust the per-phase targets.
 2. Drop the customised file into your project (e.g. alongside
-   `profiles.toml`) and load it with :class:`tnfr_lfs.ingestion.offline.ProfileManager`.
+   `profiles.toml`) and load it with :class:`tnfr_lfs.telemetry.offline.ProfileManager`.
 3. When you call :meth:`ProfileManager.resolve`, the manager now pulls the
    base :class:`tnfr_lfs.recommender.rules.ThresholdProfile` for the
    selected car/track combination before applying your overrides. This
    preserves any track-level `phase_weights` and exposes them via the
-   returned :class:`tnfr_lfs.ingestion.offline.ProfileSnapshot`. 【F:tnfr_lfs/ingestion/offline/profiles.py†L140-L176】
+   returned :class:`tnfr_lfs.telemetry.offline.ProfileSnapshot`. 【F:tnfr_lfs/ingestion/offline/profiles.py†L140-L176】
 
 The CLI/HUD automatically uses the resolved `phase_weights` when
 segmenting microsectors, so presets immediately influence the

@@ -18,8 +18,8 @@ JSONL baseline. The CLI inspects the suffix of every telemetry source
 (`.raf`, `.csv`, `.jsonl`, `.parquet`…) and automatically routes it
 through the appropriate parser. CSV inputs continue to use the
 `--simulate` flag (`tnfr_lfs baseline runs/demo.jsonl --simulate "$(python -c 'from tnfr_lfs.examples.quickstart_dataset import dataset_path; print(dataset_path())')"`),
-while RAF captures are parsed natively through `tnfr_lfs.ingestion.offline.read_raf`
-and `tnfr_lfs.ingestion.offline.raf_to_telemetry_records`. All TNFR indicators (`ΔNFR`, the
+while RAF captures are parsed natively through `tnfr_lfs.telemetry.offline.read_raf`
+and `tnfr_lfs.telemetry.offline.raf_to_telemetry_records`. All TNFR indicators (`ΔNFR`, the
 nodal projections `∇NFR∥`/`∇NFR⊥`, `ν_f`, `C(t)` and nodal derivatives)
 are computed from the Live for Speed OutSim/OutGauge telemetry streams,
 so make sure the simulator exposes both feeds before running any
@@ -379,7 +379,7 @@ and expected effects to provide a readable handover document while also
 surfacing the empirical Jacobian (ΔSi/Δp and Δ∫|ΔNFR|/Δp) gathered during
 the micro-delta experiments.
 
-Use :meth:`tnfr_lfs.ingestion.offline.ProfileManager.update_aero_profile` to persist
+Use :meth:`tnfr_lfs.telemetry.offline.ProfileManager.update_aero_profile` to persist
 the ``race`` and ``stint_save`` aero targets mentioned in the HUD.  The rule
 engine reads them back via the profile snapshot so the new aero coherence
 operator only raises wing tweaks when the stored baseline (low speed)

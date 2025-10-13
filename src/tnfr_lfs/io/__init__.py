@@ -1,4 +1,4 @@
-"""IO utilities for TNFR × LFS (deprecated; use :mod:`tnfr_lfs.ingestion.offline`)."""
+"""IO utilities for TNFR × LFS (deprecated; use :mod:`tnfr_lfs.telemetry.offline`)."""
 
 from __future__ import annotations
 
@@ -30,13 +30,13 @@ __all__ = [
 ]
 
 def __getattr__(name: str) -> Any:
-    from tnfr_lfs.ingestion import offline as _offline
+    from tnfr_lfs.telemetry import offline as _offline
 
     if hasattr(_offline, name):
         if name not in _WARNED_NAMES:
             warnings.warn(
                 "'tnfr_lfs.io' is deprecated and will be removed in a future release; "
-                "import from 'tnfr_lfs.ingestion.offline' instead.",
+                "import from 'tnfr_lfs.telemetry.offline' instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -48,6 +48,6 @@ def __getattr__(name: str) -> Any:
 
 
 def __dir__() -> list[str]:
-    from tnfr_lfs.ingestion import offline as _offline
+    from tnfr_lfs.telemetry import offline as _offline
 
     return sorted(set(__all__) | set(dir(_offline)))

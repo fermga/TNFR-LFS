@@ -74,10 +74,10 @@ if importlib.util.find_spec("pytest_cov") is None:
 from tnfr_lfs.resources import data_root
 from tnfr_lfs.examples import quickstart_dataset
 
-from tnfr_lfs.ingestion import outgauge_udp as outgauge_module
-from tnfr_lfs.ingestion import outsim_udp as outsim_module
-from tnfr_lfs.ingestion.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
-from tnfr_lfs.ingestion.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
+from tnfr_lfs.telemetry import outgauge_udp as outgauge_module
+from tnfr_lfs.telemetry import outsim_udp as outsim_module
+from tnfr_lfs.telemetry.outgauge_udp import AsyncOutGaugeUDPClient, OutGaugeUDPClient
+from tnfr_lfs.telemetry.outsim_udp import AsyncOutSimUDPClient, OutSimUDPClient
 
 from tests.helpers import (
     _populate_hud,

@@ -46,7 +46,7 @@ from tnfr_core.equations.phases import LEGACY_PHASE_MAP, expand_phase_alias, pha
 from tnfr_lfs.math.conversions import _safe_float
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from tnfr_lfs.ingestion.offline.profiles import AeroProfile, ProfileManager
+    from tnfr_lfs.telemetry.offline.profiles import AeroProfile, ProfileManager
 from tnfr_core.metrics.segmentation import (
     Goal,
     Microsector,

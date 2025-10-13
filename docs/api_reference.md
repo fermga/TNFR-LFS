@@ -22,7 +22,7 @@ provides quick links to the modules that teams consult most often.
 
 These links point straight to the most common modules in the AutoAPI tree:
 
-- [`tnfr_lfs.ingestion`](reference/autoapi/tnfr_lfs/ingestion/index.md) covers
+- [`tnfr_lfs.telemetry`](reference/autoapi/tnfr_lfs/ingestion/index.md) covers
   live telemetry capture, file replay helpers and session configuration
   loaders.
 - [`tnfr_core.epi`](reference/autoapi/tnfr_core/epi/index.md) documents

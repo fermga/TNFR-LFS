@@ -27,7 +27,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - fallback for older interpreters
     import tomli as tomllib  # type: ignore
 
-from tnfr_lfs.ingestion.live import (
+from tnfr_lfs.telemetry.live import (
     ButtonLayout,
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT,
@@ -77,7 +77,7 @@ from tnfr_lfs.exporters import (
     render_operator_trajectories,
 )
 from tnfr_lfs.exporters.setup_plan import SetupChange, SetupPlan
-from tnfr_lfs.ingestion.offline import (
+from tnfr_lfs.telemetry.offline import (
     ProfileManager,
     ProfileObjectives,
     ProfileSnapshot,
@@ -87,8 +87,8 @@ from tnfr_lfs.ingestion.offline import (
 from tnfr_lfs.recommender import Plan, RecommendationEngine, SetupPlanner
 from tnfr_lfs.recommender.rules import ThresholdProfile
 from tnfr_lfs.cli.session import format_session_messages
-from tnfr_lfs.ingestion.track_loader import assemble_session_weights
-from tnfr_lfs.ingestion.config_loader import (
+from tnfr_lfs.telemetry.track_loader import assemble_session_weights
+from tnfr_lfs.telemetry.config_loader import (
     Car as PackCar,
     Profile as PackProfile,
     load_lfs_class_overrides as load_pack_lfs_class_overrides,

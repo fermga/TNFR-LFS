@@ -11,7 +11,7 @@ from tnfr_lfs.analysis.robustness import compute_session_robustness
 from tnfr_core.equations.epi import EPIExtractor, TelemetryRecord
 from tnfr_core.equations.epi_models import EPIBundle
 from tnfr_core.metrics.segmentation import Microsector, segment_microsectors
-from tnfr_lfs.ingestion.offline import ProfileManager, ProfileSnapshot
+from tnfr_lfs.telemetry.offline import ProfileManager, ProfileSnapshot
 from tnfr_lfs.recommender import RecommendationEngine
 from tnfr_lfs.recommender.rules import ThresholdProfile
 

@@ -8,8 +8,8 @@ import struct
 import time
 from typing import Callable
 
-from tnfr_lfs.ingestion.outgauge_udp import OutGaugePacket
-from tnfr_lfs.ingestion.outsim_udp import OutSimPacket
+from tnfr_lfs.telemetry.outgauge_udp import OutGaugePacket
+from tnfr_lfs.telemetry.outsim_udp import OutSimPacket
 
 
 def _format(label: str, durations: list[float], iterations: int) -> str:
