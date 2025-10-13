@@ -28,14 +28,13 @@ from tnfr_lfs.ingestion.outgauge_udp import FrozenOutGaugePacket, OutGaugePacket
 from tnfr_lfs.ingestion.outsim_udp import FrozenOutSimPacket, OutSimPacket
 from tests.helpers import (
     QueueUDPSocket,
-    append_once_on_wait,
+    assert_udp_pending_flush,
     build_extended_outsim_packet,
     build_extended_outsim_payload,
     build_outgauge_payload,
     build_outsim_payload,
     build_sample_outgauge_packet,
     build_synthetic_packet_pair,
-    make_wait_stub,
 )
 @pytest.fixture
 def extended_outsim_payload() -> bytes:
@@ -605,50 +604,6 @@ def test_outsim_udp_client_reorders_and_tracks_losses(monkeypatch, caplog) -> No
     client.close()
 
 
-def test_outsim_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -> None:
-    payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
-        [
-            (build_outsim_payload(100), ("127.0.0.1", 4123)),
-            (build_outsim_payload(120), ("127.0.0.1", 4123)),
-        ]
-    )
-    dummy_socket = QueueUDPSocket(queue=payloads)
-    monkeypatch.setattr(outsim_module.socket, "socket", lambda *_, **__: dummy_socket)
-    client = outsim_module.OutSimUDPClient(
-        host="127.0.0.1",
-        port=0,
-        timeout=0.2,
-        retries=2,
-        reorder_grace=0.5,
-    )
-
-    packet = client.recv()
-    assert packet is not None
-    packet.release()
-
-    fake_wait, wait_calls = make_wait_stub(
-        hook=append_once_on_wait(
-            payloads,
-            lambda: (build_outsim_payload(140), ("127.0.0.1", 4123)),
-        )
-    )
-    monkeypatch.setattr(outsim_module, "wait_for_read_ready", fake_wait)
-
-    start = time.perf_counter()
-    next_packet = client.recv()
-    elapsed = time.perf_counter() - start
-
-    try:
-        assert next_packet is not None
-        assert next_packet.time == 120
-        assert elapsed < 0.2
-        assert wait_calls
-    finally:
-        if next_packet is not None:
-            next_packet.release()
-        client.close()
-
-
 def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
     payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
         [
@@ -712,45 +667,30 @@ def test_outgauge_udp_client_recovers_late_packets(monkeypatch, caplog) -> None:
     client.close()
 
 
-def test_outgauge_udp_client_flushes_pending_when_successor_arrives(monkeypatch) -> None:
-    payloads: deque[tuple[bytes, tuple[str, int]]] = deque(
-        [
-            (build_outgauge_payload(5, 50, layout="GP"), ("127.0.0.1", 3000)),
-            (build_outgauge_payload(6, 60, layout="GP"), ("127.0.0.1", 3000)),
-        ]
+@pytest.mark.parametrize(
+    "udp_client_spec",
+    ["outsim", "outgauge"],
+    indirect=True,
+    ids=("outsim", "outgauge"),
+)
+def test_udp_pending_flushes_when_successor_arrives(
+    monkeypatch: pytest.MonkeyPatch, udp_client_spec: dict[str, object]
+) -> None:
+    expected_first, expected_second = udp_client_spec["pending_expected_values"]
+    assert_udp_pending_flush(
+        monkeypatch,
+        client_factory=lambda: udp_client_spec["sync_constructor"](
+            port=0, timeout=0.2, retries=2, reorder_grace=0.5
+        ),
+        module=udp_client_spec["module"],
+        payload_factory=udp_client_spec["payload_factory"],
+        first_spec=udp_client_spec["pending_first"],
+        successor_spec=udp_client_spec["pending_successor"],
+        appended_spec=udp_client_spec["pending_appended"],
+        expected_first=expected_first,
+        expected_second=expected_second,
+        value_extractor=udp_client_spec["value_extractor"],
+        max_elapsed=0.2,
+        address=udp_client_spec["default_address"],
+        release_packets=udp_client_spec["release_packets"],
     )
-    dummy_socket = QueueUDPSocket(queue=payloads)
-    monkeypatch.setattr(outgauge_module.socket, "socket", lambda *_, **__: dummy_socket)
-    client = outgauge_module.OutGaugeUDPClient(
-        host="127.0.0.1",
-        port=0,
-        timeout=0.2,
-        retries=2,
-        reorder_grace=0.5,
-    )
-
-    packet = client.recv()
-    assert packet is not None
-    packet.release()
-
-    fake_wait, wait_calls = make_wait_stub(
-        hook=append_once_on_wait(
-            payloads,
-            lambda: (build_outgauge_payload(7, 70, layout="GP"), ("127.0.0.1", 3000)),
-        )
-    )
-    monkeypatch.setattr(outgauge_module, "wait_for_read_ready", fake_wait)
-
-    start = time.perf_counter()
-    next_packet = client.recv()
-    elapsed = time.perf_counter() - start
-
-    try:
-        assert next_packet is not None
-        assert next_packet.packet_id == 6
-        assert elapsed < 0.2
-        assert wait_calls
-    finally:
-        if next_packet is not None:
-            next_packet.release()
-        client.close()
