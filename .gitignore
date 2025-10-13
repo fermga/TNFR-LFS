@@ -1,3 +1,7 @@
 # Auto-generated docs are committed so the site builds without MkDocs plugins
 !/docs/reference/autoapi/
 !/docs/reference/autoapi/**
+
+# Ignore generated test reports while keeping the directory structure
+tests/_report/*
+!tests/_report/.gitkeep
