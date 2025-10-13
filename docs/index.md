@@ -39,7 +39,7 @@ helpers end-to-end.【F:tests/test_ingestion.py†L1-L376】
     walkthrough that onboards you from a fresh environment to a race-ready
     workflow.
 
-TNFR × LFS targets Python 3.9+ environments and Live for Speed telemetry
+TNFR × LFS targets Python 3.10+ environments and Live for Speed telemetry
 streams. The quickstart covers dependency setup, the baseline scenario, the
 simulator configuration and the report validation process without duplicating
 those instructions here.
