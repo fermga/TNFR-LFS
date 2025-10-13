@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+import sys
+import types
 
 import pytest
 
@@ -102,3 +104,43 @@ def build_persist_parquet_args(
     destination = tmp_path / "baseline.parquet"
     records = [DummyRecord(1)]
     return (records, destination, "parquet"), {}, destination
+
+
+def pandas_engine_failure(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+    """Install a dummy ``pandas`` module that fails parquet operations."""
+
+    fake_module = types.ModuleType("pandas")
+
+    if mode == "load":
+
+        def read_parquet(*_args: object, **_kwargs: object) -> None:
+            raise ImportError("Unable to find a usable engine")
+
+        class _DataFrame:  # pragma: no cover - defined for interface completeness
+            def __init__(self, *_args: object, **_kwargs: object) -> None:
+                self._args = _args
+                self._kwargs = _kwargs
+
+        fake_module.read_parquet = read_parquet  # type: ignore[attr-defined]
+        fake_module.DataFrame = _DataFrame  # type: ignore[attr-defined]
+    elif mode == "persist":
+
+        class _Frame:
+            def __init__(self, _data: object) -> None:
+                self._data = _data
+
+            def to_parquet(self, *_args: object, **_kwargs: object) -> None:
+                raise ImportError("Unable to find a usable engine")
+
+        def DataFrame(data: object) -> _Frame:  # type: ignore[no-redef]
+            return _Frame(data)
+
+        def read_parquet(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("read_parquet should not be invoked during persist")
+
+        fake_module.DataFrame = DataFrame  # type: ignore[attr-defined]
+        fake_module.read_parquet = read_parquet  # type: ignore[attr-defined]
+    else:  # pragma: no cover - defensive programming
+        raise ValueError(f"Unsupported mode: {mode}")
+
+    monkeypatch.setitem(sys.modules, "pandas", fake_module)

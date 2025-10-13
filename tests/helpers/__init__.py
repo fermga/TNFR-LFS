@@ -130,6 +130,7 @@ _MODULE_EXPORTS: Tuple[Tuple[str, Iterable[str]], ...] = (
             "DummyRecord",
             "build_load_parquet_args",
             "build_persist_parquet_args",
+            "pandas_engine_failure",
         ),
     ),
     ("osd", ("DummyHUD", "_populate_hud", "_window_metrics_from_parallel_turn")),
@@ -173,6 +174,7 @@ if TYPE_CHECKING:
         DummyRecord,
         build_load_parquet_args,
         build_persist_parquet_args,
+        pandas_engine_failure,
         instrument_prepare_pack_context,
         run_cli_in_tmp,
     )
