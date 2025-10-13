@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import List
+from dataclasses import dataclass
+from typing import Callable, List, Sequence
 
 import pytest
 
@@ -18,6 +19,86 @@ from tnfr_lfs.core.operator_detection import (
 )
 
 from tests.helpers import build_telemetry_record
+
+
+OperatorVerifier = Callable[[List[dict], Callable[..., List[dict]]], None]
+
+
+@dataclass(frozen=True)
+class OperatorCase:
+    series: List[TelemetryRecord]
+    kwargs: dict
+    expected_count: int
+    verifiers: Sequence[OperatorVerifier] = ()
+
+
+def _run_operator_case(
+    func: Callable[..., List[dict]],
+    case: OperatorCase,
+) -> None:
+    events = func(case.series, **case.kwargs)
+    if case.expected_count == 0:
+        assert events == []
+    else:
+        assert len(events) == case.expected_count
+    for verifier in case.verifiers:
+        verifier(events, func)
+
+
+def _expect_event_name(name: str) -> OperatorVerifier:
+    def _verify(events: List[dict], _: Callable[..., List[dict]]) -> None:
+        assert events[0]["name"] == name
+
+    return _verify
+
+
+def _expect_duration_positive(events: List[dict], _: Callable[..., List[dict]]) -> None:
+    assert events[0]["duration"] > 0.0
+
+
+def _expect_duration_at_least(minimum: float) -> OperatorVerifier:
+    def _verify(events: List[dict], _: Callable[..., List[dict]]) -> None:
+        assert events[0]["duration"] >= minimum
+
+    return _verify
+
+
+def _expect_field_at_most(field: str, threshold: float) -> OperatorVerifier:
+    def _verify(events: List[dict], _: Callable[..., List[dict]]) -> None:
+        assert events[0][field] <= threshold
+
+    return _verify
+
+
+def _expect_field_at_least(field: str, threshold: float) -> OperatorVerifier:
+    def _verify(events: List[dict], _: Callable[..., List[dict]]) -> None:
+        assert events[0][field] >= threshold
+
+    return _verify
+
+
+def _expect_field_greater_than(field: str, threshold: float) -> OperatorVerifier:
+    def _verify(events: List[dict], _: Callable[..., List[dict]]) -> None:
+        assert events[0][field] > threshold
+
+    return _verify
+
+
+def _expect_severity_above(threshold: float) -> OperatorVerifier:
+    return _expect_field_greater_than("severity", threshold)
+
+
+def _expect_severity_comparison(
+    reference_series: List[TelemetryRecord],
+    reference_kwargs: dict,
+    comparator: Callable[[float, float], bool],
+) -> OperatorVerifier:
+    def _verify(events: List[dict], func: Callable[..., List[dict]]) -> None:
+        reference_events = func(reference_series, **reference_kwargs)
+        assert reference_events
+        assert comparator(events[0]["severity"], reference_events[0]["severity"])
+
+    return _verify
 
 
 _BASE_OPERATOR_PAYLOAD = dict(
@@ -73,184 +154,291 @@ def _build_series(samples: List[dict]) -> List[TelemetryRecord]:
     return records
 
 
-def test_detect_al_tracks_duration_and_severity() -> None:
-    steady = _build_series(
-        [
-            {"lateral_accel": 0.2},
-            {"lateral_accel": 0.3},
-            {"lateral_accel": 2.1, "vertical_load": 5300.0},
-            {"lateral_accel": 2.0, "vertical_load": 5450.0},
-            {"lateral_accel": 1.9, "vertical_load": 5600.0},
-            {"lateral_accel": 2.2, "vertical_load": 5700.0},
-            {"lateral_accel": 0.5},
-            {"lateral_accel": 0.3},
-        ]
-    )
-    intense = _build_series(
-        [
-            {"lateral_accel": 0.2},
-            {"lateral_accel": 0.3},
-            {"lateral_accel": 2.8, "vertical_load": 5400.0},
-            {"lateral_accel": 2.6, "vertical_load": 5600.0},
-            {"lateral_accel": 2.9, "vertical_load": 5750.0},
-            {"lateral_accel": 0.4},
-        ]
-    )
+_AL_COMMON_KWARGS = dict(window=3, lateral_threshold=1.5, load_threshold=200.0)
+_AL_STEADY_SERIES = _build_series(
+    [
+        {"lateral_accel": 0.2},
+        {"lateral_accel": 0.3},
+        {"lateral_accel": 2.1, "vertical_load": 5300.0},
+        {"lateral_accel": 2.0, "vertical_load": 5450.0},
+        {"lateral_accel": 1.9, "vertical_load": 5600.0},
+        {"lateral_accel": 2.2, "vertical_load": 5700.0},
+        {"lateral_accel": 0.5},
+        {"lateral_accel": 0.3},
+    ]
+)
+_AL_INTENSE_SERIES = _build_series(
+    [
+        {"lateral_accel": 0.2},
+        {"lateral_accel": 0.3},
+        {"lateral_accel": 2.8, "vertical_load": 5400.0},
+        {"lateral_accel": 2.6, "vertical_load": 5600.0},
+        {"lateral_accel": 2.9, "vertical_load": 5750.0},
+        {"lateral_accel": 0.4},
+    ]
+)
+_AL_SHORT_WINDOW_SERIES = _build_series(
+    [
+        {"lateral_accel": 2.5, "vertical_load": 5500.0},
+        {"lateral_accel": 0.2},
+    ]
+)
 
-    events = detect_al(steady, window=3, lateral_threshold=1.5, load_threshold=200.0)
-    assert len(events) == 1
-    event = events[0]
-    assert event["name"] == canonical_operator_label("AL")
-    assert event["duration"] > 0.0
 
-    stronger = detect_al(intense, window=3, lateral_threshold=1.5, load_threshold=200.0)
-    assert len(stronger) == 1
-    assert stronger[0]["severity"] > event["severity"]
-
+_AL_CASES = [
+    pytest.param(
+        OperatorCase(
+            series=_AL_STEADY_SERIES,
+            kwargs=_AL_COMMON_KWARGS,
+            expected_count=1,
+            verifiers=(
+                _expect_event_name(canonical_operator_label("AL")),
+                _expect_duration_positive,
+            ),
+        ),
+        id="steady-turn-produces-operator",
+    ),
+    pytest.param(
+        OperatorCase(
+            series=_AL_INTENSE_SERIES,
+            kwargs=_AL_COMMON_KWARGS,
+            expected_count=1,
+            verifiers=(
+                _expect_severity_comparison(
+                    reference_series=_AL_STEADY_SERIES,
+                    reference_kwargs=_AL_COMMON_KWARGS,
+                    comparator=lambda current, reference: current > reference,
+                ),
+            ),
+        ),
+        id="intense-turn-has-greater-severity",
+    ),
     # Very short spikes should be ignored when they do not fill the window.
-    short_window = _build_series(
-        [
-            {"lateral_accel": 2.5, "vertical_load": 5500.0},
-            {"lateral_accel": 0.2},
-        ]
-    )
-    assert detect_al(short_window, window=3, lateral_threshold=1.5, load_threshold=200.0) == []
+    pytest.param(
+        OperatorCase(
+            series=_AL_SHORT_WINDOW_SERIES,
+            kwargs=_AL_COMMON_KWARGS,
+            expected_count=0,
+        ),
+        id="short-window-ignored",
+    ),
+]
 
 
-def test_detect_oz_requires_slip_and_yaw_alignment() -> None:
-    baseline = _build_series(
-        [
-            {"slip_angle": 0.05, "yaw_rate": 0.1},
-            {"slip_angle": 0.06, "yaw_rate": 0.12},
-            {"slip_angle": 0.08, "yaw_rate": 0.2},
-            {"slip_angle": 0.05, "yaw_rate": 0.1},
-        ]
-    )
-    oversteer = _build_series(
-        [
-            {"slip_angle": 0.05, "yaw_rate": 0.1},
-            {"slip_angle": 0.18, "yaw_rate": 0.32},
-            {"slip_angle": 0.2, "yaw_rate": 0.35},
-            {"slip_angle": 0.22, "yaw_rate": 0.38},
-            {"slip_angle": 0.07, "yaw_rate": 0.12},
-        ]
-    )
-
-    assert detect_oz(baseline, window=3, slip_threshold=0.12, yaw_threshold=0.25) == []
-
-    events = detect_oz(oversteer, window=3, slip_threshold=0.12, yaw_threshold=0.25)
-    assert len(events) == 1
-    event = events[0]
-    assert event["name"] == canonical_operator_label("OZ")
-    assert event["severity"] > 1.0
-
-    milder = _build_series(
-        [
-            {"slip_angle": 0.05, "yaw_rate": 0.1},
-            {"slip_angle": 0.16, "yaw_rate": 0.29},
-            {"slip_angle": 0.15, "yaw_rate": 0.28},
-            {"slip_angle": 0.07, "yaw_rate": 0.2},
-        ]
-    )
-    weaker = detect_oz(milder, window=3, slip_threshold=0.12, yaw_threshold=0.25)
-    assert weaker and weaker[0]["severity"] < event["severity"]
+@pytest.mark.parametrize("case", _AL_CASES)
+def test_detect_al_tracks_duration_and_severity(case: OperatorCase) -> None:
+    _run_operator_case(detect_al, case)
 
 
-def test_detect_il_uses_speed_weighted_threshold() -> None:
-    slow_series = _build_series(
-        [
-            {"speed": 10.0, "line_deviation": 0.45},
-            {"speed": 10.0, "line_deviation": 0.46},
-            {"speed": 10.0, "line_deviation": 0.47},
-            {"speed": 10.0, "line_deviation": 0.2},
-        ]
-    )
-    fast_series = _build_series(
-        [
-            {"speed": 40.0, "line_deviation": 0.3},
-            {"speed": 40.0, "line_deviation": 1.02},
-            {"speed": 40.0, "line_deviation": 1.05},
-            {"speed": 40.0, "line_deviation": 1.1},
-            {"speed": 40.0, "line_deviation": 0.4},
-        ]
-    )
-
-    slow_events = detect_il(slow_series, window=3, base_threshold=0.3, speed_gain=0.015)
-    assert len(slow_events) == 1
-    fast_events = detect_il(fast_series, window=3, base_threshold=0.3, speed_gain=0.015)
-    assert len(fast_events) == 1
-    assert fast_events[0]["severity"] > slow_events[0]["severity"]
-
-    below_threshold = _build_series(
-        [
-            {"speed": 25.0, "line_deviation": 0.2},
-            {"speed": 25.0, "line_deviation": 0.25},
-            {"speed": 25.0, "line_deviation": 0.24},
-        ]
-    )
-    assert detect_il(below_threshold, window=3, base_threshold=0.3, speed_gain=0.02) == []
+_OZ_COMMON_KWARGS = dict(window=3, slip_threshold=0.12, yaw_threshold=0.25)
+_OZ_BASELINE_SERIES = _build_series(
+    [
+        {"slip_angle": 0.05, "yaw_rate": 0.1},
+        {"slip_angle": 0.06, "yaw_rate": 0.12},
+        {"slip_angle": 0.08, "yaw_rate": 0.2},
+        {"slip_angle": 0.05, "yaw_rate": 0.1},
+    ]
+)
+_OZ_OVERSTEER_SERIES = _build_series(
+    [
+        {"slip_angle": 0.05, "yaw_rate": 0.1},
+        {"slip_angle": 0.18, "yaw_rate": 0.32},
+        {"slip_angle": 0.2, "yaw_rate": 0.35},
+        {"slip_angle": 0.22, "yaw_rate": 0.38},
+        {"slip_angle": 0.07, "yaw_rate": 0.12},
+    ]
+)
+_OZ_MILDER_SERIES = _build_series(
+    [
+        {"slip_angle": 0.05, "yaw_rate": 0.1},
+        {"slip_angle": 0.16, "yaw_rate": 0.29},
+        {"slip_angle": 0.15, "yaw_rate": 0.28},
+        {"slip_angle": 0.07, "yaw_rate": 0.2},
+    ]
+)
 
 
-def test_detect_silence_flags_quiet_structural_intervals() -> None:
-    quiet_series = _build_series(
-        [
-            {
-                "lateral_accel": 1.25,
-                "longitudinal_accel": 0.05,
-                "vertical_load": 4800.0,
-                "nfr": 102.0,
-                "brake_pressure": 0.04,
-                "throttle": 0.18,
-                "yaw_rate": 0.02,
-                "steer": 0.03,
-            }
-            for _ in range(16)
-        ]
-    )
-    events = detect_silence(
-        quiet_series,
-        window=8,
-        load_threshold=150.0,
-        accel_threshold=0.85,
-        delta_nfr_threshold=5.0,
-        structural_density_threshold=0.05,
-        min_duration=0.4,
-    )
-    assert events
-    event = events[0]
-    assert event["name"] == "Structural silence"
-    assert event["duration"] >= 0.4
-    assert event["structural_duration"] >= event["duration"]
-    assert event["load_span"] <= 150.0
-    assert event["structural_density_mean"] <= 0.05
-    assert event["slack"] > 0.0
+_OZ_CASES = [
+    pytest.param(
+        OperatorCase(
+            series=_OZ_BASELINE_SERIES,
+            kwargs=_OZ_COMMON_KWARGS,
+            expected_count=0,
+        ),
+        id="baseline-no-oversteer",
+    ),
+    pytest.param(
+        OperatorCase(
+            series=_OZ_OVERSTEER_SERIES,
+            kwargs=_OZ_COMMON_KWARGS,
+            expected_count=1,
+            verifiers=(
+                _expect_event_name(canonical_operator_label("OZ")),
+                _expect_severity_above(1.0),
+            ),
+        ),
+        id="aligned-slip-and-yaw",
+    ),
+    pytest.param(
+        OperatorCase(
+            series=_OZ_MILDER_SERIES,
+            kwargs=_OZ_COMMON_KWARGS,
+            expected_count=1,
+            verifiers=(
+                _expect_severity_comparison(
+                    reference_series=_OZ_OVERSTEER_SERIES,
+                    reference_kwargs=_OZ_COMMON_KWARGS,
+                    comparator=lambda current, reference: current < reference,
+                ),
+            ),
+        ),
+        id="milder-oversteer-lower-severity",
+    ),
+]
 
-    noisy_series = _build_series(
-        [
-            {
-                "lateral_accel": 2.2,
-                "longitudinal_accel": 0.4,
-                "vertical_load": 5200.0 + (index * 50.0),
-                "nfr": 120.0 + index * 3.0,
-                "throttle": 0.6,
-                "yaw_rate": 0.12,
-                "steer": 0.2,
-            }
-            for index in range(16)
-        ]
-    )
-    assert (
-        detect_silence(
-            noisy_series,
-            window=8,
-            load_threshold=150.0,
-            accel_threshold=0.85,
-            delta_nfr_threshold=5.0,
-            structural_density_threshold=0.05,
-            min_duration=0.4,
-        )
-        == []
-    )
+
+@pytest.mark.parametrize("case", _OZ_CASES)
+def test_detect_oz_requires_slip_and_yaw_alignment(case: OperatorCase) -> None:
+    _run_operator_case(detect_oz, case)
+
+
+_IL_COMMON_KWARGS = dict(window=3, base_threshold=0.3, speed_gain=0.015)
+_IL_SLOW_SERIES = _build_series(
+    [
+        {"speed": 10.0, "line_deviation": 0.45},
+        {"speed": 10.0, "line_deviation": 0.46},
+        {"speed": 10.0, "line_deviation": 0.47},
+        {"speed": 10.0, "line_deviation": 0.2},
+    ]
+)
+_IL_FAST_SERIES = _build_series(
+    [
+        {"speed": 40.0, "line_deviation": 0.3},
+        {"speed": 40.0, "line_deviation": 1.02},
+        {"speed": 40.0, "line_deviation": 1.05},
+        {"speed": 40.0, "line_deviation": 1.1},
+        {"speed": 40.0, "line_deviation": 0.4},
+    ]
+)
+_IL_BELOW_THRESHOLD_SERIES = _build_series(
+    [
+        {"speed": 25.0, "line_deviation": 0.2},
+        {"speed": 25.0, "line_deviation": 0.25},
+        {"speed": 25.0, "line_deviation": 0.24},
+    ]
+)
+
+
+_IL_CASES = [
+    pytest.param(
+        OperatorCase(
+            series=_IL_SLOW_SERIES,
+            kwargs=_IL_COMMON_KWARGS,
+            expected_count=1,
+        ),
+        id="slow-line-deviation",
+    ),
+    pytest.param(
+        OperatorCase(
+            series=_IL_FAST_SERIES,
+            kwargs=_IL_COMMON_KWARGS,
+            expected_count=1,
+            verifiers=(
+                _expect_severity_comparison(
+                    reference_series=_IL_SLOW_SERIES,
+                    reference_kwargs=_IL_COMMON_KWARGS,
+                    comparator=lambda current, reference: current > reference,
+                ),
+            ),
+        ),
+        id="faster-speed-higher-severity",
+    ),
+    pytest.param(
+        OperatorCase(
+            series=_IL_BELOW_THRESHOLD_SERIES,
+            kwargs=dict(window=3, base_threshold=0.3, speed_gain=0.02),
+            expected_count=0,
+        ),
+        id="below-threshold-ignored",
+    ),
+]
+
+
+@pytest.mark.parametrize("case", _IL_CASES)
+def test_detect_il_uses_speed_weighted_threshold(case: OperatorCase) -> None:
+    _run_operator_case(detect_il, case)
+
+
+_SILENCE_COMMON_KWARGS = dict(
+    window=8,
+    load_threshold=150.0,
+    accel_threshold=0.85,
+    delta_nfr_threshold=5.0,
+    structural_density_threshold=0.05,
+    min_duration=0.4,
+)
+_SILENCE_QUIET_SERIES = _build_series(
+    [
+        {
+            "lateral_accel": 1.25,
+            "longitudinal_accel": 0.05,
+            "vertical_load": 4800.0,
+            "nfr": 102.0,
+            "brake_pressure": 0.04,
+            "throttle": 0.18,
+            "yaw_rate": 0.02,
+            "steer": 0.03,
+        }
+        for _ in range(16)
+    ]
+)
+_SILENCE_NOISY_SERIES = _build_series(
+    [
+        {
+            "lateral_accel": 2.2,
+            "longitudinal_accel": 0.4,
+            "vertical_load": 5200.0 + (index * 50.0),
+            "nfr": 120.0 + index * 3.0,
+            "throttle": 0.6,
+            "yaw_rate": 0.12,
+            "steer": 0.2,
+        }
+        for index in range(16)
+    ]
+)
+
+
+_SILENCE_CASES = [
+    pytest.param(
+        OperatorCase(
+            series=_SILENCE_QUIET_SERIES,
+            kwargs=_SILENCE_COMMON_KWARGS,
+            expected_count=1,
+            verifiers=(
+                _expect_event_name("Structural silence"),
+                _expect_duration_at_least(0.4),
+                _expect_field_at_least("structural_duration", 0.4),
+                _expect_field_at_most("load_span", 150.0),
+                _expect_field_at_most("structural_density_mean", 0.05),
+                _expect_field_greater_than("slack", 0.0),
+            ),
+        ),
+        id="quiet-interval-detected",
+    ),
+    pytest.param(
+        OperatorCase(
+            series=_SILENCE_NOISY_SERIES,
+            kwargs=_SILENCE_COMMON_KWARGS,
+            expected_count=0,
+        ),
+        id="noisy-interval-ignored",
+    ),
+]
+
+
+@pytest.mark.parametrize("case", _SILENCE_CASES)
+def test_detect_silence_flags_quiet_structural_intervals(case: OperatorCase) -> None:
+    _run_operator_case(detect_silence, case)
 
 
 @pytest.mark.parametrize(
