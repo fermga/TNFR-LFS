@@ -17,6 +17,7 @@ from tnfr_lfs.core.operator_detection import (
     detect_il,
     detect_oz,
     detect_silence,
+    detect_nav,
     normalize_structural_operator_identifier,
     silence_event_payloads,
 )
@@ -615,3 +616,99 @@ def test_silence_event_payloads_accepts_aliases(
     events = events_factory(payload)
     result = silence_event_payloads(events)
     assert result == (payload,)
+
+
+# ---------------------------------------------------------------------------
+# Transition (NA'V) detection
+
+
+@pytest.fixture
+def nav_global_in_phase() -> tuple[float, Sequence[float]]:
+    nu_f = 0.5
+    series = [0.498, 0.502, 0.501, 0.499, 0.500, 0.501]
+    return nu_f, series
+
+
+@pytest.fixture
+def nav_global_out_of_band() -> tuple[float, Sequence[float]]:
+    nu_f = 0.5
+    series = [0.45, 0.46, 0.44, 0.60, 0.62, 0.58]
+    return nu_f, series
+
+
+@pytest.fixture
+def nav_per_node_in_phase() -> tuple[Mapping[str, float], Sequence[Mapping[str, float]]]:
+    nu_map: Mapping[str, float] = {"front": 0.30, "rear": 0.42}
+    series = [
+        {"front": 0.301, "rear": 0.420},
+        {"front": 0.300, "rear": 0.421},
+        {"front": 0.299, "rear": 0.419},
+        {"front": 0.301, "rear": 0.421},
+    ]
+    return nu_map, series
+
+
+@pytest.fixture
+def nav_per_node_out_of_band() -> tuple[Mapping[str, float], Sequence[Mapping[str, float]]]:
+    nu_map: Mapping[str, float] = {"front": 0.30, "rear": 0.42}
+    series = [
+        {"front": 0.25, "rear": 0.36},
+        {"front": 0.24, "rear": 0.35},
+        {"front": 0.55, "rear": 0.50},
+        {"front": 0.60, "rear": 0.20},
+    ]
+    return nu_map, series
+
+
+@pytest.mark.parametrize("window,eps", [(3, 1e-2), (5, 1e-2)], ids=["w3", "w5"])
+def test_detect_nav_global_positive(
+    nav_global_in_phase: tuple[float, Sequence[float]], window: int, eps: float
+) -> None:
+    nu_f, series = nav_global_in_phase
+    events = detect_nav(series, nu_f=nu_f, window=window, eps=eps)
+    assert events
+    top = max(events, key=lambda e: e["severity"])
+    assert top["severity"] > 0.0
+    assert top["duration"] >= window
+
+
+def test_detect_nav_global_negative(
+    nav_global_out_of_band: tuple[float, Sequence[float]]
+) -> None:
+    nu_f, series = nav_global_out_of_band
+    events = detect_nav(series, nu_f=nu_f, window=3, eps=1e-2)
+    assert events == [] or max(e["severity"] for e in events) == 0.0
+
+
+@pytest.mark.parametrize("window,eps", [(3, 1e-2), (4, 1e-2)], ids=["w3", "w4"])
+def test_detect_nav_per_node_positive(
+    nav_per_node_in_phase: tuple[Mapping[str, float], Sequence[Mapping[str, float]]],
+    window: int,
+    eps: float,
+) -> None:
+    nu_map, series = nav_per_node_in_phase
+    events = detect_nav(series, nu_f=nu_map, window=window, eps=eps)
+    assert events
+    assert max(e["severity"] for e in events) > 0.0
+    assert max(e["duration"] for e in events) >= window
+
+
+def test_detect_nav_per_node_negative(
+    nav_per_node_out_of_band: tuple[Mapping[str, float], Sequence[Mapping[str, float]]]
+) -> None:
+    nu_map, series = nav_per_node_out_of_band
+    events = detect_nav(series, nu_f=nu_map, window=3, eps=1e-2)
+    assert events == [] or max(e["severity"] for e in events) == 0.0
+
+
+def test_transition_aliases_canonical() -> None:
+    for alias in ("TRANSICION", "TRANSICIÓN", "NA'V", "NAV"):
+        assert normalize_structural_operator_identifier(alias) == "TRANSITION"
+        assert canonical_operator_label(alias) == "Transition"
+
+
+def test_detect_nav_coexists_with_existing_detectors() -> None:
+    assert callable(detect_al)
+    assert callable(detect_il)
+    assert callable(detect_oz)
+    assert callable(detect_silence)

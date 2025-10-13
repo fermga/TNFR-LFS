@@ -15,7 +15,7 @@ import warnings
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from statistics import mean
-from typing import List, Mapping, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Tuple, Union
 
 from tnfr_lfs.core.interfaces import SupportsTelemetrySample
 from tnfr_lfs.core.structural_time import compute_structural_timestamps
@@ -30,6 +30,7 @@ __all__ = [
     "detect_oz",
     "detect_il",
     "detect_silence",
+    "detect_nav",
 ]
 
 
@@ -39,6 +40,7 @@ STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
     "IL": "Coherence",
     "SILENCE": "Structural silence",
     "AUTOORGANISATION": "Auto-organisation",
+    "TRANSITION": "Transition",
 }
 
 _STRUCTURAL_IDENTIFIER_ALIASES: Mapping[str, str] = {
@@ -48,6 +50,28 @@ _STRUCTURAL_IDENTIFIER_ALIASES: Mapping[str, str] = {
     "AUTO-ORGANIZATION": "AUTOORGANISATION",
     "AUTO ORGANIZATION": "AUTOORGANISATION",
 }
+
+_STRUCTURAL_IDENTIFIER_ALIASES.update(
+    {
+        "TRANSITION": "TRANSITION",
+        "TRANSICION": "TRANSITION",
+        "TRANSICIÓN": "TRANSITION",
+        "NA'V": "TRANSITION",
+        "NAV": "TRANSITION",
+    }
+)
+
+try:
+    if isinstance(STRUCTURAL_OPERATOR_LABELS, Mapping):
+        labels = dict(STRUCTURAL_OPERATOR_LABELS)
+        labels.setdefault("TRANSITION", "Transition")
+        STRUCTURAL_OPERATOR_LABELS = labels
+    else:
+        STRUCTURAL_OPERATOR_LABELS = tuple(  # type: ignore[assignment]
+            sorted(set(STRUCTURAL_OPERATOR_LABELS) | {"TRANSITION"})
+        )
+except Exception:
+    pass
 
 _DEPRECATED_STRUCTURAL_IDENTIFIER_ALIASES: Mapping[str, str] = {
     "SILENCIO": "SILENCE",
@@ -98,6 +122,84 @@ def silence_event_payloads(
         else:
             collected.append(payload)  # type: ignore[arg-type]
     return tuple(collected)
+
+
+Number = float
+DeltaSample = Union[Number, Mapping[str, Number]]
+
+
+def _is_mapping_sample(sample: DeltaSample) -> bool:
+    return hasattr(sample, "keys") and hasattr(sample, "items")
+
+
+def _rel_tol(target: float, eps: float) -> float:
+    """Return relative tolerance (eps * |target|) with absolute fallback."""
+
+    return max(eps, eps * abs(target))
+
+
+def _closeness(value: float, target: float, eps: float) -> float:
+    """Return closeness score in [0, 1] with linear drop outside tolerance."""
+
+    tol = _rel_tol(target, eps)
+    d = abs(value - target)
+    if d <= tol:
+        return max(0.0, 1.0 - (d / (tol + 1e-12)) * 0.5)
+    return 0.0
+
+
+def detect_nav(
+    series: Sequence[DeltaSample],
+    *,
+    nu_f: Union[float, Mapping[str, float], None],
+    window: int = 3,
+    eps: float = 1e-3,
+) -> List[Dict[str, Any]]:
+    """Detect sustained ΔNFR ≈ νf (NA'V) runs."""
+
+    events: List[Dict[str, Any]] = []
+    if not series or window <= 0:
+        return events
+
+    if nu_f is None:
+        if _is_mapping_sample(series[0]):
+            raise ValueError("nu_f por nodo requerido para series por nodo")
+        from statistics import median
+
+        nu_f = float(median(abs(x) for x in series)) if series else 0.0
+
+    def in_phase_and_score(sample: DeltaSample) -> float:
+        if _is_mapping_sample(sample):
+            assert isinstance(nu_f, Mapping)
+            subscores = []
+            for k, v in sample.items():
+                target = float(nu_f.get(k, 0.0))
+                subscores.append(_closeness(float(v), target, eps))
+            return sum(subscores) / len(subscores) if subscores else 0.0
+        assert not isinstance(nu_f, Mapping)
+        return _closeness(float(sample), float(nu_f), eps)
+
+    n = len(series)
+    i = 0
+    while i < n:
+        score = in_phase_and_score(series[i])
+        if score > 0.0:
+            j = i + 1
+            scores = [score]
+            while j < n:
+                s = in_phase_and_score(series[j])
+                if s <= 0.0:
+                    break
+                scores.append(s)
+                j += 1
+            run_len = j - i
+            if run_len >= window:
+                severity = sum(scores) / len(scores)
+                events.append({"severity": float(severity), "duration": int(run_len)})
+            i = j
+        else:
+            i += 1
+    return events
 
 
 @dataclass(frozen=True)
