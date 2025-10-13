@@ -46,7 +46,7 @@ spectral = [
     "scipy>=1.10",
 ]
 tnfr = [
-    "tnfr>=4.5.2",
+    "tnfr>=2024.6",
 ]
 
 [project.urls]
