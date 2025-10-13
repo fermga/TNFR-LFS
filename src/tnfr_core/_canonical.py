@@ -18,7 +18,7 @@ __all__ = [
     "require_tnfr",
 ]
 
-TNFR_MINIMUM_VERSION: Final[str] = "2024.6"
+TNFR_MINIMUM_VERSION: Final[str] = "4.5.2"
 
 
 class CanonicalImportError(ImportError):
