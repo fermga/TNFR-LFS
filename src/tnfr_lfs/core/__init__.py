@@ -13,6 +13,7 @@ from tnfr_lfs.core.epi import (
     NaturalFrequencySnapshot,
     NaturalFrequencySettings,
     TelemetryRecord,
+    compute_delta_nfr,
     delta_nfr_by_node,
 )
 from tnfr_lfs.core.epi_models import EPIBundle
@@ -66,6 +67,7 @@ __all__ = [
     "NaturalFrequencySnapshot",
     "DeltaCalculator",
     "EPIBundle",
+    "compute_delta_nfr",
     "delta_nfr_by_node",
     "compute_node_delta_nfr",
     "sense_index",
