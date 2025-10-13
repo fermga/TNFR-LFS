@@ -5,3 +5,4 @@
 # Ignore generated test reports while keeping the directory structure
 tests/_report/*
 !tests/_report/.gitkeep
+!tests/_report/*.md
