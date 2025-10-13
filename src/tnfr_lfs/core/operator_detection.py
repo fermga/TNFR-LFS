@@ -11,6 +11,7 @@ to the orchestration pipeline.
 from __future__ import annotations
 
 import math
+import warnings
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from statistics import mean
@@ -39,7 +40,9 @@ STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
     "SILENCE": "Structural silence",
 }
 
-_STRUCTURAL_IDENTIFIER_ALIASES: Mapping[str, str] = {
+_STRUCTURAL_IDENTIFIER_ALIASES: Mapping[str, str] = {}
+
+_DEPRECATED_STRUCTURAL_IDENTIFIER_ALIASES: Mapping[str, str] = {
     "SILENCIO": "SILENCE",
 }
 
@@ -50,6 +53,13 @@ def normalize_structural_operator_identifier(identifier: str) -> str:
     if not isinstance(identifier, str):
         return str(identifier)
     key = identifier.upper()
+    if key in _DEPRECATED_STRUCTURAL_IDENTIFIER_ALIASES:
+        warnings.warn(
+            "The 'SILENCIO' structural identifier is deprecated; use 'SILENCE' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _DEPRECATED_STRUCTURAL_IDENTIFIER_ALIASES[key]
     return _STRUCTURAL_IDENTIFIER_ALIASES.get(key, key)
 
 

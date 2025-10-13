@@ -3,7 +3,8 @@
 The unit and integration suite reuses a couple of deterministic datasets to
 exercise the EPI extractor, segmentation heuristics and CLI pipelines.  This
 directory documents how to rebuild them if the telemetry model changes in the
-future.
+future. All contributions to this document must remain in English so the
+testing workflow stays consistent for every contributor.
 
 ## Detecting similar pytest functions
 
@@ -23,24 +24,23 @@ unversioned so local experiments and the CI sweep never dirty the tree.
 Use `make report-similar-tests-sweep` to execute the helper at thresholds 0.90,
 0.88, and 0.85 in one go. Capture the counts printed for each threshold and
 attach them to your pull request description so reviewers can see whether new
-tests introduce fresh similarities. Esta barrida de tres umbrales cubre todo el
-flujo: 0.90 actúa como corte duro, 0.88 destaca duplicados incipientes y 0.85
-ensancha la red para auditorías exploratorias.
+tests introduce fresh similarities. The three-threshold sweep covers the full
+workflow: 0.90 acts as the hard cutoff, 0.88 highlights early duplicates, and
+0.85 widens the net for exploratory audits.
 
-| Command | Umbral | Propósito |
+| Command | Threshold | Purpose |
 | --- | --- | --- |
-| `make report-similar-tests` | 0.90 | Hard gate local alineado con el corte obligatorio. |
-| `python tools/report_similar_tests.py --threshold 0.88` | 0.88 | Aviso manual para vigilar duplicados sin frenar iteraciones. |
-| `python tools/report_similar_tests.py --threshold 0.85` | 0.85 | Aviso amplio para detectar patrones candidatos a parametrizar. |
+| `make report-similar-tests` | 0.90 | Hard local gate aligned with the required cutoff. |
+| `python tools/report_similar_tests.py --threshold 0.88` | 0.88 | Manual warning to track duplicates without slowing iteration. |
+| `python tools/report_similar_tests.py --threshold 0.85` | 0.85 | Broad scan to spot parametrisation candidates. |
 
-El workflow de CI [Similar tests](../.github/workflows/similar-tests.yml)
-invoca el script a 0.90 dentro del job **Detect similar tests (0.90)** y falla
-si encuentra pares sobre el umbral duro. Un job separado genera los informes en
-0.90 y 0.85, y publica el artefacto `similar-tests-reports`. Para consultarlo,
-abre la ejecución del workflow en GitHub, entra al job **Similar test reports**
-y descarga el artefacto comprimido desde la sección *Artifacts*; allí encontrarás
-los JSON listos para su inspección, mientras que el barrido a 0.88 queda para
-ejecuciones locales con los comandos anteriores.
+The [Similar tests](../.github/workflows/similar-tests.yml) CI workflow invokes
+the script at 0.90 inside the **Detect similar tests (0.90)** job and fails if it
+finds pairs above the hard threshold. A separate job generates the reports at
+0.90 and 0.85, and publishes the `similar-tests-reports` artefact. To inspect
+the output, open the workflow run in GitHub, enter the **Similar test reports**
+job, and download the compressed artefact from the *Artifacts* section. The
+0.88 sweep is intended for local runs via the commands above.
 
 The most recent snapshot shows only one matching pair around the operator
 normalisation helpers, confirming that previous parametrisation work kept the
