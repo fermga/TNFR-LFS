@@ -6,11 +6,33 @@ import sys
 from importlib import import_module
 from typing import Any
 
+from tnfr_core._canonical import (
+    CANONICAL_ENV_VALUE,
+    CANONICAL_REQUESTED,
+    TNFR_AVAILABLE,
+    TNFR_MINIMUM_VERSION,
+    CanonicalImportError,
+    import_tnfr,
+    require_tnfr,
+)
+
 _equations = import_module("tnfr_core.equations")
 _metrics = import_module("tnfr_core.metrics")
 _operators = import_module("tnfr_core.operators")
 
-__all__ = list(dict.fromkeys([*_equations.__all__, *_metrics.__all__, *_operators.__all__]))
+_BASE_EXPORTS = [
+    "CANONICAL_ENV_VALUE",
+    "CANONICAL_REQUESTED",
+    "TNFR_AVAILABLE",
+    "TNFR_MINIMUM_VERSION",
+    "CanonicalImportError",
+    "import_tnfr",
+    "require_tnfr",
+]
+
+__all__ = list(
+    dict.fromkeys([*_BASE_EXPORTS, *_equations.__all__, *_metrics.__all__, *_operators.__all__])
+)
 
 # Public handles to the structured namespaces.
 equations = _equations

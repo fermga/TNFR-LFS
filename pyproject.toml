@@ -45,6 +45,9 @@ benchmark = [
 spectral = [
     "scipy>=1.10",
 ]
+tnfr = [
+    "tnfr>=2024.6",
+]
 
 [project.urls]
 Homepage = "https://github.com/fermga/TNFR-LFS"
