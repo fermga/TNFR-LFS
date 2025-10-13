@@ -74,6 +74,42 @@ aerodynamic imbalance).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
   tables (the ``[tool.tnfr_lfs]`` block in ``pyproject.toml``) intentionally
   retain their respective names for compatibility with existing workflows.
 
+## Alineación TNFR
+
+Los operadores estructurales de TNFR cubren trece arquetipos. Los códigos
+provienen de los detectores `AL`, `EN`, `IL`, `NAV`, `NUL`, `OZ`, `RA`,
+`REMESH`, `SILENCE`, `THOL`, `UM`, `VAL` y `ZHIR`, que `canonical_operator_label`
+traduce a sus etiquetas canónicas (Support, Reception, Coherence, Transition,
+Contraction, Dissonance, Propagation, Remeshing, Structural silence,
+Auto-organisation, Coupling, Amplification y Transformation).【F:src/tnfr_lfs/core/operator_detection.py†L43-L68】
+
+La ecuación nodal extendida que guía el índice de sentido pondera cada nodo por
+su aporte ΔNFR, su frecuencia natural y la entropía estructural:
+
+```
+Sense Index = 1 / (1 + Σ w_i · |ΔNFR_i| · g(ν_f_i)) - λ · H
+```
+
+El término ponderado `Σ w_i · |ΔNFR_i| · g(ν_f_i)` absorbe la dinámica nodal, la
+función `g(ν_f_i)` corrige por frecuencia natural y `H` representa la entropía
+Shannon calculada sobre la distribución ΔNFR.【F:docs/DESIGN.md†L41-L88】
+
+Las nuevas métricas expuestas por el núcleo recopilan expansiones y entropías
+estructurales (`support_effective`, `load_support_ratio`,
+`structural_expansion_longitudinal`, `structural_contraction_longitudinal`,
+`structural_expansion_lateral`, `structural_contraction_lateral`,
+`delta_nfr_entropy`, `node_entropy`, `phase_delta_nfr_entropy`,
+`phase_node_entropy`, `thermal_load`, `style_index`, `network_memory`, además de
+`aero_balance_drift`, `slide_catch_budget` y `ackermann_parallel_index`). Estas
+series alimentan los operadores `recursivity_operator` y `mutation_operator` para
+mantener la memoria de red y las transiciones de arquetipo.【F:docs/DESIGN.md†L65-L89】【F:tools/tnfr_theory_audit.py†L13-L103】
+
+El script `tools/tnfr_theory_audit.py` genera un informe actualizado de la
+alineación teórica. Ejecútalo con `poetry run python tools/tnfr_theory_audit.py
+--core --tests --output tests/_report/theory_impl_matrix.md` y consulta el
+resultado en `tests/_report/theory_impl_matrix.md` para validar la cobertura de
+los operadores y métricas expuestos.【F:tools/tnfr_theory_audit.py†L1-L67】
+
 ## Resources
 
 - [Documentation index](index.md) – MkDocs entry point for the full manual.
