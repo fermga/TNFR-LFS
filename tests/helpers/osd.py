@@ -9,7 +9,7 @@ from tnfr_lfs.core.epi import TelemetryRecord
 from tnfr_lfs.core.metrics import WindowMetrics
 from tnfr_lfs.exporters.setup_plan import SetupPlan
 
-from .steering import build_parallel_window_metrics
+from tests.helpers.steering import build_parallel_window_metrics
 
 
 def _populate_hud(records: Iterable[TelemetryRecord]) -> TelemetryHUD:
