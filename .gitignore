@@ -2,6 +2,10 @@
 !/docs/reference/autoapi/
 !/docs/reference/autoapi/**
 
+# MkDocs fixture cache (populated during builds)
+docs/_fixtures/*
+!docs/_fixtures/.gitkeep
+
 # Ignore generated test reports while keeping the directory structure
 tests/_report/*
 !tests/_report/.gitkeep
