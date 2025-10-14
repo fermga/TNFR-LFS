@@ -824,6 +824,28 @@ def test_detect_il_uses_detection_config_overrides(monkeypatch: pytest.MonkeyPat
     assert events, "expected IL event triggered by detection overrides"
 
 
+def test_detection_config_falls_back_to_global_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tnfr_core.config.loader import load_detection_config
+
+    payload = load_detection_config()
+    module = _configure_detection(monkeypatch, payload)
+
+    try:
+        resolved = module._resolve_detection_parameters(
+            "detect_il",
+            defaults={"coherence_threshold": 0.0, "mutation_window": 0},
+            provided={},
+            metadata_source=_build_il_records(),
+        )
+        assert "coherence_threshold" in resolved
+        assert resolved["coherence_threshold"] == pytest.approx(0.88)
+        assert resolved["mutation_window"] == 20
+    finally:
+        module._load_detection_table.cache_clear()
+
+
 def test_detect_il_explicit_kwargs_override_config(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _configure_detection(
         monkeypatch,

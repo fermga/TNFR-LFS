@@ -25,6 +25,12 @@ implementation while keeping the helper surface area unchanged. Validation
 steps will also live in this module, leveraging the already merged payload
 before it is frozen via ``MappingProxyType``.
 
+Global defaults remain meaningful even when operator-specific sections are
+absent. The detection layer now falls back to the shared ``defaults``/``tracks``/
+``classes``/``cars``/``compounds`` hierarchy materialised by
+``load_detection_config`` so detectors such as ``detect_il`` inherit the bundled
+thresholds without needing bespoke sections in ``detection.yaml``.【F:src/tnfr_core/operators/operator_detection.py†L312-L330】
+
 ### Upcoming class hierarchy support
 
 The next increment will add explicit ``classes`` handling directly inside

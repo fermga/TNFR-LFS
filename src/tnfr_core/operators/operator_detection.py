@@ -306,11 +306,28 @@ def _resolve_detection_parameters(
     """Merge defaults, configuration overrides, and explicit parameters."""
 
     resolved = dict(defaults)
-    table = _load_detection_table().get(operator)
-    if isinstance(table, Mapping):
+    table = _load_detection_table()
+    config: Mapping[str, Any] | None = None
+    if isinstance(table, MappingABC):
+        operator_table = table.get(operator)
+        if isinstance(operator_table, MappingABC):
+            config = operator_table
+        else:
+            shared_keys = ("defaults", "tracks", "classes", "cars", "compounds")
+            shared_payload = {
+                key: table[key]
+                for key in shared_keys
+                if key in table
+            }
+            if shared_payload:
+                config = shared_payload
+    else:
+        config = None
+
+    if config is not None:
         car_class, car_model, track_name, tyre_compound = _sequence_metadata(metadata_source)
         overrides = get_params(
-            table,
+            config,
             car_class=car_class,
             car_model=car_model,
             track_name=track_name,
