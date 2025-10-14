@@ -1374,9 +1374,23 @@ def _select_best(
     if not results:
         return None
     eligible = [result for result in results if result.fp_per_minute <= fp_per_minute_max]
-    candidates = eligible or list(results)
+    if not eligible:
+        sample = results[0]
+        min_fp = min(result.fp_per_minute for result in results)
+        LOGGER.warning(
+            (
+                "All %d parameter sets for operator '%s' combination %s exceed "
+                "the FP/min cap %.3f (lowest %.3f)."
+            ),
+            len(results),
+            sample.operator_id,
+            sample.combination,
+            fp_per_minute_max,
+            min_fp,
+        )
+        return None
     return max(
-        candidates,
+        eligible,
         key=lambda entry: (
             round(entry.f1, 6),
             round(entry.recall, 6),
@@ -1797,8 +1811,20 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
             if not selection_pool:
                 continue
             selection = _select_best(selection_pool, fp_per_minute_max=args.fp_per_min_max)
-            if selection:
-                best_selections.append(selection)
+            if selection is None:
+                min_fp = min(result.fp_per_minute for result in selection_pool)
+                LOGGER.warning(
+                    (
+                        "Skipping operator '%s' combination %s because no parameter set "
+                        "satisfied the FP/min cap %.3f (minimum observed %.3f)."
+                    ),
+                    operator_id,
+                    combination,
+                    args.fp_per_min_max,
+                    min_fp,
+                )
+                continue
+            best_selections.append(selection)
 
     if not best_selections:
         raise SystemExit("No detector selections satisfied the evaluation constraints")

@@ -23,6 +23,7 @@ from tools.calibrate_detectors import (
     _normalise_compound_token,
     _normalise_operator_labels,
     _normalise_track_identifier,
+    _select_best,
     normalize_structural_operator_identifier,
     _group_combinations,
     calibrate_detectors,
@@ -538,6 +539,33 @@ def test_group_combinations_collects_invalid_pairs() -> None:
     assert invalid == {("XFG", "soft")}
 
 
+def test_select_best_respects_fp_cap(caplog) -> None:
+    parameter_set = ParameterSet(identifier="AL-0", parameters={})
+    results = [
+        EvaluationResult(
+            operator_id="AL",
+            combination=("STD", "XFG", "R2"),
+            parameter_set=parameter_set,
+            precision=0.9,
+            recall=0.9,
+            f1=0.9,
+            fp_per_minute=0.95,
+            support=10,
+            tp=9,
+            fp=1,
+            tn=0,
+            fn=1,
+            duration_minutes=5.0,
+        )
+    ]
+
+    with caplog.at_level("WARNING"):
+        selection = _select_best(results, fp_per_minute_max=0.8)
+
+    assert selection is None
+    assert any("FP/min cap" in message for message in caplog.messages)
+
+
 def test_calibrate_detectors_aborts_on_invalid_pairs(tmp_path: Path, monkeypatch) -> None:
     sample = _make_sample(car="XFG", compound="soft")
 
@@ -575,6 +603,82 @@ def test_calibrate_detectors_aborts_on_invalid_pairs(tmp_path: Path, monkeypatch
     message = str(excinfo.value)
     assert "XFG" in message
     assert "soft" in message
+
+
+def test_calibrate_detectors_reports_fp_cap_violations(tmp_path: Path, monkeypatch, caplog) -> None:
+    labels_path = tmp_path / "labels.jsonl"
+    labels_path.write_text("{}\n", encoding="utf-8")
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    sample = MicrosectorSample(
+        capture_id="capture-1",
+        microsector_index=1,
+        track="KY2",
+        car="XFG",
+        car_class="STD",
+        compound="R2",
+        start_index=0,
+        end_index=0,
+        start_time=0.0,
+        end_time=60.0,
+        records=(_StubRecord(0.0),),
+        labels={"NAV": True},
+        label_intervals={"NAV": ((0.0, 60.0),)},
+    )
+
+    def fake_evaluation(
+        operator_id, samples, parameter_set, *, fold_assignments
+    ):  # type: ignore[no-untyped-def]
+        return EvaluationResult(
+            operator_id=operator_id,
+            combination=("STD", "XFG", "R2"),
+            parameter_set=parameter_set,
+            precision=0.8,
+            recall=0.8,
+            f1=0.8,
+            fp_per_minute=1.2,
+            support=5,
+            tp=4,
+            fp=2,
+            tn=0,
+            fn=1,
+            duration_minutes=1.0,
+        )
+
+    args = argparse.Namespace(
+        raf_root=str(tmp_path),
+        labels=str(labels_path),
+        out=str(output_dir),
+        operators=["NAV"],
+        operator_grid=None,
+        cars=[],
+        compounds=[],
+        tracks=[],
+        kfold=1,
+        fp_per_min_max=0.8,
+    )
+
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._load_labels",
+        lambda _path, *, raf_root: [object()],
+    )
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._build_microsector_dataset",
+        lambda _labels, *, raf_root: [sample],
+    )
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._evaluate_detector",
+        fake_evaluation,
+    )
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(SystemExit) as excinfo:
+            calibrate_detectors(args)
+
+    assert "No detector selections satisfied the evaluation constraints" in str(excinfo.value)
+    assert any("FP/min cap" in message for message in caplog.messages)
 
 
 def test_calibrator_includes_unlabelled_operator(tmp_path: Path, monkeypatch) -> None:
