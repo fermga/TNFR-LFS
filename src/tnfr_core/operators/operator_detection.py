@@ -818,7 +818,9 @@ def detect_ra(
     first_window_start: int | None = None
     sustained_windows = 0
     peak_power = 0.0
+    baseline_power = 0.0
     best_metrics: Dict[str, float] = {}
+    baseline_metrics: Dict[str, float] = {}
 
     for index in range(len(records)):
         start_index = max(0, index - window + 1)
@@ -854,6 +856,8 @@ def detect_ra(
                 if active_start is None:
                     active_start = first_window_start
                     peak_power = band_power
+                    baseline_power = band_power
+                    baseline_metrics = metrics
                     best_metrics = metrics
                 else:
                     if band_power >= peak_power:
@@ -862,7 +866,11 @@ def detect_ra(
         else:
             if active_start is not None and sustained_windows >= k_min:
                 end_index = index - 1
-                threshold = max(best_metrics.get('band_power', peak_power), 1e-9)
+                reference_si = max(
+                    best_metrics.get('si_mean', baseline_metrics.get('si_mean', si_min)),
+                    si_min,
+                )
+                threshold = max(baseline_power * (si_min / reference_si), 1e-9)
                 event = _finalise_event(
                     canonical_operator_label('RA'),
                     records,
@@ -875,6 +883,9 @@ def detect_ra(
                 payload.update(best_metrics)
                 payload.update(
                     {
+                        'band_power_baseline': float(baseline_power),
+                        'severity_threshold': float(threshold),
+                        'peak_band_power': float(peak_power),
                         'nu_band': tuple(float(value) for value in nu_band),
                         'si_min': float(si_min),
                         'delta_nfr_max': float(delta_nfr_max),
@@ -886,11 +897,17 @@ def detect_ra(
             first_window_start = None
             sustained_windows = 0
             peak_power = 0.0
+            baseline_power = 0.0
             best_metrics = {}
+            baseline_metrics = {}
 
     if active_start is not None and sustained_windows >= k_min:
         end_index = len(records) - 1
-        threshold = max(best_metrics.get('band_power', peak_power), 1e-9)
+        reference_si = max(
+            best_metrics.get('si_mean', baseline_metrics.get('si_mean', si_min)),
+            si_min,
+        )
+        threshold = max(baseline_power * (si_min / reference_si), 1e-9)
         event = _finalise_event(
             canonical_operator_label('RA'),
             records,
@@ -903,6 +920,9 @@ def detect_ra(
         payload.update(best_metrics)
         payload.update(
             {
+                'band_power_baseline': float(baseline_power),
+                'severity_threshold': float(threshold),
+                'peak_band_power': float(peak_power),
                 'nu_band': tuple(float(value) for value in nu_band),
                 'si_min': float(si_min),
                 'delta_nfr_max': float(delta_nfr_max),
