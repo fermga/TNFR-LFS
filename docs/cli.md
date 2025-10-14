@@ -342,6 +342,21 @@ The additional artefacts provide:
 * ``delta_bifurcations`` – ΔNFR sign changes and derivative summaries on
   the structural axis to highlight bifurcation hotspots.
 
+When downstream RAF or live-monitoring workflows require direct access to
+detector payloads, the exporters registry exposes two specialised keys:
+
+* ``operator-events-json`` – writes the enriched operator event stream as a
+  JSON array with phase, severity, operator identifier and detector metadata
+  promoted to the top level.  Example::
+
+      tnfr-lfs report --export operator-events-json --output events.json
+
+* ``operator-events-csv`` – flattens the same payload to CSV, encoding detector
+  parameters as JSON strings so RAF automations or live dashboards can ingest
+  them with minimal parsing.  Example::
+
+      tnfr-lfs analyze --export operator-events-csv --output events.csv
+
 ### ``write-set``
 
 Creates a setup plan by blending the optimisation-aware search module
