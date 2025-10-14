@@ -42,6 +42,11 @@ from tnfr_core.metrics.segmentation import Microsector, segment_microsectors
 from tnfr_core.operators import operator_detection
 from tnfr_core.operators.operator_detection import normalize_structural_operator_identifier
 
+from tnfr_lfs.resources.tyre_compounds import (
+    CAR_COMPOUND_COMPATIBILITY,
+    normalise_car_model,
+    normalise_compound_identifier,
+)
 from tnfr_lfs.telemetry.offline.raf import raf_to_telemetry_records, read_raf
 
 
@@ -858,14 +863,24 @@ def _detector_callable(operator_id: str) -> Callable[..., Sequence[Mapping[str, 
     return detector
 
 
-def _group_combinations(samples: Sequence[MicrosectorSample]) -> dict[tuple[str, str, str], list[MicrosectorSample]]:
+def _group_combinations(
+    samples: Sequence[MicrosectorSample],
+) -> tuple[dict[tuple[str, str, str], list[MicrosectorSample]], set[tuple[str, str]]]:
     grouped: dict[tuple[str, str, str], list[MicrosectorSample]] = {}
+    invalid_pairs: set[tuple[str, str]] = set()
     for sample in samples:
         car_class = sample.car_class or "__default__"
         car_model = sample.car or "__unknown__"
         compound = sample.compound or "__default__"
         grouped.setdefault((car_class, car_model, compound), []).append(sample)
-    return grouped
+
+        canonical_car = normalise_car_model(sample.car)
+        canonical_compound = normalise_compound_identifier(sample.compound)
+        if canonical_car and canonical_compound:
+            allowed = CAR_COMPOUND_COMPATIBILITY.get(canonical_car)
+            if allowed is not None and canonical_compound not in allowed:
+                invalid_pairs.add((str(sample.car), str(sample.compound)))
+    return grouped, invalid_pairs
 
 
 def _build_folds(samples: Sequence[MicrosectorSample], kfold: int) -> dict[str, int]:
@@ -1454,7 +1469,15 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
     )
 
     LOGGER.info("Evaluating detectors across %d microsectors", len(samples))
-    grouped = _group_combinations(samples)
+    grouped, invalid_pairs = _group_combinations(samples)
+    if invalid_pairs:
+        formatted = ", ".join(
+            f"({car}, {compound})" for car, compound in sorted(invalid_pairs)
+        )
+        raise SystemExit(
+            "The labelled dataset includes unsupported car/tyre compound combinations: "
+            + formatted
+        )
     fold_assignments = _build_folds(samples, args.kfold)
 
     all_results: list[EvaluationResult] = []

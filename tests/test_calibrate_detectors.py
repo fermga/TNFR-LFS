@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 from pathlib import Path
 
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ from tools.calibrate_detectors import (
     _materialise_best_params,
     _load_labels,
     normalize_structural_operator_identifier,
+    _group_combinations,
+    calibrate_detectors,
 )
 from tnfr_core.config.loader import load_detection_config
 from tnfr_core.operators import operator_detection
@@ -184,6 +187,24 @@ class _StubRecord:
     timestamp: float
 
 
+def _make_sample(*, car: str, compound: str | None) -> MicrosectorSample:
+    return MicrosectorSample(
+        capture_id="capture",
+        microsector_index=1,
+        track="track",
+        car=car,
+        car_class=None,
+        compound=compound,
+        start_index=0,
+        end_index=0,
+        start_time=0.0,
+        end_time=0.0,
+        records=(),
+        labels={},
+        label_intervals={},
+    )
+
+
 def test_nav_evaluation_uses_delta_series(monkeypatch) -> None:
     operator_id = "NAV"
     delta_series = [0.5, 0.5, 0.5, 0.5]
@@ -331,3 +352,60 @@ def test_interval_matching_negative_sample(monkeypatch) -> None:
     assert result.fn == 0
     assert result.tn == 1
     assert result.support == 0
+
+
+def test_group_combinations_accepts_known_compounds() -> None:
+    sample = _make_sample(car="XFG", compound="R2")
+
+    grouped, invalid = _group_combinations([sample])
+
+    assert grouped[("__default__", "XFG", "R2")] == [sample]
+    assert invalid == set()
+
+
+def test_group_combinations_collects_invalid_pairs() -> None:
+    sample = _make_sample(car="XFG", compound="soft")
+
+    grouped, invalid = _group_combinations([sample])
+
+    assert grouped[("__default__", "XFG", "soft")] == [sample]
+    assert invalid == {("XFG", "soft")}
+
+
+def test_calibrate_detectors_aborts_on_invalid_pairs(tmp_path: Path, monkeypatch) -> None:
+    sample = _make_sample(car="XFG", compound="soft")
+
+    labels_path = tmp_path / "labels.jsonl"
+    labels_path.write_text("{}\n", encoding="utf-8")
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    args = argparse.Namespace(
+        raf_root=str(tmp_path),
+        labels=str(labels_path),
+        out=str(output_dir),
+        operators=["NAV"],
+        operator_grid=None,
+        cars=[],
+        compounds=[],
+        tracks=[],
+        kfold=1,
+        fp_per_min_max=0.5,
+    )
+
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._load_labels",
+        lambda _path, *, raf_root: [object()],
+    )
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._build_microsector_dataset",
+        lambda _labels, *, raf_root: [sample],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        calibrate_detectors(args)
+
+    message = str(excinfo.value)
+    assert "XFG" in message
+    assert "soft" in message
