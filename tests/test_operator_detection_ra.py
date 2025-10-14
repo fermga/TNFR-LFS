@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import pi, sin
+from math import nan, pi, sin
 
 import pytest
 
@@ -135,3 +135,29 @@ def test_detect_ra_severity_tracks_band_power_margin() -> None:
 
     assert strong_severity > 1.1
     assert borderline_severity == pytest.approx(1.0, abs=0.15)
+
+
+def test_detect_ra_skips_nan_samples_without_crashing() -> None:
+    samples: list[dict] = []
+    for index in range(30):
+        t = index * 0.05
+        if index == 10:
+            samples.append({"nfr": nan, "si": nan, "speed": 44.0})
+            continue
+        nfr = 60.0 + 12.0 * sin(2.0 * pi * 1.6 * t)
+        si = 0.6 + 0.02 * sin(2.0 * pi * 0.4 * t)
+        samples.append({"nfr": nfr, "si": si, "speed": 45.0})
+
+    series = _series(samples)
+
+    events = detect_ra(
+        series,
+        window=12,
+        nu_band=(1.0, 3.0),
+        si_min=0.58,
+        delta_nfr_max=18.0,
+        k_min=2,
+    )
+
+    assert events
+    assert events[0]["band_power"] > 0.0

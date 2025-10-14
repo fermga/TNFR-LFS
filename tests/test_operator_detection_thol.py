@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import nan
+
 from tnfr_core.operators.operator_detection import detect_thol
 
 from tests.helpers import build_telemetry_record
@@ -110,6 +112,30 @@ def test_detect_thol_ignores_negative_epi_acceleration() -> None:
         samples,
         epi_accel_min=2.0,
         stability_window=0.2,
+        stability_tolerance=0.05,
+    )
+
+    assert events == []
+
+
+def test_detect_thol_tolerates_nan_during_growth() -> None:
+    samples = _series(
+        [
+            {"nfr": 0.4, "si": 0.02},
+            {"nfr": 2.8, "si": 0.05},
+            {"nfr": nan, "si": nan},
+            {"nfr": 11.5, "si": 0.12},
+            {"nfr": 24.0, "si": 0.18},
+            {"nfr": 34.8, "si": 0.24},
+            {"nfr": 34.8, "si": 0.24},
+            {"nfr": 34.8, "si": 0.24},
+        ]
+    )
+
+    events = detect_thol(
+        samples,
+        epi_accel_min=2.0,
+        stability_window=0.25,
         stability_tolerance=0.05,
     )
 

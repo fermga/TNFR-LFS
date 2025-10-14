@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import nan
+
 from tnfr_core.operators.operator_detection import detect_val
 
 from tests.helpers import build_telemetry_record
@@ -94,3 +96,26 @@ def test_detect_val_requires_node_growth() -> None:
     )
 
     assert events == []
+
+
+def test_detect_val_ignores_nan_wheel_loads() -> None:
+    payloads = [
+        {"nfr": 17.5, "si": 0.17, "wheel_load_rl": 120.0, "wheel_load_rr": 120.0},
+        {"nfr": 20.0, "si": 0.22, "wheel_load_rl": nan, "wheel_load_rr": 210.0},
+        {"nfr": 24.5, "si": 0.3, "wheel_load_rl": 280.0, "wheel_load_rr": 280.0},
+        {"nfr": 28.0, "si": 0.36, "wheel_load_rl": 330.0, "wheel_load_rr": 330.0},
+        {"nfr": 29.0, "si": 0.38, "wheel_load_rl": 310.0, "wheel_load_rr": 320.0},
+    ]
+
+    samples = _series(payloads)
+
+    events = detect_val(
+        samples,
+        window=4,
+        epi_growth_min=0.3,
+        active_nodes_delta_min=2,
+        active_node_load_min=200.0,
+    )
+
+    assert events
+    assert events[0]["active_nodes_delta"] >= 2

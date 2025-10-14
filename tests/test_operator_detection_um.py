@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from math import nan
+
 from tnfr_core.operators.operator_detection import detect_um
 
-from tests.helpers import build_telemetry_record
+from tests.helpers import build_telemetry_record, clone_protocol_sample
 
 
 _BASE_PAYLOAD = dict(
@@ -143,3 +145,36 @@ def test_detect_um_rejects_anti_phase_correlation() -> None:
     )
 
     assert events == []
+
+
+def test_detect_um_handles_missing_and_nan_samples() -> None:
+    payloads = []
+    for index in range(9):
+        steer = 0.018 * index
+        yaw_rate = 0.017 * index + 0.002
+        slip_ratio = 0.012 * index
+        slip_angle = 0.01 * index
+        payloads.append(
+            {
+                "steer": steer,
+                "yaw_rate": yaw_rate,
+                "slip_ratio": slip_ratio,
+                "slip_angle": slip_angle,
+            }
+        )
+
+    records = _series(payloads)
+    samples = [clone_protocol_sample(record) for record in records]
+    samples[3].slip_ratio = nan
+    delattr(samples[5], "yaw_rate")
+
+    events = detect_um(
+        samples,
+        window=6,
+        rho_min=0.6,
+        phase_max=0.12,
+        min_duration=0.3,
+    )
+
+    assert events
+    assert events[0]["max_coupling"] >= 0.6
