@@ -714,12 +714,23 @@ def _filter_samples(
     compounds: set[str] | None,
     tracks: set[str] | None,
 ) -> list[MicrosectorSample]:
+    def canonical(value: str | None) -> str | None:
+        normalised = _normalise_identifier(value)
+        if normalised is None and value is not None:
+            stripped = str(value).strip()
+            normalised = stripped or None
+        return normalised
+
     def include(sample: MicrosectorSample) -> bool:
-        if cars and sample.car not in cars:
+        sample_car = canonical(sample.car)
+        sample_compound = canonical(sample.compound)
+        sample_track = canonical(sample.track)
+
+        if cars and sample_car not in cars:
             return False
-        if compounds and (sample.compound or "") not in compounds:
+        if compounds and sample_compound not in compounds:
             return False
-        if tracks and sample.track not in tracks:
+        if tracks and sample_track not in tracks:
             return False
         return True
 
@@ -1306,9 +1317,20 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
     if not samples:
         raise SystemExit("No microsector samples were produced from the supplied RAF captures")
 
-    cars = {value.strip() for value in (args.cars or []) if value.strip()}
-    compounds = {value.strip() for value in (args.compounds or []) if value.strip()}
-    tracks = {value.strip() for value in (args.tracks or []) if value.strip()}
+    def _normalised_filter_tokens(values: Sequence[str] | None) -> set[str]:
+        tokens: set[str] = set()
+        for value in values or []:
+            canonical = _normalise_identifier(value)
+            if canonical is None:
+                stripped = str(value).strip()
+                canonical = stripped or None
+            if canonical:
+                tokens.add(canonical)
+        return tokens
+
+    cars = _normalised_filter_tokens(args.cars)
+    compounds = _normalised_filter_tokens(args.compounds)
+    tracks = _normalised_filter_tokens(args.tracks)
     if cars or compounds or tracks:
         try:
             samples = _filter_samples(
