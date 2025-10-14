@@ -1210,6 +1210,39 @@ def test_acoplamiento_and_resonance_behaviour():
     assert dissonance == pytest.approx(mean(abs(value - 0.25) for value in series_a))
 
 
+def _legacy_dissonance(series: Sequence[float], target: float) -> float:
+    if not series:
+        return 0.0
+    return mean(abs(value - target) for value in series)
+
+
+@pytest.mark.parametrize(
+    ("series", "target"),
+    [
+        ([0.25, 0.5, 0.75], 0.5),
+        ((-1.2, 3.4, -5.6, 7.8), 0.0),
+        ([10.0], 8.0),
+    ],
+)
+def test_dissonance_operator_matches_legacy_implementation(
+    series: Sequence[float], target: float
+) -> None:
+    expected = _legacy_dissonance(series, target)
+    result = dissonance_operator(series, target)
+
+    assert result == pytest.approx(expected, rel=1e-12)
+    assert isinstance(result, float)
+
+
+def test_dissonance_operator_matches_legacy_for_empty_series() -> None:
+    series: Sequence[float] = []
+    expected = _legacy_dissonance(series, target=1.0)
+
+    result = dissonance_operator(series, target=1.0)
+
+    assert result == expected == 0.0
+
+
 def test_acoplamiento_operator_alias_emits_deprecation_warning():
     series_a = [0.0, 0.5, 1.0]
     series_b = [0.0, 0.25, 0.5]
