@@ -19,6 +19,7 @@ detector outcomes and determine the best configuration per operator.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import product
 from pathlib import Path
 import argparse
@@ -91,6 +92,82 @@ class ParameterSet:
 
     identifier: str
     parameters: Mapping[str, object]
+
+
+_DEFAULT_OPERATOR_GRID_SPECS: Mapping[str, Mapping[str, Sequence[object]] | Sequence[Mapping[str, object]]] = {
+    "AL": {
+        "window": (5, 7, 9),
+        "lateral_threshold": (1.4, 1.6, 1.8),
+        "load_threshold": (200.0, 250.0, 300.0),
+    },
+    "EN": {
+        "window": (4, 6, 8),
+        "psi_threshold": (0.8, 0.9, 1.0),
+        "epi_norm_max": (100.0, 120.0, 140.0),
+    },
+    "IL": {
+        "window": (5, 7),
+        "base_threshold": (0.3, 0.35, 0.4),
+        "speed_gain": (0.01, 0.012, 0.015),
+    },
+    "NAV": {
+        "window": (3, 4, 5),
+        "eps": (1e-3, 5e-3, 1e-2),
+    },
+    "NUL": {
+        "window": (4, 6, 8),
+        "active_nodes_delta_max": (-3, -2, -1),
+        "epi_concentration_min": (0.5, 0.6, 0.7),
+        "active_node_load_min": (200.0, 250.0, 300.0),
+    },
+    "OZ": {
+        "window": (5, 7),
+        "slip_threshold": (0.1, 0.12, 0.14),
+        "yaw_threshold": (0.2, 0.25, 0.3),
+    },
+    "RA": {
+        "window": (10, 12),
+        "nu_band": ((0.8, 2.5), (1.0, 3.0)),
+        "si_min": (0.5, 0.55),
+        "delta_nfr_max": (10.0, 12.0),
+        "k_min": (2, 3),
+    },
+    "REMESH": {
+        "window": (6, 8, 10),
+        "tau_candidates": ((0.2, 0.4, 0.6), (0.3, 0.5, 0.7)),
+        "acf_min": (0.7, 0.75, 0.8),
+        "min_repeats": (2, 3),
+    },
+    "SILENCE": {
+        "window": (11, 15, 19),
+        "load_threshold": (350.0, 400.0, 450.0),
+        "accel_threshold": (0.7, 0.8, 0.9),
+        "delta_nfr_threshold": (35.0, 45.0, 55.0),
+    },
+    "THOL": {
+        "epi_accel_min": (0.6, 0.8, 1.0),
+        "stability_window": (0.3, 0.4, 0.5),
+        "stability_tolerance": (0.04, 0.05, 0.06),
+    },
+    "UM": {
+        "window": (6, 8, 10),
+        "rho_min": (0.6, 0.65, 0.7),
+        "phase_max": (0.2, 0.25, 0.3),
+        "min_duration": (0.25, 0.35, 0.45),
+    },
+    "VAL": {
+        "window": (4, 6, 8),
+        "epi_growth_min": (0.3, 0.4, 0.5),
+        "active_nodes_delta_min": (1, 2),
+        "active_node_load_min": (200.0, 250.0, 300.0),
+    },
+    "ZHIR": {
+        "window": (6, 8, 10),
+        "xi_min": (0.3, 0.35, 0.4),
+        "min_persistence": (0.3, 0.4, 0.5),
+        "phase_jump_min": (0.15, 0.2, 0.25),
+    },
+}
 
 
 @dataclass
@@ -435,6 +512,64 @@ def _filter_samples(
     return filtered
 
 
+def _parameter_sets_from_definition(
+    identifier: str, definition: Any
+) -> list[ParameterSet]:
+    param_sets: list[ParameterSet] = []
+    if isinstance(definition, Sequence) and not isinstance(definition, (str, bytes)):
+        for index, entry in enumerate(definition):
+            if not isinstance(entry, Mapping):
+                continue
+            param_sets.append(
+                ParameterSet(
+                    identifier=f"{identifier}-{index}",
+                    parameters=dict(entry),
+                )
+            )
+    elif isinstance(definition, Mapping):
+        keys = sorted(definition.keys())
+        grids: list[list[tuple[str, object]]] = []
+        for param_name in keys:
+            options = definition[param_name]
+            if isinstance(options, Mapping) and "values" in options:
+                options = options["values"]
+            if isinstance(options, Sequence) and not isinstance(options, (str, bytes)):
+                grids.append([(param_name, option) for option in options])
+            else:
+                grids.append([(param_name, options)])
+        for index, combination in enumerate(product(*grids)):
+            params = {name: entry for name, entry in combination}
+            param_sets.append(
+                ParameterSet(
+                    identifier=f"{identifier}-{index}",
+                    parameters=params,
+                )
+            )
+    else:
+        raise ValueError(
+            f"Operator '{identifier}' search space must be a mapping or sequence"
+        )
+    return param_sets
+
+
+def _build_operator_grid_from_payload(
+    payload: Mapping[str, Any]
+) -> dict[str, list[ParameterSet]]:
+    operator_grid: dict[str, list[ParameterSet]] = {}
+    for key, value in payload.items():
+        identifier = normalize_structural_operator_identifier(str(key))
+        param_sets = _parameter_sets_from_definition(identifier, value)
+        if not param_sets:
+            raise ValueError(f"Operator '{key}' has no parameter sets to evaluate")
+        operator_grid[identifier] = param_sets
+    return operator_grid
+
+
+@lru_cache(maxsize=1)
+def _default_operator_grid() -> Mapping[str, list[ParameterSet]]:
+    return _build_operator_grid_from_payload(_DEFAULT_OPERATOR_GRID_SPECS)
+
+
 def _load_operator_grid(path: Path) -> dict[str, list[ParameterSet]]:
     loader_map: dict[str, Callable[[Path], Any]] = {
         ".json": _load_json,
@@ -450,48 +585,9 @@ def _load_operator_grid(path: Path) -> dict[str, list[ParameterSet]]:
     if not isinstance(data, Mapping):
         raise ValueError("Operator search space must be a mapping")
     payload = data.get("operators") if "operators" in data else data
-
-    operator_grid: dict[str, list[ParameterSet]] = {}
-    for key, value in payload.items():
-        identifier = normalize_structural_operator_identifier(str(key))
-        param_sets: list[ParameterSet] = []
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-            for index, entry in enumerate(value):
-                if not isinstance(entry, Mapping):
-                    continue
-                param_sets.append(
-                    ParameterSet(
-                        identifier=f"{identifier}-{index}",
-                        parameters=dict(entry),
-                    )
-                )
-        elif isinstance(value, Mapping):
-            keys = sorted(value.keys())
-            grids: list[list[tuple[str, object]]] = []
-            for param_name in keys:
-                options = value[param_name]
-                if isinstance(options, Mapping) and "values" in options:
-                    options = options["values"]
-                if isinstance(options, Sequence) and not isinstance(options, (str, bytes)):
-                    grids.append([(param_name, option) for option in options])
-                else:
-                    grids.append([(param_name, options)])
-            for index, combination in enumerate(product(*grids)):
-                params = {name: entry for name, entry in combination}
-                param_sets.append(
-                    ParameterSet(
-                        identifier=f"{identifier}-{index}",
-                        parameters=params,
-                    )
-                )
-        else:
-            raise ValueError(
-                f"Operator '{key}' search space must be a mapping or sequence"
-            )
-        if not param_sets:
-            raise ValueError(f"Operator '{key}' has no parameter sets to evaluate")
-        operator_grid[identifier] = param_sets
-    return operator_grid
+    if not isinstance(payload, Mapping):
+        raise ValueError("Operator search space must be a mapping")
+    return _build_operator_grid_from_payload(payload)
 
 
 def _detector_callable(operator_id: str) -> Callable[..., Sequence[Mapping[str, object]]]:
@@ -883,8 +979,49 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
                 f"{context}: {exc}"
             ) from exc
 
-    LOGGER.info("Loading operator search space from %s", args.operators)
-    operator_grid = _load_operator_grid(Path(args.operators))
+    requested_operators = [
+        normalize_structural_operator_identifier(str(value))
+        for value in args.operators
+        if str(value).strip()
+    ]
+    requested_operators = list(dict.fromkeys(requested_operators))
+    if not requested_operators:
+        raise SystemExit("At least one operator identifier must be supplied")
+
+    overrides: dict[str, list[ParameterSet]] = {}
+    if args.operator_grid:
+        override_path = Path(args.operator_grid).expanduser().resolve()
+        LOGGER.info("Loading operator search space overrides from %s", override_path)
+        overrides = _load_operator_grid(override_path)
+
+    defaults = _default_operator_grid()
+    operator_grid: dict[str, list[ParameterSet]] = {}
+    missing: list[str] = []
+    for identifier in requested_operators:
+        if identifier in overrides:
+            operator_grid[identifier] = list(overrides[identifier])
+        elif identifier in defaults:
+            operator_grid[identifier] = list(defaults[identifier])
+        else:
+            missing.append(identifier)
+
+    if missing:
+        raise SystemExit(
+            "No parameter search space available for operators: "
+            + ", ".join(sorted(missing))
+        )
+
+    extra_overrides = sorted(set(overrides) - set(operator_grid))
+    if extra_overrides:
+        LOGGER.info(
+            "Ignoring overrides for operators not requested: %s",
+            ", ".join(extra_overrides),
+        )
+
+    LOGGER.info(
+        "Calibrating operators: %s",
+        ", ".join(sorted(operator_grid.keys())),
+    )
 
     LOGGER.info("Evaluating detectors across %d microsectors", len(samples))
     grouped = _group_combinations(samples)
@@ -901,11 +1038,13 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
             combination[2],
             len(combo_samples),
         )
-        operators_in_combo = sorted({normalize_structural_operator_identifier(key) for sample in combo_samples for key in sample.labels.keys()})
-        for operator_id in operators_in_combo:
-            if operator_id not in operator_grid:
-                LOGGER.warning("No parameter grid defined for operator '%s'; skipping", operator_id)
-                continue
+        operators_in_combo: set[str] = set()
+        for sample in combo_samples:
+            for key in sample.labels.keys():
+                identifier = normalize_structural_operator_identifier(str(key))
+                if identifier in operator_grid:
+                    operators_in_combo.add(identifier)
+        for operator_id in sorted(operators_in_combo):
             candidates: list[EvaluationResult] = []
             for parameter_set in operator_grid[operator_id]:
                 result = _evaluate_detector(
@@ -953,7 +1092,22 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Calibrate TNFR operator detectors")
     parser.add_argument("--raf-root", required=True, help="Directory containing RAF telemetry captures")
     parser.add_argument("--labels", required=True, help="Path to the labelled microsector artefact")
-    parser.add_argument("--operators", required=True, help="Parameter grid describing detector search spaces")
+    parser.add_argument(
+        "--operators",
+        nargs="+",
+        required=True,
+        help=(
+            "Structural operator identifiers to calibrate (e.g. NAV EN). "
+            "Packaged search spaces are used unless --operator-grid overrides them."
+        ),
+    )
+    parser.add_argument(
+        "--operator-grid",
+        help=(
+            "Optional parameter grid file providing custom search spaces. "
+            "When supplied it overrides the packaged defaults for the listed operators."
+        ),
+    )
     parser.add_argument("--out", required=True, help="Output directory for calibration artefacts")
     parser.add_argument(
         "--cars",

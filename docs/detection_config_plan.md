@@ -178,6 +178,23 @@ explicit override. This keeps the calibration workflow aligned with the search
 order above while allowing specialised deployments to point the loader at the
 exact artefact produced by the tool.
 
+The calibration CLI accepts one or more structural identifiers via
+``--operators`` and uses the packaged search spaces for each detector. Provide a
+custom sweep file with ``--operator-grid`` when bespoke ranges are required, for
+example:
+
+```bash
+python tools/calibrate_detectors.py \
+  --raf-root /data/raf \
+  --labels labels.jsonl \
+  --out output/calibration \
+  --operators NAV EN SILENCE \
+  --operator-grid grids.yaml
+```
+
+Omitting ``--operator-grid`` still calibrates the listed detectors using the
+bundled defaults, which is convenient for quick explorations or smoke tests.
+
 ## Deliverables
 
 Calibration runs hand over a detection bundle that mirrors the pack layout. The
