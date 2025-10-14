@@ -53,6 +53,59 @@ def test_get_params_uses_default_compound_when_specific_missing() -> None:
     assert soft["pressure"] == 2.3
 
 
+def test_get_params_merges_class_hierarchy_and_global_compounds() -> None:
+    config = {
+        "defaults": {"pressure": 1.0, "damping": {"front": 4}},
+        "compounds": {
+            "__default__": {"pressure": 1.1, "brake_bias": 52},
+            "R2": {"pressure": 1.15, "brake_bias": 54},
+        },
+        "tracks": {
+            "__default__": {"pressure": 1.2},
+            "BL1": {"pressure": 1.25, "compounds": {"r2": {"pressure": 1.3}}},
+        },
+        "classes": {
+            "__default__": {"camber": {"front": -2.0}},
+            "TCR": {
+                "defaults": {"pressure": 1.35, "damping": {"front": 5}},
+                "tracks": {"BL1": {"pressure": 1.38}},
+                "compounds": {
+                    "__default__": {"pressure": 1.36, "brake_bias": 56},
+                    "r2": {"pressure": 1.37, "brake_bias": 58},
+                },
+            },
+        },
+        "cars": {
+            "XFG": {
+                "defaults": {"pressure": 1.4, "camber": {"front": -2.5}},
+                "tracks": {
+                    "__default__": {"toe": {"front": -0.05}},
+                    "BL1": {
+                        "pressure": 1.5,
+                        "toe": {"front": -0.1},
+                        "compounds": {"r2": {"pressure": 1.6, "brake_bias": 60}},
+                    },
+                },
+                "compounds": {"r2": {"pressure": 1.55, "brake_bias": 59}},
+            }
+        },
+    }
+
+    params = get_params(
+        config,
+        car_class="TCR",
+        car_model="XFG",
+        track_name="BL1",
+        tyre_compound="R2",
+    )
+
+    assert params["pressure"] == 1.6
+    assert params["damping"]["front"] == 5
+    assert params["camber"]["front"] == -2.5
+    assert params["toe"]["front"] == -0.1
+    assert params["brake_bias"] == 60
+
+
 def test_load_detection_config_explicit_path(tmp_path) -> None:
     override = tmp_path / "detection.yaml"
     override.write_text("defaults:\n  pressure: 2.5\n", encoding="utf-8")
