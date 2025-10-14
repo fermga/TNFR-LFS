@@ -20,6 +20,7 @@ _DETECTION_RESOURCE_NAME = "detection.yaml"
 def get_params(
     config: Mapping[str, Any],
     *,
+    car_class: str | None = None,
     car_model: str | None = None,
     track_name: str | None = None,
     tyre_compound: str | None = None,
@@ -70,11 +71,23 @@ def get_params(
                 break
 
     merge(config.get("defaults"))
+    _merge_compounds(config)
 
     tracks_table = config.get("tracks")
     if isinstance(tracks_table, MappingABC):
         merge_section(_lookup_section(tracks_table, "__default__"))
         merge_section(_lookup_section(tracks_table, track_name))
+
+    classes_table = config.get("classes")
+    if isinstance(classes_table, MappingABC):
+        merge_section(_lookup_section(classes_table, "__default__"))
+        class_section = _lookup_section(classes_table, car_class)
+        merge_section(class_section)
+        if isinstance(class_section, MappingABC):
+            track_overrides = class_section.get("tracks")
+            if isinstance(track_overrides, MappingABC):
+                merge_section(_lookup_section(track_overrides, "__default__"))
+                merge_section(_lookup_section(track_overrides, track_name))
 
     cars_table = config.get("cars")
     if isinstance(cars_table, MappingABC):
