@@ -156,6 +156,32 @@ def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _load_json_lines(path: Path) -> list[Any]:
+    entries: list[Any] = []
+    with path.open(encoding="utf-8") as handle:
+        for line_number, raw_line in enumerate(handle, start=1):
+            text = raw_line.strip()
+            if not text:
+                continue
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+                raise ValueError(
+                    f"Invalid JSON entry on line {line_number} of '{path}': {exc.msg}"
+                ) from exc
+            if isinstance(payload, Mapping) and "captures" in payload:
+                captures = payload.get("captures")
+                if isinstance(captures, Sequence) and not isinstance(
+                    captures, (str, bytes)
+                ):
+                    entries.extend(captures)
+                else:
+                    entries.append(payload)
+            else:
+                entries.append(payload)
+    return entries
+
+
 def _load_toml(path: Path) -> Any:
     with path.open("rb") as handle:
         return tomllib.load(handle)
@@ -170,6 +196,7 @@ def _load_labels(path: Path, *, raf_root: Path) -> list[LabelledMicrosector]:
 
     loader_map: dict[str, Callable[[Path], Any]] = {
         ".json": _load_json,
+        ".jsonl": _load_json_lines,
         ".toml": _load_toml,
         ".tml": _load_toml,
         ".yaml": _load_yaml,
