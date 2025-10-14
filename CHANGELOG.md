@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## v0.7.0 (2025-10-14)
+
+### Feature
+
+* feat: add calibration reporting cli ([`ae49944`](https://github.com/fermga/TNFR-LFS/commit/ae499440cfdda2982a46c2cbe83257f7216c3ab1))
+
+### Unknown
+
+* Merge pull request #620 from fermga/codex/create-cli-for-report-calibration
+
+feat: add calibration reporting cli ([`dbed5b2`](https://github.com/fermga/TNFR-LFS/commit/dbed5b279d7e88ed0b04d3bbd14a4d98a4b4118c))
+
+* refactor interval matching tests ([`2b0f82d`](https://github.com/fermga/TNFR-LFS/commit/2b0f82d4f45aa9b6b88f162b5ba8797cbb53e827))
+
+* Merge pull request #619 from fermga/codex/extend-label-ingestion-and-evaluation-logic
+
+Add IoU-based detector evaluation ([`96946fc`](https://github.com/fermga/TNFR-LFS/commit/96946fce3c9c371e3ac649177526ac42706648c9))
+
+* Implement IoU-based detector evaluation ([`3032be2`](https://github.com/fermga/TNFR-LFS/commit/3032be28df885c73f28b04c34f5fb2895354caed))
+
 ## v0.6.0 (2025-10-14)
 
 ### Feature
