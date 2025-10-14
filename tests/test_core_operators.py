@@ -1205,7 +1205,7 @@ def test_acoplamiento_and_resonance_behaviour():
     dissonance = dissonance_operator(series_a, target=0.25)
 
     assert coupling > 0
-    expected_resonance = sqrt(mean(value * value for value in series_b))
+    expected_resonance = np.sqrt(np.mean(np.square(series_b)))
     assert resonance == pytest.approx(expected_resonance, rel=1e-9)
     assert dissonance == pytest.approx(mean(abs(value - 0.25) for value in series_a))
 
@@ -1245,6 +1245,28 @@ def test_pairwise_coupling_operator_allows_unbalanced_lengths():
 
     expected = coupling_operator(series["tyres"], series["suspension"], strict_length=False)
     assert pairwise["tyres↔suspension"] == pytest.approx(expected, rel=1e-9)
+
+
+def test_pairwise_coupling_operator_matches_manual_computation_for_multiple_pairs():
+    series = {
+        "tyres": [1.0, 2.0, 3.0, 4.0],
+        "suspension": [2.5, 3.5, 4.5],
+        "chassis": [0.5, 0.5, 0.5, 0.5],
+    }
+    pairs = [
+        ("tyres", "suspension"),
+        ("suspension", "chassis"),
+        ("tyres", "chassis"),
+        ("tyres", "wings"),
+    ]
+
+    pairwise = pairwise_coupling_operator(series, pairs=pairs)
+
+    for first, second in pairs:
+        expected = coupling_operator(
+            series.get(first, ()), series.get(second, ()), strict_length=False
+        )
+        assert pairwise[f"{first}↔{second}"] == pytest.approx(expected, rel=1e-9)
 
 
 def test_aggregate_operator_events_returns_latent_state_summary() -> None:

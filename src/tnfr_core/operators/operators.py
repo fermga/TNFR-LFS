@@ -517,33 +517,71 @@ def dissonance_breakdown_operator(
     )
 
 
+def _prepare_series_pair(
+    series_a: Sequence[float] | np.ndarray,
+    series_b: Sequence[float] | np.ndarray,
+    *,
+    strict_length: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return truncated NumPy arrays for ``series_a`` and ``series_b``."""
+
+    array_a = np.asarray(series_a, dtype=float).ravel()
+    array_b = np.asarray(series_b, dtype=float).ravel()
+    if strict_length and array_a.shape[0] != array_b.shape[0]:
+        raise ValueError("series must have the same length")
+
+    length = min(array_a.shape[0], array_b.shape[0])
+    return array_a[:length], array_b[:length]
+
+
+def _batch_coupling(
+    values: np.ndarray, mask: np.ndarray | None = None
+) -> np.ndarray:
+    """Compute coupling values for stacked series using vectorised operations."""
+
+    xp = jnp if jnp is not None else np
+    data = xp.asarray(values, dtype=xp.float64)
+    if mask is None:
+        mask_xp = xp.ones(data.shape[:-1], dtype=bool)
+    else:
+        mask_xp = xp.asarray(mask, dtype=bool)
+
+    counts = mask_xp.sum(axis=1, keepdims=True)
+    counts_float = counts.astype(data.dtype)
+    safe_counts = xp.where(counts > 0, counts_float, xp.ones_like(counts_float))
+    sums = xp.sum(xp.where(mask_xp[..., None], data, 0.0), axis=1, keepdims=True)
+    means = xp.where(
+        (counts > 0)[..., None],
+        sums / safe_counts[..., None],
+        0.0,
+    )
+    centered = xp.where(mask_xp[..., None], data - means, 0.0)
+    covariance = xp.sum(centered[..., 0] * centered[..., 1], axis=1)
+    variance_a = xp.sum(centered[..., 0] ** 2, axis=1)
+    variance_b = xp.sum(centered[..., 1] ** 2, axis=1)
+    denominator = xp.sqrt(variance_a * variance_b)
+
+    if xp is np:
+        with np.errstate(invalid="ignore", divide="ignore"):
+            result = np.where(denominator > 0, covariance / denominator, 0.0)
+    else:  # pragma: no cover - exercised only when JAX is available
+        result = xp.where(denominator > 0, covariance / denominator, 0.0)
+    return np.asarray(result, dtype=float)
+
+
 def coupling_operator(
     series_a: Sequence[float], series_b: Sequence[float], *, strict_length: bool = True
 ) -> float:
     """Return the normalised coupling (correlation) between two series."""
 
-    values_a = list(series_a)
-    values_b = list(series_b)
-    if strict_length and len(values_a) != len(values_b):
-        raise ValueError("series must have the same length")
-
-    length = min(len(values_a), len(values_b))
-    if length == 0:
+    values_a, values_b = _prepare_series_pair(
+        series_a, series_b, strict_length=strict_length
+    )
+    if values_a.size == 0:
         return 0.0
 
-    if len(values_a) != length:
-        values_a = values_a[:length]
-    if len(values_b) != length:
-        values_b = values_b[:length]
-
-    mean_a = mean(values_a)
-    mean_b = mean(values_b)
-    covariance = sum((a - mean_a) * (b - mean_b) for a, b in zip(values_a, values_b))
-    variance_a = sum((a - mean_a) ** 2 for a in values_a)
-    variance_b = sum((b - mean_b) ** 2 for b in values_b)
-    if variance_a == 0 or variance_b == 0:
-        return 0.0
-    return covariance / sqrt(variance_a * variance_b)
+    stacked = np.stack((values_a, values_b), axis=-1)[np.newaxis, ...]
+    return float(_batch_coupling(stacked)[0])
 
 
 def acoplamiento_operator(
@@ -571,24 +609,48 @@ def pairwise_coupling_operator(
         ordered_nodes = list(series_by_node.keys())
         pairs = [(a, b) for idx, a in enumerate(ordered_nodes) for b in ordered_nodes[idx + 1 :]]
 
-    coupling: Dict[str, float] = {}
-    for first, second in pairs:
-        series_a = series_by_node.get(first, ())
-        series_b = series_by_node.get(second, ())
-        label = f"{first}↔{second}"
-        if not series_a or not series_b:
-            coupling[label] = 0.0
+    pairs = list(pairs)
+    if not pairs:
+        return {}
+
+    prepared = [
+        _prepare_series_pair(
+            series_by_node.get(first, ()),
+            series_by_node.get(second, ()),
+            strict_length=False,
+        )
+        for first, second in pairs
+    ]
+
+    lengths = [values_a.shape[0] for values_a, _ in prepared]
+    max_length = max(lengths, default=0)
+    stacked = np.zeros((len(prepared), max_length, 2), dtype=float)
+    mask = np.zeros((len(prepared), max_length), dtype=bool)
+
+    for idx, ((values_a, values_b), length) in enumerate(zip(prepared, lengths)):
+        if length == 0:
             continue
-        coupling[label] = coupling_operator(series_a, series_b, strict_length=False)
-    return coupling
+        stacked[idx, :length, 0] = values_a
+        stacked[idx, :length, 1] = values_b
+        mask[idx, :length] = True
+
+    results = _batch_coupling(stacked, mask)
+    return {
+        f"{first}↔{second}": float(results[idx])
+        for idx, (first, second) in enumerate(pairs)
+    }
 
 
 def resonance_operator(series: Sequence[float]) -> float:
     """Compute the root-mean-square (RMS) resonance of a series."""
 
-    if not series:
+    numpy_series = np.asarray(series, dtype=float).ravel()
+    if numpy_series.size == 0:
         return 0.0
-    return sqrt(mean(value * value for value in series))
+    xp = jnp if jnp is not None else np
+    array = xp.asarray(numpy_series, dtype=xp.float64)
+    rms = xp.sqrt(xp.mean(array ** 2))
+    return float(rms)
 
 
 class RecursivityMicroState(TypedDict, total=False):
