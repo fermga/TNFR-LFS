@@ -74,75 +74,75 @@ aerodynamic imbalance).【F:tnfr_lfs/cli/osd.py†L1477-L1567】
   tables (the ``[tool.tnfr_lfs]`` block in ``pyproject.toml``) intentionally
   retain their respective names for compatibility with existing workflows.
 
-## Alineación TNFR
+## TNFR alignment
 
-Los operadores estructurales de TNFR cubren trece arquetipos. Los códigos
-provienen de los detectores `AL`, `EN`, `IL`, `NAV`, `NUL`, `OZ`, `RA`,
-`REMESH`, `SILENCE`, `THOL`, `UM`, `VAL` y `ZHIR`, que `canonical_operator_label`
-traduce a sus etiquetas canónicas (Support, Reception, Coherence, Transition,
-Contraction, Dissonance, Propagation, Remeshing, Structural silence,
-Auto-organisation, Coupling, Amplification y Transformation).【F:src/tnfr_core/operators/operator_detection.py†L43-L68】
+The TNFR structural operators span thirteen archetypes. Their codes come from
+the detectors `AL`, `EN`, `IL`, `NAV`, `NUL`, `OZ`, `RA`, `REMESH`, `SILENCE`,
+`THOL`, `UM`, `VAL`, and `ZHIR`, which `canonical_operator_label` maps to their
+canonical labels (Support, Reception, Coherence, Transition, Contraction,
+Dissonance, Propagation, Remeshing, Structural silence, Auto-organisation,
+Coupling, Amplification, and Transformation).【F:src/tnfr_core/operators/operator_detection.py†L43-L68】
 
-Los detectores estructurales pueden consultarse directamente desde
-``tnfr_core.operators.operator_detection``. Junto a `detect_al`, `detect_oz`,
-`detect_il`, `detect_silence` y `detect_nav`, el núcleo expone
+The structural detectors are exposed directly by
+``tnfr_core.operators.operator_detection``. Alongside `detect_al`, `detect_oz`,
+`detect_il`, `detect_silence`, and `detect_nav`, the core provides
 ``detect_en`` (Reception), ``detect_um`` (Coupling), ``detect_ra`` (Propagation),
 ``detect_val`` (Amplification), ``detect_nul`` (Contraction), ``detect_thol``
-(Auto-organisation), ``detect_zhir`` (Transformation) y ``detect_remesh``
-(Remeshing). Cada función sigue el mismo patrón de escaneo por ventanas y
-ofrece umbrales explícitos:
+(Auto-organisation), ``detect_zhir`` (Transformation), and ``detect_remesh``
+(Remeshing). Each function follows the same sliding-window scan pattern and
+exposes explicit thresholds:
 
-* ``detect_en`` integra el flujo ψ en una ``window`` deslizante; requiere que la
-  integral supere ``psi_threshold`` mientras la norma |EPI| permanece por debajo
-  de ``epi_norm_max`` y sin decrecer.
-* ``detect_um`` contrasta ``mu_delta_threshold``, ``load_ratio_threshold`` y
-  ``suspension_delta_threshold`` para medir el acoplamiento nodal.
-* ``detect_ra`` valora la difusión ΔNFR con ``nfr_rate_threshold``,
-  ``si_span_threshold`` y ``speed_threshold``.
-* ``detect_val`` controla ``window`` muestras para verificar que la tasa de
-  crecimiento |EPI| supere ``epi_growth_min`` mientras el número de nodos de
-  soporte aumenta al menos ``active_nodes_delta_min`` con cargas superiores a
+* ``detect_en`` integrates the ψ flux across a sliding ``window``; it requires
+  the integral to exceed ``psi_threshold`` while the |EPI| norm remains below
+  ``epi_norm_max`` without decaying.
+* ``detect_um`` cross-checks ``mu_delta_threshold``, ``load_ratio_threshold``,
+  and ``suspension_delta_threshold`` to measure nodal coupling.
+* ``detect_ra`` evaluates ΔNFR diffusion with ``nfr_rate_threshold``,
+  ``si_span_threshold``, and ``speed_threshold``.
+* ``detect_val`` inspects ``window`` samples to confirm that the |EPI| growth
+  rate exceeds ``epi_growth_min`` while the number of support nodes increases by
+  at least ``active_nodes_delta_min`` under loads above
   ``active_node_load_min``.
-* ``detect_nul`` revisa ``window`` registros para confirmar que el conteo de
-  nodos activos disminuye hasta ``active_nodes_delta_max`` (valor negativo) a la
-  vez que la concentración EPI supera ``epi_concentration_min`` sobre nodos con
-  carga mínima ``active_node_load_min``.
-* ``detect_thol`` observa aceleraciones de |EPI| mayores a ``epi_accel_min`` que
-  se sostienen durante ``stability_window`` segundos dentro del margen
-  ``stability_tolerance`` sobre la derivada primera.
-* ``detect_zhir`` usa una ``window`` bidireccional para detectar saltos de fase
-  al menos ``phase_jump_min`` mientras la derivada de |EPI| supera ``xi_min``
-  durante ``min_persistence`` segundos.
-* ``detect_remesh`` evalúa patrones repetidos en ``window`` muestras y exige que
-  al menos ``min_repeats`` retrasos de ``tau_candidates`` alcancen una
-  autocorrelación de ``acf_min``.
+* ``detect_nul`` reviews ``window`` records to confirm that the active-node
+  count drops to ``active_nodes_delta_max`` (negative value) while the EPI
+  concentration exceeds ``epi_concentration_min`` over nodes with minimum load
+  ``active_node_load_min``.
+* ``detect_thol`` monitors |EPI| accelerations above ``epi_accel_min`` that
+  persist for ``stability_window`` seconds within the
+  ``stability_tolerance`` margin on the first derivative.
+* ``detect_zhir`` uses a bidirectional ``window`` to detect phase jumps of at
+  least ``phase_jump_min`` while the |EPI| derivative exceeds ``xi_min`` for
+  ``min_persistence`` seconds.
+* ``detect_remesh`` evaluates repeated patterns across ``window`` samples and
+  requires at least ``min_repeats`` delays from ``tau_candidates`` to reach an
+  autocorrelation of ``acf_min``.
 
-La ecuación nodal extendida que guía el índice de sentido pondera cada nodo por
-su aporte ΔNFR, su frecuencia natural y la entropía estructural:
+The extended nodal equation driving the Sense Index weights each node by its
+ΔNFR contribution, natural frequency, and structural entropy:
 
 ```
 Sense Index = 1 / (1 + Σ w_i · |ΔNFR_i| · g(ν_f_i)) - λ · H
 ```
 
-El término ponderado `Σ w_i · |ΔNFR_i| · g(ν_f_i)` absorbe la dinámica nodal, la
-función `g(ν_f_i)` corrige por frecuencia natural y `H` representa la entropía
-Shannon calculada sobre la distribución ΔNFR.【F:docs/DESIGN.md†L41-L88】
+The weighted term `Σ w_i · |ΔNFR_i| · g(ν_f_i)` absorbs the nodal dynamics, the
+`g(ν_f_i)` function corrects for natural frequency, and `H` represents the
+Shannon entropy computed over the ΔNFR distribution.【F:docs/DESIGN.md†L41-L88】
 
-Las nuevas métricas expuestas por el núcleo recopilan expansiones y entropías
-estructurales (`support_effective`, `load_support_ratio`,
+The new metrics exposed by the core aggregate structural expansions and
+entropies (`support_effective`, `load_support_ratio`,
 `structural_expansion_longitudinal`, `structural_contraction_longitudinal`,
 `structural_expansion_lateral`, `structural_contraction_lateral`,
 `delta_nfr_entropy`, `node_entropy`, `phase_delta_nfr_entropy`,
-`phase_node_entropy`, `thermal_load`, `style_index`, `network_memory`, además de
-`aero_balance_drift`, `slide_catch_budget` y `ackermann_parallel_index`). Estas
-series alimentan los operadores `recursivity_operator` y `mutation_operator` para
-mantener la memoria de red y las transiciones de arquetipo.【F:docs/DESIGN.md†L65-L89】【F:tools/tnfr_theory_audit.py†L13-L103】
+`phase_node_entropy`, `thermal_load`, `style_index`, `network_memory`, along
+with `aero_balance_drift`, `slide_catch_budget`, and
+`ackermann_parallel_index`). These series feed the `recursivity_operator` and
+`mutation_operator` to preserve network memory and archetype transitions.【F:docs/DESIGN.md†L65-L89】【F:tools/tnfr_theory_audit.py†L13-L103】
 
-El script `tools/tnfr_theory_audit.py` genera un informe actualizado de la
-alineación teórica. Ejecútalo con `poetry run python tools/tnfr_theory_audit.py
---core --tests --output tests/_report/theory_impl_matrix.md` y consulta el
-resultado en `tests/_report/theory_impl_matrix.md` para validar la cobertura de
-los operadores y métricas expuestos.【F:tools/tnfr_theory_audit.py†L1-L67】
+The `tools/tnfr_theory_audit.py` script produces an up-to-date theoretical
+alignment report. Run it with `poetry run python tools/tnfr_theory_audit.py
+--core --tests --output tests/_report/theory_impl_matrix.md` and review the
+output in `tests/_report/theory_impl_matrix.md` to validate the coverage of the
+exposed operators and metrics.【F:tools/tnfr_theory_audit.py†L1-L67】
 
 ## Resources
 
