@@ -776,85 +776,139 @@ def _segment_delta_metrics(
     }
 
 
-def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str, Any]:
+def _iter_operator_events_for_microsector(
+    microsector: Any,
+    *,
+    series: Sequence[EPIBundle],
+    lookup: Sequence[Mapping[str, float]],
+) -> Iterable[Dict[str, Any]]:
+    raw_events = getattr(microsector, "operator_events", {}) or {}
+    base_index = 0
+    boundaries = getattr(microsector, "phase_boundaries", {}) or {}
+    if boundaries:
+        base_index = min(int(start) for start, _ in boundaries.values())
+
+    for name, payloads in raw_events.items():
+        operator_code = str(name)
+        operator_label = canonical_operator_label(operator_code)
+        for payload in payloads:
+            if not isinstance(payload, Mapping):
+                continue
+            start_idx = payload.get("global_start_index")
+            if start_idx is None:
+                start_idx = base_index + int(payload.get("start_index", 0))
+            end_idx = payload.get("global_end_index")
+            if end_idx is None:
+                end_idx = base_index + int(payload.get("end_index", start_idx))
+            start_idx = int(start_idx)
+            end_idx = int(end_idx)
+            start_time = _to_float(payload.get("start_time"))
+            end_time = _to_float(payload.get("end_time"), default=start_time)
+            structural_start = _structural_for_time(
+                lookup, start_time, index=start_idx
+            )
+            structural_end = _structural_for_time(lookup, end_time, index=end_idx)
+            duration = max(0.0, end_time - start_time)
+            if duration <= 0.0:
+                duration = max(0.0, _to_float(payload.get("duration"), default=0.0))
+            delta_metrics = dict(_segment_delta_metrics(series, start_idx, end_idx))
+            details = {
+                key: payload[key]
+                for key in sorted(payload)
+                if key not in {"start_index", "end_index"}
+            }
+            event_entry: Dict[str, Any] = {
+                "code": operator_code,
+                "type": operator_label,
+                "microsector": int(getattr(microsector, "index", 0)),
+                "start_time": start_time,
+                "end_time": end_time,
+                "duration": duration,
+                "structural_start": structural_start,
+                "structural_end": structural_end,
+                "delta_metrics": delta_metrics,
+                "details": details,
+            }
+            structural_duration = _to_float(
+                payload.get("structural_duration"), default=0.0
+            )
+            if structural_duration > 0.0:
+                event_entry["structural_duration"] = structural_duration
+
+            phase = payload.get("phase")
+            event_entry["phase"] = str(phase) if isinstance(phase, str) else None
+            event_entry["severity"] = _to_float(payload.get("severity"))
+            operator_id = payload.get("operator_id")
+            if isinstance(operator_id, str) and operator_id:
+                event_entry["operator_id"] = operator_id
+            else:
+                event_entry["operator_id"] = operator_code
+            detector = payload.get("detector")
+            event_entry["detector"] = (
+                str(detector) if isinstance(detector, str) and detector else None
+            )
+
+            yield event_entry
+
+
+def _iter_operator_events(
+    series: Sequence[EPIBundle],
+    microsectors: Sequence[Any],
+    lookup: Sequence[Mapping[str, float]],
+) -> Iterable[Dict[str, Any]]:
+    for microsector in microsectors:
+        yield from _iter_operator_events_for_microsector(
+            microsector, series=series, lookup=lookup
+        )
+
+
+def _operator_event_context(
+    results: Mapping[str, Any]
+) -> tuple[list[EPIBundle], list[Any], list[Mapping[str, float]]]:
     series = list(_series_from_results(results))
-    microsectors = _microsectors_from_results(results)
+    microsectors = list(_microsectors_from_results(results))
     lookup = list(_structural_lookup(series))
+    return series, microsectors, lookup
+
+
+def build_operator_trajectories_payload(results: Mapping[str, Any]) -> Dict[str, Any]:
+    series, microsectors, lookup = _operator_event_context(results)
     events: list[Dict[str, Any]] = []
     summary: MutableMapping[str, Dict[str, float]] = {}
     structural_values: list[float] = []
 
-    for microsector in microsectors:
-        raw_events = getattr(microsector, "operator_events", {}) or {}
-        base_index = 0
-        boundaries = getattr(microsector, "phase_boundaries", {}) or {}
-        if boundaries:
-            base_index = min(int(start) for start, _ in boundaries.values())
-        for name, payloads in raw_events.items():
-            operator_code = str(name)
-            operator_label = canonical_operator_label(operator_code)
-            for payload in payloads:
-                start_idx = payload.get("global_start_index")
-                if start_idx is None:
-                    start_idx = base_index + int(payload.get("start_index", 0))
-                end_idx = payload.get("global_end_index")
-                if end_idx is None:
-                    end_idx = base_index + int(payload.get("end_index", start_idx))
-                start_idx = int(start_idx)
-                end_idx = int(end_idx)
-                start_time = _to_float(payload.get("start_time"))
-                end_time = _to_float(payload.get("end_time"), default=start_time)
-                structural_start = _structural_for_time(lookup, start_time, index=start_idx)
-                structural_end = _structural_for_time(lookup, end_time, index=end_idx)
-                duration = max(0.0, end_time - start_time)
-                if duration <= 0.0:
-                    duration = max(0.0, _to_float(payload.get("duration"), default=0.0))
-                delta_metrics = dict(
-                    _segment_delta_metrics(series, start_idx, end_idx)
-                )
-                structural_values.extend([structural_start, structural_end])
-                event_entry: Dict[str, Any] = {
-                    "code": operator_code,
-                    "type": operator_label,
-                    "microsector": int(getattr(microsector, "index", 0)),
-                    "start_time": start_time,
-                    "end_time": end_time,
-                    "duration": duration,
-                    "structural_start": structural_start,
-                    "structural_end": structural_end,
-                    "delta_metrics": delta_metrics,
-                    "details": {
-                        key: payload[key]
-                        for key in sorted(payload)
-                        if key not in {"start_index", "end_index"}
-                    },
-                }
-                structural_duration = _to_float(
-                    payload.get("structural_duration"), default=0.0
-                )
-                if structural_duration > 0.0:
-                    event_entry["structural_duration"] = structural_duration
-                events.append(event_entry)
-                stats = summary.setdefault(
-                    operator_label,
-                    {
-                        "code": operator_code,
-                        "count": 0.0,
-                        "duration": 0.0,
-                        "peak": 0.0,
-                    },
-                )
-                stats["count"] += 1.0
-                stats["duration"] += duration
-                stats["peak"] += abs(delta_metrics.get("peak", 0.0))
-                if operator_code == "SILENCE":
-                    quiet_total = stats.setdefault("quiet_duration", 0.0)
-                    stats["quiet_duration"] = quiet_total + duration
-                    density_total = stats.setdefault("density_total", 0.0)
-                    stats["density_total"] = density_total + max(
-                        0.0, _to_float(payload.get("structural_density_mean"), default=0.0)
-                    )
-                    event_entry.setdefault("details", {})["latent_state"] = "SILENCE"
+    for event_entry in _iter_operator_events(series, microsectors, lookup):
+        events.append(event_entry)
+        structural_values.extend(
+            [event_entry["structural_start"], event_entry["structural_end"]]
+        )
+        operator_label = str(event_entry.get("type"))
+        operator_code = str(event_entry.get("code"))
+        delta_metrics = event_entry.get("delta_metrics", {})
+        duration = _to_float(event_entry.get("duration"))
+        stats = summary.setdefault(
+            operator_label,
+            {
+                "code": operator_code,
+                "count": 0.0,
+                "duration": 0.0,
+                "peak": 0.0,
+            },
+        )
+        stats["code"] = operator_code
+        stats["count"] += 1.0
+        stats["duration"] += duration
+        stats["peak"] += abs(_to_float(delta_metrics.get("peak")))
+        if operator_code == "SILENCE":
+            quiet_total = stats.setdefault("quiet_duration", 0.0)
+            stats["quiet_duration"] = quiet_total + duration
+            density_total = stats.setdefault("density_total", 0.0)
+            details = event_entry.get("details", {})
+            stats["density_total"] = density_total + max(
+                0.0,
+                _to_float(details.get("structural_density_mean"), default=0.0),
+            )
+            details.setdefault("latent_state", "SILENCE")
 
     events.sort(key=lambda entry: (entry["structural_start"], entry["start_time"]))
     for name, stats in summary.items():
@@ -1180,6 +1234,73 @@ def operator_trajectory_exporter(results: Mapping[str, Any]) -> str:
     return render_operator_trajectories(payload, fmt="json")
 
 
+def operator_events_json_exporter(results: Mapping[str, Any]) -> str:
+    series, microsectors, lookup = _operator_event_context(results)
+    events = list(_iter_operator_events(series, microsectors, lookup))
+    return json.dumps(events, indent=2, sort_keys=True)
+
+
+def operator_events_csv_exporter(results: Mapping[str, Any]) -> str:
+    from io import StringIO
+    import csv
+
+    series, microsectors, lookup = _operator_event_context(results)
+    events = list(_iter_operator_events(series, microsectors, lookup))
+    fieldnames = [
+        "microsector",
+        "phase",
+        "code",
+        "type",
+        "operator_id",
+        "detector",
+        "severity",
+        "start_time",
+        "end_time",
+        "duration",
+        "structural_start",
+        "structural_end",
+        "structural_duration",
+        "delta_mean",
+        "delta_peak",
+        "delta_span",
+        "detector_params",
+    ]
+    buffer = StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    for event in events:
+        delta_metrics = event.get("delta_metrics", {})
+        details = event.get("details", {})
+        detector_params = details.get("detector_parameters")
+        if detector_params is not None:
+            detector_params_str = json.dumps(detector_params, sort_keys=True)
+        else:
+            detector_params_str = ""
+        row = {
+            "microsector": event.get("microsector"),
+            "phase": event.get("phase") or "",
+            "code": event.get("code"),
+            "type": event.get("type"),
+            "operator_id": event.get("operator_id"),
+            "detector": event.get("detector") or "",
+            "severity": _to_float(event.get("severity")),
+            "start_time": _to_float(event.get("start_time")),
+            "end_time": _to_float(event.get("end_time")),
+            "duration": _to_float(event.get("duration")),
+            "structural_start": _to_float(event.get("structural_start")),
+            "structural_end": _to_float(event.get("structural_end")),
+            "structural_duration": _to_float(
+                event.get("structural_duration"), default=0.0
+            ),
+            "delta_mean": _to_float(delta_metrics.get("mean")),
+            "delta_peak": _to_float(delta_metrics.get("peak")),
+            "delta_span": _to_float(delta_metrics.get("span")),
+            "detector_params": detector_params_str,
+        }
+        writer.writerow(row)
+    return buffer.getvalue()
+
+
 def delta_bifurcation_exporter(results: Mapping[str, Any]) -> str:
     payload = build_delta_bifurcation_payload(results)
     return render_delta_bifurcation(payload, fmt="json")
@@ -1194,6 +1315,8 @@ exporters_registry = {
     "html_ext": html_exporter,
     "coherence-map": coherence_map_exporter,
     "operator-trajectory": operator_trajectory_exporter,
+    "operator-events-json": operator_events_json_exporter,
+    "operator-events-csv": operator_events_csv_exporter,
     "delta-bifurcation": delta_bifurcation_exporter,
 }
 
@@ -1209,6 +1332,8 @@ __all__ = [
     "render_delta_bifurcation",
     "coherence_map_exporter",
     "operator_trajectory_exporter",
+    "operator_events_json_exporter",
+    "operator_events_csv_exporter",
     "delta_bifurcation_exporter",
     "html_exporter",
     "json_exporter",

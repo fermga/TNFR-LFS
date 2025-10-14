@@ -1,3 +1,4 @@
+import csv
 import importlib
 import json
 import struct
@@ -19,6 +20,8 @@ from tnfr_lfs.exporters import (
     lfs_set_exporter,
     markdown_exporter,
     normalise_set_output_name,
+    operator_events_csv_exporter,
+    operator_events_json_exporter,
     operator_trajectory_exporter,
 )
 from tnfr_core.operator_detection import canonical_operator_label
@@ -30,6 +33,7 @@ from tests.helpers import (
     build_native_export_plan,
     build_setup_plan,
 )
+from tests.helpers.microsector import build_microsector
 
 
 def build_payload():
@@ -66,6 +70,30 @@ def build_payload():
     return {"series": results, "meta": {"session": "FP1"}}
 
 
+def build_operator_payload():
+    payload = build_payload()
+    operator_events = {
+        "OZ": (
+            {
+                "global_start_index": 0,
+                "global_end_index": 1,
+                "start_time": 0.0,
+                "end_time": 0.2,
+                "duration": 0.2,
+                "phase": "apex3a",
+                "severity": 1.6,
+                "operator_id": "OZ",
+                "detector": "detect_oz",
+                "detector_parameters": {"threshold": 1.25},
+            },
+        )
+    }
+    payload["microsectors"] = (
+        build_microsector(index=3, operator_events=operator_events),
+    )
+    return payload
+
+
 def test_json_exporter_serialises_payload():
     payload = build_payload()
     output = json_exporter(payload)
@@ -82,6 +110,33 @@ def test_csv_exporter_renders_rows():
         == "timestamp,epi,delta_nfr,delta_nfr_proj_longitudinal,delta_nfr_proj_lateral,sense_index"
     )
     assert len(lines) == 3
+
+
+def test_operator_events_json_exporter_includes_metadata() -> None:
+    payload = build_operator_payload()
+    rendered = operator_events_json_exporter(payload)
+    events = json.loads(rendered)
+    assert events
+    event = events[0]
+    assert event["phase"] == "apex3a"
+    assert event["operator_id"] == "OZ"
+    assert event["detector"] == "detect_oz"
+    assert event["severity"] == pytest.approx(1.6)
+    assert event["details"]["detector_parameters"]["threshold"] == pytest.approx(1.25)
+
+
+def test_operator_events_csv_exporter_flattens_detector_parameters() -> None:
+    payload = build_operator_payload()
+    rendered = operator_events_csv_exporter(payload)
+    rows = list(csv.DictReader(rendered.splitlines()))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["phase"] == "apex3a"
+    assert row["operator_id"] == "OZ"
+    assert row["detector"] == "detect_oz"
+    assert float(row["severity"]) == pytest.approx(1.6)
+    params = json.loads(row["detector_params"])
+    assert params["threshold"] == pytest.approx(1.25)
 def test_serialise_setup_plan_collects_unique_fields():
     plan = build_setup_plan()
     payload = serialise_setup_plan(plan)
