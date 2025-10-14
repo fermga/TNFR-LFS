@@ -27,6 +27,7 @@ import csv
 import json
 import logging
 import math
+import statistics
 from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 
 try:  # Python 3.11+
@@ -39,10 +40,7 @@ import yaml
 from tnfr_core.equations.epi import EPIExtractor, TelemetryRecord
 from tnfr_core.metrics.segmentation import Microsector, segment_microsectors
 from tnfr_core.operators import operator_detection
-from tnfr_core.operators.operator_detection import (
-    canonical_operator_label,
-    normalize_structural_operator_identifier,
-)
+from tnfr_core.operators.operator_detection import normalize_structural_operator_identifier
 
 from tnfr_lfs.telemetry.offline.raf import raf_to_telemetry_records, read_raf
 
@@ -82,6 +80,8 @@ class MicrosectorSample:
     records: Sequence[TelemetryRecord]
     labels: Mapping[str, bool]
     label_intervals: Mapping[str, Sequence[tuple[float, float]]]
+    delta_nfr_series: Sequence[float] = ()
+    nav_nu_f: float | Mapping[str, float] | None = None
 
     @property
     def duration_seconds(self) -> float:
@@ -687,6 +687,35 @@ def _build_microsector_dataset(
                 micro_start_time=float(micro.start_time),
                 micro_end_time=float(micro.end_time),
             )
+            delta_series: list[float] = []
+            nu_f_values: list[float] = []
+            if bundles:
+                bundle_len = len(bundles)
+                if bundle_len > 0:
+                    start_bundle = max(0, min(start_index, bundle_len - 1))
+                    end_bundle = max(start_bundle, min(end_index, bundle_len - 1))
+                    for bundle in bundles[start_bundle : end_bundle + 1]:
+                        delta_value = _coerce_float(getattr(bundle, "delta_nfr", None))
+                        if delta_value is None or not math.isfinite(delta_value):
+                            delta_value = 0.0
+                        delta_series.append(delta_value)
+                        nu_candidates = (
+                            getattr(bundle, "nu_f_dominant", None),
+                            getattr(getattr(bundle, "track", None), "nu_f", None),
+                            getattr(getattr(bundle, "driver", None), "nu_f", None),
+                        )
+                        for candidate in nu_candidates:
+                            numeric = _coerce_float(candidate)
+                            if numeric is None or not math.isfinite(numeric):
+                                continue
+                            nu_f_values.append(float(numeric))
+                            break
+            nav_nu_f: float | None = None
+            if nu_f_values:
+                try:
+                    nav_nu_f = float(statistics.median(nu_f_values))
+                except statistics.StatisticsError:  # pragma: no cover - defensive
+                    nav_nu_f = None
             dataset.append(
                 MicrosectorSample(
                     capture_id=label.capture_id,
@@ -700,6 +729,8 @@ def _build_microsector_dataset(
                     start_time=float(micro.start_time),
                     end_time=float(micro.end_time),
                     records=records,
+                    delta_nfr_series=tuple(delta_series),
+                    nav_nu_f=nav_nu_f,
                     labels=labels_map or dict(label.operators),
                     label_intervals=interval_map,
                 )
@@ -986,6 +1017,7 @@ def _evaluate_detector(
     if not samples:
         return None
     detector = _detector_callable(operator_id)
+    canonical_id = normalize_structural_operator_identifier(operator_id)
     tp = fp = tn = fn = 0
     total_duration = 0.0
     support = 0
@@ -1005,7 +1037,26 @@ def _evaluate_detector(
             is_positive = bool(sample.labels.get(operator_id)) or bool(truth_intervals)
             window = list(sample.records[sample.start_index : sample.end_index + 1])
             try:
-                events = detector(window, **parameter_set.parameters)
+                if canonical_id == "NAV":
+                    delta_series = list(sample.delta_nfr_series)
+                    if not delta_series and window:
+                        for record in window:
+                            delta_value = _coerce_float(getattr(record, "delta_nfr", None))
+                            if delta_value is None or not math.isfinite(delta_value):
+                                delta_series.append(0.0)
+                            else:
+                                delta_series.append(float(delta_value))
+                    nu_f_value: float | Mapping[str, float] | None = sample.nav_nu_f
+                    if not isinstance(nu_f_value, Mapping) and nu_f_value is None and delta_series:
+                        try:
+                            nu_f_value = float(
+                                statistics.median(abs(value) for value in delta_series)
+                            )
+                        except statistics.StatisticsError:  # pragma: no cover - defensive
+                            nu_f_value = None
+                    events = detector(delta_series, nu_f=nu_f_value, **parameter_set.parameters)
+                else:
+                    events = detector(window, **parameter_set.parameters)
             except Exception as exc:
                 LOGGER.debug(
                     "Detector '%s' failed for sample %s/%s: %s",

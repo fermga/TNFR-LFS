@@ -184,6 +184,59 @@ class _StubRecord:
     timestamp: float
 
 
+def test_nav_evaluation_uses_delta_series(monkeypatch) -> None:
+    operator_id = "NAV"
+    delta_series = [0.5, 0.5, 0.5, 0.5]
+    expected_nu_f = 0.5
+    captured: dict[str, object] = {}
+
+    def stub_detector(series, *, nu_f, window, **_kwargs):  # type: ignore[no-untyped-def]
+        captured["series"] = list(series)
+        captured["nu_f"] = nu_f
+        if all(abs(float(value) - expected_nu_f) < 1e-6 for value in series):
+            events = [{"start_index": 0, "end_index": len(series) - 1}]
+            captured["events"] = events
+            return events
+        captured["events"] = []
+        return []
+
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._detector_callable", lambda _: stub_detector
+    )
+
+    records = [_StubRecord(float(index)) for index in range(len(delta_series))]
+    interval_end = float(len(delta_series))
+    sample = MicrosectorSample(
+        capture_id="capture",
+        microsector_index=1,
+        track="track",
+        car="car",
+        car_class=None,
+        compound=None,
+        start_index=0,
+        end_index=len(delta_series) - 1,
+        start_time=0.0,
+        end_time=interval_end,
+        records=records,
+        delta_nfr_series=tuple(delta_series),
+        nav_nu_f=expected_nu_f,
+        labels={operator_id: True},
+        label_intervals={operator_id: ((0.0, interval_end),)},
+    )
+
+    result = _evaluate_detector(
+        operator_id,
+        [sample],
+        ParameterSet(identifier="nav", parameters={"window": 3}),
+        fold_assignments={},
+    )
+
+    assert result is not None
+    assert captured["series"] == delta_series
+    assert captured["nu_f"] == expected_nu_f
+    assert captured["events"]
+
+
 @pytest.mark.parametrize(
     "detector_events, expected",
     [
