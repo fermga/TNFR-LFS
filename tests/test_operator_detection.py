@@ -6,6 +6,7 @@ import importlib
 from collections.abc import Mapping as MappingABC
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, List, Mapping, Sequence
 
 from _pytest.mark.structures import ParameterSet
@@ -771,7 +772,7 @@ class _SimpleILRecord:
 def _configure_detection(monkeypatch: pytest.MonkeyPatch, config: Mapping[str, object]):
     import tnfr_core.operators.operator_detection as module
 
-    monkeypatch.setattr(module, "load_detection_config", lambda: config)
+    monkeypatch.setattr(module, "load_detection_config", lambda **_kwargs: config)
     module._load_detection_table.cache_clear()
     return module
 
@@ -843,6 +844,46 @@ def test_detection_config_falls_back_to_global_payload(
         assert resolved["coherence_threshold"] == pytest.approx(0.88)
         assert resolved["mutation_window"] == 20
     finally:
+        module._load_detection_table.cache_clear()
+
+
+def test_detection_config_reads_pack_root(tmp_path: Path) -> None:
+    import tnfr_core.operators.operator_detection as module
+    from tnfr_lfs.resources import set_pack_root_override
+
+    pack_dir = tmp_path / "pack-root"
+    config_dir = pack_dir / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    detection_config = "\n".join(
+        [
+            "detect_il:",
+            "  defaults:",
+            "    window: 7",
+            "    base_threshold: 0.77",
+            "    speed_gain: 0.022",
+        ]
+    )
+    (config_dir / "detection.yaml").write_text(detection_config, encoding="utf-8")
+
+    module._load_detection_table.cache_clear()
+    set_pack_root_override(pack_dir)
+    module._load_detection_table.cache_clear()
+    try:
+        resolved = module._resolve_detection_parameters(
+            "detect_il",
+            defaults={
+                "window": 5,
+                "base_threshold": 0.35,
+                "speed_gain": 0.012,
+            },
+            provided={},
+            metadata_source=_build_il_records(),
+        )
+        assert resolved["window"] == 7
+        assert resolved["base_threshold"] == pytest.approx(0.77)
+        assert resolved["speed_gain"] == pytest.approx(0.022)
+    finally:
+        set_pack_root_override(None)
         module._load_detection_table.cache_clear()
 
 
