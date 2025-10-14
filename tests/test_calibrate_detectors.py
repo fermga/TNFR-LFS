@@ -16,6 +16,7 @@ from tools.calibrate_detectors import (
     _evaluate_detector,
     _materialise_best_params,
     _load_labels,
+    _normalise_operator_labels,
     normalize_structural_operator_identifier,
     _group_combinations,
     calibrate_detectors,
@@ -78,6 +79,29 @@ def test_load_labels_jsonl(tmp_path: Path) -> None:
 
     assert labels[0].raf_path == (raf_root / "capture_a.raf").resolve()
     assert labels[2].raf_path == (raf_root / "capture_b.raf").resolve()
+
+
+def test_normalise_operator_labels_mapping_string_values() -> None:
+    operator_alpha = normalize_structural_operator_identifier("operator.alpha")
+    operator_beta = normalize_structural_operator_identifier("operator.beta")
+    operator_gamma = normalize_structural_operator_identifier("operator.gamma")
+    operator_delta = normalize_structural_operator_identifier("operator.delta")
+
+    payload = {
+        "operator.alpha": {"active": "false"},
+        "operator.beta": {"label": "0"},
+        "operator.gamma": {"positive": "no"},
+        "operator.delta": {"active": " true "},
+    }
+
+    entries = _normalise_operator_labels(payload)
+
+    assert entries == {
+        operator_alpha: False,
+        operator_beta: False,
+        operator_gamma: False,
+        operator_delta: True,
+    }
 
 
 def test_materialise_best_params_integration(tmp_path: Path, monkeypatch) -> None:

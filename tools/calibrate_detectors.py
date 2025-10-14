@@ -222,7 +222,11 @@ def _normalise_operator_labels(payload: Any) -> dict[str, bool]:
                 if status is None:
                     status = value.get("positive")
                 if status is not None:
-                    entries[identifier] = bool(status)
+                    if isinstance(status, str):
+                        token = status.strip().lower()
+                        entries[identifier] = token not in {"", "0", "false", "no"}
+                    else:
+                        entries[identifier] = bool(status)
                     continue
             if isinstance(value, str):
                 token = value.strip().lower()
