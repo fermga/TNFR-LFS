@@ -5,6 +5,8 @@ from pathlib import Path
 
 from dataclasses import dataclass
 
+import pytest
+
 from tools.calibrate_detectors import (
     EvaluationResult,
     LabelledMicrosector,
@@ -182,11 +184,26 @@ class _StubRecord:
     timestamp: float
 
 
-def test_interval_matching_overlap(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "detector_events, expected",
+    [
+        pytest.param(
+            [{"start_time": 1.0, "end_time": 4.0}],
+            {"tp": 1, "fp": 0, "fn": 0, "tn": 0, "support": 1},
+            id="overlap generates true positive",
+        ),
+        pytest.param(
+            [{"start_time": 6.0, "end_time": 8.0}],
+            {"tp": 0, "fp": 1, "fn": 1, "tn": 0, "support": 1},
+            id="non-overlap registers false positive",
+        ),
+    ],
+)
+def test_interval_matching_outcomes(monkeypatch, detector_events, expected) -> None:
     operator_id = "NAV"
 
     def stub_detector(window, **_kwargs):  # type: ignore[no-untyped-def]
-        return [{"start_time": 1.0, "end_time": 4.0}]
+        return detector_events
 
     monkeypatch.setattr(
         "tools.calibrate_detectors._detector_callable", lambda _: stub_detector
@@ -217,53 +234,8 @@ def test_interval_matching_overlap(monkeypatch) -> None:
     )
 
     assert result is not None
-    assert result.tp == 1
-    assert result.fp == 0
-    assert result.fn == 0
-    assert result.tn == 0
-    assert result.support == 1
-
-
-def test_interval_matching_non_overlap(monkeypatch) -> None:
-    operator_id = "NAV"
-
-    def stub_detector(window, **_kwargs):  # type: ignore[no-untyped-def]
-        return [{"start_time": 6.0, "end_time": 8.0}]
-
-    monkeypatch.setattr(
-        "tools.calibrate_detectors._detector_callable", lambda _: stub_detector
-    )
-
-    records = [_StubRecord(timestamp) for timestamp in (0.0, 5.0, 10.0)]
-    sample = MicrosectorSample(
-        capture_id="capture",
-        microsector_index=1,
-        track="track",
-        car="car",
-        car_class=None,
-        compound=None,
-        start_index=0,
-        end_index=2,
-        start_time=0.0,
-        end_time=10.0,
-        records=records,
-        labels={operator_id: True},
-        label_intervals={operator_id: ((0.0, 5.0),)},
-    )
-
-    result = _evaluate_detector(
-        operator_id,
-        [sample],
-        ParameterSet(identifier="stub", parameters={}),
-        fold_assignments={},
-    )
-
-    assert result is not None
-    assert result.tp == 0
-    assert result.fp == 1
-    assert result.fn == 1
-    assert result.tn == 0
-    assert result.support == 1
+    for metric, expected_value in expected.items():
+        assert getattr(result, metric) == expected_value
 
 
 def test_interval_matching_negative_sample(monkeypatch) -> None:
