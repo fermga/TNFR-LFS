@@ -9,8 +9,7 @@ import math
 from importlib import import_module
 from importlib.util import find_spec
 import warnings
-from math import sqrt
-from statistics import mean, pvariance
+from statistics import mean
 from typing import (
     Deque,
     Any,
@@ -1849,11 +1848,13 @@ def _variance_payload(values: Sequence[float]) -> Dict[str, float]:
             "coefficient_of_variation": 0.0,
             "stability_score": 1.0,
         }
-    average = float(mean(values))
-    variance = float(pvariance(values))
+    xp = jnp if _HAS_JAX else np
+    array = xp.asarray(values, dtype=float)
+    average = float(xp.mean(array))
+    variance = float(xp.var(array, ddof=0))
     if variance < 0.0 and abs(variance) < 1e-12:
         variance = 0.0
-    stdev = sqrt(variance) if variance > 0.0 else 0.0
+    stdev = float(xp.sqrt(variance)) if variance > 0.0 else 0.0
     baseline = max(abs(average), 1e-9)
     coefficient = stdev / baseline
     stability = 1.0 - min(1.0, coefficient / _STABILITY_COV_THRESHOLD)

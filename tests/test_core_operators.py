@@ -51,10 +51,12 @@ from tnfr_core.operators import (
     coherence_operator,
     dissonance_breakdown_operator,
     dissonance_operator,
+    _STABILITY_COV_THRESHOLD,
     _aggregate_operator_events,
     _delta_integral_series,
     _stage_coherence,
     _stage_epi_evolution,
+    _variance_payload,
     evolve_epi,
     emission_operator,
     mutation_operator,
@@ -96,6 +98,55 @@ def _delta_integral_series_reference(
             dt = 1.0
         integrals.append(abs(float(bundles[idx].delta_nfr)) * dt)
     return integrals
+
+
+def _variance_payload_reference(values: Sequence[float]) -> Mapping[str, float]:
+    if not values:
+        return {
+            "mean": 0.0,
+            "variance": 0.0,
+            "stdev": 0.0,
+            "coefficient_of_variation": 0.0,
+            "stability_score": 1.0,
+        }
+
+    average = float(mean(values))
+    variance = float(pvariance(values))
+    if variance < 0.0 and abs(variance) < 1e-12:
+        variance = 0.0
+    stdev = sqrt(variance) if variance > 0.0 else 0.0
+    baseline = max(abs(average), 1e-9)
+    coefficient = stdev / baseline
+    stability = 1.0 - min(1.0, coefficient / _STABILITY_COV_THRESHOLD)
+    if stability < 0.0:
+        stability = 0.0
+    return {
+        "mean": average,
+        "variance": variance,
+        "stdev": stdev,
+        "coefficient_of_variation": coefficient,
+        "stability_score": stability,
+    }
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        pytest.param([0.1, -0.2, 0.3, -0.4, 0.5], id="small_series"),
+        pytest.param(
+            [float(x) for x in np.linspace(-5.0, 5.0, 1024)],
+            id="large_series",
+        ),
+    ],
+)
+def test_variance_payload_vectorized_matches_reference(values: Sequence[float]):
+    reference = _variance_payload_reference(values)
+    result = _variance_payload(values)
+
+    assert set(result.keys()) == set(reference.keys())
+    for key, expected in reference.items():
+        assert isinstance(result[key], float)
+        assert result[key] == pytest.approx(expected, rel=1e-12, abs=1e-12)
 
 
 def test_delta_integral_series_vectorized_matches_reference():
