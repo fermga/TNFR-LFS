@@ -1524,6 +1524,39 @@ def _write_curves_csv(
                 )
 
 
+def _write_best_selection_csv(
+    selections: Sequence[EvaluationResult],
+    *,
+    output_path: Path,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "operator",
+                "car_class",
+                "car",
+                "compound",
+                "parameter_set",
+                "f1",
+                "fp_per_min",
+            ]
+        )
+        for entry in sorted(selections, key=lambda item: item.combination):
+            writer.writerow(
+                [
+                    entry.operator_id,
+                    entry.combination[0],
+                    entry.combination[1],
+                    entry.combination[2],
+                    entry.parameter_set.identifier,
+                    f"{entry.f1:.6f}",
+                    f"{entry.fp_per_minute:.6f}",
+                ]
+            )
+
+
 def _write_confusion_csv(
     selections: Sequence[EvaluationResult],
     *,
@@ -1773,6 +1806,11 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
     best_params_path = output_dir / "best_params.yaml"
     LOGGER.info("Writing best parameter overrides to %s", best_params_path)
     _materialise_best_params(best_selections, output_path=best_params_path)
+
+    metrics_dir = output_dir / "metrics"
+    best_selection_path = metrics_dir / "best_selection.csv"
+    LOGGER.info("Writing best selection metrics to %s", best_selection_path)
+    _write_best_selection_csv(best_selections, output_path=best_selection_path)
 
     curves_dir = output_dir / "curves"
     LOGGER.info("Writing calibration curves to %s", curves_dir)

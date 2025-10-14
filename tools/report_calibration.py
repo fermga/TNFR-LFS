@@ -2,8 +2,9 @@
 
 The command line interface provided by this module aggregates the calibration
 results produced by :mod:`tools.calibrate_detectors`.  It consumes the
-``best_params.yaml`` summary, per-combination metrics (such as the confusion or
-curve CSV exports) and optional acceptance thresholds.  The collected data is
+``best_params.yaml`` summary, the ``metrics/best_selection.csv`` export (or
+derives the relevant metrics from the confusion CSVs when the consolidated file
+is unavailable) and optional acceptance thresholds.  The collected data is
 collapsed across three levels – operator, operator/car and
 operator/car/compound – and evaluated against the acceptance criteria defined
 by the thresholds.  The final outcome is written as a Markdown document that is
@@ -117,9 +118,48 @@ def _normalise_columns(columns: Iterable[str]) -> dict[str, str]:
     return mapping
 
 
-def load_metrics(metrics_dir: Path) -> pd.DataFrame:
+def _load_best_selection(metrics_dir: Path) -> pd.DataFrame | None:
+    best_path = metrics_dir / "best_selection.csv"
+    if not best_path.exists():
+        return None
+    frame = pd.read_csv(best_path)
+    mapping = _normalise_columns(frame.columns)
+    frame = frame.rename(columns=mapping)
+    required = ["operator", "car", "compound", "f1", "fp_per_min"]
+    missing = set(required) - set(frame.columns)
+    if missing:
+        raise ValueError(
+            "best_selection.csv is missing required columns: " + ", ".join(sorted(missing))
+        )
+    result = frame[required].copy()
+    result["f1"] = result["f1"].astype(float)
+    result["fp_per_min"] = result["fp_per_min"].astype(float)
+    return result
+
+
+def _load_confusion_metrics(metrics_dir: Path) -> pd.DataFrame | None:
+    if metrics_dir.is_file():
+        csv_paths = [metrics_dir]
+    else:
+        confusion_dir = metrics_dir / "confusion"
+        candidates = []
+        if metrics_dir.is_dir():
+            candidates.extend(sorted(metrics_dir.glob("*_confusion.csv")))
+            candidates.extend(sorted(metrics_dir.glob("*.csv")))
+        if confusion_dir.is_dir():
+            candidates.extend(sorted(confusion_dir.glob("*.csv")))
+        # Preserve order but remove duplicates
+        seen: set[Path] = set()
+        csv_paths = []
+        for path in candidates:
+            if path.suffix.lower() != ".csv":
+                continue
+            if path in seen:
+                continue
+            seen.add(path)
+            csv_paths.append(path)
     frames: list[pd.DataFrame] = []
-    for csv_path in sorted(metrics_dir.rglob("*.csv")):
+    for csv_path in csv_paths:
         try:
             frame = pd.read_csv(csv_path)
         except Exception as exc:  # pragma: no cover - I/O safeguard
@@ -127,20 +167,55 @@ def load_metrics(metrics_dir: Path) -> pd.DataFrame:
             continue
         mapping = _normalise_columns(frame.columns)
         frame = frame.rename(columns=mapping)
-        required = {"operator", "car", "compound", "f1", "fp_per_min"}
-        if not required.issubset(frame.columns):
-            LOGGER.debug("Skipping %s due to missing columns", csv_path)
+        expected = {"operator", "car", "compound", "tp", "fp", "fn", "duration_minutes"}
+        if not expected.issubset(frame.columns):
+            LOGGER.debug("Skipping %s due to missing confusion columns", csv_path)
             continue
-        frames.append(frame[list(required)])
-    if not frames:
-        raise FileNotFoundError(
-            "No usable metrics CSV files found – ensure they expose operator, car, "
-            "compound, f1 and fp_per_min columns"
+        subset = frame[list(expected)].copy()
+        for column in ["tp", "fp", "fn", "duration_minutes"]:
+            subset[column] = subset[column].astype(float)
+        # Compute metrics using the same formulae as in tools.calibrate_detectors
+        denom_precision = subset["tp"] + subset["fp"]
+        precision = subset["tp"] / denom_precision.where(denom_precision != 0, pd.NA)
+        denom_recall = subset["tp"] + subset["fn"]
+        recall = subset["tp"] / denom_recall.where(denom_recall != 0, pd.NA)
+        f1 = 2 * precision * recall / (precision + recall)
+        f1 = f1.fillna(0.0)
+        duration = subset["duration_minutes"]
+        fp_per_min = subset["fp"] / duration.where(duration > 0, pd.NA)
+        fallback = subset["fp"].apply(lambda value: float("inf") if value > 0 else 0.0)
+        fp_per_min = fp_per_min.fillna(fallback)
+        frames.append(
+            pd.DataFrame(
+                {
+                    "operator": subset["operator"],
+                    "car": subset["car"],
+                    "compound": subset["compound"],
+                    "f1": f1.astype(float),
+                    "fp_per_min": fp_per_min.astype(float),
+                }
+            )
         )
-    merged = pd.concat(frames, ignore_index=True)
-    merged["f1"] = merged["f1"].astype(float)
-    merged["fp_per_min"] = merged["fp_per_min"].astype(float)
-    return merged
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True)
+
+
+def load_metrics(metrics_dir: Path) -> pd.DataFrame:
+    if not metrics_dir.exists():
+        raise FileNotFoundError(f"Metrics path does not exist: {metrics_dir}")
+
+    best_frame = _load_best_selection(metrics_dir)
+    if best_frame is not None:
+        return best_frame
+
+    confusion_frame = _load_confusion_metrics(metrics_dir)
+    if confusion_frame is not None:
+        return confusion_frame
+
+    raise FileNotFoundError(
+        "No usable metrics found – supply metrics/best_selection.csv or confusion CSV exports"
+    )
 
 
 def aggregate_metrics(frame: pd.DataFrame) -> dict[str, pd.DataFrame]:
