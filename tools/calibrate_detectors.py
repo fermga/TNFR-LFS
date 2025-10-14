@@ -40,7 +40,10 @@ import yaml
 from tnfr_core.equations.epi import EPIExtractor, TelemetryRecord
 from tnfr_core.metrics.segmentation import Microsector, segment_microsectors
 from tnfr_core.operators import operator_detection
-from tnfr_core.operators.operator_detection import normalize_structural_operator_identifier
+from tnfr_core.operators.operator_detection import (
+    canonical_operator_label,
+    normalize_structural_operator_identifier,
+)
 
 from tnfr_lfs.resources.tyre_compounds import (
     CAR_COMPOUND_COMPATIBILITY,
