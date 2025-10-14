@@ -23,6 +23,8 @@ python tools/calibrate_detectors.py \
 
 The command line parser mirrors these switches and aborts early when required inputs are missing, when no samples remain after filtering, or when the requested detectors lack a search space.【F:tools/calibrate_detectors.py†L1293-L1365】 During execution the tool groups labelled micro-sectors by class/car/compound combination, evaluates every requested detector across the packaged or custom parameter grid, and applies track-level cross-validation folds when ``--kfold`` is greater than one.【F:tools/calibrate_detectors.py†L1374-L1400】 Cross-reference :doc:`cli` if you need a refresher on ingesting RAF captures into JSONL runs before triggering calibrations.
 
+GTR entries now accept both slick and road compounds for FXR, XRR, and FZR samples thanks to the expanded compatibility map, so calibrations built from mixed-tyre stints no longer raise invalid pair warnings.【F:src/tnfr_lfs/resources/tyre_compounds.py†L59-L94】
+
 ## Label artefacts and formats
 
 The ``--labels`` argument accepts JSON, JSON Lines, TOML, YAML, and CSV artefacts. The loader normalises each format into ``LabelledMicrosector`` entries that identify the RAF capture, micro-sector index, structural operator booleans, and optional time intervals.【F:tools/calibrate_detectors.py†L398-L472】 JSON-like payloads can either provide a ``captures`` list or a flat mapping per capture; CSV rows use the ``microsector``/``microsector_index`` column alongside ``operators`` or ``label`` fields. Operator identifiers are automatically normalised to the canonical structural codes (NAV, EN, OZ, …).【F:tools/calibrate_detectors.py†L475-L520】
