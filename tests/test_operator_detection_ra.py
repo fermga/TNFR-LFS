@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from math import pi, sin
 
+import pytest
+
 from tnfr_core.operators.operator_detection import detect_ra
 
 from tests.helpers import build_telemetry_record
@@ -72,6 +74,8 @@ def test_detect_ra_identifies_resonant_band_power() -> None:
     assert event["band_power"] > 0.0
     assert event["si_mean"] >= 0.58
     assert event["delta_nfr_dispersion"] <= 15.0
+    assert event["severity"] > 1.0
+    assert event["peak_value"] == pytest.approx(event["peak_band_power"])
 
 
 def test_detect_ra_requires_sustained_windows() -> None:
@@ -93,3 +97,41 @@ def test_detect_ra_requires_sustained_windows() -> None:
     )
 
     assert events == []
+
+
+def test_detect_ra_severity_tracks_band_power_margin() -> None:
+    strong_samples: list[dict] = []
+    for index in range(36):
+        t = index * 0.05
+        nfr = 55.0 + 18.0 * sin(2.0 * pi * 1.4 * t)
+        strong_samples.append({"nfr": nfr, "si": 0.68, "speed": 46.0})
+
+    borderline_samples: list[dict] = []
+    for index in range(36):
+        t = index * 0.05
+        nfr = 58.0 + 10.0 * sin(2.0 * pi * 1.4 * t)
+        borderline_samples.append({"nfr": nfr, "si": 0.59, "speed": 44.0})
+
+    strong_events = detect_ra(
+        _series(strong_samples),
+        window=12,
+        nu_band=(1.0, 3.0),
+        si_min=0.58,
+        delta_nfr_max=15.0,
+        k_min=2,
+    )
+    borderline_events = detect_ra(
+        _series(borderline_samples),
+        window=12,
+        nu_band=(1.0, 3.0),
+        si_min=0.58,
+        delta_nfr_max=15.0,
+        k_min=2,
+    )
+
+    assert strong_events and borderline_events
+    strong_severity = strong_events[0]["severity"]
+    borderline_severity = borderline_events[0]["severity"]
+
+    assert strong_severity > 1.1
+    assert borderline_severity == pytest.approx(1.0, abs=0.15)
