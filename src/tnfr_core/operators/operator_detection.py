@@ -18,6 +18,7 @@ from statistics import fmean, mean, pstdev
 from typing import Any, Dict, List, Mapping, Sequence, Tuple, Union
 
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 from tnfr_core.operators.interfaces import SupportsTelemetrySample
 from tnfr_core.operators.structural_time import compute_structural_timestamps
@@ -380,6 +381,26 @@ def _integrate_series(
     return float(integral)
 
 
+def _sliding_window_max(values: np.ndarray, window: int) -> np.ndarray:
+    """Return the rolling maximum over the trailing ``window`` samples."""
+
+    length = int(values.size)
+    if length == 0:
+        return values.copy()
+
+    window = max(1, int(window))
+    if length == 1 or window == 1:
+        return values.copy()
+
+    if length < window:
+        return np.maximum.accumulate(values)
+
+    prefix = np.maximum.accumulate(values[: window - 1])
+    trailing = sliding_window_view(values, window_shape=window)
+    maxima = trailing.max(axis=-1)
+    return np.concatenate((prefix, maxima))
+
+
 def _compute_first_derivative(
     values: Sequence[float], times: Sequence[float]
 ) -> List[float]:
@@ -503,83 +524,124 @@ def detect_en(
         return []
 
     window = max(2, int(window))
-    times = _sample_times(records)
-    psi_flux: List[float] = []
-    epi_norms: List[float] = []
+    xp = np
 
-    for index, record in enumerate(records):
-        dt = _safe_dt(times, index)
-        susp_front = abs(_clean_numeric(getattr(record, "suspension_velocity_front", 0.0)) or 0.0)
-        susp_rear = abs(_clean_numeric(getattr(record, "suspension_velocity_rear", 0.0)) or 0.0)
+    times = xp.asarray(_sample_times(records), dtype=float)
+    dt = xp.concatenate((xp.zeros(1, dtype=times.dtype), xp.diff(times)))
+    dt = xp.where(dt > 0.0, dt, 0.0)
 
-        steer_value = _clean_numeric(getattr(record, "steer", 0.0)) or 0.0
-        if index > 0:
-            prev_steer = _clean_numeric(getattr(records[index - 1], "steer", 0.0)) or steer_value
-        else:
-            prev_steer = steer_value
-        steer_rate = abs((steer_value - prev_steer) / dt) if dt > 0.0 else 0.0
+    susp_front = xp.asarray(
+        [
+            abs(_clean_numeric(getattr(record, "suspension_velocity_front", 0.0)) or 0.0)
+            for record in records
+        ],
+        dtype=float,
+    )
+    susp_rear = xp.asarray(
+        [
+            abs(_clean_numeric(getattr(record, "suspension_velocity_rear", 0.0)) or 0.0)
+            for record in records
+        ],
+        dtype=float,
+    )
+    steer_series = xp.asarray(
+        [
+            _clean_numeric(getattr(record, "steer", 0.0)) or 0.0
+            for record in records
+        ],
+        dtype=float,
+    )
+    yaw_rate = xp.asarray(
+        [
+            abs(_clean_numeric(getattr(record, "yaw_rate", 0.0)) or 0.0)
+            for record in records
+        ],
+        dtype=float,
+    )
+    vertical_load = xp.asarray(
+        [
+            (
+                float(value)
+                if (value := _clean_numeric(getattr(record, "vertical_load", math.nan)))
+                is not None
+                else math.nan
+            )
+            for record in records
+        ],
+        dtype=float,
+    )
+    epi_norms = xp.asarray([_epi_norm(record) for record in records], dtype=float)
 
-        yaw_rate = abs(_clean_numeric(getattr(record, "yaw_rate", 0.0)) or 0.0)
+    safe_dt = xp.where(dt > 0.0, dt, 1.0)
+    steer_diff = xp.concatenate((xp.zeros(1, dtype=steer_series.dtype), xp.diff(steer_series)))
+    steer_rate = xp.where(dt > 0.0, xp.abs(steer_diff) / safe_dt, 0.0)
 
-        vertical = _clean_numeric(getattr(record, "vertical_load", 0.0))
-        if index > 0:
-            prev_vertical = _clean_numeric(getattr(records[index - 1], "vertical_load", 0.0))
-        else:
-            prev_vertical = vertical
-        micro_vibration = 0.0
-        if (
-            vertical is not None
-            and prev_vertical is not None
-            and dt > 0.0
-            and math.isfinite(vertical)
-            and math.isfinite(prev_vertical)
-        ):
-            micro_vibration = abs(vertical - prev_vertical) / dt
+    vertical_prev = xp.concatenate((vertical_load[:1], vertical_load[:-1]))
+    vertical_valid = xp.isfinite(vertical_load)
+    vertical_prev_valid = xp.concatenate((xp.array([False]), vertical_valid[:-1]))
+    vertical_delta = xp.abs(vertical_load - vertical_prev)
+    micro_vibration = xp.where(
+        vertical_valid & vertical_prev_valid & (dt > 0.0),
+        vertical_delta / safe_dt,
+        0.0,
+    )
 
-        flux = (0.5 * (susp_front + susp_rear)) + steer_rate + yaw_rate + micro_vibration
-        psi_flux.append(float(flux))
-        epi_norms.append(_epi_norm(record))
+    psi_flux = (0.5 * (susp_front + susp_rear)) + steer_rate + yaw_rate + micro_vibration
+
+    dt_segments = xp.diff(times)
+    if dt_segments.size:
+        dt_segments = xp.where(dt_segments > 0.0, dt_segments, 0.0)
+    flux_avg = 0.5 * (psi_flux[1:] + psi_flux[:-1])
+    segment_integral = flux_avg * dt_segments
+    psi_cumulative = xp.concatenate((xp.zeros(1, dtype=psi_flux.dtype), xp.cumsum(segment_integral)))
+
+    length = int(len(records))
+    indices = xp.arange(length)
+    start_indices = xp.maximum(indices - (window - 1), 0).astype(int)
+    psi_integral = psi_cumulative[indices] - psi_cumulative[start_indices]
+    start_times = times[start_indices]
+    window_duration = xp.where(indices > start_indices, times - start_times, 0.0)
+    epi_start = epi_norms[start_indices]
+    epi_end = epi_norms
+    epi_peak = _sliding_window_max(epi_norms, window)
+    epi_rising = epi_end >= (epi_start - 1e-6)
+
+    meets_threshold = (
+        (psi_integral >= psi_threshold)
+        & (epi_peak <= epi_norm_max)
+        & epi_rising
+    )
 
     events: List[Mapping[str, float | str | int]] = []
     active_start: int | None = None
     peak_integral = 0.0
     best_metrics: Dict[str, float] = {}
 
-    for index in range(len(records)):
-        start_index = max(0, index - window + 1)
-        duration = float(times[index] - times[start_index]) if index > start_index else 0.0
-        psi_integral = _integrate_series(psi_flux, times, start_index, index)
-        epi_window = epi_norms[start_index : index + 1]
-        if not epi_window:
-            continue
-        epi_start = epi_window[0]
-        epi_end = epi_window[-1]
-        epi_peak = max(epi_window)
-        epi_rising = epi_end >= epi_start - 1e-6
-
-        meets_threshold = (
-            psi_integral >= psi_threshold
-            and epi_peak <= epi_norm_max
-            and epi_rising
-        )
+    for index in range(length):
+        start_index = int(start_indices[index])
+        psi_value = float(psi_integral[index])
+        duration_value = float(window_duration[index])
+        epi_start_value = float(epi_start[index])
+        epi_end_value = float(epi_end[index])
+        epi_peak_value = float(epi_peak[index])
 
         metrics = {
-            "psi_integral": float(psi_integral),
-            "window_duration": float(duration),
-            "epi_norm_start": float(epi_start),
-            "epi_norm_end": float(epi_end),
-            "epi_norm_peak": float(epi_peak),
+            "psi_integral": psi_value,
+            "window_duration": duration_value,
+            "epi_norm_start": epi_start_value,
+            "epi_norm_end": epi_end_value,
+            "epi_norm_peak": epi_peak_value,
         }
 
-        if meets_threshold:
+        if bool(meets_threshold[index]):
             if active_start is None:
                 active_start = start_index
-                peak_integral = psi_integral
+                peak_integral = psi_value
                 best_metrics = metrics
             else:
-                if psi_integral >= peak_integral:
+                if psi_value >= peak_integral:
                     best_metrics = metrics
-                peak_integral = max(peak_integral, psi_integral)
+                peak_integral = max(peak_integral, psi_value)
         elif active_start is not None:
             event = _finalise_event(
                 canonical_operator_label("EN"),
