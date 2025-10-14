@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import argparse
 from pathlib import Path
+from types import SimpleNamespace
 
 from dataclasses import dataclass
 
@@ -211,9 +212,10 @@ def test_nav_evaluation_uses_delta_series(monkeypatch) -> None:
     expected_nu_f = 0.5
     captured: dict[str, object] = {}
 
-    def stub_detector(series, *, nu_f, window, **_kwargs):  # type: ignore[no-untyped-def]
+    def stub_detector(series, *, nu_f, window, metadata=None, **_kwargs):  # type: ignore[no-untyped-def]
         captured["series"] = list(series)
         captured["nu_f"] = nu_f
+        captured["metadata"] = metadata
         if all(abs(float(value) - expected_nu_f) < 1e-6 for value in series):
             events = [{"start_index": 0, "end_index": len(series) - 1}]
             captured["events"] = events
@@ -256,6 +258,42 @@ def test_nav_evaluation_uses_delta_series(monkeypatch) -> None:
     assert captured["series"] == delta_series
     assert captured["nu_f"] == expected_nu_f
     assert captured["events"]
+    assert captured["metadata"] == list(records)
+
+
+def test_detect_nav_metadata_overrides(monkeypatch) -> None:
+    series = [1.0] * 5
+    metadata = [
+        SimpleNamespace(
+            car_class="GT3",
+            car_model="XFG",
+            track_name="kyoto",
+            tyre_compound="r2",
+        )
+    ]
+    config = {
+        "detect_nav": {
+            "defaults": {"window": 3},
+            "classes": {
+                "GT3": {
+                    "defaults": {"window": 6},
+                }
+            },
+        }
+    }
+
+    operator_detection._load_detection_table.cache_clear()
+    monkeypatch.setattr(operator_detection, "load_detection_config", lambda: config)
+    operator_detection._load_detection_table.cache_clear()
+
+    try:
+        baseline = operator_detection.detect_nav(series, nu_f=1.0)
+        assert baseline  # window=3 should yield an event
+
+        overridden = operator_detection.detect_nav(series, nu_f=1.0, metadata=metadata)
+        assert overridden == []
+    finally:
+        operator_detection._load_detection_table.cache_clear()
 
 
 @pytest.mark.parametrize(

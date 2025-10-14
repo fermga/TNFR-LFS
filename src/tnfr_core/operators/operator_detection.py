@@ -13,7 +13,7 @@ from __future__ import annotations
 import inspect
 import math
 import warnings
-from collections.abc import Sequence as SequenceABC
+from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import dataclass
 from functools import lru_cache, wraps
 from statistics import fmean, mean, pstdev
@@ -187,7 +187,10 @@ def _load_detection_table() -> Mapping[str, Any]:
 
 
 def _sequence_metadata(
-    records: Sequence[SupportsTelemetrySample] | None,
+    records: Sequence[SupportsTelemetrySample]
+    | SupportsTelemetrySample
+    | Mapping[str, object]
+    | None,
 ) -> tuple[str | None, str | None, str | None, str | None]:
     """Extract (car_class, car_model, track_name, tyre_compound) metadata."""
 
@@ -199,17 +202,38 @@ def _sequence_metadata(
     if not records:
         return car_class, car_model, track_name, tyre_compound
 
-    for sample in records:
+    if isinstance(records, MappingABC):
+        candidates = [records]
+    elif isinstance(records, SequenceABC) and not isinstance(records, (str, bytes, bytearray)):
+        candidates = records
+    else:
+        candidates = [records]
+
+    for sample in candidates:
         if sample is None:
             continue
+        if isinstance(sample, MappingABC):
+            getter = sample.get  # type: ignore[assignment]
+        else:
+            getter = None
         if car_class is None:
-            car_class = getattr(sample, "car_class", None)
+            car_class = (
+                getter("car_class") if getter else getattr(sample, "car_class", None)
+            )
         if car_model is None:
-            car_model = getattr(sample, "car_model", None)
+            car_model = (
+                getter("car_model") if getter else getattr(sample, "car_model", None)
+            )
         if track_name is None:
-            track_name = getattr(sample, "track_name", None)
+            track_name = (
+                getter("track_name") if getter else getattr(sample, "track_name", None)
+            )
         if tyre_compound is None:
-            tyre_compound = getattr(sample, "tyre_compound", None)
+            tyre_compound = (
+                getter("tyre_compound")
+                if getter
+                else getattr(sample, "tyre_compound", None)
+            )
         if all(value is not None for value in (car_model, track_name, tyre_compound)):
             break
 
@@ -221,7 +245,10 @@ def _resolve_detection_parameters(
     *,
     defaults: Mapping[str, Any],
     provided: Mapping[str, Any],
-    metadata_source: Sequence[SupportsTelemetrySample] | None,
+    metadata_source: Sequence[SupportsTelemetrySample]
+    | SupportsTelemetrySample
+    | Mapping[str, object]
+    | None,
 ) -> Dict[str, Any]:
     """Merge defaults, configuration overrides, and explicit parameters."""
 
@@ -268,11 +295,14 @@ def _with_detection_overrides(
             bound = signature.bind(*args, **kwargs)
             bound.apply_defaults()
 
-            metadata_source: Sequence[SupportsTelemetrySample] | None = None
+            metadata_source: (
+                Sequence[SupportsTelemetrySample]
+                | SupportsTelemetrySample
+                | Mapping[str, object]
+                | None
+            ) = None
             if metadata_argument:
-                candidate = bound.arguments.get(metadata_argument)
-                if isinstance(candidate, SequenceABC):
-                    metadata_source = candidate  # type: ignore[assignment]
+                metadata_source = bound.arguments.get(metadata_argument)
 
             provided = {name: kwargs[name] for name in parameters if name in kwargs}
             resolved = _resolve_detection_parameters(
@@ -315,7 +345,7 @@ def _closeness(value: float, target: float, eps: float) -> float:
 
 @_with_detection_overrides(
     "detect_nav",
-    metadata_argument=None,
+    metadata_argument="metadata",
     parameters=("window", "eps"),
 )
 def detect_nav(
@@ -324,6 +354,10 @@ def detect_nav(
     nu_f: Union[float, Mapping[str, float], None],
     window: int = 3,
     eps: float = 1e-3,
+    metadata: Sequence[SupportsTelemetrySample]
+    | SupportsTelemetrySample
+    | Mapping[str, object]
+    | None = None,
 ) -> List[Dict[str, Any]]:
     """Detect sustained ΔNFR ≈ νf (NA'V) runs."""
 
