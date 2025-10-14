@@ -73,6 +73,8 @@ _SLICK_COMPOUNDS = _freeze_compounds(
     )
 )
 
+_GTR_COMPOUNDS = frozenset(_ROAD_COMPOUNDS | _SLICK_COMPOUNDS)
+
 _CAR_COMPOUND_SPECS: Mapping[str, frozenset[str]] = {
     "UF1": _ROAD_COMPOUNDS,
     "XFG": _ROAD_COMPOUNDS,
@@ -91,9 +93,9 @@ _CAR_COMPOUND_SPECS: Mapping[str, frozenset[str]] = {
     "BF1": _SLICK_COMPOUNDS,
     "UFR": _SLICK_COMPOUNDS,
     "XFR": _SLICK_COMPOUNDS,
-    "FXR": _SLICK_COMPOUNDS,
-    "XRR": _SLICK_COMPOUNDS,
-    "FZR": _SLICK_COMPOUNDS,
+    "FXR": _GTR_COMPOUNDS,
+    "XRR": _GTR_COMPOUNDS,
+    "FZR": _GTR_COMPOUNDS,
 }
 
 

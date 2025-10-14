@@ -530,6 +530,16 @@ def test_group_combinations_accepts_known_compounds() -> None:
     assert invalid == set()
 
 
+@pytest.mark.parametrize("car", ["FXR", "XRR", "FZR"])
+def test_group_combinations_accepts_gtr_road_compound(car: str) -> None:
+    sample = _make_sample(car=car, compound="R2")
+
+    grouped, invalid = _group_combinations([sample])
+
+    assert grouped[("__default__", car, "R2")] == [sample]
+    assert invalid == set()
+
+
 def test_group_combinations_collects_invalid_pairs() -> None:
     sample = _make_sample(car="XFG", compound="soft")
 
