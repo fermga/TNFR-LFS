@@ -13,45 +13,53 @@ and the packaged ``detection.yaml`` fallback.
 
 ## Extension strategy
 
-Future enhancements that introduce new override levels or validation stages will
-extend this existing module instead of creating parallel loaders. New logic will
-hook into the current merge flow (for example by augmenting ``merge_section`` or
-``_merge_compounds``) so that the override precedence stays aligned with the
-current implementation while keeping the helper surface area unchanged.
-Validation steps will also live in this module, leveraging the already merged
-payload before it is frozen via ``MappingProxyType``.
+All upcoming work explicitly reuses ``tnfr_core.config.loader`` and expands the
+logic inside that module rather than introducing alternative entry points. The
+new behaviours will be expressed by extending the existing helper functions and
+entry points: ``get_params`` will continue to orchestrate the merge order and
+will receive the additional hierarchy hooks, while ``load_detection_config``
+will host any new validation passes that operate on the fully merged mapping.
+Supporting helpers such as ``merge_section`` and ``_merge_compounds`` will be
+augmented in-place so the override precedence stays aligned with the current
+implementation while keeping the helper surface area unchanged. Validation
+steps will also live in this module, leveraging the already merged payload
+before it is frozen via ``MappingProxyType``.
 
 ### Upcoming class hierarchy support
 
-The next increment will add explicit ``classes`` handling to ``get_params`` so
-that shared overrides can be defined per car class before being specialised at
-the individual car level. The update will also consider a top-level
-``compounds`` table so that global compound defaults can be reused outside the
-track/car/class sections.
+The next increment will add explicit ``classes`` handling directly inside
+``get_params`` so that shared overrides can be defined per car class before
+being specialised at the individual car level. The update will also consider a
+top-level ``compounds`` table so that global compound defaults can be reused
+outside the track/car/class sections.
 
 To integrate classes cleanly we will:
 
-* Extend the merge order to slot classes between the existing track and car
-  resolutions. The precedence will therefore be ``defaults`` → top-level
-  compounds → top-level tracks → class defaults/tracks/compounds → car
-  defaults/tracks/compounds. Car-specific entries will continue to override
+* Extend ``get_params`` so the merge order slots classes between the existing
+  track and car resolutions. The precedence will therefore be ``defaults`` →
+  top-level compounds → top-level tracks → class defaults/tracks/compounds →
+  car defaults/tracks/compounds. Car-specific entries will continue to override
   class-level data, while class-level overrides will in turn override
   track/global selections.
 * Reuse ``_normalise_identifier`` across the new sections so that class names
   and compound identifiers remain case-insensitive and resilient to formatting
   differences. This keeps lookups aligned with current car/track behaviour.
-* Ensure class overrides compose with car and track overrides. Class-specific
-  ``tracks`` blocks will be resolved before car-level ``tracks`` so that car
-  overrides stay authoritative while still inheriting defaults from their
-  classes. Global/top-level ``compounds`` will be merged first, followed by
-  class-level compounds and finally car-level compounds for the selected tyre.
+* Update ``get_params`` to ensure class overrides compose with car and track
+  overrides. Class-specific ``tracks`` blocks will be resolved before car-level
+  ``tracks`` so that car overrides stay authoritative while still inheriting
+  defaults from their classes. Global/top-level ``compounds`` will be merged
+  first, followed by class-level compounds and finally car-level compounds for
+  the selected tyre.
+* Add an opt-in validation pass inside ``load_detection_config`` to confirm
+  that class references and compound selections resolved by ``get_params`` map
+  to existing identifiers before returning the frozen mapping.
 
 ### Test coverage expansion
 
 ``tests/test_config_loader_core.py`` will gain fixtures that exercise the full
-cascade (global defaults/compounds, tracks, classes, car overrides) to ensure
-that each merge level behaves as documented and that precedence remains stable
-when the new sections are introduced.
+cascade (global defaults/compounds, tracks, classes, car overrides) so that the
+updated ``get_params`` and ``load_detection_config`` flows are verified end to
+end and precedence remains stable when the new sections are introduced.
 
 ## Search path compatibility
 
