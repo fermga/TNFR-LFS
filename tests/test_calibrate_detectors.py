@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import argparse
 from pathlib import Path
@@ -545,3 +546,99 @@ def test_calibrate_detectors_aborts_on_invalid_pairs(tmp_path: Path, monkeypatch
     message = str(excinfo.value)
     assert "XFG" in message
     assert "soft" in message
+
+
+def test_calibrator_includes_unlabelled_operator(tmp_path: Path, monkeypatch) -> None:
+    raf_root = tmp_path / "raf"
+    raf_root.mkdir()
+    labels_path = tmp_path / "labels.jsonl"
+    labels_path.write_text("{}\n", encoding="utf-8")
+
+    output_dir = tmp_path / "output"
+
+    sample = MicrosectorSample(
+        capture_id="capture-1",
+        microsector_index=7,
+        track="KY2",
+        car="XFG",
+        car_class="STD",
+        compound="R2",
+        start_index=0,
+        end_index=0,
+        start_time=0.0,
+        end_time=60.0,
+        records=(_StubRecord(0.0),),
+        labels={},
+        label_intervals={},
+    )
+
+    def stub_detector(window_records, **_kwargs):  # type: ignore[no-untyped-def]
+        return [{"start_time": 0.0, "end_time": 1.0}]
+
+    stub_detector.__name__ = "detect_al"
+
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._detector_callable", lambda _identifier: stub_detector
+    )
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._load_labels",
+        lambda _path, *, raf_root: [object()],
+    )
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._build_microsector_dataset",
+        lambda _labels, *, raf_root: [sample],
+    )
+
+    args = argparse.Namespace(
+        raf_root=str(raf_root),
+        labels=str(labels_path),
+        out=str(output_dir),
+        operators=["AL"],
+        operator_grid=None,
+        cars=[],
+        compounds=[],
+        tracks=[],
+        kfold=1,
+        fp_per_min_max=1.5,
+    )
+
+    calibrate_detectors(args)
+
+    best_params_path = output_dir / "best_params.yaml"
+    config = load_detection_config(path=best_params_path)
+    detector_config = config.get("detect_al")
+    assert isinstance(detector_config, dict)
+
+    class_payload = detector_config.get("classes", {}).get("STD", {})
+    class_compound = class_payload.get("compounds", {}).get("R2")
+    assert class_compound == {
+        "window": 5,
+        "lateral_threshold": 1.4,
+        "load_threshold": 200.0,
+    }
+
+    curves_path = output_dir / "curves" / "al_curves.csv"
+    with curves_path.open("r", encoding="utf-8") as handle:
+        curve_rows = list(csv.DictReader(handle))
+    assert curve_rows
+    assert curve_rows[0]["operator"] == "AL"
+    assert curve_rows[0]["support"] == "0"
+    assert curve_rows[0]["fp_per_min"] == "1.000000"
+
+    confusion_path = output_dir / "confusion" / "al_confusion.csv"
+    with confusion_path.open("r", encoding="utf-8") as handle:
+        confusion_rows = list(csv.DictReader(handle))
+    assert confusion_rows == [
+        {
+            "operator": "AL",
+            "car_class": "STD",
+            "car": "XFG",
+            "compound": "R2",
+            "parameter_set": "AL-0",
+            "tp": "0",
+            "fp": "1",
+            "tn": "0",
+            "fn": "0",
+            "duration_minutes": "1.000000",
+        }
+    ]

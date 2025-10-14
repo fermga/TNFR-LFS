@@ -200,6 +200,30 @@ class EvaluationResult:
     duration_minutes: float
 
 
+def _empty_evaluation_result(
+    operator_id: str,
+    combination: tuple[str, str, str],
+    parameter_set: ParameterSet,
+) -> EvaluationResult:
+    """Build a zeroed evaluation payload used as a placeholder."""
+
+    return EvaluationResult(
+        operator_id=operator_id,
+        combination=combination,
+        parameter_set=parameter_set,
+        precision=0.0,
+        recall=0.0,
+        f1=0.0,
+        fp_per_minute=0.0,
+        support=0,
+        tp=0,
+        fp=0,
+        tn=0,
+        fn=0,
+        duration_minutes=0.0,
+    )
+
+
 _SENTINEL_IDENTIFIERS = {"__default__", "__unknown__"}
 
 
@@ -1703,14 +1727,9 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
             combination[2],
             len(combo_samples),
         )
-        operators_in_combo: set[str] = set()
-        for sample in combo_samples:
-            for key in sample.labels.keys():
-                identifier = normalize_structural_operator_identifier(str(key))
-                if identifier in operator_grid:
-                    operators_in_combo.add(identifier)
-        for operator_id in sorted(operators_in_combo):
+        for operator_id in sorted(operator_grid):
             candidates: list[EvaluationResult] = []
+            placeholders: list[EvaluationResult] = []
             for parameter_set in operator_grid[operator_id]:
                 result = _evaluate_detector(
                     operator_id,
@@ -1719,17 +1738,32 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
                     fold_assignments=fold_assignments,
                 )
                 if result is None:
+                    placeholders.append(
+                        _empty_evaluation_result(
+                            operator_id,
+                            combination,
+                            parameter_set,
+                        )
+                    )
                     continue
                 candidates.append(result)
                 all_results.append(result)
             if not candidates:
+                if not placeholders:
+                    continue
                 LOGGER.warning(
-                    "No successful evaluations for operator '%s' under combination %s",
+                    "No evaluable samples for operator '%s' under combination %s; "
+                    "metrics will default to zero",
                     operator_id,
                     combination,
                 )
+                all_results.extend(placeholders)
+                selection_pool = placeholders
+            else:
+                selection_pool = candidates
+            if not selection_pool:
                 continue
-            selection = _select_best(candidates, fp_per_minute_max=args.fp_per_min_max)
+            selection = _select_best(selection_pool, fp_per_minute_max=args.fp_per_min_max)
             if selection:
                 best_selections.append(selection)
 
