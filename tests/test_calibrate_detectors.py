@@ -395,6 +395,35 @@ def test_detect_nav_metadata_overrides(monkeypatch) -> None:
         operator_detection._load_detection_table.cache_clear()
 
 
+def test_detect_nav_class_override_applies_via_car_model(monkeypatch) -> None:
+    series = [0.0] * 5
+
+    def fake_detection_table() -> dict[str, object]:
+        return {
+            "detect_nav": {
+                "defaults": {},
+                "classes": {
+                    "STD": {
+                        "defaults": {"window": 9},
+                    }
+                },
+            }
+        }
+
+    monkeypatch.setattr(operator_detection, "_load_detection_table", fake_detection_table)
+
+    baseline = operator_detection.detect_nav(series, nu_f=0.0)
+    assert baseline  # window=3 should yield an event
+
+    events = operator_detection.detect_nav(
+        series,
+        nu_f=0.0,
+        metadata={"car_model": "XFG"},
+    )
+
+    assert events == []
+
+
 @pytest.mark.parametrize(
     "detector_events, expected",
     [

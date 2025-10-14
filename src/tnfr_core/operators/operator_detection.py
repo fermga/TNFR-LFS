@@ -22,6 +22,13 @@ from typing import Any, Dict, List, Mapping, Sequence, Tuple, Union
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
+try:  # Python 3.11+
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+    import tomli as tomllib  # type: ignore
+
+from tnfr_lfs.resources import data_root
+
 from tnfr_core.config.loader import get_params, load_detection_config
 from tnfr_core.operators.interfaces import SupportsTelemetrySample
 from tnfr_core.operators.structural_time import compute_structural_timestamps
@@ -186,6 +193,47 @@ def _load_detection_table() -> Mapping[str, Any]:
     return load_detection_config()
 
 
+@lru_cache(maxsize=1)
+def _load_lfs_car_classes() -> Mapping[str, str]:
+    """Return a mapping of car model abbreviations to LFS classes."""
+
+    mapping: Dict[str, str] = {}
+
+    try:
+        cars_dir = data_root() / "cars"
+    except Exception:  # pragma: no cover - defensive fallback
+        return mapping
+
+    if not cars_dir.exists():
+        return mapping
+
+    for manifest in sorted(cars_dir.glob("*.toml")):
+        try:
+            with manifest.open("rb") as buffer:
+                payload = tomllib.load(buffer)
+        except Exception:  # pragma: no cover - defensive fallback
+            continue
+
+        car_model = payload.get("abbrev") or manifest.stem
+        lfs_class = payload.get("lfs_class")
+        if not car_model or not lfs_class:
+            continue
+
+        mapping[str(car_model).strip().upper()] = str(lfs_class)
+
+    return mapping
+
+
+def _derive_lfs_class(car_model: str | None) -> str | None:
+    """Return the LFS class inferred from ``car_model`` when available."""
+
+    if not car_model:
+        return None
+
+    lookup = _load_lfs_car_classes()
+    return lookup.get(str(car_model).strip().upper())
+
+
 def _sequence_metadata(
     records: Sequence[SupportsTelemetrySample]
     | SupportsTelemetrySample
@@ -236,6 +284,11 @@ def _sequence_metadata(
             )
         if all(value is not None for value in (car_model, track_name, tyre_compound)):
             break
+
+    if car_class is None and car_model:
+        derived = _derive_lfs_class(car_model)
+        if derived is not None:
+            car_class = derived
 
     return car_class, car_model, track_name, tyre_compound
 
