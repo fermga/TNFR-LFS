@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## v0.6.0 (2025-10-14)
+
+### Feature
+
+* feat: add default detector grids to calibrator ([`27daaa8`](https://github.com/fermga/TNFR-LFS/commit/27daaa8f02fd538f31243fc8f10a21933f29451b))
+
+### Unknown
+
+* Merge pull request #618 from fermga/codex/update-operator-handling-in-calibration-script
+
+Add packaged operator grids and CLI overrides to calibrator ([`47ea7a1`](https://github.com/fermga/TNFR-LFS/commit/47ea7a1d0b61a28b4cde574c09e099c8dec4a186))
+
+* Merge pull request #617 from fermga/codex/update-parameter-grouping-in-calibrate_detectors
+
+Refine detector calibration export structure ([`c222953`](https://github.com/fermga/TNFR-LFS/commit/c22295384699a8babdce561ba5c473e7595030f7))
+
+* Refine detector calibration export structure ([`8193ae8`](https://github.com/fermga/TNFR-LFS/commit/8193ae8905e49777ce8c4fc4cfb532e274d6062c))
+
+* Merge pull request #616 from fermga/codex/replace-empty-dataset-return-with-exception
+
+Handle empty datasets after applying calibration filters ([`b157f3c`](https://github.com/fermga/TNFR-LFS/commit/b157f3c2f0866bbb8854cd321253d1e5b558a452))
+
+* Handle empty datasets after calibration filters ([`64e063c`](https://github.com/fermga/TNFR-LFS/commit/64e063c8c3a3a3cd54ff334b4c3c39aa0696c1ba))
+
+* Merge pull request #615 from fermga/codex/refactor-operator_detection.py-for-lazy-loading
+
+Respect detection config overrides in operator detectors ([`4e56c3a`](https://github.com/fermga/TNFR-LFS/commit/4e56c3a939e76a23aff0c237ca22b6b803b2ce8b))
+
+* Use detection config overrides in operator detectors ([`8b0c036`](https://github.com/fermga/TNFR-LFS/commit/8b0c036ac1ae2b0ba2b91329423b6fd5bad25f3e))
+
 ## v0.5.0 (2025-10-14)
 
 ### Feature
