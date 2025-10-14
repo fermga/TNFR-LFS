@@ -16,6 +16,7 @@ nav:
       - How the API is organised: api_reference.md
       - API Index: reference/autoapi/index.md
       - Operator mapping: operators_mapping.md
+      - Calibration workflow: calibration.md
       - Design manual: DESIGN.md
       - Development workflow: DEVELOPMENT.md
       - Release process: release_process.md
