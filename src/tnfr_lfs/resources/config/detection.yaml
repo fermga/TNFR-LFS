@@ -1,0 +1,50 @@
+# Default detection parameter overrides distributed with TNFR × LFS.
+#
+# The structure mirrors the configuration consumed by ``tnfr_core.config.loader``:
+#
+# defaults:
+#   <parameter>: <value>
+# tracks:
+#   <track code>:
+#     defaults:
+#       <parameter>: <value>
+#     compounds:
+#       <compound code>:
+#         <parameter>: <value>
+# cars:
+#   <car model>:
+#     defaults:
+#       <parameter>: <value>
+#     tracks:
+#       <track code>:
+#         <parameter>: <value>
+#     compounds:
+#       <compound code>:
+#         <parameter>: <value>
+#
+# Real deployments are expected to extend these placeholders with telemetry-derived
+# thresholds.  They remain intentionally conservative to keep the unit tests light
+# while documenting the YAML schema consumed by ``get_params``.
+
+defaults:
+  mutation_window: 12
+  coherence_threshold: 0.8
+
+tracks:
+  __default__:
+    coherence_threshold: 0.82
+    mutation_window: 14
+  BL1:
+    mutation_window: 16
+
+cars:
+  XFG:
+    defaults:
+      coherence_threshold: 0.85
+      mutation_window: 18
+    tracks:
+      BL1:
+        mutation_window: 20
+    compounds:
+      r2:
+        coherence_threshold: 0.88

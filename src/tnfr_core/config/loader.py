@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping as MappingABC
+from collections.abc import Iterable, Mapping as MappingABC
+from importlib import resources
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping
 
-__all__ = ["get_params"]
+import yaml
+
+__all__ = ["get_params", "load_detection_config"]
+
+
+_DETECTION_RESOURCE_PACKAGE = "tnfr_lfs.resources.config"
+_DETECTION_RESOURCE_NAME = "detection.yaml"
 
 
 def get_params(
@@ -82,6 +90,66 @@ def get_params(
     return MappingProxyType(dict(result))
 
 
+def load_detection_config(
+    path: str | Path | None = None,
+    *,
+    search_paths: Iterable[str | Path] | None = None,
+    pack_root: Path | None = None,
+) -> Mapping[str, Any]:
+    """Load the detection override table honouring site-specific fallbacks.
+
+    Parameters
+    ----------
+    path:
+        Absolute or relative path to a YAML file. When supplied the loader
+        skips the search order and reads this file directly.
+    search_paths:
+        Optional iterable of directories or files to inspect. Entries pointing
+        to directories are resolved against ``detection.yaml``. The first
+        existing file wins.
+    pack_root:
+        Optional configuration pack root. The loader inspects
+        ``pack_root / "config" / "detection.yaml"`` followed by
+        ``pack_root / "detection.yaml"`` before falling back to the packaged
+        defaults bundled with :mod:`tnfr_lfs`.
+    """
+
+    if path is not None:
+        candidate = Path(path).expanduser()
+        if not candidate.is_file():
+            raise FileNotFoundError(candidate)
+        return _load_detection_payload(candidate)
+
+    candidates: list[Path] = []
+
+    if search_paths is not None:
+        for entry in search_paths:
+            entry_path = Path(entry).expanduser()
+            if entry_path.is_dir():
+                candidates.append(entry_path / _DETECTION_RESOURCE_NAME)
+            else:
+                candidates.append(entry_path)
+
+    if pack_root is not None:
+        root = Path(pack_root).expanduser()
+        candidates.extend(
+            [
+                root / "config" / _DETECTION_RESOURCE_NAME,
+                root / _DETECTION_RESOURCE_NAME,
+            ]
+        )
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return _load_detection_payload(candidate)
+
+    resource = resources.files(_DETECTION_RESOURCE_PACKAGE).joinpath(
+        _DETECTION_RESOURCE_NAME
+    )
+    payload = resource.read_text(encoding="utf-8")
+    return _load_detection_from_text(payload, source=str(resource))
+
+
 def _deep_merge(target: dict[str, Any], source: Mapping[str, Any]) -> None:
     for key, value in source.items():
         key_str = str(key)
@@ -105,6 +173,27 @@ def _deep_copy_mapping(source: Mapping[str, Any]) -> dict[str, Any]:
         else:
             copied[key_str] = value
     return copied
+
+
+def _load_detection_payload(path: Path) -> Mapping[str, Any]:
+    with path.open("r", encoding="utf-8") as buffer:
+        payload = buffer.read()
+    return _load_detection_from_text(payload, source=str(path))
+
+
+def _load_detection_from_text(payload: str, *, source: str) -> Mapping[str, Any]:
+    try:
+        data = yaml.safe_load(payload)
+    except yaml.YAMLError as exc:  # pragma: no cover - defensive guard
+        raise ValueError(f"Invalid YAML in detection configuration: {source}") from exc
+
+    if data is None:
+        return MappingProxyType({})
+    if not isinstance(data, MappingABC):
+        raise TypeError(
+            f"Detection configuration in {source!s} must decode to a mapping"
+        )
+    return MappingProxyType(_deep_copy_mapping(data))
 
 
 def _lookup_section(

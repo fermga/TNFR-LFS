@@ -452,6 +452,24 @@ the remaining caches, including the setup recommender.
 
 When ``pack_root`` points to a TNFR × LFS pack (a directory containing ``config/global.toml`` together with ``data/cars`` and ``data/profiles``) the CLI resolves car metadata and TNFR objectives from that bundle. The ``--pack-root`` flag overrides the configured value for a single invocation.
 
+### Detection parameter overrides
+
+Detection heuristics reuse the same configuration-pack mechanism. The
+``tnfr_core.config.loader.load_detection_config`` helper loads a
+``detection.yaml`` payload using the following precedence:
+
+1. An explicit path supplied by the caller (for example a CLI flag).
+2. Site-specific directories passed via ``search_paths`` – each directory is
+   inspected for ``detection.yaml`` and the first match wins.
+3. ``config/detection.yaml`` under the resolved ``pack_root`` (falling back to a
+   top-level ``detection.yaml`` when the ``config`` subdirectory is absent).
+4. The packaged default shipped with the wheel under
+   ``tnfr_lfs.resources.config``.
+
+Operators that maintain local packs should place their overrides in the
+``config`` directory so deployments share the same search order regardless of
+where the bundle lives on disk.【F:src/tnfr_core/config/loader.py†L1-L137】
+
 Plugin scaffolding now lives in ``pyproject.toml`` under the
 ``[tool.tnfr_lfs.plugins]`` table.  The runtime consumes that block directly
 through ``PluginConfig.from_project`` so you can manage your plugin inventory,

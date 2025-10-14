@@ -1,4 +1,6 @@
-from tnfr_core.config.loader import get_params
+import pytest
+
+from tnfr_core.config.loader import get_params, load_detection_config
 
 
 def test_get_params_merges_compound_overrides() -> None:
@@ -49,3 +51,49 @@ def test_get_params_uses_default_compound_when_specific_missing() -> None:
 
     assert baseline["pressure"] == 2.0
     assert soft["pressure"] == 2.3
+
+
+def test_load_detection_config_explicit_path(tmp_path) -> None:
+    override = tmp_path / "detection.yaml"
+    override.write_text("defaults:\n  pressure: 2.5\n", encoding="utf-8")
+
+    payload = load_detection_config(path=override)
+
+    assert payload["defaults"]["pressure"] == 2.5
+
+
+def test_load_detection_config_missing_path_raises(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError):
+        load_detection_config(path=tmp_path / "missing.yaml")
+
+
+def test_load_detection_config_search_paths_directory(tmp_path) -> None:
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+    (site_dir / "detection.yaml").write_text(
+        "defaults:\n  pressure: 2.6\n", encoding="utf-8"
+    )
+
+    payload = load_detection_config(search_paths=[site_dir])
+
+    assert payload["defaults"]["pressure"] == 2.6
+
+
+def test_load_detection_config_pack_root(tmp_path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "detection.yaml").write_text(
+        "defaults:\n  pressure: 2.7\n", encoding="utf-8"
+    )
+
+    payload = load_detection_config(pack_root=tmp_path)
+
+    assert payload["defaults"]["pressure"] == 2.7
+
+
+def test_load_detection_config_packaged_default() -> None:
+    payload = load_detection_config()
+
+    assert payload["defaults"]["mutation_window"] == 12
+    cars_section = payload["cars"]
+    assert cars_section["XFG"]["compounds"]["r2"]["coherence_threshold"] == 0.88
