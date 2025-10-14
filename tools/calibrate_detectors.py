@@ -624,20 +624,34 @@ def _select_best(
     )
 
 
-def _update_nested_mapping(
-    root: MutableMapping[str, Any],
-    path: Sequence[str],
-    operator_id: str,
-    params: Mapping[str, object],
-) -> None:
+def _ensure_mapping(
+    root: MutableMapping[str, Any], path: Sequence[str]
+) -> MutableMapping[str, Any]:
     cursor: MutableMapping[str, Any] = root
-    for key in path:
-        cursor = cursor.setdefault(key, {})  # type: ignore[assignment]
-    operators = cursor.setdefault("operators", {})
-    if isinstance(operators, MutableMapping):
-        operators[operator_id] = dict(params)
-    else:  # pragma: no cover - defensive
-        cursor["operators"] = {operator_id: dict(params)}
+    for raw_key in path:
+        key = str(raw_key)
+        existing = cursor.get(key)
+        if not isinstance(existing, MutableMapping):
+            existing = {}
+            cursor[key] = existing
+        cursor = existing
+    return cursor
+
+
+def _merge_parameter_values(
+    target: MutableMapping[str, Any], params: Mapping[str, object]
+) -> None:
+    for key, value in params.items():
+        target[str(key)] = value
+
+
+def _detector_function_name(operator_id: str) -> str:
+    detector = _detector_callable(operator_id)
+    name = getattr(detector, "__name__", None)
+    if not isinstance(name, str):  # pragma: no cover - defensive
+        normalised = normalize_structural_operator_identifier(operator_id)
+        return f"detect_{normalised.lower()}"
+    return name
 
 
 def _materialise_best_params(
@@ -645,32 +659,54 @@ def _materialise_best_params(
     *,
     output_path: Path,
 ) -> None:
-    payload: dict[str, Any] = {}
+    grouped: dict[str, list[EvaluationResult]] = {}
     for selection in selections:
-        operator_id = selection.operator_id
-        car_class, car_model, compound = selection.combination
-        if car_class and car_class != "__default__":
-            _update_nested_mapping(
-                payload,
-                ("classes", car_class, "compounds", compound),
-                operator_id,
-                selection.parameter_set.parameters,
+        detector_name = _detector_function_name(selection.operator_id)
+        grouped.setdefault(detector_name, []).append(selection)
+
+    payload: dict[str, Any] = {}
+    for detector_name, entries in sorted(grouped.items()):
+        detector_payload = payload.setdefault(detector_name, {})
+        if not isinstance(detector_payload, MutableMapping):  # pragma: no cover - defensive
+            detector_payload = {}
+            payload[detector_name] = detector_payload
+        for selection in entries:
+            car_class, car_model, compound = selection.combination
+            class_key = str(car_class) if car_class is not None else "__default__"
+            car_key = str(car_model) if car_model is not None else "__unknown__"
+            compound_key = (
+                str(compound) if compound is not None else "__default__"
             )
-        if car_model and car_model != "__unknown__":
-            _update_nested_mapping(
-                payload,
-                ("cars", car_model, "compounds", compound),
-                operator_id,
-                selection.parameter_set.parameters,
-            )
-        if not car_class or car_class == "__default__":
-            if not car_model or car_model == "__unknown__":
-                _update_nested_mapping(
-                    payload,
-                    ("defaults",),
-                    operator_id,
-                    selection.parameter_set.parameters,
-                )
+            params = selection.parameter_set.parameters
+            if not params:
+                continue
+
+            if class_key and class_key != "__default__":
+                if compound_key != "__default__":
+                    path = ("classes", class_key, "compounds", compound_key)
+                else:
+                    path = ("classes", class_key, "defaults")
+                section = _ensure_mapping(detector_payload, path)
+                _merge_parameter_values(section, params)
+
+            if car_key and car_key != "__unknown__":
+                if compound_key != "__default__":
+                    path = ("cars", car_key, "compounds", compound_key)
+                else:
+                    path = ("cars", car_key, "defaults")
+                section = _ensure_mapping(detector_payload, path)
+                _merge_parameter_values(section, params)
+
+            if (not class_key or class_key == "__default__") and (
+                not car_key or car_key == "__unknown__"
+            ):
+                if compound_key != "__default__":
+                    path = ("compounds", compound_key)
+                else:
+                    path = ("defaults",)
+                section = _ensure_mapping(detector_payload, path)
+                _merge_parameter_values(section, params)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(payload, handle, sort_keys=True)
