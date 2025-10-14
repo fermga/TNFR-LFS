@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+FIXTURE_CACHE = PROJECT_ROOT / "docs" / "_fixtures"
+PRESEEDED_FIXTURES: tuple[str, ...] = (
+    "tests/data/synthetic_stint.csv",
+)
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -34,10 +39,28 @@ def _read_cli_block(pyproject_path: Path) -> str:
     return "\n".join(captured)
 
 
+def _ensure_fixture(relative_path: str) -> Path:
+    """Make sure a fixture is available within the published docs tree."""
+
+    source = PROJECT_ROOT / relative_path
+    if not source.exists():
+        raise FileNotFoundError(f"Fixture not found: {relative_path}")
+
+    target = FIXTURE_CACHE / relative_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if not target.exists() or source.stat().st_mtime > target.stat().st_mtime:
+        shutil.copy2(source, target)
+
+    return Path("_fixtures") / relative_path
+
+
 def define_env(env) -> None:  # pragma: no cover - exercised during docs build
     """Register macros exposed to the documentation build."""
 
     pyproject_path = PROJECT_ROOT / "pyproject.toml"
+    for fixture in PRESEEDED_FIXTURES:
+        _ensure_fixture(fixture)
 
     @env.macro  # type: ignore[attr-defined]
     def render_config_defaults() -> str:
@@ -45,3 +68,11 @@ def define_env(env) -> None:  # pragma: no cover - exercised during docs build
 
         contents = _read_cli_block(pyproject_path)
         return f"```toml\n{contents}\n```"
+
+    @env.macro  # type: ignore[attr-defined]
+    def fixture_link(relative_path: str, text: str | None = None) -> str:
+        """Return a Markdown link to a repository fixture copied into the docs."""
+
+        doc_path = _ensure_fixture(relative_path)
+        label = text or relative_path
+        return f"[{label}]({doc_path.as_posix()})"
