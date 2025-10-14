@@ -4,6 +4,7 @@ import json
 import struct
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -33,6 +34,7 @@ from tests.helpers import (
     build_native_export_plan,
     build_setup_plan,
 )
+from tests.helpers.epi import build_epi_bundle
 from tests.helpers.microsector import build_microsector
 
 
@@ -94,6 +96,65 @@ def build_operator_payload():
     return payload
 
 
+def build_out_of_order_operator_payload() -> dict[str, Any]:
+    series = [
+        build_epi_bundle(timestamp=0.0, delta_nfr=-1.0, sense_index=0.5, structural_timestamp=0.0),
+        build_epi_bundle(timestamp=1.0, delta_nfr=-0.5, sense_index=0.55, structural_timestamp=1.0),
+        build_epi_bundle(timestamp=2.0, delta_nfr=0.5, sense_index=0.6, structural_timestamp=2.0),
+        build_epi_bundle(timestamp=3.0, delta_nfr=1.0, sense_index=0.65, structural_timestamp=3.0),
+    ]
+    operator_events = {
+        "AA": (
+            {
+                "global_start_index": 2,
+                "global_end_index": 3,
+                "start_time": 2.5,
+                "end_time": 3.0,
+                "duration": 0.5,
+                "operator_id": "evt-late",
+                "detector": "detector-late",
+                "severity": 0.5,
+            },
+            {
+                "global_start_index": 0,
+                "global_end_index": 1,
+                "start_time": 0.0,
+                "end_time": 0.3,
+                "duration": 0.3,
+                "operator_id": "evt-early",
+                "detector": "detector-early",
+                "severity": 1.0,
+            },
+            {
+                "global_start_index": 1,
+                "global_end_index": 2,
+                "start_time": 1.6,
+                "end_time": 1.9,
+                "duration": 0.3,
+                "operator_id": "evt-mid-b",
+                "detector": "detector-mid",
+                "severity": 0.75,
+            },
+            {
+                "global_start_index": 1,
+                "global_end_index": 2,
+                "start_time": 1.4,
+                "end_time": 1.6,
+                "duration": 0.2,
+                "operator_id": "evt-mid-a",
+                "detector": "detector-mid",
+                "severity": 0.7,
+            },
+        )
+    }
+    return {
+        "series": series,
+        "microsectors": (
+            build_microsector(index=7, operator_events=operator_events),
+        ),
+    }
+
+
 def test_json_exporter_serialises_payload():
     payload = build_payload()
     output = json_exporter(payload)
@@ -137,6 +198,29 @@ def test_operator_events_csv_exporter_flattens_detector_parameters() -> None:
     assert float(row["severity"]) == pytest.approx(1.6)
     params = json.loads(row["detector_params"])
     assert params["threshold"] == pytest.approx(1.25)
+
+
+def test_operator_events_json_exporter_orders_events() -> None:
+    payload = build_out_of_order_operator_payload()
+    rendered = operator_events_json_exporter(payload)
+    events = json.loads(rendered)
+    identifiers = [event["operator_id"] for event in events]
+    assert identifiers == ["evt-early", "evt-mid-a", "evt-mid-b", "evt-late"]
+    ordering = [(event["structural_start"], event["start_time"]) for event in events]
+    assert ordering == sorted(ordering)
+
+
+def test_operator_events_csv_exporter_orders_rows() -> None:
+    payload = build_out_of_order_operator_payload()
+    rendered = operator_events_csv_exporter(payload)
+    rows = list(csv.DictReader(rendered.splitlines()))
+    identifiers = [row["operator_id"] for row in rows]
+    assert identifiers == ["evt-early", "evt-mid-a", "evt-mid-b", "evt-late"]
+    ordering = [
+        (float(row["structural_start"]), float(row["start_time"]))
+        for row in rows
+    ]
+    assert ordering == sorted(ordering)
 def test_serialise_setup_plan_collects_unique_fields():
     plan = build_setup_plan()
     payload = serialise_setup_plan(plan)
