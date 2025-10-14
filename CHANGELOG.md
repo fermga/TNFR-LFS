@@ -1,28 +1,1686 @@
 # CHANGELOG
 
-## Unreleased
+## v0.4.0 (2025-10-14)
 
-### Added
+### Chore
 
-* Implement structural operator detectors for Reception (`detect_en`),
-  Coupling (`detect_um`), Propagation (`detect_ra`), Amplification (`detect_val`),
-  Contraction (`detect_nul`), Auto-organisation (`detect_thol`), Transformation
-  (`detect_zhir`) and Remeshing (`detect_remesh`), including documentation,
-  tests, and benchmarks.
+* chore: drop legacy requirements txt files ([`b6920c3`](https://github.com/fermga/TNFR-LFS/commit/b6920c3754ad7020602db60a34f072c676cef262))
 
-### Changed
+### Documentation
 
-* Rename the `tnfr_lfs.ingestion` package to `tnfr_lfs.telemetry`, provide a
-  deprecation shim for existing imports, and update documentation, tooling, and
-  tests to reference the new namespace.
-* Move utility helpers into themed packages (`tnfr_lfs.common`, `tnfr_lfs.logging`, `tnfr_lfs.math`, `tnfr_lfs.visualization`) and update import guidance accordingly.
-* Rename operator helpers to English (`coupling_operator`, `recursive_filter_operator`) while keeping deprecated Spanish aliases for compatibility.
-* Translate the structural silence operator naming to English (`detect_silence`, `SILENCE`), normalise legacy `SILENCIO` payloads to the canonical identifier, and update telemetry aggregation to consume the English label consistently.
+* docs: translate operator mapping back to English ([`62f51d7`](https://github.com/fermga/TNFR-LFS/commit/62f51d7803548d91b2e7d478f7cdf1194217bdf4))
 
-### Removed
+* docs: document OutGauge block consumers ([`e03088e`](https://github.com/fermga/TNFR-LFS/commit/e03088e0465882d933df1ad71f3e67b6053ccb0a))
 
-* Retire the legacy `tnfr_lfs.pack` alias in favour of `tnfr_lfs.resources` helpers.
-* Remove the deprecated `tnfr_lfs.utils` compatibility package and its module re-exports.
+* docs: regenerate autoapi for tnfr_core ([`262cd43`](https://github.com/fermga/TNFR-LFS/commit/262cd43a818585e7990b6c5a434042f4d8bf6c0f))
+
+* docs: describe similar test threshold flow ([`901d9c8`](https://github.com/fermga/TNFR-LFS/commit/901d9c86b0e7f8daae24910d92010e710e9ee698))
+
+* docs: reference tutorials for quickstart flow ([`eeb6aba`](https://github.com/fermga/TNFR-LFS/commit/eeb6abaac15312291552986b2d514728563157e4))
+
+* docs: streamline readme overview ([`1c1f9f2`](https://github.com/fermga/TNFR-LFS/commit/1c1f9f22228a57c9694584da77199a8f717ca321))
+
+* docs: document delta_utils helper ([`dd731b2`](https://github.com/fermga/TNFR-LFS/commit/dd731b29fcd7453affe3182199fcecae59e2f403))
+
+* docs: add core re-export usage example ([`2c90fc6`](https://github.com/fermga/TNFR-LFS/commit/2c90fc6e93ca3108eac4aadd68328912cbc86269))
+
+* docs: document epi helpers and plugin usage ([`cd5bfd4`](https://github.com/fermga/TNFR-LFS/commit/cd5bfd44a9be35787618adb3eaa54c5084f53744))
+
+* docs: expand core module reference ([`f27e297`](https://github.com/fermga/TNFR-LFS/commit/f27e297893142c61e06dde2139c655f4057bc6be))
+
+* docs: expand metrics reference with window example ([`8d37681`](https://github.com/fermga/TNFR-LFS/commit/8d37681022cc333fce6cc5f1894505e6f543c5bd))
+
+* docs: describe structural time helpers ([`a650451`](https://github.com/fermga/TNFR-LFS/commit/a65045182c2b74517a9fc9627d0ea7a99c5736ca))
+
+* docs: add resonance modal analysis section ([`480d34a`](https://github.com/fermga/TNFR-LFS/commit/480d34ad383efebb5e50f42a6c82daa16e50f6c7))
+
+* docs: expand spectrum and segmentation examples ([`36e5f11`](https://github.com/fermga/TNFR-LFS/commit/36e5f11733bceaf25c447e9c8d128b411b999a3a))
+
+* docs: switch install instructions to pip extras ([`9f58340`](https://github.com/fermga/TNFR-LFS/commit/9f583404f602bf6fddb6435568abafd1334227d5))
+
+* docs: refresh ingestion module paths ([`f540ba4`](https://github.com/fermga/TNFR-LFS/commit/f540ba429e3d4541237c0db79d85796c98f1214a))
+
+### Feature
+
+* feat: add structural operator detectors ([`7bc1a9a`](https://github.com/fermga/TNFR-LFS/commit/7bc1a9aefeaa3f0efd212b1706616e330521fdf0))
+
+* feat(core): capture optional telemetry metadata ([`348ed1e`](https://github.com/fermga/TNFR-LFS/commit/348ed1e230fba8e5957cfc7ff21358507d334ddd))
+
+### Refactor
+
+* refactor: move plugin helpers into tnfr_lfs analysis module ([`1501227`](https://github.com/fermga/TNFR-LFS/commit/1501227a6d33028c232de597e1c525ee4b88253f))
+
+* refactor: rename ingestion package to telemetry ([`679ab99`](https://github.com/fermga/TNFR-LFS/commit/679ab99f0b6017b1e05a33fdf7c694c31d6b30e2))
+
+* refactor: split core analytics into tnfr_core package ([`a7d8675`](https://github.com/fermga/TNFR-LFS/commit/a7d867516ffb15d578c08785911f3d30871539d6))
+
+* refactor: use absolute package imports ([`8beb719`](https://github.com/fermga/TNFR-LFS/commit/8beb7191f290710a04accb3e8fd341503007ed00))
+
+* refactor: deduplicate base profile plugin config ([`411be16`](https://github.com/fermga/TNFR-LFS/commit/411be16ec6c3f1e4e5c5f4f2bd17c43dbdf3953b))
+
+* refactor: centralize pytest area filters ([`e5f667e`](https://github.com/fermga/TNFR-LFS/commit/e5f667ed749376710ffca7b9b364b1359bd25eef))
+
+* refactor: load CLI defaults from pyproject ([`77bf2a4`](https://github.com/fermga/TNFR-LFS/commit/77bf2a430d3d5b60ea368af125db0d58d5c0d895))
+
+* refactor: add typed recursivity state structures ([`c5712ac`](https://github.com/fermga/TNFR-LFS/commit/c5712acbb1e6ef9f5178450f491b43461c5a14d1))
+
+* refactor: retire tnfr_lfs.pack shim ([`de6f7f2`](https://github.com/fermga/TNFR-LFS/commit/de6f7f2a60c81cf2485353d7dbfaeb77070ad7aa))
+
+* refactor: reorganize packaged resources ([`6c1f353`](https://github.com/fermga/TNFR-LFS/commit/6c1f353d82752e84c998202af8ec009d14e798c5))
+
+* refactor: share epi node builder across tests ([`d1398ac`](https://github.com/fermga/TNFR-LFS/commit/d1398ac03b4cd1be3243bab157e1e4754603ce17))
+
+### Test
+
+* test: add reusable plugin scaffolding helpers ([`2b3a679`](https://github.com/fermga/TNFR-LFS/commit/2b3a67979be698fcd255e42390da20b73511705e))
+
+* test: share prepare-pack instrumentation helper ([`986eeed`](https://github.com/fermga/TNFR-LFS/commit/986eeedf93ae8bf350fdbb7fb54ac33d81720791))
+
+* test: centralize plugin registry fixture ([`eb37bee`](https://github.com/fermga/TNFR-LFS/commit/eb37beecf4d67967ec30782ab0253bbcd1f5bb04))
+
+* test: centralize UDP test helpers ([`8e232c1`](https://github.com/fermga/TNFR-LFS/commit/8e232c124a42ce008893f614f1d546156e98026f))
+
+* test: centralise telemetry record builders ([`01ef836`](https://github.com/fermga/TNFR-LFS/commit/01ef83650c4d4a9dbf51e665e59ecd51551a7f15))
+
+### Unknown
+
+* Merge pull request #599 from fermga/codex/add-changelog.md-to-manifest.in
+
+Include CHANGELOG in source distribution ([`b1936cd`](https://github.com/fermga/TNFR-LFS/commit/b1936cd4c54b1f795550dcaeef3eb0a077383774))
+
+* Include CHANGELOG in source distribution ([`994ecaf`](https://github.com/fermga/TNFR-LFS/commit/994ecaf7f183a3e81a8c18a8ff2d264a7fc0c9e3))
+
+* Merge pull request #598 from fermga/codex/extend-outgauge-to-capture-tyre-compound
+
+Add tyre compound metadata plumbing across telemetry ([`b411e5c`](https://github.com/fermga/TNFR-LFS/commit/b411e5c11ff6a95336cd13f6295975666a2233cc))
+
+* Add tyre compound metadata plumbing across telemetry ([`58e83a3`](https://github.com/fermga/TNFR-LFS/commit/58e83a3c3501caf0aa16e113c598310e574463b0))
+
+* Merge pull request #597 from fermga/codex/update-release.yml-for-pypi-publishing
+
+Update release workflow secrets configuration ([`7bf010b`](https://github.com/fermga/TNFR-LFS/commit/7bf010b364f3c1e4be6861ecac7adc7bf1bf6f1e))
+
+* Simplify release workflow secrets ([`62da5a0`](https://github.com/fermga/TNFR-LFS/commit/62da5a0ff08164780e3851b5f278ea600704181f))
+
+* Merge pull request #596 from fermga/codex/update-event-exporters-for-chronological-order
+
+Ensure operator event exports are chronologically ordered ([`bdb1800`](https://github.com/fermga/TNFR-LFS/commit/bdb180029352cae33fe722b3b52175ad9d321add))
+
+* Ensure operator event exports are chronologically ordered ([`ddcd432`](https://github.com/fermga/TNFR-LFS/commit/ddcd432cefd28cd138aad33ec8df898a0fe98148))
+
+* Merge pull request #595 from fermga/codex/refactor-operators-and-add-new-exporters
+
+Add JSON/CSV operator event exporters with detector metadata ([`85e20fd`](https://github.com/fermga/TNFR-LFS/commit/85e20fd8791a61ba843d4b7bfb6467318c902a51))
+
+* Add operator event exporters with metadata ([`1bf1772`](https://github.com/fermga/TNFR-LFS/commit/1bf177270af14fe5232ce45b839bdcd64e6986a6))
+
+* Merge pull request #594 from fermga/codex/update-ingest_and_recommend.py-for-argparse
+
+Add CLI options and operator export to ingest example ([`5469cf4`](https://github.com/fermga/TNFR-LFS/commit/5469cf44c8ba9ced13931253d8d738e6f53aba2e))
+
+* Add CLI options and operator export to ingest example ([`f2758fe`](https://github.com/fermga/TNFR-LFS/commit/f2758fe5bc26a5c716d56ecb38cb79c123b12bcd))
+
+* Merge pull request #593 from fermga/codex/add-documentation-language-check-and-script
+
+Add documentation language guardrail ([`4e20ff2`](https://github.com/fermga/TNFR-LFS/commit/4e20ff28b3cc6c15fb993015a89f4be46f15d06a))
+
+* Add documentation language enforcement ([`164d774`](https://github.com/fermga/TNFR-LFS/commit/164d774b8746a689e35bd3a6e7f2a186b5d5c944))
+
+* Merge pull request #592 from fermga/codex/update-help-text-to-english
+
+Translate verify parity CLI messaging to English ([`75c27e5`](https://github.com/fermga/TNFR-LFS/commit/75c27e56ef0c6a8e348b7a7c1fa6d1b37e847a00))
+
+* Translate verify parity CLI messaging to English ([`5e95041`](https://github.com/fermga/TNFR-LFS/commit/5e95041f780a354e5a2ef0b0a20472534347f5ac))
+
+* Merge pull request #591 from fermga/codex/update-readme.md-with-english-translations
+
+Translate README alignment and parity sections ([`4a8f10f`](https://github.com/fermga/TNFR-LFS/commit/4a8f10f6bdc8cff0ff99931f923b08e1b1b72ad6))
+
+* Translate README alignment and parity sections ([`0a3b18d`](https://github.com/fermga/TNFR-LFS/commit/0a3b18dc7bff576c21bbb0c65f086daa5fa95f40))
+
+* Merge pull request #590 from fermga/codex/add-operator-to-lfs-signals-mapping-documentation
+
+docs: restore English operator mapping and telemetry guide ([`9cf973c`](https://github.com/fermga/TNFR-LFS/commit/9cf973cf68192f038716a590b94fbeb52abc2793))
+
+* Merge pull request #589 from fermga/codex/update-orchestrate_delta_metrics-example
+
+Align orchestrate delta metrics docs with RAF fixture instructions ([`36397b6`](https://github.com/fermga/TNFR-LFS/commit/36397b62a1c0be7aee55344132fea41e5767de78))
+
+* Update RAF fixture guidance in operator mapping docs ([`1a1d79b`](https://github.com/fermga/TNFR-LFS/commit/1a1d79b0f596283ca5464ab694417b9328a87244))
+
+* Merge pull request #588 from fermga/codex/update-docs-for-reception_operator-reference
+
+Update reception operator docs to reference RAF fixture ([`abfca3c`](https://github.com/fermga/TNFR-LFS/commit/abfca3c71c045352f7885a64dd6280bcf3d21b77))
+
+* Update reception operator fixture instructions ([`ee1142b`](https://github.com/fermga/TNFR-LFS/commit/ee1142b4a247228a5be32daeb3fcfb10c7b644f8))
+
+* Merge pull request #587 from fermga/codex/extend-telemetry-documentation-with-outgauge-block-requireme
+
+docs: document OutGauge block consumers ([`bd371c4`](https://github.com/fermga/TNFR-LFS/commit/bd371c4d07a56d55bad9c4c8fa6ae5c9d50c4cb0))
+
+* Merge pull request #586 from fermga/codex/create-operators-mapping-documentation
+
+Remove staged RAF fixture copy from docs site ([`ef222ee`](https://github.com/fermga/TNFR-LFS/commit/ef222ee473912baa07913a72735b3a0f67c7dead))
+
+* Remove staged RAF fixture copy from docs ([`4b3a787`](https://github.com/fermga/TNFR-LFS/commit/4b3a7873ab6ac26ac73fd1633355c4e77ca3736e))
+
+* Update synthetic_stint.csv ([`5c9e7e3`](https://github.com/fermga/TNFR-LFS/commit/5c9e7e3c04b57da2002c419ef4167c520c2fce2e))
+
+* Merge pull request #585 from fermga/codex/update-phasedeltadeviationrule-to-include-triggers
+
+Propagate operator trigger through phase delta rule ([`64d1448`](https://github.com/fermga/TNFR-LFS/commit/64d14489e0062e164d1704a831aa497ab6b354ae))
+
+* Propagate operator trigger through phase delta rule ([`ea2b34d`](https://github.com/fermga/TNFR-LFS/commit/ea2b34de3d31c59af1446c6cf2713806233fd5d1))
+
+* Merge pull request #584 from fermga/codex/add-operator-metric-recommendation-tracing
+
+Add operator event trace metadata and HUD operator chips ([`a8cc962`](https://github.com/fermga/TNFR-LFS/commit/a8cc962f2f9b053258b62bd9db93cb331853edea))
+
+* Refactor duplicate-heavy tests into parameterised suites ([`c1a90a4`](https://github.com/fermga/TNFR-LFS/commit/c1a90a4cde941ed51868bac8f4a883fc6f99b209))
+
+* Add operator trace metadata to microsectors and HUD ([`742bedd`](https://github.com/fermga/TNFR-LFS/commit/742bedd5399f1bd623290dc51b067dc1df3c210c))
+
+* Merge pull request #583 from fermga/codex/add-tests-for-math.nan-handling-in-detectors
+
+Add contamination scenarios to structural detector tests ([`8d13860`](https://github.com/fermga/TNFR-LFS/commit/8d1386022ffeb99188183b3626d55eb2c762512b))
+
+* Add contamination scenarios to structural detector tests ([`69f1503`](https://github.com/fermga/TNFR-LFS/commit/69f15035719a79805016b1739c1ca56bd86e8e63))
+
+* Merge pull request #582 from fermga/codex/update-severity-calculation-in-detect_ra
+
+Adjust RA severity baseline ([`5704f6f`](https://github.com/fermga/TNFR-LFS/commit/5704f6ff1524c48320124ac8fcf592b6ac84ea5e))
+
+* Adjust RA severity baseline ([`f8d6c08`](https://github.com/fermga/TNFR-LFS/commit/f8d6c0839f6c54061653527a361a90338e2042fe))
+
+* Merge pull request #581 from fermga/codex/update-tnfr-alignment-section-in-documentation
+
+Translate TNFR alignment section to English ([`17218ce`](https://github.com/fermga/TNFR-LFS/commit/17218cefbae1d5bb2f6d0911689b7aaa6587b5a3))
+
+* Translate TNFR alignment documentation section ([`1f024a0`](https://github.com/fermga/TNFR-LFS/commit/1f024a0c5ec8fcb0f448fc6de3aff57f6e17d750))
+
+* Merge pull request #580 from fermga/codex/update-parameter-list-in-documentation
+
+Update operator detection parameter documentation ([`86307dc`](https://github.com/fermga/TNFR-LFS/commit/86307dc9a47ae6cce94cfa17ca6b41cc6c36ec8c))
+
+* Update detection parameter docs ([`e9bf686`](https://github.com/fermga/TNFR-LFS/commit/e9bf68601a0fc812026480635bea5c03150a788c))
+
+* Merge pull request #579 from fermga/codex/update-operator_detection_structural_benchmark
+
+Update remesh benchmark parameters ([`20c14d8`](https://github.com/fermga/TNFR-LFS/commit/20c14d89de664c242a1e9bf619ca7ae7349f2d3d))
+
+* Update remesh benchmark parameters ([`a408b58`](https://github.com/fermga/TNFR-LFS/commit/a408b5802d604cc2851d8314f8213d7b96c561d2))
+
+* Merge pull request #578 from fermga/codex/modify-detect_thol-for-signed-second_derivative
+
+Handle negative EPI acceleration in THOL detection ([`80f4fa6`](https://github.com/fermga/TNFR-LFS/commit/80f4fa64d8bfbba3ff89bac2020c34e989687a1f))
+
+* Refine THOL detection to respect signed acceleration ([`5eca670`](https://github.com/fermga/TNFR-LFS/commit/5eca670ff4d755098eb949af285e1dd16df7a356))
+
+* Merge pull request #577 from fermga/codex/update-detect_um-for-positive-correlations
+
+Fix UM detection to ignore negative correlations ([`62e9464`](https://github.com/fermga/TNFR-LFS/commit/62e946485deddfb5ee34c2273b9db02312e5a015))
+
+* Fix UM detection to ignore negative correlations ([`174cdc5`](https://github.com/fermga/TNFR-LFS/commit/174cdc5ed73a1504b58385ba14ee72437ec4a41c))
+
+* Merge pull request #576 from fermga/codex/rework-detection-operators-in-operator_detection.py
+
+Fix structural operator change-point heuristics ([`5359355`](https://github.com/fermga/TNFR-LFS/commit/5359355f769188fbfe3cfac1544666f2eb4c147a))
+
+* Fix structural operator change-point heuristics ([`f95d913`](https://github.com/fermga/TNFR-LFS/commit/f95d913fe289941315bc801f0c0ee50d8927ec36))
+
+* Merge pull request #575 from fermga/codex/add-new-detection-operators-and-tests
+
+feat: add structural operator detectors and benchmarks ([`612fc11`](https://github.com/fermga/TNFR-LFS/commit/612fc114f596982bae082588401537546bf3b0c7))
+
+* Update pyproject.toml ([`a23a552`](https://github.com/fermga/TNFR-LFS/commit/a23a5526359b7e1a3eb7c2b32c3bb86acca257e7))
+
+* Update _canonical.py ([`114fa7f`](https://github.com/fermga/TNFR-LFS/commit/114fa7f43775e3df10927ef315b1c473a8dff379))
+
+* Merge pull request #574 from fermga/codex/update-optional-dependency-tnfr-version
+
+Align tnfr extra requirement with canonical minimum ([`4848a1f`](https://github.com/fermga/TNFR-LFS/commit/4848a1fe3e1faa19ed70ee73166ab24601ac4011))
+
+* Align tnfr extra with canonical minimum version ([`6a54573`](https://github.com/fermga/TNFR-LFS/commit/6a545730415bfe332d143f2a0a74a2ff3cd255ba))
+
+* Merge pull request #573 from fermga/codex/add-verify_tnfr_parity.py-script
+
+Add parity verification script for TNFR engines ([`ecf4516`](https://github.com/fermga/TNFR-LFS/commit/ecf4516a98dbbfb7828212a8aa0a07e93e50e4f3))
+
+* Add parity verification script for TNFR engines ([`40db913`](https://github.com/fermga/TNFR-LFS/commit/40db913e4fb2e41a4860273edb44e205b04bd8e4))
+
+* Merge pull request #572 from fermga/codex/add-tests-for-parity-tnfr-engine
+
+Add parity tests for canonical TNFR engine ([`facc48b`](https://github.com/fermga/TNFR-LFS/commit/facc48baab8a89fcf1342a001b2da3ad4ce5a42f))
+
+* Add parity tests for canonical TNFR engine ([`638111f`](https://github.com/fermga/TNFR-LFS/commit/638111fdb5d8f662f6e0cad8351cfbc5be40bd71))
+
+* Merge pull request #571 from fermga/codex/refactor-imports-and-adapt-functions-for-tnfr
+
+Integrate canonical TNFR fallbacks ([`74dca86`](https://github.com/fermga/TNFR-LFS/commit/74dca86109f7e9c7bd9de3fb0639213d98aded4a))
+
+* Integrate canonical TNFR fallbacks ([`96b4daa`](https://github.com/fermga/TNFR-LFS/commit/96b4daad1651adab5203f4286d95f7d0f726721f))
+
+* Update pyproject.toml ([`cdea660`](https://github.com/fermga/TNFR-LFS/commit/cdea6602807bb899801aed912225436a4a4788cf))
+
+* Merge pull request #570 from fermga/codex/update-pyproject.toml-and-add-tnfr-helper
+
+Add canonical tnfr helper and optional extra ([`0d95887`](https://github.com/fermga/TNFR-LFS/commit/0d95887553274fc903b63d5f062287752f82a70a))
+
+* Add helper for canonical tnfr imports ([`9cd1c4f`](https://github.com/fermga/TNFR-LFS/commit/9cd1c4f0d209d1d2dca422e8491ca5a9e21aa653))
+
+* Merge pull request #569 from fermga/codex/generate-and-commit-theory_impl_matrix-report
+
+Add theory implementation matrix report ([`ad4492e`](https://github.com/fermga/TNFR-LFS/commit/ad4492ebed4a74cc039837155a7ba775add4d21d))
+
+* Add theory implementation matrix report ([`bd00767`](https://github.com/fermga/TNFR-LFS/commit/bd0076760edc621068efa3095a24e666512d40d1))
+
+* Merge pull request #568 from fermga/codex/enable-pip-caching-and-update-pytest-steps
+
+Enable pip caching in CI and quiet pytest output ([`aded5ce`](https://github.com/fermga/TNFR-LFS/commit/aded5ce954e223c071653445ed391a52c32e9281))
+
+* Improve CI caching and quiet pytest ([`c0d587a`](https://github.com/fermga/TNFR-LFS/commit/c0d587aafc6879244490d8c3cf9c6249c13b3db3))
+
+* Merge pull request #567 from fermga/codex/extend-tnfr_theory_audit.py-for-operator-detection
+
+Extend theory audit with structural detector coverage ([`b2ffbbf`](https://github.com/fermga/TNFR-LFS/commit/b2ffbbf7d2937314cf5ca77c1430e21acf9de210))
+
+* Extend theory audit with structural detector coverage ([`3201e38`](https://github.com/fermga/TNFR-LFS/commit/3201e38f2f6a3513213f12c69514c3bb6e6129e8))
+
+* Merge pull request #566 from fermga/codex/update-tnfr_theory_audit.py-and-ci-workflow
+
+Allow theory audit to accept multiple directories ([`1fff4b4`](https://github.com/fermga/TNFR-LFS/commit/1fff4b4cd2f1a48511a6e3ad0487745c4fc57b65))
+
+* Improve theory audit path selection ([`fe7a335`](https://github.com/fermga/TNFR-LFS/commit/fe7a335d02025d778d59db0d65e7d30409a1379a))
+
+* Merge pull request #565 from fermga/codex/create-tests-for-compatibility-shims
+
+Add regression tests for deprecated import shims ([`b3c1510`](https://github.com/fermga/TNFR-LFS/commit/b3c1510900b74d8c2c6d3fe807b610f0f48c77fa))
+
+* Add regression tests for import shims ([`c09b84b`](https://github.com/fermga/TNFR-LFS/commit/c09b84b4cc31cd4d92355b6f3614d4811d578cf0))
+
+* Merge pull request #564 from fermga/codex/update-mkdocs.yml-for-autoapi-packages
+
+Include tnfr_core in AutoAPI docs ([`a069c5d`](https://github.com/fermga/TNFR-LFS/commit/a069c5d96389ba5bc92465537a6bb1f7b3127d8c))
+
+* Merge pull request #563 from fermga/codex/update-documentation-module-references-and-rebuild
+
+Update documentation references after telemetry refactor ([`59aed96`](https://github.com/fermga/TNFR-LFS/commit/59aed96830e6dbd94f3079bf2f45c1261bb21b11))
+
+* Update documentation citations for reorganised modules ([`fd32cc6`](https://github.com/fermga/TNFR-LFS/commit/fd32cc6af964dd5dc7ef4116432bec60c4419037))
+
+* Merge pull request #562 from fermga/codex/update-deprecation-warning-in-init.py
+
+Fix tnfr_lfs.core deprecation warning ([`fce2464`](https://github.com/fermga/TNFR-LFS/commit/fce2464fdd9e62b07d474d945dd6fcb5083c8ec3))
+
+* Fix tnfr_lfs.core deprecation warning ([`92fd96a`](https://github.com/fermga/TNFR-LFS/commit/92fd96a7610ce562657083a704c1784d7c229378))
+
+* Merge pull request #561 from fermga/codex/refactor-contextual-delta-loader-and-imports
+
+Refactor contextual delta loader configuration ([`5377819`](https://github.com/fermga/TNFR-LFS/commit/5377819900cd4ce2d5f911a3a8ea549973300083))
+
+* Decouple contextual delta loader from tnfr_core ([`70c7fd9`](https://github.com/fermga/TNFR-LFS/commit/70c7fd9fed8a0bc775a3aaa1e149764cd520f3f1))
+
+* Merge pull request #560 from fermga/codex/refactor-tnfr-plugin-operations
+
+refactor: move plugin helpers into tnfr_lfs analysis module ([`8d27507`](https://github.com/fermga/TNFR-LFS/commit/8d2750706720e0c7ad0d420502249e286aa19ee5))
+
+* Merge pull request #559 from fermga/codex/rename-ingestion-directory-to-telemetry
+
+Rename ingestion package to telemetry ([`4c0d9ce`](https://github.com/fermga/TNFR-LFS/commit/4c0d9cee267ca1b18abbb5e9308d0e7bf3d349b4))
+
+* Merge pull request #558 from fermga/codex/create-and-reorganize-tnfr_core-structure
+
+Refactor core analytics into tnfr_core package ([`70ffb3b`](https://github.com/fermga/TNFR-LFS/commit/70ffb3bd4b40dcae9e2c05b1022f30f17e5dcbf0))
+
+* Merge pull request #554 from fermga/codex/modificar-evolve_epi-para-soportar-metadatos
+
+Enhance evolve_epi metadata handling ([`6bcf66e`](https://github.com/fermga/TNFR-LFS/commit/6bcf66e4e9ae52a2a9cf05ba4c18898cc61296de))
+
+* Enhance evolve_epi metadata handling ([`732669f`](https://github.com/fermga/TNFR-LFS/commit/732669f6fa56756ab1851e9221c9f7f90268a478))
+
+* Merge pull request #557 from fermga/codex/actualizar-readme-y-documentacion
+
+Document TNFR alignment and add theory contract test ([`d222d6d`](https://github.com/fermga/TNFR-LFS/commit/d222d6d2348402e1f4357964909eb3a266a91808))
+
+* Document TNFR alignment and add theory contract test ([`82a7c6e`](https://github.com/fermga/TNFR-LFS/commit/82a7c6ec9575f57ecf7974b7e9bd6e45d644f309))
+
+* Merge pull request #556 from fermga/codex/implement-metrics-functions-and-tests
+
+Add TNFR coherence metrics helpers ([`4ece55a`](https://github.com/fermga/TNFR-LFS/commit/4ece55a4e23a813bf1f325292d9d909fd13ec819))
+
+* Add TNFR coherence metrics helpers ([`5b7ead3`](https://github.com/fermga/TNFR-LFS/commit/5b7ead378991849f2f7e46b1077c3451726b88cd))
+
+* Merge pull request #555 from fermga/codex/add-compute_delta_nfr-function-and-tests
+
+Add compute_delta_nfr helper and supporting tests ([`043e7db`](https://github.com/fermga/TNFR-LFS/commit/043e7db0385a56ba4c6edafe3814391d5ca463a0))
+
+* Add compute_delta_nfr helper and supporting tests ([`663e6a0`](https://github.com/fermga/TNFR-LFS/commit/663e6a09515bc8240ccf54fb101f98b40e448aa4))
+
+* Merge pull request #553 from fermga/codex/expand-labels-and-aliases-in-operator_detection.py
+
+Expand structural operator labels and update aliases ([`579e9a0`](https://github.com/fermga/TNFR-LFS/commit/579e9a050b8d2254c638f576e983569bcae9284a))
+
+* Expand structural operator label coverage ([`cb3756f`](https://github.com/fermga/TNFR-LFS/commit/cb3756fb0ed674960c45540fff507717c6bd498b))
+
+* Merge pull request #552 from fermga/codex/add-detect_nav-for-na-v-transitions
+
+Add TRANSITION (NA&#39;V) operator detection ([`a5300a2`](https://github.com/fermga/TNFR-LFS/commit/a5300a2aa3d417685379a1655af2f7d947dc6ec6))
+
+* Add NA&#39;V transition detector and tests ([`326bd64`](https://github.com/fermga/TNFR-LFS/commit/326bd648308a01eecba935a5cc1b3b77c8667157))
+
+* Merge pull request #551 from fermga/codex/update-thol-tests-for-telemetryrecord-usage
+
+Add THOL coverage to operator detection tests ([`37a0e60`](https://github.com/fermga/TNFR-LFS/commit/37a0e6082a9ef9150adc3d438da0494544520d30))
+
+* Add THOL detection tests using telemetry records ([`abd0f25`](https://github.com/fermga/TNFR-LFS/commit/abd0f25e10c2785ead536f38f83dbad6182cf5b2))
+
+* Merge pull request #550 from fermga/codex/extend-structural_operator_labels-for-autoorganisation
+
+Add auto-organisation structural operator aliases ([`6b97ceb`](https://github.com/fermga/TNFR-LFS/commit/6b97ceba071c4ddca1f1c49d88eea97dd962be0c))
+
+* Add auto-organisation structural operator aliases ([`8a51538`](https://github.com/fermga/TNFR-LFS/commit/8a51538d2d07ecad8773ebdac2e051c505f82d63))
+
+* Merge pull request #549 from fermga/codex/add-theory-audit-job-to-ci-pipeline
+
+Add theory audit to CI pipeline ([`83fb907`](https://github.com/fermga/TNFR-LFS/commit/83fb9072ff7a16fa81ab6cf88da1b1aa17a08532))
+
+* Add theory audit job to CI ([`366e4fd`](https://github.com/fermga/TNFR-LFS/commit/366e4fd3816337ead584449c0bb0205b31a2297f))
+
+* Merge pull request #548 from fermga/codex/update-.gitignore-for-tests/_report
+
+Ignore generated test reports ([`93d0899`](https://github.com/fermga/TNFR-LFS/commit/93d0899bc88c609216e5afc1447367ffd8935cbe))
+
+* Ignore generated test reports ([`0cefa27`](https://github.com/fermga/TNFR-LFS/commit/0cefa2763aca7b66409dad5624be0cf503368fff))
+
+* Merge pull request #547 from fermga/codex/add-audit-script-to-tools-module
+
+Add theory implementation audit script ([`17d8876`](https://github.com/fermga/TNFR-LFS/commit/17d8876b6905551b1923412e6c1efef87ead49e9))
+
+* Add theory implementation audit script ([`b15edee`](https://github.com/fermga/TNFR-LFS/commit/b15edee8ee94f11b8edee042f4b7e6f5265a3522))
+
+* Merge pull request #546 from fermga/codex/update-pyproject.toml-for-python-3.10
+
+Raise minimum Python version to 3.10 ([`e6d9f06`](https://github.com/fermga/TNFR-LFS/commit/e6d9f06535fb8ddec644532d4ddd6e2dc94bbcdd))
+
+* Raise minimum Python version to 3.10 ([`eecb0ed`](https://github.com/fermga/TNFR-LFS/commit/eecb0eded6a19a6153c9fab66d04e39a8e1c13f7))
+
+* Merge pull request #545 from fermga/codex/update-import-statements-to-absolute-paths
+
+Use absolute imports for tests helpers ([`f2a28f3`](https://github.com/fermga/TNFR-LFS/commit/f2a28f308f56b44acca75bc23299a595b90af3ce))
+
+* Fix helper imports to use absolute paths ([`fff8ff1`](https://github.com/fermga/TNFR-LFS/commit/fff8ff138c414eafb85a264447c8ed2d9c9f4a2a))
+
+* Merge pull request #544 from fermga/codex/refactor-to-use-absolute-imports-in-tnfr_lfs
+
+Refactor package imports to use absolute paths ([`8734eb1`](https://github.com/fermga/TNFR-LFS/commit/8734eb10e56c3c0ea4ffa79fefd06d530433db70))
+
+* Merge pull request #543 from fermga/codex/update-version-loading-logic-and-tests
+
+Honor semantic-release version override ([`56c2920`](https://github.com/fermga/TNFR-LFS/commit/56c29205b3176e286d126556b240524a80246ef2))
+
+* Honor semantic-release version override ([`d33c928`](https://github.com/fermga/TNFR-LFS/commit/d33c928e82f4cff99dae86a43f5b89b236c43848))
+
+* Merge pull request #542 from fermga/codex/remove-spanish-identifiers-and-update-tests
+
+Remove Spanish silence alias and Anglicize testing docs ([`5214e63`](https://github.com/fermga/TNFR-LFS/commit/5214e639f6a266f602c9f08a56aeca7f8c393ce7))
+
+* Remove Spanish operator alias and update docs ([`0c8c68f`](https://github.com/fermga/TNFR-LFS/commit/0c8c68fcf357116de5a7515ecfd2bca7693d9ed5))
+
+* Merge pull request #541 from fermga/codex/update-tests/readme.md-with-thresholds-and-ci
+
+docs: document similar test thresholds ([`03e3160`](https://github.com/fermga/TNFR-LFS/commit/03e31606b4c27123e796d110f78c327c3ae2c62b))
+
+* Merge pull request #540 from fermga/codex/refactor-test-helpers-and-assertions
+
+Refactor CLI OSD tests with shared helpers ([`651878e`](https://github.com/fermga/TNFR-LFS/commit/651878e21b8e3f949eb9e27c71528e48c29d8d16))
+
+* Refactor CLI OSD tests with shared helpers ([`bd1e6f7`](https://github.com/fermga/TNFR-LFS/commit/bd1e6f75ce79b04956b307edaaed4d35f42306cb))
+
+* Merge pull request #539 from fermga/codex/refactorizar-tests-de-carga-de-registros
+
+Refactor CLI record loading tests ([`5e4903e`](https://github.com/fermga/TNFR-LFS/commit/5e4903e4bc5605f24121ccb2eec673f1ee3e3145))
+
+* Refactor load records tests with parametrized scenarios ([`af362bb`](https://github.com/fermga/TNFR-LFS/commit/af362bb749ff7e257af83a63706ec67f1fa1daac))
+
+* Merge pull request #538 from fermga/codex/refactorizar-tests-de-cli-para-reducir-duplicacion
+
+Refactor CLI run tests into parameterized cases ([`0870595`](https://github.com/fermga/TNFR-LFS/commit/0870595a646d75ef43d2af225fbee6497fbf51ba))
+
+* Refactor CLI run tests into parameterized cases ([`09f3255`](https://github.com/fermga/TNFR-LFS/commit/09f3255aaa0f58616007b3850bc6766154195415))
+
+* Merge pull request #537 from fermga/codex/refactorizar-pruebas-con-pytest.param-y-helper
+
+Refactor operator detection tests with parametrized cases ([`6d632ac`](https://github.com/fermga/TNFR-LFS/commit/6d632acc3d42361a1d8d493ca6f0c3b75e8ce469))
+
+* Refactor operator detection tests with parametrized cases ([`edc30f6`](https://github.com/fermga/TNFR-LFS/commit/edc30f6fcf9ba273550f369909cfe0e454fd933a))
+
+* Merge pull request #536 from fermga/codex/refactorizar-pruebas-del-calculador-delta
+
+Parametrize delta calculator component decomposition tests ([`5086015`](https://github.com/fermga/TNFR-LFS/commit/508601592ea4d1aa8dcd89980e9f8bf42fc98d4f))
+
+* Parametrize delta calculator component tests ([`450bb03`](https://github.com/fermga/TNFR-LFS/commit/450bb03eff43c5a399bc494d43717f7f2b15a5ea))
+
+* Merge pull request #535 from fermga/codex/document-pr-template-requirements
+
+Add similarity helper sweep target and document reporting workflow ([`9671beb`](https://github.com/fermga/TNFR-LFS/commit/9671beb0c99a3740dd1615a33838d596328a6351))
+
+* Add similarity helper sweep and cleanup guidance ([`1160203`](https://github.com/fermga/TNFR-LFS/commit/116020348cbe7f3a1f145f44b967df8b096808ec))
+
+* Merge pull request #534 from fermga/codex/add-github-actions-workflow-for-similar-tests
+
+Add workflow to detect similar tests ([`c1bb263`](https://github.com/fermga/TNFR-LFS/commit/c1bb26336fa0e9b4feb5b1399568237d22179d94))
+
+* Add workflow to detect similar tests ([`4f60eaa`](https://github.com/fermga/TNFR-LFS/commit/4f60eaa8bb8ee95858010ab7b13cda9012a6a158))
+
+* Merge pull request #533 from fermga/codex/refactor-tests-for-silence-event-payloads
+
+Refactor silence event payload tests ([`0b3d3d4`](https://github.com/fermga/TNFR-LFS/commit/0b3d3d454d95ebc7d74c4eee4fe4e4630554ea87))
+
+* Refactor silence event payload tests ([`7c2a79e`](https://github.com/fermga/TNFR-LFS/commit/7c2a79ed73d86aefc5cbd0d4e5de1c3422e4e221))
+
+* Merge pull request #532 from fermga/codex/refactorizar-pruebas-de-deteccion-de-operadores
+
+Parametrize structural operator alias tests ([`208c68c`](https://github.com/fermga/TNFR-LFS/commit/208c68ce870c042854c0c9eecf1da29b6abbf721))
+
+* Parametrize structural operator alias tests ([`a926828`](https://github.com/fermga/TNFR-LFS/commit/a926828422e3987b7abdee3a00ace22a18477892))
+
+* Merge pull request #531 from fermga/codex/update-tests/readme.md-with-factories-and-examples
+
+Document test fixture parametrisation guidance ([`5efb32c`](https://github.com/fermga/TNFR-LFS/commit/5efb32cdd25a9ed800f62ee0c0ebe982e9fba830))
+
+* Document test fixture parametrisation guidance ([`f060fb6`](https://github.com/fermga/TNFR-LFS/commit/f060fb6a6e39a5d27182f18a16621765069887a2))
+
+* Merge pull request #530 from fermga/codex/add-script-to-report-similar-tests
+
+Add script to report structurally similar pytest tests ([`a9677d1`](https://github.com/fermga/TNFR-LFS/commit/a9677d1946e824f1a9150dde2e97a6d28dc7c29e))
+
+* Add tooling to detect similar pytest tests ([`1aa7c49`](https://github.com/fermga/TNFR-LFS/commit/1aa7c491ff4637f93a02ce04199920d70cbf450b))
+
+* Merge pull request #529 from fermga/codex/add-synthetic_window_factory-fixture
+
+Add synthetic telemetry window fixture for brake headroom tests ([`a1ddbe7`](https://github.com/fermga/TNFR-LFS/commit/a1ddbe78aee2fb7465965edc9af504961367c7c4))
+
+* Refactor brake headroom tests with synthetic window factory ([`9d287df`](https://github.com/fermga/TNFR-LFS/commit/9d287df0263361b7326fd4608a3a239af67ca6b6))
+
+* Merge pull request #528 from fermga/codex/add-osd_hud-fixture-and-refactor-tests
+
+Add osd HUD fixture and parametrize page C tests ([`60540f3`](https://github.com/fermga/TNFR-LFS/commit/60540f332f49e785c64fe64589883c5a2935fa65))
+
+* Add reusable OSD HUD fixture and parametrize page C tests ([`7642f57`](https://github.com/fermga/TNFR-LFS/commit/7642f572432d68aaed8acb3a6c95bea15428cfc7))
+
+* Merge pull request #527 from fermga/codex/add-cli_runner-fixture-and-parameterize-tests
+
+Add CLI runner fixture and parameterize CLI diagnostics tests ([`8633839`](https://github.com/fermga/TNFR-LFS/commit/8633839824022dbada4d260d557adb3f9ada11a2))
+
+* Add CLI runner fixture and parametrize diagnosis tests ([`2aaef19`](https://github.com/fermga/TNFR-LFS/commit/2aaef1987678da21ee49643e4c893a26b717fd7a))
+
+* Merge pull request #526 from fermga/codex/add-rule_scenario_factory-in-tests/conftest.py
+
+Refactor rule-based tests with parametrized scenarios ([`78104da`](https://github.com/fermga/TNFR-LFS/commit/78104da60128e4bdae88a03d364513bf7b34b7af))
+
+* Refactor rule tests with parametrized scenarios ([`d0d19a1`](https://github.com/fermga/TNFR-LFS/commit/d0d19a12fc99a74cbf9494daf7b0704554e12a2d))
+
+* Merge pull request #525 from fermga/codex/add-fixtures-and-parameterized-test-for-parquet
+
+Refactor parquet requirement tests into parametrized flow ([`5e1edab`](https://github.com/fermga/TNFR-LFS/commit/5e1edab0826f6dacb6a024175e3a67096ee41214))
+
+* Refactor parquet requirement tests into parametrized flow ([`ecdb639`](https://github.com/fermga/TNFR-LFS/commit/ecdb639e295de47d99ee1acd760e73f2e98e80d3))
+
+* Merge pull request #524 from fermga/codex/add-csv_bundle-fixture-and-refactor-tests
+
+Add reusable CSV bundle fixture for replay tests ([`a6de953`](https://github.com/fermga/TNFR-LFS/commit/a6de953080dd308dcb742ae5bf8a006c9ac78c7f))
+
+* Add reusable CSV bundle fixture and parametrize error tests ([`e0660d2`](https://github.com/fermga/TNFR-LFS/commit/e0660d24c6b66370a0fa9959c554222eaa2ce812))
+
+* Merge pull request #523 from fermga/codex/refactor-tests-with-fixtures-and-parameterization
+
+Refactor write-set tests and cache coverage ([`57b9094`](https://github.com/fermga/TNFR-LFS/commit/57b90940f7e6b3fca506cd077ad300deba8f8fa4))
+
+* Refactor write-set tests and cache coverage ([`fbeba21`](https://github.com/fermga/TNFR-LFS/commit/fbeba21e81b9589ae20daefedfeba19638eb1dc0))
+
+* Merge pull request #520 from fermga/codex/refactor-ingestion-tests-to-use-parametrize
+
+Refactor ingestion pending flush tests ([`8481bdf`](https://github.com/fermga/TNFR-LFS/commit/8481bdfc4dcb84453eae3613d8754db73e5746be))
+
+* Refactor ingestion pending flush tests ([`8fc0f53`](https://github.com/fermga/TNFR-LFS/commit/8fc0f5350110ca0537522ed8d040d490818aa089))
+
+* Merge pull request #522 from fermga/codex/replace-tests-with-parameterized-version
+
+Align cache resolver tests ([`240dd20`](https://github.com/fermga/TNFR-LFS/commit/240dd200d89ba4bb34dd09233d9e6467c288dc78))
+
+* Align cache resolver tests ([`808d752`](https://github.com/fermga/TNFR-LFS/commit/808d7520048fe6587639824a4d38c4dce0a820da))
+
+* Merge pull request #521 from fermga/codex/add-fixture-for-reusable-toml-test-cases
+
+Add shared CLI config fixture for tests ([`e0cc378`](https://github.com/fermga/TNFR-LFS/commit/e0cc378f7b148f695d1bad0b083b740bb069d80a))
+
+* Refactor CLI config fixtures ([`c627b39`](https://github.com/fermga/TNFR-LFS/commit/c627b3960454bb562bb7308ed437630b2225985f))
+
+* Merge pull request #519 from fermga/codex/refactor-tests-for-outsim-and-outgauge
+
+Refactor ingestion and CLI replay tests ([`c0a43d5`](https://github.com/fermga/TNFR-LFS/commit/c0a43d5dc217210df43a712dc68751b9314845b9))
+
+* Refactor ingestion and CLI replay tests ([`d55f6cc`](https://github.com/fermga/TNFR-LFS/commit/d55f6cc8ca3b178845cdbb648763c577a14b780f))
+
+* Merge pull request #518 from fermga/codex/add-fixture-for-mocked-pandas-module
+
+Refactor parquet engine failure tests ([`68df643`](https://github.com/fermga/TNFR-LFS/commit/68df643166f87e60ba57dcbd0bb16fdafb2ff5a8))
+
+* Refactor parquet engine failure tests ([`de986ac`](https://github.com/fermga/TNFR-LFS/commit/de986ac188d2ba2667a40cb0951e09d3cf326b75))
+
+* Merge pull request #517 from fermga/codex/add-module-fixture-and-refactor-tests
+
+Refactor CLI and config loader tests to use shared fixtures ([`a6089e4`](https://github.com/fermga/TNFR-LFS/commit/a6089e4ba80d08c3151b4577ff8e9f783252503c))
+
+* Refactor config loader and CLI tests ([`f4d28ef`](https://github.com/fermga/TNFR-LFS/commit/f4d28ef5e2726a5dd027735405c5ab1e13f7a0e9))
+
+* Merge pull request #516 from fermga/codex/add-fixture-for-profilemanager-tests
+
+Refactor IO profile tests to reuse shared fixture ([`cde2210`](https://github.com/fermga/TNFR-LFS/commit/cde2210c0cf0673c87c323d44d1c018aa53fb878))
+
+* Refactor profile manager tests to use shared fixture ([`a02ae42`](https://github.com/fermga/TNFR-LFS/commit/a02ae4263deb2c3aaf9ff4a98d909e513f3a4678))
+
+* Merge pull request #515 from fermga/codex/refactor-tests-with-reusable-fixture
+
+Refactor diagnose CLI tests with reusable fixture ([`11544ed`](https://github.com/fermga/TNFR-LFS/commit/11544edf21e720c16b532dfda20c2c9e4a93af66))
+
+* Refactor diagnose CLI tests ([`a2b3cd5`](https://github.com/fermga/TNFR-LFS/commit/a2b3cd5c1688f9f9a2357a345f8c9e869116dfd0))
+
+* Merge pull request #514 from fermga/codex/refactor-tests-using-helper-for-toml
+
+Refactor CLI configuration tests with parametrization ([`1231e21`](https://github.com/fermga/TNFR-LFS/commit/1231e2121a634c8548659231138e289aa665b95b))
+
+* Refactor CLI configuration tests with parametrization ([`6248b54`](https://github.com/fermga/TNFR-LFS/commit/6248b546efc9b542c8793fda67572e71fe95ea70))
+
+* Merge pull request #513 from fermga/codex/refactor-tests-to-use-parameterization
+
+Refactor tests with parametrization ([`b618f21`](https://github.com/fermga/TNFR-LFS/commit/b618f2123c2a22701bc6716cd98c9786b1ecc78b))
+
+* Refactor tests with parametrization ([`b821784`](https://github.com/fermga/TNFR-LFS/commit/b821784939dcd753676af86b394f780a974e2d7a))
+
+* Merge pull request #512 from fermga/codex/refactor-tests-with-parameterized-fixture-and-consolidation
+
+Refactor UDP client tests to share parameterized specs ([`1a734a7`](https://github.com/fermga/TNFR-LFS/commit/1a734a75fcb90a52d25ce56463017fafe89233c1))
+
+* Refactor UDP client tests to share parameterized specs ([`61c4a81`](https://github.com/fermga/TNFR-LFS/commit/61c4a81a10fbee9c71a012f6eed60f19c46f10ca))
+
+* Merge pull request #511 from fermga/codex/refactor-tests-for-resolve_cache_size
+
+Parametrize cache size resolution tests ([`49995d9`](https://github.com/fermga/TNFR-LFS/commit/49995d91bb695519739ba8b31db60737aaf6671b))
+
+* Parametrize resolve cache size tests ([`d295467`](https://github.com/fermga/TNFR-LFS/commit/d2954676a1ff79bb86052535869e6b95197dfbc4))
+
+* Merge pull request #510 from fermga/codex/refactor-test_ackermann_parallel_delta-tests
+
+Parametrize Ackermann delta tests ([`09cccdb`](https://github.com/fermga/TNFR-LFS/commit/09cccdb73421a0bdd1e289c75532e5ff41b9a21a))
+
+* Parametrize Ackermann delta tests ([`98ea3c9`](https://github.com/fermga/TNFR-LFS/commit/98ea3c94a3adcf11b5b966aec007f19db0030e16))
+
+* Update index.md ([`3587be6`](https://github.com/fermga/TNFR-LFS/commit/3587be6a713f5d78c65cf4eb31896dddab829b2e))
+
+* Merge pull request #509 from fermga/codex/update-readme.md-for-project-summary
+
+Streamline README documentation links ([`5ba1b76`](https://github.com/fermga/TNFR-LFS/commit/5ba1b76db367f1fba628d9882b04c0e78167ca68))
+
+* Streamline README navigation ([`07be722`](https://github.com/fermga/TNFR-LFS/commit/07be7220b74fc7b84aef3943b7901302afe43bc6))
+
+* Merge pull request #508 from fermga/codex/update-documentation-for-telemetry-setup
+
+Document telemetry setup as canonical reference ([`24dea3a`](https://github.com/fermga/TNFR-LFS/commit/24dea3af6f611afc938be8d23268d564d7743d6b))
+
+* Document telemetry setup as canonical reference ([`4608395`](https://github.com/fermga/TNFR-LFS/commit/4608395b05a26e1c9c052be807792054623080df))
+
+* Merge pull request #507 from fermga/codex/revise-readme-and-update-documentation-links
+
+Refine documentation entry points ([`940327e`](https://github.com/fermga/TNFR-LFS/commit/940327eb88eda9fe0ff446ea5fff06b6dedd5212))
+
+* Refine documentation entry points ([`f63f003`](https://github.com/fermga/TNFR-LFS/commit/f63f0033adcbeb4d49681d36c35d9ee94b728fc1))
+
+* Merge pull request #506 from fermga/codex/refactor-readme-for-clarity-and-links
+
+Streamline README and reinforce documentation index ([`90d3aec`](https://github.com/fermga/TNFR-LFS/commit/90d3aec2c34e1c25fde16121460c38b6c0c274ec))
+
+* Refine README pitch and cross-link docs ([`baa408a`](https://github.com/fermga/TNFR-LFS/commit/baa408ae74d5dbd03ddac8025642fb111fbb1871))
+
+* Merge pull request #505 from fermga/codex/refactor-readme.md-and-docs/index.md
+
+Streamline README and centralize onboarding docs ([`f552ead`](https://github.com/fermga/TNFR-LFS/commit/f552ead9513aef7c1a653004d7721ff3521786fd))
+
+* Streamline README and expand docs intro ([`bdd2ee7`](https://github.com/fermga/TNFR-LFS/commit/bdd2ee717bb4565e6e12b5740cd6aa49ba0e9283))
+
+* Merge pull request #504 from fermga/codex/update-documentation-index-and-examples
+
+docs: deduplicate quickstart references ([`4b721d6`](https://github.com/fermga/TNFR-LFS/commit/4b721d6370c324702cbc4b69d1f5ceea9da8ef3a))
+
+* Merge pull request #503 from fermga/codex/update-documentation-for-onboarding-process
+
+Clarify onboarding guidance references ([`eba4b06`](https://github.com/fermga/TNFR-LFS/commit/eba4b067fb9848ba699d35899d8ff580145ec037))
+
+* Refine onboarding pointers ([`73b7124`](https://github.com/fermga/TNFR-LFS/commit/73b7124322c26e6c80048e6b9b7e9c4345ed387f))
+
+* Merge pull request #502 from fermga/codex/update-documentation-to-link-tutorials
+
+Streamline onboarding docs around beginner quickstart ([`8cb4d3f`](https://github.com/fermga/TNFR-LFS/commit/8cb4d3f802fd21ca9db721d1a19d6ae8c6d8edf1))
+
+* Refocus onboarding docs around tutorials quickstart ([`810ddef`](https://github.com/fermga/TNFR-LFS/commit/810ddef9bf372db97c34c7486cb82debc43eada8))
+
+* Merge pull request #501 from fermga/codex/refactor-readme-and-enhance-documentation
+
+Clarify onboarding docs and trim README ([`3ef0423`](https://github.com/fermga/TNFR-LFS/commit/3ef04233039456c5ff0f267adac4c2a16b0c1122))
+
+* Refine onboarding docs ([`4019346`](https://github.com/fermga/TNFR-LFS/commit/40193465871283176276eb438ee1df81390da10c))
+
+* Merge pull request #500 from fermga/codex/refactor-readme.md-for-concise-overview
+
+Streamline README overview ([`c6e20f5`](https://github.com/fermga/TNFR-LFS/commit/c6e20f5f152e2fb1b1051e3efe2a55bece2097b5))
+
+* Merge pull request #499 from fermga/codex/refactor-readme-and-migrate-details-to-docs
+
+Refine README overview and expand documentation index ([`ee7529c`](https://github.com/fermga/TNFR-LFS/commit/ee7529c68d3e0ee38ff4d1aefef30aa1a372cbe3))
+
+* Refine README summaries and expand docs index ([`7f26455`](https://github.com/fermga/TNFR-LFS/commit/7f26455f573dc2bcfff0e030e9d018a6f137e6f5))
+
+* Merge pull request #498 from fermga/codex/update-pyproject.toml-profiles-and-validate-inheritance
+
+Refine profile plugin inheritance ([`5502e80`](https://github.com/fermga/TNFR-LFS/commit/5502e804d3f7485f13f0d4fbfd98a616c1a411cf))
+
+* Merge pull request #497 from fermga/codex/add-base-configuration-section-in-pyproject.toml
+
+Add base plugin profile inheritance ([`24d3bed`](https://github.com/fermga/TNFR-LFS/commit/24d3bedd32c70b0191c77bb2b2779a0d724814a9))
+
+* Add base plugin profile inheritance ([`d46a2b5`](https://github.com/fermga/TNFR-LFS/commit/d46a2b582f59ea582ac85f6728421d2b021df270))
+
+* Merge pull request #496 from fermga/codex/remove-legacy-configuration-files
+
+Remove legacy CLI configuration files ([`40478ee`](https://github.com/fermga/TNFR-LFS/commit/40478eeddbd9dc203ac55c167ba2834871aa008a))
+
+* Remove legacy CLI config files in favor of pyproject ([`26e826a`](https://github.com/fermga/TNFR-LFS/commit/26e826afa939e0c1f790e12be180a0c7925730af))
+
+* Merge pull request #495 from fermga/codex/update-makefile-to-enhance-error-handling
+
+Improve Makefile dependency checks ([`adbf691`](https://github.com/fermga/TNFR-LFS/commit/adbf691ad607346dbef5dab22b7b207905d066bb))
+
+* Improve Makefile dependency checks ([`b5bece2`](https://github.com/fermga/TNFR-LFS/commit/b5bece20e84f584651cb2700d1ff0f2c28204f85))
+
+* Merge pull request #494 from fermga/codex/update-ci-workflow-for-pytest-selection
+
+Ensure main branch always runs full CI test suite ([`581b499`](https://github.com/fermga/TNFR-LFS/commit/581b499f4c2971ed85aadc127876dbea54e9972f))
+
+* Ensure full CI suite runs on main ([`99afe93`](https://github.com/fermga/TNFR-LFS/commit/99afe93c0351b46a3caec60ba41d0a55ec941623))
+
+* Merge pull request #493 from fermga/codex/update-ci-workflow-for-full-suite-fallback
+
+Support full suite fallback when no test areas detected ([`5558be8`](https://github.com/fermga/TNFR-LFS/commit/5558be894538451d2441d89e0ca1f62ad661f152))
+
+* Handle fallback full suite when no areas detected ([`4fd3f59`](https://github.com/fermga/TNFR-LFS/commit/4fd3f594e5ca37045d5a1ac93a778628f9f67809))
+
+* Merge pull request #492 from fermga/codex/add-test_acceptance_pipeline-to-yaml-config
+
+Include acceptance pipeline tests in core_pkg area ([`44d7ede`](https://github.com/fermga/TNFR-LFS/commit/44d7ede3cd1ce0f499dfd36c3d5603a2707de258))
+
+* Include acceptance pipeline tests in core_pkg area ([`2d911be`](https://github.com/fermga/TNFR-LFS/commit/2d911be790a8ec0c7855587c25603ef1f4dcf5ca))
+
+* Merge pull request #491 from fermga/codex/update-test-areas.yml-with-new-tests
+
+Add brake thermal and robustness tests to analysis area ([`29fa36e`](https://github.com/fermga/TNFR-LFS/commit/29fa36eab8f1cbb3bdc7e3714c92b45fbe292f73))
+
+* Include brake thermal and robustness tests in analysis suite ([`b1305a1`](https://github.com/fermga/TNFR-LFS/commit/b1305a1d8e2dc046067375981caa853a1cc47e63))
+
+* Merge pull request #490 from fermga/codex/update-test-areas.yml-for-new-tests
+
+Add ingestion tests to CI area mapping ([`25ba5c5`](https://github.com/fermga/TNFR-LFS/commit/25ba5c5d30476bdf9922b51d7b2aa9ebb2ac9da4))
+
+* Add ingestion tests to CI area mapping ([`f0ad37d`](https://github.com/fermga/TNFR-LFS/commit/f0ad37de73b926349901d1b4faa1ea373194dc52))
+
+* Merge pull request #489 from fermga/codex/update-.github/test-areas.yml-for-recommender
+
+Include pareto and search tests in recommender area ([`22d9965`](https://github.com/fermga/TNFR-LFS/commit/22d99652d8734e9d822e3b310db054ea15b11e91))
+
+* Include pareto and search tests in recommender area ([`98dfede`](https://github.com/fermga/TNFR-LFS/commit/98dfedee6ce0b6cc74a440c2d5ed0b07c4a24ef3))
+
+* Merge pull request #488 from fermga/codex/update-.github/test-areas.yml-for-cli-tests
+
+Update CLI test area coverage ([`7c89f17`](https://github.com/fermga/TNFR-LFS/commit/7c89f17aecf43c5de5fb648621605719dabb0381))
+
+* Add CLI tests to test areas configuration ([`e10c469`](https://github.com/fermga/TNFR-LFS/commit/e10c4698792eb820f0e50040acbe376e9804ca08))
+
+* Merge pull request #487 from fermga/codex/fix-track_selection.session-access-in-workflows.py
+
+Safeguard analyze debug logging session access ([`4083f43`](https://github.com/fermga/TNFR-LFS/commit/4083f4384168187222e999e4be058c7f2ffb1a1b))
+
+* Safeguard analyze debug logging session access ([`6d2d4e9`](https://github.com/fermga/TNFR-LFS/commit/6d2d4e9fb6dba828a6be4e2bbbb4f9d1f8f7721b))
+
+* Merge pull request #486 from fermga/codex/edit-.github/test-areas.yml-multiple-filters
+
+Add shared full-area filters for helper resources ([`45f8102`](https://github.com/fermga/TNFR-LFS/commit/45f8102ac8807583f71597468784041122e986c0))
+
+* Refine core filters and add shared full area ([`e1579c8`](https://github.com/fermga/TNFR-LFS/commit/e1579c8dbf40970f455611c2a2281b51a816ccae))
+
+* Merge pull request #485 from fermga/codex/update-plugins-filter-in-test-areas.yml
+
+Include CLI OSD module in plugins test area filters ([`9302a5a`](https://github.com/fermga/TNFR-LFS/commit/9302a5ae5a0f329694f75ea57d247d082eb21a06))
+
+* Include CLI OSD path in plugins area filters ([`ccc3197`](https://github.com/fermga/TNFR-LFS/commit/ccc31970a13dc14da2ea3122fc9928ccbb846a83))
+
+* Merge pull request #484 from fermga/codex/modify-test-areas.yml-and-update-pytest_args
+
+Refine CLI test selection ([`24929b1`](https://github.com/fermga/TNFR-LFS/commit/24929b14195238958aab90907a48d00220b8e2e3))
+
+* Refine CLI test selection ([`73c272f`](https://github.com/fermga/TNFR-LFS/commit/73c272fb80a09e0279076da670a958eba4cabb5f))
+
+* Merge pull request #483 from fermga/codex/update-github-test-areas-configuration
+
+Refine core test area coverage ([`80cb924`](https://github.com/fermga/TNFR-LFS/commit/80cb92434c830cc42fd00510bc2ed046bf411b5c))
+
+* Refine core test area coverage ([`99b25c1`](https://github.com/fermga/TNFR-LFS/commit/99b25c127ee9bfd3f747a8ea20d57c3ed145b386))
+
+* Merge pull request #482 from fermga/codex/update-analysis-configuration-in-test-areas.yml
+
+Remove stale analysis test paths from CI matrix ([`c3f2921`](https://github.com/fermga/TNFR-LFS/commit/c3f292130c82c8fc7e1a0569a4953784ef05be9a))
+
+* Remove obsolete analysis tests path from CI matrix ([`b9070b2`](https://github.com/fermga/TNFR-LFS/commit/b9070b2e109f38bbc3e6410d3183b6f9845e7019))
+
+* Merge pull request #481 from fermga/codex/evaluate-test-selection-logic
+
+Ensure core area triggers pytest in CI ([`24d4b02`](https://github.com/fermga/TNFR-LFS/commit/24d4b028f099742bf9932f34dff578da8096f057))
+
+* Ensure core test area runs pytest ([`fe44b3d`](https://github.com/fermga/TNFR-LFS/commit/fe44b3d4ece53e8eb83b6b2a740be518180231ca))
+
+* Merge pull request #480 from fermga/codex/refactorizar-job-detect-changes-y-condiciones-de-tests
+
+Refine CI change detection outputs and conditions ([`e01decd`](https://github.com/fermga/TNFR-LFS/commit/e01decd9bd6c41952edd8227333772ab2eaef291))
+
+* Refactor CI change detection outputs ([`0049952`](https://github.com/fermga/TNFR-LFS/commit/00499521dfd687dcbb2511100543127a7dff056f))
+
+* Merge pull request #479 from fermga/codex/update-ci-workflow-for-test-areas
+
+Wrap matrix outputs in include object ([`44387db`](https://github.com/fermga/TNFR-LFS/commit/44387db263bc681d9a5a47adf4289a1a0733c1ea))
+
+* Wrap matrix outputs in include object ([`e4d94ac`](https://github.com/fermga/TNFR-LFS/commit/e4d94ac1df187d57f7b3de1a5712e8f0e2720bb2))
+
+* Merge pull request #478 from fermga/codex/add-user-authentication-feature
+
+Avoid legacy phase warnings in dissonance breakdown ([`0068cab`](https://github.com/fermga/TNFR-LFS/commit/0068cab336af26ba723566993aada0aee1bd7350))
+
+* Avoid legacy phase warnings in dissonance breakdown ([`9baf7e5`](https://github.com/fermga/TNFR-LFS/commit/9baf7e5ac5cbebba912b22dc94461349f3836ea9))
+
+* Merge pull request #477 from fermga/codex/refactor-test-areas.yml-and-ci.yml
+
+Refactor CI test area configuration ([`d636fe0`](https://github.com/fermga/TNFR-LFS/commit/d636fe0d59ad342d196432a70598809fdb0edc5c))
+
+* Refactor CI test area configuration ([`12c2dde`](https://github.com/fermga/TNFR-LFS/commit/12c2dde7454a8682bd5eb182feaef1d004c454ca))
+
+* Merge pull request #476 from fermga/codex/add-user-authentication-to-api
+
+Handle missing pytest-cov plugin gracefully ([`e456979`](https://github.com/fermga/TNFR-LFS/commit/e456979a3ff7520fa2a62256ba5772a8ef85e2bc))
+
+* Handle missing pytest-cov plugin ([`f1683e5`](https://github.com/fermga/TNFR-LFS/commit/f1683e58dc663fccfbd3aae5b860bd8fef944425))
+
+* Merge pull request #475 from fermga/codex/refactor-ci-workflow-to-simplify-pytest-execution
+
+Simplify CI workflow matrix configuration ([`c72d418`](https://github.com/fermga/TNFR-LFS/commit/c72d418a8093cba206e5053920ca255b1a810fc1))
+
+* Simplify CI test matrix configuration ([`a4ba453`](https://github.com/fermga/TNFR-LFS/commit/a4ba453069cc3fc0e6756aa4fcdf637320a206f5))
+
+* Merge pull request #474 from fermga/codex/add-pytest-area-configuration-in-ci
+
+Refactor CI to load pytest matrix from shared manifest ([`bedea49`](https://github.com/fermga/TNFR-LFS/commit/bedea498095e7d0da82ed704697862d959e8f8f2))
+
+* Merge pull request #473 from fermga/codex/extend-ci-workflow-to-dynamically-build-pytest-matrix
+
+Refactor CI pytest matrix generation ([`8c0ff6a`](https://github.com/fermga/TNFR-LFS/commit/8c0ff6a0bce807e40de9d7fe8c51625905368102))
+
+* Refactor CI pytest matrix generation ([`680f73c`](https://github.com/fermga/TNFR-LFS/commit/680f73cf8479784afd79532ba3947c5fb0b988bc))
+
+* Merge pull request #472 from fermga/codex/update-ci-workflow-to-improve-pytest-execution
+
+Simplify CI pytest matrix using declarative strategy ([`a13f554`](https://github.com/fermga/TNFR-LFS/commit/a13f5543524e5b8a2f2b676d938cca6ba2d7069d))
+
+* Refine pytest matrix selection ([`9f09768`](https://github.com/fermga/TNFR-LFS/commit/9f0976833526d04727d35ac504c420a3e132046e))
+
+* Merge pull request #471 from fermga/codex/refactor-ci-workflow-for-pytest-matrix
+
+Refine CI pytest matrix selection ([`85ab887`](https://github.com/fermga/TNFR-LFS/commit/85ab8870d80e63de9af7ef7dce8a9f36b2a2ac33))
+
+* Refine CI pytest matrix selection ([`d5a044d`](https://github.com/fermga/TNFR-LFS/commit/d5a044ddba96c1e1f1421970f0ea8dd3167083e6))
+
+* Update pyproject.toml ([`a9d9001`](https://github.com/fermga/TNFR-LFS/commit/a9d90011364c86ba065c7ab9c999b9276c21a5ee))
+
+* Merge pull request #470 from fermga/codex/update-homepage-url-in-pyproject.toml
+
+Update Homepage URL in pyproject metadata ([`1ccf9a1`](https://github.com/fermga/TNFR-LFS/commit/1ccf9a1cdf78e31710128aa1474739cbb04e962c))
+
+* Update project homepage URL ([`b04c134`](https://github.com/fermga/TNFR-LFS/commit/b04c134be5ed82a6ecef282565cbb8856887182f))
+
+* Merge pull request #469 from fermga/codex/update-telemetryfusion-links-in-documentation
+
+Fix TelemetryFusion documentation links ([`c7316a4`](https://github.com/fermga/TNFR-LFS/commit/c7316a4318b61a54c6fd3fb9382b883a670c2ce1))
+
+* Fix TelemetryFusion doc links ([`578a113`](https://github.com/fermga/TNFR-LFS/commit/578a113590038756e592f51ecfc116f1e069c6e5))
+
+* Merge pull request #468 from fermga/codex/update-ci-workflow-for-documents
+
+Add documentation link checking to CI ([`95f2a38`](https://github.com/fermga/TNFR-LFS/commit/95f2a384da81bf871e85349985b4848d0ab44dc0))
+
+* Add documentation link checking to CI ([`6840c32`](https://github.com/fermga/TNFR-LFS/commit/6840c3208fbd0bf3eeab9c552b277f319da9eb0e))
+
+* Merge pull request #467 from fermga/codex/run-autoapi-generation-and-commit-changes
+
+Add offline AutoAPI docs and verification tools ([`35998f6`](https://github.com/fermga/TNFR-LFS/commit/35998f65b55103675ca155e3e79006f60b4572dd))
+
+* Add offline AutoAPI docs and verification tools ([`491e907`](https://github.com/fermga/TNFR-LFS/commit/491e907cb86bc35d5d5e5161a7398ee34e601904))
+
+* Merge pull request #466 from fermga/codex/implement-config-sync-command-and-handler
+
+Add CLI command to sync legacy configuration files ([`bd77752`](https://github.com/fermga/TNFR-LFS/commit/bd777523fbfdcc9746163b9608c1237bbc3f312c))
+
+* Add CLI command to sync legacy configuration files ([`318fe5c`](https://github.com/fermga/TNFR-LFS/commit/318fe5cfa72cef5bfc6d684052857b98171eb8fb))
+
+* Merge pull request #465 from fermga/codex/enhance-test-for-tnfr_lfs.toml-comparison
+
+Tighten legacy CLI config verification ([`82daa4b`](https://github.com/fermga/TNFR-LFS/commit/82daa4b1460addecddf0fad3aa1abb489a5c1269))
+
+* Ensure legacy config matches canonical CLI block ([`123dea2`](https://github.com/fermga/TNFR-LFS/commit/123dea2eb77af3f1ae48ebda2f2dba3d350c9f42))
+
+* Merge pull request #464 from fermga/codex/add-from_project-factory-and-tests
+
+Load plugin configuration from pyproject metadata ([`afc5d06`](https://github.com/fermga/TNFR-LFS/commit/afc5d06803d6583933492bf00569a5fd01aee6d2))
+
+* Load plugin config directly from pyproject ([`4cd6c84`](https://github.com/fermga/TNFR-LFS/commit/4cd6c84a9a0efdc8fd8adf4c26022ac2079b5a3d))
+
+* Merge pull request #463 from fermga/codex/add-utility-to-export-cli-config-to-tnfr_lfs.toml
+
+Add utility to regenerate legacy CLI configuration ([`440451e`](https://github.com/fermga/TNFR-LFS/commit/440451e27f7ee88867cf31a0e0091e1582097621))
+
+* Add helper to regenerate legacy CLI config ([`507fec0`](https://github.com/fermga/TNFR-LFS/commit/507fec0d636f0dfdb61406d8c2729927bdd262b4))
+
+* Merge pull request #462 from fermga/codex/migrate-tnfr_lfs-to-pyproject.toml
+
+refactor: load CLI defaults from pyproject ([`e9878ff`](https://github.com/fermga/TNFR-LFS/commit/e9878ff6cc4b91126bf43accf4df3157cbdd9f24))
+
+* Merge pull request #461 from fermga/codex/add-function-to-expose-plugins-from-pyproject.toml
+
+Generate plugin template from pyproject configuration ([`ed3e019`](https://github.com/fermga/TNFR-LFS/commit/ed3e019b25bdaed4ebd9d4d83a6a51cf6186375d))
+
+* Expose canonical plugin configuration template ([`2ed2b82`](https://github.com/fermga/TNFR-LFS/commit/2ed2b823dc0c2ac42f67f66b7193577cc1641ce4))
+
+* Merge pull request #460 from fermga/codex/define-new-tool.tnfr_lfs.plugins-block
+
+Support plugin configuration from pyproject mapping ([`bd2b874`](https://github.com/fermga/TNFR-LFS/commit/bd2b874d80bf0c50b2f39a8c0c63650da11329f9))
+
+* Allow plugin config to load from pyproject ([`eacc1cf`](https://github.com/fermga/TNFR-LFS/commit/eacc1cf48aaf60520738392e70f46fd3838d25e9))
+
+* Merge pull request #459 from fermga/codex/add-project-config-loading-module
+
+Support pyproject-based CLI configuration ([`27578bc`](https://github.com/fermga/TNFR-LFS/commit/27578bcde67dbccbab986259b58125558e86cf33))
+
+* Support pyproject-based CLI configuration ([`f246b6a`](https://github.com/fermga/TNFR-LFS/commit/f246b6af090603db735fba26adc5d0f6d01f22d5))
+
+* Merge pull request #458 from fermga/codex/update-readme.md-for-api-quickstart
+
+Update README ingestion offline reference ([`e77d0dc`](https://github.com/fermga/TNFR-LFS/commit/e77d0dc8c275c850b46d733f3277f3312b135016))
+
+* Update ingestion note in README ([`2e67203`](https://github.com/fermga/TNFR-LFS/commit/2e67203930e00daa58ead1507f9358de91bcf99c))
+
+* Merge pull request #457 from fermga/codex/update-docs/examples.md-for-pythonpath-changes
+
+Update example docs PYTHONPATH guidance ([`0f7f24a`](https://github.com/fermga/TNFR-LFS/commit/0f7f24aaa8ef367226f18b2551f6b9cf04bb40af))
+
+* Update example docs PYTHONPATH guidance ([`720a623`](https://github.com/fermga/TNFR-LFS/commit/720a623aae4c186f4471a5c8cc6b75b1faf85bbb))
+
+* Merge pull request #456 from fermga/codex/update-docs/examples.md-with-new-metrics
+
+Update quickstart capture metrics documentation ([`8b49c7d`](https://github.com/fermga/TNFR-LFS/commit/8b49c7d946ab35798b8d9fae45d37dcbc1ae098b))
+
+* Update quickstart capture metrics documentation ([`654f4e9`](https://github.com/fermga/TNFR-LFS/commit/654f4e9b3a4a2ab70261537b3ca45a46b2105348))
+
+* Merge pull request #455 from fermga/codex/update-readme.md-quickstart-instructions
+
+Clarify quickstart dataset location ([`b616282`](https://github.com/fermga/TNFR-LFS/commit/b616282ea4748383a53e802b3d3643748c77ea02))
+
+* Clarify quickstart dataset location ([`369c9eb`](https://github.com/fermga/TNFR-LFS/commit/369c9eba9bd283a3fb4949e24e3206deb93d9046))
+
+* Merge pull request #454 from fermga/codex/update-.gitignore-to-exclude-autoapi-output
+
+Ignore AutoAPI generated documentation ([`2e1d2d1`](https://github.com/fermga/TNFR-LFS/commit/2e1d2d1c9ea91eeb02fcfe1f2ba59f3cc9127bc1))
+
+* Ignore AutoAPI generated documentation ([`ffcd5db`](https://github.com/fermga/TNFR-LFS/commit/ffcd5dbbbb3cd239d842ba26246f173d195806ff))
+
+* Merge pull request #453 from fermga/codex/convert-api_reference.md-to-introduction-page
+
+Refocus API reference introduction ([`db07667`](https://github.com/fermga/TNFR-LFS/commit/db076675b98d308cd568f10a3a966efa4d2692d7))
+
+* Refocus API reference introduction ([`0ba5c02`](https://github.com/fermga/TNFR-LFS/commit/0ba5c020f9af1c2e29742ffe76e2847b9ef5844b))
+
+* Merge pull request #452 from fermga/codex/add-mkdocs-autoapi-to-dev-dependencies
+
+Add mkdocs-autoapi to dev dependencies ([`0622f41`](https://github.com/fermga/TNFR-LFS/commit/0622f4166f4ae2afccc648c3ef98d1e67cafe6f7))
+
+* Add mkdocs-autoapi to dev dependencies ([`aea17ff`](https://github.com/fermga/TNFR-LFS/commit/aea17ff69969aa861d8fb780da0ad64b920d2a37))
+
+* Merge pull request #451 from fermga/codex/update-mkdocs.yml-for-autoapi-plugin
+
+Configure AutoAPI documentation build ([`c62914f`](https://github.com/fermga/TNFR-LFS/commit/c62914f51a3805d7cdf946171a1bcaf4ef0c3693))
+
+* Add AutoAPI plugin configuration to MkDocs ([`7d89eb6`](https://github.com/fermga/TNFR-LFS/commit/7d89eb60cadfbc5cdc5c807d948acc9d55613175))
+
+* Merge pull request #450 from fermga/codex/extend-supportstelemetrysample-with-metadata-fields
+
+feat: capture optional telemetry metadata ([`ba22ea3`](https://github.com/fermga/TNFR-LFS/commit/ba22ea358b9d75fde779b29af8a09526ac5c2f50))
+
+* Merge pull request #449 from fermga/codex/refactor-telemetry-methods-to-use-protocol
+
+Allow EPI helpers to accept protocol telemetry samples ([`483ce21`](https://github.com/fermga/TNFR-LFS/commit/483ce21b54373c83015ad1ea5a6c838313cb62ce))
+
+* Allow EPI helpers to accept protocol telemetry samples ([`9929889`](https://github.com/fermga/TNFR-LFS/commit/99298895727f659cd167350705601b59bfd27657))
+
+* Merge pull request #448 from fermga/codex/update-operators-to-support-supportsepibundle
+
+Support protocol bundles in coherence operators ([`c4b38c5`](https://github.com/fermga/TNFR-LFS/commit/c4b38c5ea1621f4718dfe391371ad8182f3c0342))
+
+* Support protocol bundles in coherence operators ([`2a0b182`](https://github.com/fermga/TNFR-LFS/commit/2a0b1820e7cb7fd5322239260d1120cccb66b64b))
+
+* Merge pull request #447 from fermga/codex/extend-interfaces-with-new-protocol-definitions
+
+Define subsystem protocols for EPI analytics ([`8171c58`](https://github.com/fermga/TNFR-LFS/commit/8171c5894314123f24bbe35ba0a1db1576c038f7))
+
+* Define subsystem protocols for EPI analytics ([`681b45c`](https://github.com/fermga/TNFR-LFS/commit/681b45cd86ec4a5551edfa89fd1255a0a8ca3f45))
+
+* Merge pull request #446 from fermga/codex/implement-explicit-interfaces-between-modules
+
+Define explicit core protocols for operator interactions ([`826ba7e`](https://github.com/fermga/TNFR-LFS/commit/826ba7eebc70986fd55c99bf1531b5ab75bd0b1d))
+
+* Define core protocols for operator interactions ([`db620d1`](https://github.com/fermga/TNFR-LFS/commit/db620d1e49f7736013aeae7861fcc3ecd1d5ca85))
+
+* Merge pull request #445 from fermga/codex/add-new-protocols-to-interfaces.py
+
+Introduce telemetry protocols for analytics helpers ([`8075905`](https://github.com/fermga/TNFR-LFS/commit/80759057a9b2b5422382b9d7ff7c21a7b8a7a995))
+
+* Introduce telemetry protocols for analytics modules ([`7793410`](https://github.com/fermga/TNFR-LFS/commit/7793410f32dccebf2686b3ff8fc49b15cfcb2755))
+
+* Merge pull request #444 from fermga/codex/introduce-typeddict-for-recursivity-types
+
+Add typed structures for recursivity state and update segmentation ([`8e7edea`](https://github.com/fermga/TNFR-LFS/commit/8e7edea888be7b95d3d058f9316b5afbfdbc6c4e))
+
+* Merge pull request #443 from fermga/codex/create-and-update-protocols-in-core
+
+Add structural protocols for contextual metrics ([`fb45e41`](https://github.com/fermga/TNFR-LFS/commit/fb45e41ef971387bd1c8d08a2cd95bb778994b35))
+
+* Add structural protocols for contextual metrics ([`d37658a`](https://github.com/fermga/TNFR-LFS/commit/d37658a2e12a5b949a48aabe6c9d47a3a9f8f833))
+
+* Merge pull request #442 from fermga/codex/remove-utils-module-and-update-imports
+
+Remove deprecated tnfr_lfs.utils package ([`bce6679`](https://github.com/fermga/TNFR-LFS/commit/bce6679d27721570b4e22c6f55c943633780f30b))
+
+* Remove deprecated tnfr_lfs.utils package ([`2cf75aa`](https://github.com/fermga/TNFR-LFS/commit/2cf75aab77e371a6f5c5c0d25b91c9b9d80917b6))
+
+* Merge pull request #441 from fermga/codex/remove-tnfr_lfs.pack-and-update-references
+
+refactor: retire tnfr_lfs.pack compatibility shim ([`5da8468`](https://github.com/fermga/TNFR-LFS/commit/5da846896a407f480f874f3ca0ec8977d9ef18ab))
+
+* Merge pull request #440 from fermga/codex/create-new-resources-package-and-restructure-code
+
+refactor: move resource helpers into tnfr_lfs.resources ([`e9679f1`](https://github.com/fermga/TNFR-LFS/commit/e9679f17681b98e74527f8553189b6cf1995f21c))
+
+* Merge pull request #439 from fermga/codex/create-thematic-packages-and-update-imports
+
+Refactor utilities into themed packages ([`66bce70`](https://github.com/fermga/TNFR-LFS/commit/66bce7001e6ab33c094661eb26fdc2c93dbb7765))
+
+* Refactor utilities into themed packages ([`f16ebe6`](https://github.com/fermga/TNFR-LFS/commit/f16ebe6d5550ee217f7a27c80d74b9e94f2a607e))
+
+* Merge pull request #438 from fermga/codex/update-github-actions-ci-for-ingestion-tests
+
+Expand ingestion targeted tests ([`63572c7`](https://github.com/fermga/TNFR-LFS/commit/63572c75221d98e7d0c93dc6c1b2e7cad73ab9b0))
+
+* Expand ingestion targeted tests ([`46bb544`](https://github.com/fermga/TNFR-LFS/commit/46bb54477f8f00667ea72e9327742d78a39eefbd))
+
+* Merge pull request #437 from fermga/codex/update-pytest-target-selection-script
+
+Allow CI pytest target selection to combine multiple areas ([`0019567`](https://github.com/fermga/TNFR-LFS/commit/0019567895c54454ff0ace6f486abff45926d50e))
+
+* Support multiple pytest target areas ([`b4f68a6`](https://github.com/fermga/TNFR-LFS/commit/b4f68a6ca25d019d1d0b25cc1dfb996fd0c7f758))
+
+* Merge pull request #436 from fermga/codex/update-ci-workflow-for-plugins-filtering
+
+Add plugin-aware pytest targeting to CI ([`f6ec6cb`](https://github.com/fermga/TNFR-LFS/commit/f6ec6cb126f17627c4533c21aee91adce6a78b70))
+
+* Add plugin targeting to CI workflow ([`53e974a`](https://github.com/fermga/TNFR-LFS/commit/53e974a5a8868761aeb1bc88c1fb9da37daec130))
+
+* Merge pull request #435 from fermga/codex/update-ci-workflow-for-core-package-tests
+
+Add core-specific pytest targeting ([`3b0eb34`](https://github.com/fermga/TNFR-LFS/commit/3b0eb34c4930cfe0a46095522c99bf96f7a2dbc9))
+
+* Add targeted core workflow filter ([`e075519`](https://github.com/fermga/TNFR-LFS/commit/e07551974ab65ad92bd8def4ee0d6ad0bd683877))
+
+* Merge pull request #434 from fermga/codex/enhance-ci-workflow-for-test-area-outputs
+
+Refine CI change detection and targeted pytest selection ([`956264d`](https://github.com/fermga/TNFR-LFS/commit/956264da8b7e78f1e602d9150e1c8c836735153c))
+
+* Refine CI change detection and targeted tests ([`3c130ba`](https://github.com/fermga/TNFR-LFS/commit/3c130ba3b2eca636d28934d866ec442305d586d6))
+
+* Merge pull request #433 from fermga/codex/update-ci-workflow-for-example-only-prs
+
+Adjust CI filters for example changes ([`83ecd10`](https://github.com/fermga/TNFR-LFS/commit/83ecd10ba22311098105a1c31b539400d41a7f80))
+
+* Adjust CI triggers for examples ([`a8f2b65`](https://github.com/fermga/TNFR-LFS/commit/a8f2b655910d4be043a7d5069467b14fa4707329))
+
+* Merge pull request #432 from fermga/codex/update-api-reference-for-delta_utils
+
+Add delta_utils documentation to API reference ([`1455c64`](https://github.com/fermga/TNFR-LFS/commit/1455c64b830a955d3fbc77dd67c9ee389f14ffa7))
+
+* Merge pull request #431 from fermga/codex/update-api_reference.md-with-usage-examples
+
+Document tnfr_lfs.core re-export usage ([`2ab397e`](https://github.com/fermga/TNFR-LFS/commit/2ab397ec59a951eba2963b25ec9f83234a3fce06))
+
+* Merge pull request #430 from fermga/codex/update-api_reference.md-for-tnfr_lfs-metrics
+
+Document aero coherence helpers in API reference ([`e989310`](https://github.com/fermga/TNFR-LFS/commit/e9893107e881af874c94f44597b139db7c45f669))
+
+* Document metrics helpers and examples ([`29ab59b`](https://github.com/fermga/TNFR-LFS/commit/29ab59b443c11017eb3d4da08960d4151df93b2b))
+
+* Merge pull request #429 from fermga/codex/update-api_reference.md-for-tyre_balance_controller
+
+Document tyre balance controller usage ([`fe62f77`](https://github.com/fermga/TNFR-LFS/commit/fe62f770decd6901a99ca1e2f445e4d75baeeece))
+
+* Document tyre balance controller usage ([`8055e4a`](https://github.com/fermga/TNFR-LFS/commit/8055e4add773dce81d9d012f2a67ba41c33a71c5))
+
+* Merge pull request #428 from fermga/codex/add-code-example-for-cacheoptions-in-api_reference
+
+Document CacheOptions usage ([`60064a0`](https://github.com/fermga/TNFR-LFS/commit/60064a0a9bef9893bc4de980b5f1031709ac4d70))
+
+* Document CacheOptions usage ([`56d1f05`](https://github.com/fermga/TNFR-LFS/commit/56d1f0508686c6f087b7dfd5c5d8257a136874f0))
+
+* Merge pull request #427 from fermga/codex/update-api-reference-documentation
+
+Document EPI bundle dataclasses in API reference ([`8fee0d3`](https://github.com/fermga/TNFR-LFS/commit/8fee0d3de6b7d1b50c86adac91c694ad19fa0e94))
+
+* Document EPI bundle models and usage ([`ecbafd9`](https://github.com/fermga/TNFR-LFS/commit/ecbafd9040734ebf13c976eea10fa0aedbd06cd0))
+
+* Merge pull request #426 from fermga/codex/update-api_reference.md-with-epi-section
+
+docs: expand API reference for core epi helpers ([`8edb8af`](https://github.com/fermga/TNFR-LFS/commit/8edb8aff585660c40bbca23e60dc1b95d95ca120))
+
+* Merge pull request #425 from fermga/codex/update-api_reference.md-with-example
+
+Document coherence calibration baseline example ([`4317fc8`](https://github.com/fermga/TNFR-LFS/commit/4317fc83b23ec703820bb1d8e12c87b9de7a1c7f))
+
+* Document coherence calibration baseline example ([`97cc3de`](https://github.com/fermga/TNFR-LFS/commit/97cc3dec883786d9cd0de017ae3ec0c928318460))
+
+* Merge pull request #424 from fermga/codex/update-api-reference-documentation
+
+docs: expand core module reference ([`e6c1183`](https://github.com/fermga/TNFR-LFS/commit/e6c1183c4a609c38276210b8b63694776f4b6473))
+
+* Merge pull request #423 from fermga/codex/add-tnfr_lfs.core.metrics-section-to-docs
+
+docs: document window metrics usage ([`80ed35a`](https://github.com/fermga/TNFR-LFS/commit/80ed35ac7a52d8006c6f2b22195d11ceef76aa29))
+
+* Merge pull request #422 from fermga/codex/add-tnfr_lfs.core.structural_time-section
+
+docs: expand structural time guidance ([`a3d68be`](https://github.com/fermga/TNFR-LFS/commit/a3d68be0545375d7ca8a705d7de8e13c84251414))
+
+* Merge pull request #421 from fermga/codex/add-tnfr_lfs.core.resonance-documentation
+
+docs: add resonance modal analysis section ([`04477e8`](https://github.com/fermga/TNFR-LFS/commit/04477e8cd69f577162d5d65bb30165e4227e7934))
+
+* Merge pull request #420 from fermga/codex/update-api-documentation-with-new-section
+
+Document coherence helpers in API reference ([`76413ed`](https://github.com/fermga/TNFR-LFS/commit/76413edde1568d097542c637d3bfbfc598f94999))
+
+* Document coherence helpers in API reference ([`fc9c5fc`](https://github.com/fermga/TNFR-LFS/commit/fc9c5fceeb898d62a06f4c12b96358c480e55b60))
+
+* Merge pull request #419 from fermga/codex/update-api-documentation-with-code-examples
+
+docs: expand analytics usage examples ([`bd6c317`](https://github.com/fermga/TNFR-LFS/commit/bd6c317f716d211459161c909477dcd966ef07f8))
+
+* Merge pull request #418 from fermga/codex/update-api-reference-for-core-analytics
+
+Document contextual delta and coherence calibration APIs ([`7b2ddb9`](https://github.com/fermga/TNFR-LFS/commit/7b2ddb9b5445c6901d8300f7393cc51f3d20887a))
+
+* Translate Core Analytics docs to English ([`cfec043`](https://github.com/fermga/TNFR-LFS/commit/cfec04351ff9bb54d9685d2a8672a80efadb885a))
+
+* Document contextual delta and coherence calibration APIs ([`32bcc04`](https://github.com/fermga/TNFR-LFS/commit/32bcc04e0dfcc16207e112a044f6e21c6be467c0))
+
+* Merge pull request #417 from fermga/codex/update-api-documentation-for-core-analytics
+
+Document cache configuration in Core Analytics ([`9218952`](https://github.com/fermga/TNFR-LFS/commit/92189523c4ead9da00b4c3558e8335223b85df44))
+
+* Document core cache modules ([`fca9430`](https://github.com/fermga/TNFR-LFS/commit/fca94308089dcf6474a08c6b484c9ef91b5fb870))
+
+* Merge pull request #416 from fermga/codex/add-pre-commit-to-optional-dependencies
+
+Add pre-commit to development extra and document hook setup ([`968d1f1`](https://github.com/fermga/TNFR-LFS/commit/968d1f10199c074c4c25f9f640046721c8a14484))
+
+* Add pre-commit to dev dependencies ([`a69e00e`](https://github.com/fermga/TNFR-LFS/commit/a69e00eecba03b4c0f24c232dba97bbae51c7f5b))
+
+* Merge pull request #415 from fermga/codex/create-.pre-commit-config.yaml-with-hooks
+
+Add pre-commit configuration and document hook usage ([`95de097`](https://github.com/fermga/TNFR-LFS/commit/95de097d71f5e657b540cd0e1b1b8a0f024e4fc7))
+
+* Add pre-commit hooks for linting and typing ([`84aaaf6`](https://github.com/fermga/TNFR-LFS/commit/84aaaf69153a042295142ece26b0406259fe0d96))
+
+* Merge pull request #414 from fermga/codex/refactor-test-helpers-into-new-module
+
+Refactor recommender test helpers ([`f95e636`](https://github.com/fermga/TNFR-LFS/commit/f95e6361289245a8a97b804bffc63f4be3c88f8d))
+
+* Extract recommender test helpers ([`fa8f0a3`](https://github.com/fermga/TNFR-LFS/commit/fa8f0a3c62a3c3d588af9feda4623d99d3f7b3dc))
+
+* Merge pull request #413 from fermga/codex/extend-udp-test-helpers-and-refactor-tests
+
+Refactor UDP test helpers ([`d0110df`](https://github.com/fermga/TNFR-LFS/commit/d0110df9c7eb30818bbe81715f18ccb4baecb6b0))
+
+* Refactor UDP test helpers ([`187d563`](https://github.com/fermga/TNFR-LFS/commit/187d56369bfed780986949c8cc30314efeb0fc10))
+
+* Merge pull request #412 from fermga/codex/add-csv-utilities-to-test-helpers
+
+Extract replay bundle CSV utilities into shared helpers ([`0f488a5`](https://github.com/fermga/TNFR-LFS/commit/0f488a572ee008d6243ed4495272a05a03f11010))
+
+* Add replay bundle helpers for reference data and numerics ([`3f1b141`](https://github.com/fermga/TNFR-LFS/commit/3f1b141b56d7a4371e717cb822e27fdcaeb5b8ab))
+
+* Merge pull request #411 from fermga/codex/refactor-test-helpers-and-optimize-imports
+
+Refactor test helpers for fusion ingestion ([`7709eda`](https://github.com/fermga/TNFR-LFS/commit/7709edaa6a62daeba279e539cd9f46390e303dc1))
+
+* Refactor test helpers for fusion ingestion ([`2f34a3b`](https://github.com/fermga/TNFR-LFS/commit/2f34a3bbacf217c8c338a255a1cd670c4b29207a))
+
+* Merge pull request #410 from fermga/codex/refactor-lazy-imports-in-helpers-module
+
+Implement lazy imports for tests.helpers package ([`bdff4f1`](https://github.com/fermga/TNFR-LFS/commit/bdff4f19db053f4df8458c3ecf3b7b17c430c071))
+
+* Make tests.helpers lazily import helper modules ([`3036778`](https://github.com/fermga/TNFR-LFS/commit/3036778627f2777f84f3f1a10a6633d1a31a96a2))
+
+* Merge pull request #409 from fermga/codex/refactor-udp-tests-with-new-helpers
+
+Refactor UDP wait helpers in tests ([`f59cf31`](https://github.com/fermga/TNFR-LFS/commit/f59cf31fb3c7adf4b501bde3cd678c235bbfb88d))
+
+* Refactor UDP wait helpers in tests ([`d23f25e`](https://github.com/fermga/TNFR-LFS/commit/d23f25e1aff583586a9db2778877b9eabf629d97))
+
+* Merge pull request #408 from fermga/codex/add-raise_gaierror-helper-function
+
+Add shared raise_gaierror helper for UDP tests ([`bb20582`](https://github.com/fermga/TNFR-LFS/commit/bb20582c9a18a2c15e296ead635dbc46091f8350))
+
+* Add shared raise_gaierror helper for UDP tests ([`3132bca`](https://github.com/fermga/TNFR-LFS/commit/3132bca51578ad0bfa9c186f49560958d99fe2e3))
+
+* Merge pull request #407 from fermga/codex/create-shared-cli-i/o-helpers
+
+Refactor CLI parquet helpers into shared module ([`360b25a`](https://github.com/fermga/TNFR-LFS/commit/360b25a13b948371c76b7a4da49760e7193c56a0))
+
+* Refactor CLI parquet helpers into shared module ([`6f3e534`](https://github.com/fermga/TNFR-LFS/commit/6f3e534b2ace0777e480e31f64d5a86bfe01d7ec))
+
+* Merge pull request #406 from fermga/codex/refactor-bundle-helpers-and-tests
+
+Add shared node bundle helper for tests ([`f97e99b`](https://github.com/fermga/TNFR-LFS/commit/f97e99b6877ba232cd874c620e10d0e2641df82d))
+
+* Add shared node bundle helper for tests ([`3922cdb`](https://github.com/fermga/TNFR-LFS/commit/3922cdb78e888aabd814f4b84ee164fab8ee267b))
+
+* Merge pull request #405 from fermga/codex/add-and-refactor-testing-helper-functions
+
+Add helper for replay CSV row-to-record counting tests ([`b8581ec`](https://github.com/fermga/TNFR-LFS/commit/b8581eceec938eba619e90e1dcd35d3af27ac628))
+
+* Add helper for counting replay row conversions in tests ([`96fbeec`](https://github.com/fermga/TNFR-LFS/commit/96fbeec51b9aa950cb7cc1faf24a43a642b281e5))
+
+* Merge pull request #404 from fermga/codex/add-helpers-in-tests-directory
+
+Refactor CLI OSD test helpers ([`b263ca3`](https://github.com/fermga/TNFR-LFS/commit/b263ca3be0500a37d1a354df0a33fd18194a39fb))
+
+* Refactor CLI OSD test helpers ([`78004a9`](https://github.com/fermga/TNFR-LFS/commit/78004a9cf5246d4c24a44a9d8da9ed61a52116ec))
+
+* Merge pull request #403 from fermga/codex/add-helpers-to-tests/helpers/epi.py
+
+Refactor test bundle helpers ([`98dccc9`](https://github.com/fermga/TNFR-LFS/commit/98dccc97f9e0009d779350e8e9e4dd16022aa897))
+
+* Refactor test bundle helpers ([`e17ec29`](https://github.com/fermga/TNFR-LFS/commit/e17ec298cf0ccfb7b7a549176f1e2938ed233e32))
+
+* Merge pull request #402 from fermga/codex/refactor-cli-tests-to-use-helper
+
+Add helper for running CLI tests in temp directories ([`1ec4f46`](https://github.com/fermga/TNFR-LFS/commit/1ec4f46f179001b640fdd5a818fabc0dfdca5db4))
+
+* Add helper for running CLI tests in temp directories ([`23741d1`](https://github.com/fermga/TNFR-LFS/commit/23741d1328468a3464d536eba8142eb6eccd8fff))
+
+* Merge pull request #401 from fermga/codex/refactor-recommender-tests-to-use-helpers
+
+Refactor recommender tests to use helper factories ([`301616d`](https://github.com/fermga/TNFR-LFS/commit/301616d64c14b79b48b2d8e62d335096507a7e87))
+
+* Refactor recommender tests to use goal factories ([`1b092ea`](https://github.com/fermga/TNFR-LFS/commit/1b092ea93f3eaeb6516594020bb4412c9ce6d10f))
+
+* Merge pull request #400 from fermga/codex/refactor-telemetryrecord-instantiations
+
+Refactor telemetry record setup in EPI tests ([`67f4da8`](https://github.com/fermga/TNFR-LFS/commit/67f4da8e913bc9f1b7bd3f6d3f9feccb76ac9ab8))
+
+* Refactor telemetry record setup in EPI tests ([`993d40e`](https://github.com/fermga/TNFR-LFS/commit/993d40e9a7993e3844da8ffa1f6e6d5d94e43729))
+
+* Merge pull request #399 from fermga/codex/add-temporary-pack-root-helpers
+
+Add reusable pack factories for tests ([`0c8b6d7`](https://github.com/fermga/TNFR-LFS/commit/0c8b6d78023b2cd7e0ca91ab693f102e181a821f))
+
+* Add reusable pack factories for tests ([`1d4154b`](https://github.com/fermga/TNFR-LFS/commit/1d4154bf294ae5a235e31957bc13d747ec255a39))
+
+* Merge pull request #398 from fermga/codex/add-new-write_plugin_config_text-helper
+
+Add shared plugin config helper for tests ([`a6ede08`](https://github.com/fermga/TNFR-LFS/commit/a6ede089172a2d4cd24b58ee058e61d44ab4ce64))
+
+* Add shared helper for writing plugin config files ([`05422f5`](https://github.com/fermga/TNFR-LFS/commit/05422f599c004bd1524d2aedc148e205dc0a1a90))
+
+* Merge pull request #397 from fermga/codex/refactor-plugin-helpers-for-reusability
+
+test: add reusable plugin scaffolding helpers ([`0484a52`](https://github.com/fermga/TNFR-LFS/commit/0484a52daf8591604bea8dd24b629a970f8025df))
+
+* Merge pull request #396 from fermga/codex/create-cli-helper-for-tests
+
+test: share prepare-pack instrumentation helper ([`7bbb2c5`](https://github.com/fermga/TNFR-LFS/commit/7bbb2c55020ad5dc7c4af9092cbbda4fc66486a4))
+
+* Merge pull request #395 from fermga/codex/add-reusable-factory-for-windowmetrics
+
+Add shared helper for steering window metrics ([`3256340`](https://github.com/fermga/TNFR-LFS/commit/32563401d0b89604acd5dde9b8d7a54eff910981))
+
+* Refactor steering window metrics helpers ([`30059c9`](https://github.com/fermga/TNFR-LFS/commit/30059c98ad3bf58dadcd6a48de057895a4ef4960))
+
+* Merge pull request #394 from fermga/codex/add-helper-module-for-test-factories
+
+Add shared microsector test helpers ([`36858e0`](https://github.com/fermga/TNFR-LFS/commit/36858e0cc27dc7f49a9d21e030661e09c32396eb))
+
+* Add shared microsector test helpers ([`2156ff1`](https://github.com/fermga/TNFR-LFS/commit/2156ff1a491737460f2a6647b0b9225be0281d1c))
+
+* Merge pull request #393 from fermga/codex/refactor-test-imports-and-run-tests
+
+Refactor tests to use helper module re-exports ([`710f7c2`](https://github.com/fermga/TNFR-LFS/commit/710f7c2f6b8ccac5d43221dc85250bf6fd300eb0))
+
+* Refactor tests to use helper module re-exports ([`89110df`](https://github.com/fermga/TNFR-LFS/commit/89110df2ddd04c288d8b80b9cb7f181ff4e32d2a))
+
+* Merge pull request #392 from fermga/codex/add-public-build_balanced_bundle-helper
+
+Add shared balanced EPI bundle helper for tests ([`b1b2aab`](https://github.com/fermga/TNFR-LFS/commit/b1b2aab30949cf49fb12959de4bb7e7343f35189))
+
+* Add shared balanced EPI bundle helper for tests ([`f1b6a60`](https://github.com/fermga/TNFR-LFS/commit/f1b6a6096576de4ae050ab790c4fd0a7d21c10a1))
+
+* Merge pull request #391 from fermga/codex/create-shared-factory-for-bundle-tests
+
+Add shared EPI test bundle factory ([`d4f7ce3`](https://github.com/fermga/TNFR-LFS/commit/d4f7ce370f3b77ccd341dfb31ff718631c53f951))
+
+* Add shared EPI bundle factory for tests ([`91b5a65`](https://github.com/fermga/TNFR-LFS/commit/91b5a65f9071e975ac6698838c2caeadfb28d2e3))
+
+* Merge pull request #390 from fermga/codex/add-dynamic-versioning-to-pyproject.toml
+
+Configure setuptools dynamic version attribute ([`102154e`](https://github.com/fermga/TNFR-LFS/commit/102154e3754759bb73d880a066d1e4dc4313622d))
+
+* Configure dynamic version from package ([`e6813f1`](https://github.com/fermga/TNFR-LFS/commit/e6813f120922f644d6a8bc07ee4bc7b4ebf3bf66))
+
+* Merge pull request #389 from fermga/codex/add-packaging-dependency-to-pyproject.toml
+
+Add packaging dependency to project dependencies ([`6ebe46a`](https://github.com/fermga/TNFR-LFS/commit/6ebe46abb5913df21669b129c4bd0fb6cab55cfc))
+
+* Add packaging dependency ([`e15d0e8`](https://github.com/fermga/TNFR-LFS/commit/e15d0e8ba513aa12c93402de9662336ed5d79cb1))
+
+* Merge pull request #388 from fermga/codex/remove-merge_group-event-from-ci.yml
+
+Remove merge_group trigger from CI workflow ([`b43ecd6`](https://github.com/fermga/TNFR-LFS/commit/b43ecd6aa9a8c67b909100f05b031dbc7cd89493))
+
+* Remove merge_group trigger from CI workflow ([`f0b07a5`](https://github.com/fermga/TNFR-LFS/commit/f0b07a5aaa160cd7ad5e74f9333be23e21386822))
+
+* Merge pull request #387 from fermga/codex/add-merge_group-trigger-to-ci.yml
+
+Add merge queue trigger to CI workflow ([`65c227e`](https://github.com/fermga/TNFR-LFS/commit/65c227e90b12b1648f202743e586db01217820e3))
+
+* Add merge queue trigger to CI workflow ([`af46a78`](https://github.com/fermga/TNFR-LFS/commit/af46a787b5ed275ed31a65e0f19def6d3e5f77eb))
+
+* Merge pull request #386 from fermga/codex/create-shared-packet-helpers-for-tests
+
+Add shared OutSim/OutGauge packet builders for tests ([`f0ec254`](https://github.com/fermga/TNFR-LFS/commit/f0ec254d05c9e1530eee752035534d5baf8a7058))
+
+* Refactor test packet builders ([`52b7178`](https://github.com/fermga/TNFR-LFS/commit/52b71782865d0fee448b2018634c508a1ecccfde))
+
+* Merge pull request #385 from fermga/codex/add-plugin-registry-context-manager-and-fixtures
+
+Add shared plugin registry helper for tests ([`935c493`](https://github.com/fermga/TNFR-LFS/commit/935c49346414d9926914e7122a45834b0b1d5480))
+
+* Merge pull request #384 from fermga/codex/add-build_epi_nodes-helper-function
+
+Refactor EPI node builder usage in tests ([`a788f1a`](https://github.com/fermga/TNFR-LFS/commit/a788f1a9ce26e21dffb65a264dfa61e0ad0ccb80))
+
+* Merge pull request #383 from fermga/codex/refactor-tests/test_cli.py-to-use-dummybundle
+
+Use shared DummyBundle helper in CLI test ([`e9ae05a`](https://github.com/fermga/TNFR-LFS/commit/e9ae05a453afef8d2edde4f4406e286a65e81a5e))
+
+* Use shared DummyBundle helper in CLI test ([`80e1d58`](https://github.com/fermga/TNFR-LFS/commit/80e1d58aa6ccbe06bc49280505bbfb14213da826))
+
+* Merge pull request #382 from fermga/codex/create-shared-helpers-for-tests
+
+Centralize UDP test datagram helpers ([`4a8b544`](https://github.com/fermga/TNFR-LFS/commit/4a8b544bbccc5ff2b7216fb7699feaee4a3468d7))
+
+* Refactor UDP test helpers ([`16c5a80`](https://github.com/fermga/TNFR-LFS/commit/16c5a80e4dffbb39e6a83dd1481c50066faf99db))
+
+* Merge pull request #381 from fermga/codex/create-reusable-factories-in-setup.py
+
+Refactor tests to use reusable setup plan helpers ([`56870e1`](https://github.com/fermga/TNFR-LFS/commit/56870e185f19ec6457e986dfa706887305cfce5a))
+
+* Refactor tests to use reusable setup plan helpers ([`149b777`](https://github.com/fermga/TNFR-LFS/commit/149b77787e39ea71e244cf66b6add8b21d98ef72))
+
+* Merge pull request #380 from fermga/codex/add-helper-module-for-constants-and-models
+
+Deduplicate shared test constants ([`ab27ac9`](https://github.com/fermga/TNFR-LFS/commit/ab27ac99bbcf45fd92ad5c5319ef63c497062d1f))
+
+* Refactor shared test constants ([`95a9939`](https://github.com/fermga/TNFR-LFS/commit/95a9939e1a417a8605d889f4ebb053849e9c281f))
+
+* Merge pull request #379 from fermga/codex/refactor-ab-test-helpers-into-new-module
+
+Refactor AB test helpers into shared module ([`feacc7e`](https://github.com/fermga/TNFR-LFS/commit/feacc7edab4240a3783e3c922cd3e5c1973957d5))
+
+* Refactor AB test helpers into shared module ([`b24a2e2`](https://github.com/fermga/TNFR-LFS/commit/b24a2e231dc370452272f0ddd423dfc8e109f6b7))
+
+* Merge pull request #378 from fermga/codex/create-reusable-udp-test-helpers
+
+test: centralize UDP test helpers ([`27701a0`](https://github.com/fermga/TNFR-LFS/commit/27701a0fad0b3b9685c7c3cd65845944f37a131c))
+
+* Merge pull request #377 from fermga/codex/add-reusable-builder-functions-for-telemetry-tests
+
+Refactor telemetry test builders ([`88eb31a`](https://github.com/fermga/TNFR-LFS/commit/88eb31a34986685691ffb437e3067eee3e741924))
+
+* Merge pull request #376 from fermga/codex/create-telemetry-helper-and-update-tests
+
+Refactor telemetry test helpers ([`0564e60`](https://github.com/fermga/TNFR-LFS/commit/0564e6084b221e2e54f5a5914073fd09379045fa))
+
+* Add shared telemetry record builder for tests ([`14265c8`](https://github.com/fermga/TNFR-LFS/commit/14265c81407a4b303841533252440a84e39bca17))
+
+* Merge pull request #375 from fermga/codex/refactor-profile-manager-helpers
+
+Refactor profile manager test helper location ([`52a9b07`](https://github.com/fermga/TNFR-LFS/commit/52a9b07dad1c5680ab3ac7cb0484405a446df460))
+
+* Refactor test helpers for preloaded profile manager ([`3c4e173`](https://github.com/fermga/TNFR-LFS/commit/3c4e173461f919d5110969628e21f1fe65e5d0be))
+
+* Merge pull request #374 from fermga/codex/enhance-setupplanner-to-support-cacheoptions
+
+Support cache options for setup planner ([`ac7b6f7`](https://github.com/fermga/TNFR-LFS/commit/ac7b6f72dee8c715e47444fa7ad5b4538951e60e))
+
+* Support cache options for setup planner ([`699f236`](https://github.com/fermga/TNFR-LFS/commit/699f2362bbe74aeb9e4559d61330438ae2ccac37))
+
+* Merge pull request #373 from fermga/codex/add-performance-config-helper-method
+
+Add cache performance config helper ([`76724d1`](https://github.com/fermga/TNFR-LFS/commit/76724d1d02e7b522764edfe5a4ce857403f684e9))
+
+* Add cache performance config helper ([`bd42cf9`](https://github.com/fermga/TNFR-LFS/commit/bd42cf910a31a35427f3ebf87839c6bdaeca7089))
+
+* Merge pull request #372 from fermga/codex/add-helper-to-manage-cache-size
+
+Normalize recommender cache size handling ([`9138f04`](https://github.com/fermga/TNFR-LFS/commit/9138f048be413871cfb73b0af47dfaa640aac7aa))
+
+* Add helper for recommender cache size normalisation ([`a6b85ee`](https://github.com/fermga/TNFR-LFS/commit/a6b85eed216d170cc65555eff9b868e8a4085bd1))
+
+* Merge pull request #371 from fermga/codex/update-telemetry_cache_size-initialization
+
+Align telemetry cache default with dynamic size ([`1596643`](https://github.com/fermga/TNFR-LFS/commit/15966432f1c06974e59cbb79fdc38726e1b7b1e2))
+
+* Align telemetry cache default with dynamic size ([`59b6d75`](https://github.com/fermga/TNFR-LFS/commit/59b6d75a0cc863a08646a907574613becc16750c))
+
+* Merge pull request #370 from fermga/codex/add-helper-functions-and-refactor-cache-logic
+
+Add cache override helpers and update EPI caching tests ([`0b0dd86`](https://github.com/fermga/TNFR-LFS/commit/0b0dd8665b2707dc2b70d01ab87df0759221fe04))
+
+* Add cache helper selectors and tests ([`7e47e02`](https://github.com/fermga/TNFR-LFS/commit/7e47e021e3de92a039d21179d982d992aac2080f))
+
+* Merge pull request #369 from fermga/codex/create-helper-for-cache-size-retrieval
+
+Refactor CLI cache size handling ([`f4ddcde`](https://github.com/fermga/TNFR-LFS/commit/f4ddcdea9986d9717aaffd0daa39a1dc05522e64))
+
+* Refactor CLI cache size handling ([`dc1eab6`](https://github.com/fermga/TNFR-LFS/commit/dc1eab61f0b705000e704756e4dd4364b176615e))
+
+* Merge pull request #368 from fermga/codex/add-shared-helper-for-cacheoptions
+
+Refactor cache configuration parsing ([`0e1bda7`](https://github.com/fermga/TNFR-LFS/commit/0e1bda7fd308cdba8d6bb6775a6b16d0cafcf502))
+
+* Refactor cache configuration parsing ([`2ec4859`](https://github.com/fermga/TNFR-LFS/commit/2ec48591138aaa19eeac5167a7be2d4530ea84c1))
+
+* Merge pull request #367 from fermga/codex/add-cache-configuration-function
+
+Add helper to configure caches via CacheOptions ([`7283cd4`](https://github.com/fermga/TNFR-LFS/commit/7283cd4cb13cd5cea09ae60eaa6f797ac900a515))
+
+* Add helper to configure caches from CacheOptions ([`3f54ffb`](https://github.com/fermga/TNFR-LFS/commit/3f54ffb872728800dad75219aa08fa002bb0bc6d))
+
+* Merge pull request #366 from fermga/codex/add-default_dynamic_cache_size-constant
+
+Add shared default for dynamic cache size ([`769bc06`](https://github.com/fermga/TNFR-LFS/commit/769bc06d6a41f94e81457f556d082bc7498a0a31))
+
+* Add shared default for dynamic cache size ([`2cda4ce`](https://github.com/fermga/TNFR-LFS/commit/2cda4ce77e96e8b33a0197ef89814399b82b2d70))
+
+* Merge pull request #365 from fermga/codex/update-ci-workflow-for-pytest-coverage
+
+Update CI to publish coverage ([`f4bd258`](https://github.com/fermga/TNFR-LFS/commit/f4bd25882b57ec23de675076cf91e61c99e2ba93))
+
+* Update CI to publish coverage ([`6b2ac5a`](https://github.com/fermga/TNFR-LFS/commit/6b2ac5a74f8cef48a189b66accfef5377d99e601))
+
+* Merge pull request #364 from fermga/codex/update-pyproject.toml-for-testing
+
+Add pytest coverage tooling ([`883af9f`](https://github.com/fermga/TNFR-LFS/commit/883af9f4f88d9413e4d50f097c539c16b63e41de))
+
+* Add pytest coverage configuration ([`b9a3d72`](https://github.com/fermga/TNFR-LFS/commit/b9a3d722550358b37e5c981256fb0106ac95a4e5))
+
+* Merge pull request #363 from fermga/codex/update-installation-instructions-and-makefile
+
+Update installation instructions to use pip extras ([`51369cf`](https://github.com/fermga/TNFR-LFS/commit/51369cfb1fd76035045b155ccf3089006de8eec6))
+
+* Merge pull request #362 from fermga/codex/confirm-dependencies-in-pyproject.toml
+
+chore: remove legacy requirements files ([`d7a9884`](https://github.com/fermga/TNFR-LFS/commit/d7a988411be18247009bebcb33afb210fe63ebcd))
+
+* Merge pull request #361 from fermga/codex/add-development-dependencies-to-pyproject.toml
+
+Add MkDocs tooling to dev optional dependencies ([`dffbe22`](https://github.com/fermga/TNFR-LFS/commit/dffbe22674daa881c1cfa0688380996c7d53c7d1))
+
+* Add MkDocs tooling to dev optional dependencies ([`4739668`](https://github.com/fermga/TNFR-LFS/commit/4739668bef6925815e366b7649cd1673ef0318d4))
+
+* Merge pull request #360 from fermga/codex/update-ci-workflow-configuration
+
+Remove merge_group trigger from CI workflow ([`ec84e9b`](https://github.com/fermga/TNFR-LFS/commit/ec84e9b773021ca5b7c4cdeed20e183833fa1836))
+
+* Remove merge group workflow trigger ([`3d6da01`](https://github.com/fermga/TNFR-LFS/commit/3d6da01213e4fbb7c82ca20fb65a22fd2ad85dbc))
+
+* Merge pull request #359 from fermga/codex/add-pluginconfig-class-with-validation-and-persistence
+
+Add plugin configuration management and concurrency limits ([`1506500`](https://github.com/fermga/TNFR-LFS/commit/1506500dae4048c40c78c5817abb6b445fa12d16))
+
+* Add plugin configuration loader and profile-aware manager limits ([`ff2a35f`](https://github.com/fermga/TNFR-LFS/commit/ff2a35f330fb95e7aa25aeda10a1d2247d235e8e))
+
+* Merge pull request #358 from fermga/codex/create-config-directory-and-plugin-file
+
+Add packaged plugin configuration template ([`ce27deb`](https://github.com/fermga/TNFR-LFS/commit/ce27deb0e58fa2f1f67a7708e49dec5b01934c77))
+
+* Add bundled plugin configuration template ([`fb44cb6`](https://github.com/fermga/TNFR-LFS/commit/fb44cb6e82cc4b133d3c345c49151e7cc9e08d5f))
+
+* Merge pull request #357 from fermga/codex/implement-pluginmanager-with-plugin-discovery
+
+Add plugin manager with discovery and lifecycle tests ([`7526bfd`](https://github.com/fermga/TNFR-LFS/commit/7526bfda14844261983b07645c6ff590bada265d))
+
+* Add plugin manager with discovery and lifecycle tests ([`7ea1623`](https://github.com/fermga/TNFR-LFS/commit/7ea1623e1a3b932c24a09568c9e8f660cac59056))
+
+* Merge pull request #356 from fermga/codex/create-plugin-interface-module-and-tests
+
+Add plugin metadata interface structures ([`8270348`](https://github.com/fermga/TNFR-LFS/commit/827034873797b9e5996d7cab4fae67dd1dc23cd2))
+
+* Add plugin metadata interfaces and tests ([`a2c126b`](https://github.com/fermga/TNFR-LFS/commit/a2c126b8c5d7194d0c99db093c2d020f04a49d40))
+
+* Merge pull request #355 from fermga/codex/implement-metadata-registry-for-tnfr-plugins
+
+Add registry for plugin operator metadata ([`a4e46fa`](https://github.com/fermga/TNFR-LFS/commit/a4e46fa45ad2dd25e9f5d816572ee1810c1a67cd))
+
+* Add plugin metadata registry ([`82c19c7`](https://github.com/fermga/TNFR-LFS/commit/82c19c7371e1a6b960c7f2c824c53a867491bc34))
+
+* Merge pull request #354 from fermga/codex/create-tnfrplugin-package-and-documentation
+
+Add TNFR plugin base API and integration helpers ([`4070d00`](https://github.com/fermga/TNFR-LFS/commit/4070d00fd7417201314185b39590b3e746cf0f19))
+
+* Add plugin infrastructure and integration helpers ([`162160c`](https://github.com/fermga/TNFR-LFS/commit/162160c581d923597ef0dfab53335e7b0560fdc5))
+
+* Merge pull request #353 from fermga/codex/update-udp_timeout-defaults-and-tests
+
+Clamp UDP grace period to 10ms ([`b1988cd`](https://github.com/fermga/TNFR-LFS/commit/b1988cd1aad93370e3d6fe35aef74df808686bad))
+
+* Clamp UDP grace period to 10ms ([`d471a77`](https://github.com/fermga/TNFR-LFS/commit/d471a775c6321413169150cfcc0e41a44092877f))
+
+* Merge pull request #352 from fermga/codex/detect-and-handle-packet-loss-events
+
+Log reorder buffer evictions as loss events ([`ff9407a`](https://github.com/fermga/TNFR-LFS/commit/ff9407aab78d653381b04e915ad178fd4c6994e3))
+
+* Log reorder buffer evictions and test loss accounting ([`ce8a4b9`](https://github.com/fermga/TNFR-LFS/commit/ce8a4b9485a77aeeeee3f1895d1b4100299892e7))
+
+* Merge pull request #351 from fermga/codex/update-remote-address-resolution-and-logging
+
+Handle UDP host resolution failures ([`d88c0fd`](https://github.com/fermga/TNFR-LFS/commit/d88c0fde047d787ca6c62287c9799c2334205c1f))
+
+* Handle UDP host resolution failures ([`764a9e0`](https://github.com/fermga/TNFR-LFS/commit/764a9e072f595241be8e5b8c680e9c7fa66a7c7a))
+
+* Merge pull request #350 from fermga/codex/refactor-outsimudpclient-and-outgaugeudpclient-recv
+
+Improve UDP pending packet wake-up handling ([`e81867f`](https://github.com/fermga/TNFR-LFS/commit/e81867fce8bc695f3960761742450d20da63c855))
+
+* Improve UDP pending packet wake-up handling ([`3eb9da3`](https://github.com/fermga/TNFR-LFS/commit/3eb9da3328ef874e64609524847dcb19d885b775))
+
+* Merge pull request #349 from fermga/codex/implement-reusable-object-pool-for-packets
+
+Add reusable packet pools for UDP ingestion ([`4429910`](https://github.com/fermga/TNFR-LFS/commit/44299101c9ebc4e59442283d8f2b3dbde2b5eec8))
+
+* Implement packet pooling for UDP ingestion ([`b2cf5c3`](https://github.com/fermga/TNFR-LFS/commit/b2cf5c39419b1e885df33b5fa1c77105a5b980cb))
+
+* Merge pull request #348 from fermga/codex/implement-batch-processing-for-udp-clients
+
+Batch socket reads for UDP clients ([`ab5125f`](https://github.com/fermga/TNFR-LFS/commit/ab5125f6503ddbf078f15f2928bbfb12cf50e1ab))
+
+* Batch socket reads for UDP clients ([`343c7b1`](https://github.com/fermga/TNFR-LFS/commit/343c7b10b77e83982327033467d8e74bf8d32130))
+
+* Merge pull request #347 from fermga/codex/implementar-clientes-udp-asincronos-en-ingestion
+
+Add asyncio-based OutSim/OutGauge clients with tests ([`c6efadb`](https://github.com/fermga/TNFR-LFS/commit/c6efadb870a547d8e3e4d55dc82e895f3d4cec46))
+
+* Add asyncio-based OutSim/OutGauge clients with tests ([`7fabb05`](https://github.com/fermga/TNFR-LFS/commit/7fabb05889d3e92f8083901338d1d766ca3ea04a))
+
+* Merge pull request #346 from fermga/codex/implementar-nuevo-helper-de-buffer-circular
+
+Implement circular reorder buffer for UDP clients ([`37239be`](https://github.com/fermga/TNFR-LFS/commit/37239befafdeaa1b06d3b4e637797b7b081c07ff))
+
+* Implement circular reorder buffer for UDP clients ([`b9037b7`](https://github.com/fermga/TNFR-LFS/commit/b9037b7d70c59e8828cbcf284788792485d73be7))
+
+* Merge pull request #345 from fermga/codex/update-documentation-paths-and-links
+
+docs: refresh ingestion module paths ([`2a495bd`](https://github.com/fermga/TNFR-LFS/commit/2a495bd7b8299d8e757b6054bf5b8a88effd0cde))
+
+* Merge pull request #344 from fermga/codex/reorganize-ingestion-package-structure
+
+Refactor offline ingestion utilities into dedicated package ([`bc6cc03`](https://github.com/fermga/TNFR-LFS/commit/bc6cc037d20b2784dd9ab19d6ac3e642914af29b))
+
+* Refactor offline ingestion utilities into dedicated package ([`5c775a0`](https://github.com/fermga/TNFR-LFS/commit/5c775a04cf932a3b5aa111700ba500098b199dec))
+
+* Merge pull request #343 from fermga/codex/move-cache_settings-to-core-and-update-imports
+
+Relocate cache settings into core package ([`768435d`](https://github.com/fermga/TNFR-LFS/commit/768435d96822609f63971bbc0d10d900168ce130))
+
+* Refactor cache settings into core module ([`493b9eb`](https://github.com/fermga/TNFR-LFS/commit/493b9eb5d23079d1deb088fc5a2e295f1f31eda1))
+
+* Merge pull request #342 from fermga/codex/move-session.py-and-update-imports
+
+Move session helpers into CLI package ([`35108b0`](https://github.com/fermga/TNFR-LFS/commit/35108b02bb63887cf499452a2bbef71fefde746e))
+
+* Move session helpers into CLI package ([`6a95a34`](https://github.com/fermga/TNFR-LFS/commit/6a95a344dbcbc161fae44ef467dfbbadcf40cafd))
+
+* Merge pull request #341 from fermga/codex/move-config_loader-and-track_loader-modules
+
+Move config and track loader modules into ingestion package ([`c8827f7`](https://github.com/fermga/TNFR-LFS/commit/c8827f7e68f49128310b654ec18990f1b0af9b41))
+
+* Move config and track loaders into ingestion namespace ([`2b9e3c5`](https://github.com/fermga/TNFR-LFS/commit/2b9e3c5a0e3a43660970d4051a9e01b51a2d7117))
+
+* Merge pull request #340 from fermga/codex/refactor-processing-module-to-insights
+
+Refactor insights processing into analysis module ([`4fed3f6`](https://github.com/fermga/TNFR-LFS/commit/4fed3f6216a35369ffee1cf075c2dde6043d366b))
+
+* Move processing helpers into analysis insights module ([`17f37bc`](https://github.com/fermga/TNFR-LFS/commit/17f37bcb7d546fa05ffb891619afbceaa5c76eea))
+
+* Merge pull request #339 from fermga/codex/update-ci-workflow-for-tnfr_lfs-path-changes
+
+Update CI core filter to monitor src package ([`65f2137`](https://github.com/fermga/TNFR-LFS/commit/65f213786cdf9434aa3e8105541e2909d2d12c2f))
+
+* Update CI filters for src layout ([`d24b2e8`](https://github.com/fermga/TNFR-LFS/commit/d24b2e8ab839d176d7614cf65997a0246274b4ac))
+
+* Merge pull request #338 from fermga/codex/modify-sys.path-in-tests/conftest.py
+
+Adjust pytest path handling for src layout ([`08d7117`](https://github.com/fermga/TNFR-LFS/commit/08d7117068718acc7d142712217c2a072fcdb933))
+
+* Adjust test path to src layout ([`d7a6e4f`](https://github.com/fermga/TNFR-LFS/commit/d7a6e4f45607cc1a4d364e6b88323b49fdad482a))
+
+* Merge pull request #337 from fermga/codex/reorganize-project-structure-to-src-directory
+
+Adopt src layout for tnfr_lfs package ([`f5449bb`](https://github.com/fermga/TNFR-LFS/commit/f5449bbbff37d7695ef6a09060edac87187d61d7))
+
+* Adopt src layout for package ([`246c8ad`](https://github.com/fermga/TNFR-LFS/commit/246c8ad36980d9aef9eabe2251d6f9a0a8105874))
+
+* Merge pull request #336 from fermga/codex/translate-all-content-to-english
+
+Ensure silence operator tests expect English label and normalise SILENCIO alias ([`ad366e7`](https://github.com/fermga/TNFR-LFS/commit/ad366e79cc0456736aba816935f54868a3ea59e5))
+
+* Merge branch &#39;main&#39; into codex/translate-all-content-to-english ([`29a022a`](https://github.com/fermga/TNFR-LFS/commit/29a022a7dc5a25c83bb5893d7c5e4468c52ba211))
+
+* Merge pull request #335 from fermga/codex/translate-all-content-to-english
+
+Ensure silence operator tests expect English label ([`c1a017b`](https://github.com/fermga/TNFR-LFS/commit/c1a017b96faa8276a98a9daf92e922820dec474a))
+
+* Merge branch &#39;main&#39; into codex/translate-all-content-to-english ([`054134d`](https://github.com/fermga/TNFR-LFS/commit/054134dc1dad9feb1c5b4ba04b69de451dfe95b8))
+
+* Merge pull request #334 from fermga/codex/translate-all-content-to-english
+
+Simplify structural silence identifier handling ([`b577353`](https://github.com/fermga/TNFR-LFS/commit/b577353359a8aae8fdce638670c1d742aa9ef691))
+
+* Merge branch &#39;main&#39; into codex/translate-all-content-to-english ([`685a7f0`](https://github.com/fermga/TNFR-LFS/commit/685a7f013cbd37909f91fd4bc53a27ddc2e02745))
+
+* Merge pull request #333 from fermga/codex/translate-all-content-to-english
+
+Normalize structural silence operator naming ([`2a405b4`](https://github.com/fermga/TNFR-LFS/commit/2a405b419a343b299b1596c7cec419bdb0ce5753))
+
+* Merge branch &#39;main&#39; into codex/translate-all-content-to-english ([`5781053`](https://github.com/fermga/TNFR-LFS/commit/5781053932b1e5622f01afc79e59b82b9268295c))
+
+* Merge pull request #332 from fermga/codex/translate-all-content-to-english
+
+Translate structural silence operator naming to English ([`5c860f6`](https://github.com/fermga/TNFR-LFS/commit/5c860f69b044798048cfe8146d81cde62dbf9cde))
+
+* Translate structural silence operator naming ([`630e8aa`](https://github.com/fermga/TNFR-LFS/commit/630e8aa8c52616cbb7fb3ebb03bbc91d39396140))
+
+* Normalize structural silence operator naming ([`088d5a2`](https://github.com/fermga/TNFR-LFS/commit/088d5a2fe2cd01325a9cc449ab6f8c8e9cb84f20))
+
+* Simplify structural silence identifier handling ([`6395baa`](https://github.com/fermga/TNFR-LFS/commit/6395baa9de411e0d4ce6bb57aa55a91f9595e3c0))
+
+* Test silence operator uses English label ([`ca7d49d`](https://github.com/fermga/TNFR-LFS/commit/ca7d49d9c128103cad40cd0e69c1abef62b0a1fc))
+
+* Normalize SILENCIO operator alias to SILENCE ([`9588fd0`](https://github.com/fermga/TNFR-LFS/commit/9588fd08b74ce206fd46cb4a953a806d9c275410))
+
+* Merge pull request #331 from fermga/codex/rename-operators-to-english-equivalents
+
+Rename coupling and recursion operators ([`93e646c`](https://github.com/fermga/TNFR-LFS/commit/93e646c7e69170b9844abf442a7e233225e41c45))
+
+* Rename coupling and recursion operators ([`3119d14`](https://github.com/fermga/TNFR-LFS/commit/3119d1415bce4ad7142fb28e67fc108eefcef269))
+
+* Merge pull request #330 from fermga/codex/rename-operators-and-update-references
+
+Rename reception operator stage to English ([`d63eede`](https://github.com/fermga/TNFR-LFS/commit/d63eede7edaac2061fd00d971e4a2796e7916791))
+
+* Rename reception operator stage to English ([`b4e5d42`](https://github.com/fermga/TNFR-LFS/commit/b4e5d42839deadee576134d2c5ea3bfa4da02d1b))
+
+* Merge pull request #329 from fermga/codex/create-setup-plan-documentation
+
+Add setup plan workflow documentation and update references ([`84dc68e`](https://github.com/fermga/TNFR-LFS/commit/84dc68e13ad231eed417f96df26b4345e10a141d))
+
+* Add setup plan workflow documentation and update navigation ([`cf2663b`](https://github.com/fermga/TNFR-LFS/commit/cf2663bac38a21f7d215787e7b1af67b2de80dc6))
+
+* Merge pull request #328 from fermga/codex/delete-examples_gallery.md-and-update-links
+
+Remove obsolete examples gallery stub ([`6cdc4cb`](https://github.com/fermga/TNFR-LFS/commit/6cdc4cb9f533d434bff8e103f70141ee05016c10))
+
+* Remove obsolete examples gallery stub ([`432be66`](https://github.com/fermga/TNFR-LFS/commit/432be66c9abd026c84d101154b3d2a3e44a23045))
+
+* Merge pull request #327 from fermga/codex/update-tnfr_lfs-configuration-and-telemetry-handling
+
+Refactor CLI configuration schema and telemetry buffers ([`a61eca5`](https://github.com/fermga/TNFR-LFS/commit/a61eca5ec4106895f9f7551a80f667e5f4ff4d59))
+
+* Refactor CLI config schema and telemetry buffers ([`651581a`](https://github.com/fermga/TNFR-LFS/commit/651581a0beb883a28f562c1f201db03c2bde7da4))
+
+* Merge pull request #326 from fermga/codex/add-deprecation-warnings-for-legacy-aliases
+
+Deprecate legacy phase aliases and CPHI flat mapping ([`38f5e87`](https://github.com/fermga/TNFR-LFS/commit/38f5e870f8ec19cc63e011dcf518b04022eda6cf))
+
+* Warn about legacy phase aliases and CPHI flat keys ([`3a44c38`](https://github.com/fermga/TNFR-LFS/commit/3a44c38f74bc980608c938e79b83bc13acaefd82))
 
 ## v0.3.0 (2025-10-10)
 
@@ -370,7 +2028,7 @@ Consolidate HTML exporter test coverage ([`614d2be`](https://github.com/fermga/T
 
 * refactor: expose quickstart dataset helper in package ([`3eb097a`](https://github.com/fermga/TNFR-LFS/commit/3eb097ad979707b4f6ece5f358717eb4763aabeb))
 
-* refactor: package resources inside tnfr_lfs.resources ([`5bcb62a`](https://github.com/fermga/TNFR-LFS/commit/5bcb62a34c598874564a8113bc8edd05241c8abb))
+* refactor: package resources inside tnfr_lfs.pack ([`5bcb62a`](https://github.com/fermga/TNFR-LFS/commit/5bcb62a34c598874564a8113bc8edd05241c8abb))
 
 * refactor: share entropy helper across core metrics ([`ae05411`](https://github.com/fermga/TNFR-LFS/commit/ae05411899046f65355f214b325b56d38926bfc3))
 
