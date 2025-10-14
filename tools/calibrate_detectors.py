@@ -441,6 +441,17 @@ def _normalise_operator_labels(payload: Any) -> dict[str, bool]:
     return {}
 
 
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        token = value.strip().lower()
+        if not token or token in {"0", "false", "no", "off"}:
+            return False
+        if token in {"1", "true", "yes", "on"}:
+            return True
+        return bool(token)
+    return bool(value)
+
+
 def _coerce_float(value: Any) -> float | None:
     if value is None:
         return None
@@ -645,13 +656,18 @@ def _load_labels_csv(path: Path, *, raf_root: Path) -> Iterator[LabelledMicrosec
                         )
                     else:
                         operator_intervals[identifier] = values
-            if not operators and row.get("label") is not None:
-                operators = {
-                    normalize_structural_operator_identifier(str(row.get("operator"))): bool(
-                        str(row.get("label")).strip() not in {"", "0", "false", "False"}
+            if row.get("label") is not None:
+                operator_token = row.get("operator")
+                if operator_token:
+                    identifier = normalize_structural_operator_identifier(
+                        str(operator_token)
                     )
-                }
-                operator_intervals = {}
+                    operators = dict(operators)
+                    operators[identifier] = _coerce_bool(row.get("label"))
+                else:
+                    LOGGER.debug(
+                        "CSV row contains a label but no operator identifier: %s", row
+                    )
             raf_token = row.get("raf") or row.get("path") or row.get("capture")
             if not raf_token:
                 LOGGER.debug("CSV row missing RAF reference: %s", row)

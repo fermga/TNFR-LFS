@@ -109,6 +109,26 @@ def test_load_labels_jsonl(tmp_path: Path) -> None:
     assert labels[2].raf_path == (raf_root / "capture_b.raf").resolve()
 
 
+def test_load_labels_csv_label_overrides(tmp_path: Path) -> None:
+    raf_root = tmp_path / "raf"
+    raf_root.mkdir()
+
+    csv_path = tmp_path / "labels.csv"
+    csv_path.write_text(
+        "capture_id,raf,microsector,operator,label\n"
+        "capture-a,capture_a.raf,7,operator.alpha,0\n",
+        encoding="utf-8",
+    )
+
+    labels = _load_labels(csv_path, raf_root=raf_root)
+
+    operator_alpha = normalize_structural_operator_identifier("operator.alpha")
+
+    assert len(labels) == 1
+    assert labels[0].capture_id == "capture-a"
+    assert labels[0].operators == {operator_alpha: False}
+
+
 def test_normalise_operator_labels_mapping_string_values() -> None:
     operator_alpha = normalize_structural_operator_identifier("operator.alpha")
     operator_beta = normalize_structural_operator_identifier("operator.beta")
