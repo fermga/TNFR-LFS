@@ -16,6 +16,7 @@ import warnings
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import dataclass
 from functools import lru_cache, wraps
+from pathlib import Path
 from statistics import fmean, mean, pstdev
 from typing import Any, Dict, List, Mapping, Sequence, Tuple, Union
 
@@ -27,7 +28,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from tnfr_lfs.resources import data_root
+from tnfr_lfs.resources import data_root, pack_root
 
 from tnfr_core.config.loader import get_params, load_detection_config
 from tnfr_core.operators.interfaces import SupportsTelemetrySample
@@ -186,11 +187,24 @@ Number = float
 DeltaSample = Union[Number, Mapping[str, Number]]
 
 
-@lru_cache(maxsize=1)
 def _load_detection_table() -> Mapping[str, Any]:
-    """Return the cached detection override table."""
+    """Return the cached detection override table for the active pack root."""
 
-    return load_detection_config()
+    root = pack_root()
+    return _load_detection_table_for_pack_root(str(root))
+
+
+@lru_cache(maxsize=None)
+def _load_detection_table_for_pack_root(root: str) -> Mapping[str, Any]:
+    """Return detection overrides resolved for ``root``."""
+
+    return load_detection_config(pack_root=Path(root))
+
+
+# Preserve cache management API for tests and callers that relied on the
+# previous :func:`functools.lru_cache` decorated helper.
+_load_detection_table.cache_clear = _load_detection_table_for_pack_root.cache_clear  # type: ignore[attr-defined]
+_load_detection_table.cache_info = _load_detection_table_for_pack_root.cache_info  # type: ignore[attr-defined]
 
 
 @lru_cache(maxsize=1)

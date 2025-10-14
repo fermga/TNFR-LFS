@@ -274,7 +274,9 @@ def test_materialise_best_params_integration(tmp_path: Path, monkeypatch) -> Non
         baseline_events = operator_detection.detect_nav([0.0, 0.0], nu_f=0.0)
         assert baseline_events == []
 
-        monkeypatch.setattr(operator_detection, "load_detection_config", lambda: config)
+        monkeypatch.setattr(
+            operator_detection, "load_detection_config", lambda **_kwargs: config
+        )
         operator_detection._load_detection_table.cache_clear()
 
         overridden_events = operator_detection.detect_nav([0.0, 0.0], nu_f=0.0)
@@ -383,7 +385,9 @@ def test_detect_nav_metadata_overrides(monkeypatch) -> None:
     }
 
     operator_detection._load_detection_table.cache_clear()
-    monkeypatch.setattr(operator_detection, "load_detection_config", lambda: config)
+    monkeypatch.setattr(
+        operator_detection, "load_detection_config", lambda **_kwargs: config
+    )
     operator_detection._load_detection_table.cache_clear()
 
     try:
