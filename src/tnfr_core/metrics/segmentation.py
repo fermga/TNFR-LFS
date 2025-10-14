@@ -50,10 +50,19 @@ from tnfr_core.metrics.metrics import (
     phase_synchrony_index,
 )
 from tnfr_core.operators.operator_detection import (
+    canonical_operator_label,
     detect_al,
+    detect_en,
     detect_il,
+    detect_nul,
     detect_oz,
+    detect_ra,
+    detect_remesh,
     detect_silence,
+    detect_thol,
+    detect_um,
+    detect_val,
+    detect_zhir,
     silence_event_payloads,
 )
 from tnfr_core.operators.operators import (
@@ -1030,8 +1039,16 @@ def segment_microsectors(
         )
         detector_specs = (
             ("AL", detect_al, {}),
-            ("OZ", detect_oz, {}),
+            ("EN", detect_en, {}),
             ("IL", detect_il, {}),
+            ("NUL", detect_nul, {}),
+            ("OZ", detect_oz, {}),
+            ("RA", detect_ra, {}),
+            ("REMESH", detect_remesh, {}),
+            ("THOL", detect_thol, {}),
+            ("UM", detect_um, {}),
+            ("VAL", detect_val, {}),
+            ("ZHIR", detect_zhir, {}),
             (
                 "SILENCE",
                 detect_silence,
@@ -1104,6 +1121,33 @@ def segment_microsectors(
                             else event.get("structural_end", 0.0)
                         ),
                     )
+                phase_votes: Dict[str, int] = {}
+                for idx in range(global_start, global_end + 1):
+                    phase_candidate = phase_assignments.get(idx)
+                    if not phase_candidate:
+                        continue
+                    phase_key = phase_family(str(phase_candidate))
+                    phase_votes[phase_key] = phase_votes.get(phase_key, 0) + 1
+                if phase_votes:
+                    dominant_phase = max(phase_votes.items(), key=lambda item: item[1])[0]
+                else:
+                    dominant_phase = phase_family(active_goal.phase)
+                payload.setdefault("phase", dominant_phase)
+                payload.setdefault("operator_id", name)
+                operator_label = payload.get("name")
+                if not isinstance(operator_label, str) or not operator_label:
+                    operator_label = canonical_operator_label(name)
+                payload.setdefault("operator_label", operator_label)
+                payload.setdefault(
+                    "operator",
+                    f"{payload['operator_id']} · {payload['operator_label']}",
+                )
+                payload.setdefault("start_time", float(event.get("start_time", records[global_start].timestamp)))
+                payload.setdefault("end_time", float(event.get("end_time", records[global_end].timestamp)))
+                payload.setdefault(
+                    "severity",
+                    float(event.get("severity", event.get("peak_value", 0.0))),
+                )
                 events.append(payload)
             if events:
                 operator_events[name] = tuple(events)

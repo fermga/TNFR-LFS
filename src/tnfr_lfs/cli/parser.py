@@ -196,6 +196,12 @@ def build_parser(config: Optional[Mapping[str, Any]] = None) -> argparse.Argumen
         default=osd_cfg.get("layout_height"),
         help="Override the IS_BTN height (0-200).",
     )
+    osd_parser.add_argument(
+        "--show-operators",
+        dest="show_operators",
+        action="store_true",
+        help="Display structural operator chips in the HUD.",
+    )
     osd_parser.set_defaults(handler=_handle_osd)
     osd_parser.set_defaults(telemetry_buffer_size=telemetry_buffer_default)
 

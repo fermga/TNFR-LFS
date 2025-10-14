@@ -551,6 +551,9 @@ class Recommendation:
     priority: int = 0
     parameter: str | None = None
     delta: float | None = None
+    metric: str | None = None
+    rule_id: str | None = None
+    triggered_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1766,6 +1769,8 @@ def _phase_action_recommendations(
     reference_key: str,
     node: str | None = None,
     gradient: float | None = None,
+    triggered_by: str | None = None,
+    rule_id: str | None = None,
 ) -> List[Recommendation]:
     recommendations: List[Recommendation] = []
     for template in _phase_action_templates(phase, metric, node):
@@ -1791,6 +1796,9 @@ def _phase_action_recommendations(
                 priority=priority + template.priority_offset,
                 parameter=template.parameter,
                 delta=float(value),
+                metric=metric,
+                triggered_by=triggered_by,
+                rule_id=rule_id,
             )
         )
     return recommendations
@@ -2087,6 +2095,40 @@ def _brake_event_summary(
         direction = "forward" if bias_score > 0 else "rearward"
     summary = " · ".join(summary_parts)
     return summary, direction, max_ratio
+
+
+def _operator_trigger(
+    microsector: Microsector, phase: str
+) -> tuple[str, str | None]:
+    events = getattr(microsector, "operator_events", {}) or {}
+    if not events:
+        return "", None
+    target_phase = phase_family(phase)
+    candidates: list[tuple[int, float, str, str]] = []
+    for operator_id, payloads in events.items():
+        if not isinstance(payloads, Sequence):
+            continue
+        for payload in payloads:
+            if not isinstance(payload, Mapping):
+                continue
+            payload_phase = payload.get("phase")
+            payload_phase_key = (
+                phase_family(str(payload_phase)) if isinstance(payload_phase, str) else None
+            )
+            phase_rank = 0 if payload_phase_key == target_phase else 1
+            severity = _safe_float(payload.get("severity"), 0.0)
+            operator_label = payload.get("operator_label")
+            if not isinstance(operator_label, str) or not operator_label:
+                operator_label = canonical_operator_label(str(operator_id))
+            display = payload.get("operator")
+            if not isinstance(display, str) or not display:
+                display = f"{operator_id} · {operator_label}".strip()
+            candidates.append((phase_rank, -severity, display, str(operator_id)))
+    if not candidates:
+        return "", None
+    candidates.sort()
+    _, _, display, operator_id = candidates[0]
+    return display, operator_id
 
 
 class PhaseDeltaDeviationRule:
@@ -2473,6 +2515,7 @@ class PhaseNodeOperatorRule:
         self.category = category
         self.priority = priority
         self.reference_key = reference_key
+        self.rule_id = f"{self.__class__.__name__}:{self.phase}"
 
     def evaluate(
         self,
@@ -2493,6 +2536,9 @@ class PhaseNodeOperatorRule:
             indices = list(microsector.phase_indices(goal.phase))
             if not indices:
                 continue
+            trigger_label, _ = _operator_trigger(microsector, goal.phase)
+            if not trigger_label:
+                trigger_label = self.operator_label
             samples = _phase_samples(results, indices)
             dominant_nodes = goal.dominant_nodes or microsector.dominant_nodes.get(
                 goal.phase, ()
@@ -2538,6 +2584,8 @@ class PhaseNodeOperatorRule:
                     priority=self.priority - 1,
                     reference_key=self.reference_key,
                     node=geometry_nodes.get("phase_alignment"),
+                    triggered_by=trigger_label,
+                    rule_id=self.rule_id,
                 )
                 geometry_actions_map = _merge_recommendations_by_parameter(
                     geometry_actions_map, alignment_actions
@@ -2560,6 +2608,8 @@ class PhaseNodeOperatorRule:
                     priority=self.priority - 1,
                     reference_key=self.reference_key,
                     node=geometry_nodes.get("phase_lag"),
+                    triggered_by=trigger_label,
+                    rule_id=self.rule_id,
                 )
                 geometry_actions_map = _merge_recommendations_by_parameter(
                     geometry_actions_map, lag_actions
@@ -2582,6 +2632,8 @@ class PhaseNodeOperatorRule:
                     priority=self.priority - 1,
                     reference_key=self.reference_key,
                     node=geometry_nodes.get("coherence_index"),
+                    triggered_by=trigger_label,
+                    rule_id=self.rule_id,
                 )
                 geometry_actions_map = _merge_recommendations_by_parameter(
                     geometry_actions_map, coherence_actions
@@ -2649,6 +2701,8 @@ class PhaseNodeOperatorRule:
                     priority=self.priority,
                     reference_key=self.reference_key,
                     node=node,
+                    triggered_by=trigger_label,
+                    rule_id=self.rule_id,
                 )
                 if geometry_urgency > 0 and actions:
                     _boost_geometry_priority(actions, self.priority, geometry_urgency)
@@ -2670,6 +2724,9 @@ class PhaseNodeOperatorRule:
                             f"{MANUAL_REFERENCES[self.reference_key]} for the adjustments."
                         ),
                         priority=self.priority,
+                        metric="nu_f",
+                        triggered_by=trigger_label,
+                        rule_id=self.rule_id,
                     )
                 )
             _apply_priority_scale(recommendations[start_index:], priority_scale)
@@ -3602,6 +3659,7 @@ class RecommendationEngine:
         self.threshold_library = threshold_library or DEFAULT_THRESHOLD_LIBRARY
         self.profile_manager = profile_manager
         self.session: Mapping[str, Any] | None = None
+        self.trace: List[Dict[str, str]] = []
         if rules is None:
             self.rules = [
                 PhaseDeltaDeviationRule(
@@ -3784,23 +3842,42 @@ class RecommendationEngine:
         track_name: str | None = None,
     ) -> List[Recommendation]:
         context = self._resolve_context(car_model, track_name)
+        self.trace = []
         if microsectors:
             quiet_sequences = detect_quiet_microsector_streaks(microsectors)
             if quiet_sequences:
                 message, rationale = _quiet_recommendation_notice(
                     microsectors, quiet_sequences
                 )
-                return [
-                    Recommendation(
-                        category="driver",
-                        message=message,
-                        rationale=rationale,
-                        priority=-100,
-                    )
+                recommendation = Recommendation(
+                    category="driver",
+                    message=message,
+                    rationale=rationale,
+                    priority=-100,
+                    metric="silence",
+                    triggered_by="",
+                    rule_id="QuietNotice",
+                )
+                self.trace = [
+                    {
+                        "operator": recommendation.triggered_by or "",
+                        "metric": recommendation.metric or "",
+                        "rule_id": recommendation.rule_id or "",
+                    }
                 ]
+                return [recommendation]
         recommendations: List[Recommendation] = []
         for rule in self.rules:
-            recommendations.extend(list(rule.evaluate(results, microsectors, context)))
+            produced = list(rule.evaluate(results, microsectors, context))
+            rule_id = rule.__class__.__name__
+            for entry in produced:
+                if not entry.rule_id:
+                    entry.rule_id = rule_id
+                if entry.metric is None:
+                    entry.metric = ""
+                if entry.triggered_by is None:
+                    entry.triggered_by = ""
+            recommendations.extend(produced)
         enumerated = list(enumerate(recommendations))
         enumerated.sort(key=lambda item: (item[1].priority, item[0]))
         unique: List[Recommendation] = []
@@ -3811,4 +3888,12 @@ class RecommendationEngine:
                 continue
             seen.add(key)
             unique.append(recommendation)
+        self.trace = [
+            {
+                "operator": recommendation.triggered_by or "",
+                "metric": recommendation.metric or "",
+                "rule_id": recommendation.rule_id or "",
+            }
+            for recommendation in unique
+        ]
         return unique

@@ -192,6 +192,7 @@ class TelemetryHUD:
         plan_interval: float = DEFAULT_PLAN_INTERVAL,
         time_fn: Callable[[], float] = monotonic,
         session: Optional[Mapping[str, Any]] = None,
+        show_operators: bool = False,
     ) -> None:
         self._records: Deque[TelemetryRecord] = deque(maxlen=max(8, int(window)))
         self.extractor = extractor or EPIExtractor()
@@ -240,6 +241,7 @@ class TelemetryHUD:
         self._lap_integrals: Tuple[float, ...] = ()
         self._integral_cov: Optional[float] = None
         self._integral_cov_lap_count: int = 0
+        self._show_operators = bool(show_operators)
 
     def append(self, record: TelemetryRecord) -> None:
         self._records.append(record)
@@ -496,6 +498,7 @@ class TelemetryHUD:
                 objectives=self._profile_objectives,
                 session_hints=self._session_hints,
                 bundles=self._bundles,
+                show_operators=self._show_operators,
             ),
             _render_page_d(top_changes, self._macro_status),
         )
@@ -1306,6 +1309,55 @@ def _sense_state_line(
     return _truncate_line(f"{prefix}{spark} μ {avg_value:.2f}")
 
 
+def _severity_chip_icon(severity: float) -> str:
+    if severity >= 2.0:
+        return "🔴"
+    if severity >= 1.25:
+        return "🟠"
+    if severity >= 0.75:
+        return "🟡"
+    if severity > 0.0:
+        return "🟢"
+    return "⚪"
+
+
+def _operator_chip_line(microsector: Microsector, phase: str) -> Optional[str]:
+    events = getattr(microsector, "operator_events", {}) or {}
+    if not events:
+        return None
+    phase_key = phase_family(phase)
+    focused: List[Tuple[float, str]] = []
+    overflow: List[Tuple[float, str]] = []
+    for operator_id, payloads in events.items():
+        if not isinstance(payloads, Sequence):
+            continue
+        for payload in payloads:
+            if not isinstance(payload, Mapping):
+                continue
+            label = payload.get("operator_label")
+            if not isinstance(label, str) or not label:
+                label = canonical_operator_label(str(operator_id))
+            identifier = payload.get("operator_id")
+            if not isinstance(identifier, str) or not identifier:
+                identifier = str(operator_id)
+            display = payload.get("operator")
+            if not isinstance(display, str) or not display:
+                display = f"{identifier} · {label}".strip()
+            severity = _safe_float(payload.get("severity"), 0.0)
+            chip = f"{_severity_chip_icon(severity)} {display}"
+            payload_phase = payload.get("phase")
+            if isinstance(payload_phase, str) and phase_family(payload_phase) == phase_key:
+                focused.append((severity, chip))
+            else:
+                overflow.append((severity, chip))
+    candidates = focused or overflow
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    chips = [entry[1] for entry in candidates[:4]]
+    return _truncate_line(" ".join(chips))
+
+
 def _brake_event_meter(microsector: Microsector) -> Optional[str]:
     events = getattr(microsector, "operator_events", {}) or {}
     silence_payloads = silence_event_payloads(events)
@@ -1829,6 +1881,7 @@ def _render_page_c(
     objectives: Optional[RuleProfileObjectives] = None,
     session_hints: Optional[Mapping[str, object]] = None,
     bundles: Optional[Sequence[object]] = None,
+    show_operators: bool = False,
 ) -> str:
     lines: List[str] = []
     sense_line = _sense_state_line(sense_state, prefix="Si plan ")
@@ -1852,6 +1905,12 @@ def _render_page_c(
             truncated = _truncate_line(message)
             if truncated:
                 lines.append(truncated)
+    if show_operators and active:
+        operator_line = _operator_chip_line(active.microsector, active.phase)
+        if operator_line:
+            candidate = "\n".join((*lines, operator_line))
+            if len(candidate.encode("utf8")) <= PAYLOAD_LIMIT:
+                lines.append(operator_line)
     if active and phase_hint:
         lines.append(_truncate_line(f"Hint {phase_hint}"))
     elif active:
@@ -2068,6 +2127,7 @@ class OSDController:
         fusion: Optional[TelemetryFusion] = None,
         hud: Optional[TelemetryHUD] = None,
         telemetry_buffer_size: Optional[int] = None,
+        show_operators: bool = False,
     ) -> None:
         self.host = host
         self.outsim_port = outsim_port
@@ -2081,6 +2141,7 @@ class OSDController:
             car_model=car_model,
             track_name=track_name,
             plan_interval=DEFAULT_PLAN_INTERVAL,
+            show_operators=show_operators,
         )
         self._pager = HUDPager(self.hud.pages())
         self._idle_backoff = 0.01
