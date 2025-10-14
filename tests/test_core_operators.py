@@ -905,6 +905,37 @@ def test_recursive_filter_operator_requires_decay_in_range():
         recursive_filter_operator([0.1, 0.2], decay=1.0)
 
 
+def _reference_recursive_filter(
+    series: Sequence[float], *, seed: float = 0.0, decay: float = 0.5
+) -> list[float]:
+    state = seed
+    trace: list[float] = []
+    for value in series:
+        state = (decay * state) + ((1.0 - decay) * value)
+        trace.append(state)
+    return trace
+
+
+@pytest.mark.parametrize("seed", [0.0, -0.25, 1.5])
+@pytest.mark.parametrize("decay", [0.0, 0.2, 0.5, 0.85])
+@pytest.mark.parametrize(
+    "series",
+    [
+        [],
+        [0.0, 0.5, 1.0],
+        [0.3, -0.6, 0.4, 0.2, -0.1],
+    ],
+)
+def test_recursive_filter_operator_matches_reference(
+    series: Sequence[float], decay: float, seed: float
+):
+    expected = _reference_recursive_filter(series, seed=seed, decay=decay)
+    result = recursive_filter_operator(series, seed=seed, decay=decay)
+    assert len(result) == len(expected)
+    for actual, expected_value in zip(result, expected):
+        assert actual == pytest.approx(expected_value)
+
+
 def test_recursividad_operator_alias_emits_deprecation_warning():
     series = [0.0, 0.5, 1.0]
 

@@ -1492,12 +1492,15 @@ def recursive_filter_operator(
         raise ValueError("decay must be in the [0, 1) interval")
     if not series:
         return []
-    state = seed
-    trace: List[float] = []
-    for value in series:
-        state = (decay * state) + ((1.0 - decay) * value)
-        trace.append(state)
-    return trace
+    xp = jnp if jnp is not None else np
+    array = xp.asarray(series, dtype=float)
+    length = array.shape[0]
+    dtype = array.dtype
+    kernel = xp.power(decay, xp.arange(length, dtype=dtype)) * (1.0 - decay)
+    filtered = xp.convolve(array, kernel, mode="full")[:length]
+    seed_powers = xp.power(decay, xp.arange(1, length + 1, dtype=dtype)) * seed
+    trace = filtered + seed_powers
+    return np.asarray(trace, dtype=float).tolist()
 
 
 def recursividad_operator(
