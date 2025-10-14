@@ -8,6 +8,8 @@ from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from typing import Callable, List, Mapping, Sequence
 
+from _pytest.mark.structures import ParameterSet
+
 import pytest
 
 from tnfr_core.epi import TelemetryRecord
@@ -226,11 +228,6 @@ _AL_CASES = [
 ]
 
 
-@pytest.mark.parametrize("case", _AL_CASES)
-def test_detect_al_tracks_duration_and_severity(case: OperatorCase) -> None:
-    _run_operator_case(detect_al, case)
-
-
 _OZ_COMMON_KWARGS = dict(window=3, slip_threshold=0.12, yaw_threshold=0.25)
 _OZ_BASELINE_SAMPLES = [
     {"slip_angle": 0.05, "yaw_rate": 0.1},
@@ -295,11 +292,6 @@ _OZ_CASES = [
 ]
 
 
-@pytest.mark.parametrize("case", _OZ_CASES)
-def test_detect_oz_requires_slip_and_yaw_alignment(case: OperatorCase) -> None:
-    _run_operator_case(detect_oz, case)
-
-
 _IL_COMMON_KWARGS = dict(window=3, base_threshold=0.3, speed_gain=0.015)
 _IL_SLOW_SAMPLES = [
     {"speed": 10.0, "line_deviation": 0.45},
@@ -357,11 +349,6 @@ _IL_CASES = [
         id="below-threshold-ignored",
     ),
 ]
-
-
-@pytest.mark.parametrize("case", _IL_CASES)
-def test_detect_il_uses_speed_weighted_threshold(case: OperatorCase) -> None:
-    _run_operator_case(detect_il, case)
 
 
 _SILENCE_COMMON_KWARGS = dict(
@@ -514,9 +501,43 @@ _SILENCE_CASES = [
 ]
 
 
-@pytest.mark.parametrize("case", _SILENCE_CASES)
-def test_detect_silence_flags_quiet_structural_intervals(case: OperatorCase) -> None:
-    _run_operator_case(detect_silence, case)
+def _structural_operator_params() -> List[ParameterSet]:
+    suites = (
+        ("AL", detect_al, _AL_CASES),
+        ("OZ", detect_oz, _OZ_CASES),
+        ("IL", detect_il, _IL_CASES),
+        ("SILENCE", detect_silence, _SILENCE_CASES),
+    )
+    parameters: List[ParameterSet] = []
+    for operator_id, detector, cases in suites:
+        for entry in cases:
+            if isinstance(entry, ParameterSet):
+                (case,) = entry.values
+                case_id = entry.id or "case"
+            else:  # pragma: no cover - defensive path for plain OperatorCase
+                case = entry
+                case_id = "case"
+            parameters.append(
+                pytest.param(
+                    operator_id,
+                    detector,
+                    case,
+                    id=f"{operator_id}:{case_id}",
+                )
+            )
+    return parameters
+
+
+@pytest.mark.parametrize(
+    "operator_id, detector, case",
+    _structural_operator_params(),
+)
+def test_structural_operator_behaviour(
+    operator_id: str,
+    detector: Callable[..., List[dict]],
+    case: OperatorCase,
+) -> None:
+    _run_operator_case(detector, case)
 
 
 _THOL_DETECTOR_CASES = [
@@ -695,11 +716,16 @@ def test_detect_nav_global_positive(
     assert top["duration"] >= window
 
 
-def test_detect_nav_global_negative(
-    nav_global_out_of_band: tuple[float, Sequence[float]]
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["nav_global_out_of_band", "nav_per_node_out_of_band"],
+    ids=["global-series", "per-node-series"],
+)
+def test_detect_nav_negative(
+    fixture_name: str, request: pytest.FixtureRequest
 ) -> None:
-    nu_f, series = nav_global_out_of_band
-    events = detect_nav(series, nu_f=nu_f, window=3, eps=1e-2)
+    nu_target, series = request.getfixturevalue(fixture_name)
+    events = detect_nav(series, nu_f=nu_target, window=3, eps=1e-2)
     assert events == [] or max(e["severity"] for e in events) == 0.0
 
 
@@ -716,12 +742,6 @@ def test_detect_nav_per_node_positive(
     assert max(e["duration"] for e in events) >= window
 
 
-def test_detect_nav_per_node_negative(
-    nav_per_node_out_of_band: tuple[Mapping[str, float], Sequence[Mapping[str, float]]]
-) -> None:
-    nu_map, series = nav_per_node_out_of_band
-    events = detect_nav(series, nu_f=nu_map, window=3, eps=1e-2)
-    assert events == [] or max(e["severity"] for e in events) == 0.0
 
 
 def test_transition_aliases_canonical() -> None:
