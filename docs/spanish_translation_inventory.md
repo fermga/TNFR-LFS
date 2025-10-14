@@ -48,10 +48,10 @@ messages and rationales that are still in English:
 
 - `High-speed microsector {index}: {action}` → _Goal_: keep "Alta velocidad" and
   describe the action (`increase/reduce rear wing angle`) with vocabulary such
-  as "alerón" and "carga".【F:tests/test_recommender.py†L931-L964】
+  as `alerón` and `carga`.【F:tests/test_recommender.py†L931-L964】
   【F:tnfr_lfs/recommender/rules.py†L1410-L1470】
 - `High-speed microsector {index}: increase front wing angle` → _Goal_: include
-  an explicit reference to "alerón delantero" in the action.
+  an explicit reference to `alerón delantero` in the action.
   【F:tests/test_recommender.py†L965-L996】
   【F:tnfr_lfs/recommender/rules.py†L1495-L1534】
 - `Reinforce {direction} load ({manual_reference})` → _Goal_: rationales that
@@ -61,12 +61,12 @@ messages and rationales that are still in English:
   【F:tnfr_lfs/recommender/rules.py†L1523-L1531】
 - `Transmission operator: smooth apex→exit shifts in microsector {index}` and
   `Transmission metrics highlight losses during the apex→exit transition: …` →
-  _Goal_: messages and rationales that include "transmisión" and describe the
+  _Goal_: messages and rationales that include `transmisión` and describe the
   apex→exit transition in Spanish.
   【F:tests/test_recommender.py†L1607-L1641】
   【F:tnfr_lfs/recommender/rules.py†L3389-L3405】
 - `Stiffen compression` (several branches of `SuspensionVelocityRule`) → _Goal_:
-  instructions that reference "compresión" for the dampers.
+  instructions that reference `compresión` for the dampers.
   【F:tests/test_recommender.py†L2008-L2033】
   【F:tnfr_lfs/recommender/rules.py†L1085-L1097】
 
