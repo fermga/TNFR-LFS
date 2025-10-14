@@ -34,6 +34,21 @@ sample or reports "no data" instead of inventing synthetic readings. CSV-based
 imports follow the same rule: the reader preserves missing columns as
 ``math.nan`` so the downstream metrics surface the absence explicitly.
 
+## OutGauge block requirements
+
+Live for Speed’s extended dashboard payload is delivered in discrete blocks.
+Each flag unlocks specific slices of telemetry in
+:class:`TelemetryFusion.fuse`, which are then passed to the entry operators
+and long-term memory described in :doc:`operators_mapping`. Use the table below
+to verify which analytics depend on every block and how the toolkit behaves if
+the simulator omits it.
+
+| OutGauge flag | Signals exposed by fusion | Operators / metrics | Behaviour without the block |
+| --- | --- | --- | --- |
+| ``OG_EXT_TYRE_TEMP`` | Per-wheel surface temperatures and the inner/middle/outer layers recorded on every sample.【F:src/tnfr_lfs/telemetry/fusion.py†L531-L546】 The resolver keeps the previous valid reading or ``nan`` when the dashboard stops broadcasting the layer payloads.【F:src/tnfr_lfs/telemetry/fusion.py†L956-L1101】 | Entry reception feeds the temperatures into the `TelemetryRecord` consumed by the entry-stage reception operator and the recursivity loop documented in :doc:`operators_mapping`, enabling tyre ΔT∕Δt derivatives.【F:docs/operators_mapping.md†L21-L33】【F:src/tnfr_core/operators/operators.py†L923-L968】 | Derivatives and smoothing fall back to the last finite value; if no history exists the operators emit ``"no data"`` so HUD/CLI overlays call out the missing block.【F:src/tnfr_core/operators/operators.py†L959-L968】 |
+| ``OG_EXT_TYRE_PRESS`` | Per-wheel gauge pressures stored alongside the thermal layers in the fused record.【F:src/tnfr_lfs/telemetry/fusion.py†L547-L550】 When packets lack the block the resolver carries the previous pressure or ``nan`` just like the tyre temperatures.【F:src/tnfr_lfs/telemetry/fusion.py†L1103-L1136】 | The recursivity stage filters pressures together with tyre temperatures so the exit orchestration can report tyre-balance deltas outlined in :doc:`operators_mapping`. | Missing pressures remain ``nan``; operators relying on pressure balance degrade to neutral values, mirroring the reception warning noted in the mapping table.【F:docs/operators_mapping.md†L21-L33】 |
+| ``OG_EXT_BRAKE_TEMP`` | Per-wheel brake temperatures merged into the fused record; raw sensors override the proxy estimator whenever plausible data arrives.【F:src/tnfr_lfs/telemetry/fusion.py†L551-L1202】 | Brake dispersion metrics in segmentation and the recursivity thermal store depend on the block, feeding the brake fade analytics referenced by the entry-phase operators.【F:docs/operators_mapping.md†L21-L33】【F:src/tnfr_core/metrics/segmentation.py†L386-L424】【F:src/tnfr_core/operators/operators.py†L923-L968】 | When Live for Speed omits the block the brake thermal proxy continues running, but segmentation receives the synthetic series and reports uniform temperatures, indicating degraded fidelity.【F:src/tnfr_lfs/telemetry/fusion.py†L1145-L1202】【F:src/tnfr_core/metrics/segmentation.py†L386-L424】 |
+
 ### Asynchronous ingestion
 
 The synchronous :class:`tnfr_lfs.telemetry.outsim_udp.OutSimUDPClient` and
