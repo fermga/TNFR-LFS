@@ -4,7 +4,7 @@ from math import sin, tau
 
 from tnfr_core.operators.operator_detection import detect_remesh
 
-from tests.helpers import build_telemetry_record
+from tests.helpers import build_telemetry_record, clone_protocol_sample
 
 
 _BASE_PAYLOAD = dict(
@@ -104,3 +104,26 @@ def test_detect_remesh_requires_repetition() -> None:
     )
 
     assert events == []
+
+
+def test_detect_remesh_handles_missing_line_signal() -> None:
+    payloads: list[dict] = []
+    for index in range(22):
+        t = index * 0.1
+        line = 0.35 * sin(tau * 0.5 * t) + 0.06 * sin(tau * t)
+        payloads.append({"line_deviation": line})
+
+    records = _series(payloads)
+    samples = [clone_protocol_sample(record) for record in records]
+    delattr(samples[7], "line_deviation")
+
+    events = detect_remesh(
+        samples,
+        window=10,
+        tau_candidates=(0.2, 0.4, 0.6),
+        acf_min=0.7,
+        min_repeats=2,
+    )
+
+    assert events
+    assert events[0]["matched_lags"] >= 2

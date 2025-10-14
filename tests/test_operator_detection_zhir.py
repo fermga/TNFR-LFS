@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import nan
+
 from tnfr_core.operators.operator_detection import detect_zhir
 
 from tests.helpers import build_telemetry_record
@@ -134,6 +136,71 @@ def test_detect_zhir_requires_phase_jump() -> None:
                 "nfr": 22.0 + 1.5 * index,
             }
             for index in range(10)
+        ]
+    )
+
+    events = detect_zhir(
+        samples,
+        window=6,
+        xi_min=0.15,
+        min_persistence=0.3,
+        phase_jump_min=0.15,
+    )
+
+    assert events == []
+
+
+def test_detect_zhir_ignores_nan_phase_features() -> None:
+    samples = _series(
+        [
+            {
+                "mu_eff_front": 0.82,
+                "mu_eff_rear": 0.84,
+                "slip_ratio": 0.03,
+                "slip_angle": 0.02,
+                "si": 0.12,
+                "nfr": 18.0,
+            },
+            {
+                "mu_eff_front": nan,
+                "mu_eff_rear": nan,
+                "slip_ratio": nan,
+                "slip_angle": nan,
+                "si": 0.13,
+                "nfr": 20.0,
+            },
+            {
+                "mu_eff_front": 1.02,
+                "mu_eff_rear": 0.99,
+                "slip_ratio": 0.08,
+                "slip_angle": 0.05,
+                "si": 0.26,
+                "nfr": 36.0,
+            },
+            {
+                "mu_eff_front": 1.12,
+                "mu_eff_rear": 1.08,
+                "slip_ratio": 0.13,
+                "slip_angle": 0.08,
+                "si": 0.32,
+                "nfr": 50.0,
+            },
+            {
+                "mu_eff_front": 1.16,
+                "mu_eff_rear": 1.11,
+                "slip_ratio": 0.16,
+                "slip_angle": 0.09,
+                "si": 0.34,
+                "nfr": 58.0,
+            },
+            {
+                "mu_eff_front": 1.17,
+                "mu_eff_rear": 1.12,
+                "slip_ratio": 0.17,
+                "slip_angle": 0.09,
+                "si": 0.35,
+                "nfr": 60.0,
+            },
         ]
     )
 

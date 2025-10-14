@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import nan
+
 from tnfr_core.operators.operator_detection import detect_en
 
 from tests.helpers import build_telemetry_record
@@ -180,3 +182,68 @@ def test_detect_en_requires_rising_epi_norm() -> None:
     events = detect_en(samples, window=6, psi_threshold=0.55, epi_norm_max=80.0)
 
     assert events == []
+
+
+def test_detect_en_handles_nan_payloads() -> None:
+    payloads = [
+        {
+            "suspension_velocity_front": 0.26,
+            "suspension_velocity_rear": 0.25,
+            "steer": 0.02,
+            "nfr": 18.5,
+            "si": 0.2,
+        },
+        {
+            "suspension_velocity_front": 0.28,
+            "suspension_velocity_rear": 0.27,
+            "steer": 0.05,
+            "nfr": 19.0,
+            "si": 0.22,
+        },
+        {
+            "suspension_velocity_front": nan,
+            "suspension_velocity_rear": nan,
+            "steer": nan,
+            "nfr": 19.5,
+            "si": 0.23,
+            "vertical_load": nan,
+        },
+        {
+            "suspension_velocity_front": 0.32,
+            "suspension_velocity_rear": 0.3,
+            "steer": 0.08,
+            "nfr": 21.5,
+            "si": 0.24,
+            "vertical_load": 5204.0,
+        },
+        {
+            "suspension_velocity_front": 0.35,
+            "suspension_velocity_rear": 0.33,
+            "steer": 0.12,
+            "nfr": 23.0,
+            "si": 0.27,
+            "vertical_load": 5208.0,
+        },
+        {
+            "suspension_velocity_front": 0.34,
+            "suspension_velocity_rear": 0.32,
+            "steer": 0.15,
+            "nfr": 24.5,
+            "si": 0.28,
+            "vertical_load": 5210.0,
+        },
+        {
+            "suspension_velocity_front": 0.12,
+            "suspension_velocity_rear": 0.1,
+            "steer": 0.04,
+            "nfr": 32.0,
+            "si": 0.19,
+        },
+    ]
+
+    samples = _series(payloads)
+
+    events = detect_en(samples, window=6, psi_threshold=0.58, epi_norm_max=80.0)
+
+    assert events
+    assert events[0]["start_index"] == 0
