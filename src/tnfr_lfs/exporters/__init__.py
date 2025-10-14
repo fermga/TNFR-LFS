@@ -1235,8 +1235,8 @@ def operator_trajectory_exporter(results: Mapping[str, Any]) -> str:
 
 
 def operator_events_json_exporter(results: Mapping[str, Any]) -> str:
-    series, microsectors, lookup = _operator_event_context(results)
-    events = list(_iter_operator_events(series, microsectors, lookup))
+    payload = build_operator_trajectories_payload(results)
+    events = list(payload.get("events", ()))
     return json.dumps(events, indent=2, sort_keys=True)
 
 
@@ -1244,8 +1244,8 @@ def operator_events_csv_exporter(results: Mapping[str, Any]) -> str:
     from io import StringIO
     import csv
 
-    series, microsectors, lookup = _operator_event_context(results)
-    events = list(_iter_operator_events(series, microsectors, lookup))
+    payload = build_operator_trajectories_payload(results)
+    events = list(payload.get("events", ()))
     fieldnames = [
         "microsector",
         "phase",
