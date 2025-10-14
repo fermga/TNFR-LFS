@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from math import cos, pi, sin, sqrt
 from statistics import mean, pstdev, pvariance
 from typing import List, Mapping, Sequence
@@ -52,6 +52,7 @@ from tnfr_core.operators import (
     dissonance_breakdown_operator,
     dissonance_operator,
     _aggregate_operator_events,
+    _delta_integral_series,
     _stage_coherence,
     _stage_epi_evolution,
     evolve_epi,
@@ -70,6 +71,59 @@ from tnfr_core.operators import (
 from tnfr_core.metrics import compute_window_metrics
 from tnfr_core.operator_detection import canonical_operator_label
 from tnfr_core.interfaces import SupportsEPIBundle
+
+
+@dataclass
+class _DummyBundle:
+    timestamp: float
+    delta_nfr: float
+
+
+def _delta_integral_series_reference(
+    bundles: Sequence[SupportsEPIBundle], sample_indices: Sequence[int]
+) -> List[float]:
+    integrals: List[float] = []
+    if not bundles or not sample_indices:
+        return integrals
+    timestamps = [float(bundles[idx].timestamp) for idx in sample_indices]
+    for pos, idx in enumerate(sample_indices):
+        dt = 0.0
+        if pos + 1 < len(sample_indices):
+            dt = max(0.0, timestamps[pos + 1] - timestamps[pos])
+        elif pos > 0:
+            dt = max(0.0, timestamps[pos] - timestamps[pos - 1])
+        if dt <= 0.0:
+            dt = 1.0
+        integrals.append(abs(float(bundles[idx].delta_nfr)) * dt)
+    return integrals
+
+
+def test_delta_integral_series_vectorized_matches_reference():
+    regular_bundles = [
+        _DummyBundle(timestamp=t, delta_nfr=d)
+        for t, d in zip((0.0, 1.0, 2.0, 3.0), (0.5, -1.5, 2.0, -0.1))
+    ]
+
+    gapped_bundles = [
+        _DummyBundle(timestamp=t, delta_nfr=d)
+        for t, d in zip((0.0, 0.4, 1.8, 3.6, 7.2), (1.0, -0.2, 0.8, -1.2, 0.4))
+    ]
+
+    repeated_bundles = [
+        _DummyBundle(timestamp=t, delta_nfr=d)
+        for t, d in zip((0.0, 1.0, 1.0, 4.0), (1.5, -0.5, 0.5, 2.5))
+    ]
+
+    scenarios = [
+        (regular_bundles, list(range(len(regular_bundles)))),
+        (gapped_bundles, [0, 2, 4]),
+        (repeated_bundles, list(range(len(repeated_bundles)))),
+    ]
+
+    for bundles, indices in scenarios:
+        expected = _delta_integral_series_reference(bundles, indices)
+        result = _delta_integral_series(bundles, indices)
+        assert result == pytest.approx(expected)
 
 
 CASES = [
