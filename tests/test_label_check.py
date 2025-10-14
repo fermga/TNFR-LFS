@@ -1,31 +1,30 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
+
+import tools.label_check as label_check
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _run_label_check(path: Path, raf_root: Path) -> subprocess.CompletedProcess[str]:
-    env = os.environ.copy()
-    src_path = PROJECT_ROOT / "src"
-    existing = env.get("PYTHONPATH")
-    if existing:
-        env["PYTHONPATH"] = os.pathsep.join([str(src_path), existing])
-    else:
-        env["PYTHONPATH"] = str(src_path)
-    return subprocess.run(
-        [sys.executable, "-m", "tools.label_check", str(path), "--raf-root", str(raf_root)],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=PROJECT_ROOT,
-        env=env,
-    )
+def _run_label_check(path: Path, raf_root: Path):
+    stdout = StringIO()
+    stderr = StringIO()
+    root_logger = label_check.logging.getLogger()
+    previous_handlers = list(root_logger.handlers)
+    for handler in previous_handlers:
+        root_logger.removeHandler(handler)
+    with redirect_stdout(stdout), redirect_stderr(stderr):
+        try:
+            exit_code = label_check.main([str(path), "--raf-root", str(raf_root)])
+        finally:
+            root_logger.handlers = previous_handlers
+    return SimpleNamespace(returncode=exit_code, stdout=stdout.getvalue(), stderr=stderr.getvalue())
 
 
 def test_label_check_reports_contiguous_coverage(tmp_path: Path) -> None:
@@ -47,8 +46,8 @@ def test_label_check_reports_contiguous_coverage(tmp_path: Path) -> None:
                             "NAV": {
                                 "label": True,
                                 "intervals": [
-                                    {"start": 0.1, "end": 0.4},
-                                    {"start": 0.4, "end": 0.7},
+                                    {"start": 12.3, "end": 12.9},
+                                    {"start": 13.1, "end": 13.8},
                                 ],
                             }
                         },
@@ -81,7 +80,7 @@ def test_label_check_flags_invalid_interval(tmp_path: Path) -> None:
                         "operators": {
                             "NAV": {
                                 "label": True,
-                                "intervals": [{"start": 0.3, "end": 0.3}],
+                                "intervals": [{"start": 2.0, "end": 1.5}],
                             }
                         },
                     }

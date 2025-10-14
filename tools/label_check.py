@@ -18,16 +18,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Literal, Mapping, Sequence
 
-from tools.calibrate_detectors import (
-    LabelledMicrosector,
-    _load_labels,
-    _normalise_interval_bounds,
-)
+from tools.calibrate_detectors import LabelledMicrosector, _load_labels
 
 
 LOGGER = logging.getLogger(__name__)
@@ -150,24 +147,36 @@ def _validate_intervals(
             intervals = list(raw_intervals)
             if not intervals:
                 continue
-            resolved = _normalise_interval_bounds(
-                intervals,
-                default_start=0.0,
-                default_end=1.0,
-            )
-            if len(resolved) < len(intervals):
+            resolved: list[tuple[float, float]] = []
+            invalid = False
+            for raw_start, raw_end in intervals:
+                try:
+                    start = float(raw_start)
+                    end = float(raw_end)
+                except (TypeError, ValueError):
+                    invalid = True
+                    break
+                if not math.isfinite(start) or not math.isfinite(end):
+                    invalid = True
+                    break
+                if start > end + 1e-9:
+                    invalid = True
+                    break
+                resolved.append((start, end))
+            if invalid:
                 issues.append(
                     ValidationIssue(
                         "error",
                         capture_id,
                         (
                             f"Microsector {label.microsector_index} operator {operator_id} "
-                            "defines invalid intervals that collapse after normalisation."
+                            "defines invalid intervals with inconsistent bounds."
                         ),
                     )
                 )
                 # Skip overlap detection when intervals are already invalid.
                 continue
+            resolved.sort(key=lambda item: item[0])
             previous_end: float | None = None
             for start, end in resolved:
                 if previous_end is not None and start < previous_end - 1e-9:
