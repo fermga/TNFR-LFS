@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: quickstart install dev-install benchmark-delta-cache report-similar-tests report-similar-tests-sweep verify-tnfr-parity
+.PHONY: quickstart install dev-install benchmark-delta-cache report-similar-tests report-similar-tests-sweep verify-tnfr-parity docs-language-check
 quickstart:
 	@if [[ ! -f examples/quickstart.sh ]]; then \
 		echo "Error: quickstart script examples/quickstart.sh not found. Please pull the examples directory or download the script before rerunning quickstart."; \
@@ -32,6 +32,14 @@ benchmark-delta-cache:
 	fi
 	@echo "Running delta cache benchmark..."
 	@python -m benchmarks.delta_cache_benchmark
+
+docs-language-check:
+	@if ! command -v python >/dev/null 2>&1; then \
+		echo "Error: python command not found. Install Python before running the documentation language check."; \
+		exit 1; \
+	fi
+	@echo "Scanning Markdown documentation for non-English text..."
+	@python tools/check_docs_language.py
 
 
 report-similar-tests:

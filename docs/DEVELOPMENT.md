@@ -11,6 +11,7 @@ ruff check .
 mypy --strict
 pytest
 lychee --config lychee.toml README.md docs/**/*.md
+make docs-language-check
 make report-similar-tests-sweep
 ```
 
@@ -18,7 +19,12 @@ make report-similar-tests-sweep
 - `mypy --strict` analyses `tnfr_lfs` and the rest of the declared typing targets (including the tests and examples helper). If you need to pass the paths explicitly run `mypy --strict src tests`; note that strict analysis across the whole package takes longer than the reduced subset.
 - `pytest` runs the unit and integration test suite, including verification for the example datasets `src/tnfr_lfs/resources/data/test1.raf` and `src/tnfr_lfs/resources/data/test1.zip`.
 - `lychee` verifies that the Markdown documentation (including the MkDocs site) references valid URLs and relative links. Install it via `cargo install lychee` or download a pre-built release binary from the [Lychee project](https://github.com/lycheeverse/lychee/releases).
+- `make docs-language-check` scans `README.md`, MkDocs content, and `tests/README.md` for Spanish stop words and accented characters to keep the documentation English-only.
 - `make report-similar-tests-sweep` runs the similarity helper at thresholds 0.90, 0.88, and 0.85, prints the pair counts, and clears the generated JSON artefacts so the working tree remains clean. Capture the counts and include them in your pull request description for reviewer context.
+
+### Documentation language
+
+Keep `README.md`, MkDocs pages, and any Markdown resources in English so the documentation remains consistent with the link-check workflow in `.github/workflows/ci.yml`. Run `make docs-language-check` after updating docs to spot Spanish stop words or accented characters early; the CI documentation job executes the same check alongside Lychee and fails the build if non-English text slips through.
 
 ### Pre-commit hooks
 
