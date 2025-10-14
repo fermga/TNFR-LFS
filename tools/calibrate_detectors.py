@@ -431,8 +431,7 @@ def _filter_samples(
 
     filtered = [sample for sample in samples if include(sample)]
     if not filtered:
-        LOGGER.warning("Filters removed every microsector sample; returning the original set")
-        return list(samples)
+        raise ValueError("Filters removed every microsector sample")
     return filtered
 
 
@@ -826,7 +825,27 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
     compounds = {value.strip() for value in (args.compounds or []) if value.strip()}
     tracks = {value.strip() for value in (args.tracks or []) if value.strip()}
     if cars or compounds or tracks:
-        samples = _filter_samples(samples, cars=cars or None, compounds=compounds or None, tracks=tracks or None)
+        try:
+            samples = _filter_samples(
+                samples,
+                cars=cars or None,
+                compounds=compounds or None,
+                tracks=tracks or None,
+            )
+        except ValueError as exc:
+            applied_filters: list[str] = []
+            if cars:
+                applied_filters.append(f"cars={sorted(cars)}")
+            if compounds:
+                applied_filters.append(f"compounds={sorted(compounds)}")
+            if tracks:
+                applied_filters.append(f"tracks={sorted(tracks)}")
+            filters_text = ", ".join(applied_filters)
+            context = f" ({filters_text})" if filters_text else ""
+            raise SystemExit(
+                "No microsector samples remained after applying the requested filters"
+                f"{context}: {exc}"
+            ) from exc
 
     LOGGER.info("Loading operator search space from %s", args.operators)
     operator_grid = _load_operator_grid(Path(args.operators))
@@ -900,9 +919,21 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--labels", required=True, help="Path to the labelled microsector artefact")
     parser.add_argument("--operators", required=True, help="Parameter grid describing detector search spaces")
     parser.add_argument("--out", required=True, help="Output directory for calibration artefacts")
-    parser.add_argument("--cars", nargs="*", help="Optional car filter (one or more identifiers)")
-    parser.add_argument("--compounds", nargs="*", help="Optional compound filter (one or more identifiers)")
-    parser.add_argument("--tracks", nargs="*", help="Optional track filter (one or more identifiers)")
+    parser.add_argument(
+        "--cars",
+        nargs="*",
+        help="Optional car filter (one or more identifiers). Calibration aborts if no samples remain.",
+    )
+    parser.add_argument(
+        "--compounds",
+        nargs="*",
+        help="Optional compound filter (one or more identifiers). Calibration aborts if no samples remain.",
+    )
+    parser.add_argument(
+        "--tracks",
+        nargs="*",
+        help="Optional track filter (one or more identifiers). Calibration aborts if no samples remain.",
+    )
     parser.add_argument("--kfold", type=int, default=5, help="Number of cross-validation folds (grouped by track)")
     parser.add_argument(
         "--fp_per_min_max",
