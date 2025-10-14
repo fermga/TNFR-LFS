@@ -1899,14 +1899,27 @@ def _variance_payload(values: Sequence[float]) -> Dict[str, float]:
 
 
 def _delta_integral_series(
-    bundles: Sequence[SupportsEPIBundle], sample_indices: Sequence[int]
+    bundles: Sequence[SupportsEPIBundle],
+    sample_indices: Sequence[int],
+    *,
+    delta_series: Any | None = None,
+    timestamp_series: Any | None = None,
 ) -> List[float]:
     if not bundles or not sample_indices:
         return []
 
     xp = jnp if _HAS_JAX else np
-    timestamps = xp.asarray([float(bundles[idx].timestamp) for idx in sample_indices], dtype=float)
-    delta_nfr = xp.asarray([float(bundles[idx].delta_nfr) for idx in sample_indices], dtype=float)
+    if delta_series is None or timestamp_series is None:
+        timestamps = xp.asarray(
+            [float(bundles[idx].timestamp) for idx in sample_indices], dtype=float
+        )
+        delta_nfr = xp.asarray(
+            [float(bundles[idx].delta_nfr) for idx in sample_indices], dtype=float
+        )
+    else:
+        indices = xp.asarray(sample_indices, dtype=int)
+        timestamps = xp.take(timestamp_series, indices)
+        delta_nfr = xp.take(delta_series, indices)
 
     forward_dt = xp.diff(timestamps)
     forward_dt = xp.concatenate(
@@ -1972,14 +1985,34 @@ def _microsector_variability(
         return []
     bundle_count = len(bundles)
     include_laps = len(lap_metadata) > 1
+    xp = jnp if _HAS_JAX else np
+    delta_series = xp.asarray([float(bundle.delta_nfr) for bundle in bundles], dtype=float)
+    sense_index_series = xp.asarray([float(bundle.sense_index) for bundle in bundles], dtype=float)
+    timestamp_series = xp.asarray([float(bundle.timestamp) for bundle in bundles], dtype=float)
+    lap_indices_array = xp.full((bundle_count,), -1, dtype=int)
+    if lap_indices:
+        limit = min(len(lap_indices), bundle_count)
+        if limit > 0:
+            trimmed = xp.asarray([int(lap_indices[idx]) for idx in range(limit)], dtype=int)
+            target_indices = xp.arange(limit, dtype=int)
+            if _HAS_JAX:
+                lap_indices_array = lap_indices_array.at[target_indices].set(trimmed)
+            else:
+                lap_indices_array[:limit] = trimmed
     variability: List[Dict[str, object]] = []
     for microsector in microsectors:
         sample_indices = [
             idx for idx in _microsector_sample_indices(microsector) if 0 <= idx < bundle_count
         ]
-        delta_values = [bundles[idx].delta_nfr for idx in sample_indices]
-        si_values = [bundles[idx].sense_index for idx in sample_indices]
-        integral_values = _delta_integral_series(bundles, sample_indices)
+        sample_index_array = xp.asarray(sample_indices, dtype=int)
+        delta_slice = xp.take(delta_series, sample_index_array)
+        sense_slice = xp.take(sense_index_series, sample_index_array)
+        integral_values = _delta_integral_series(
+            bundles,
+            sample_indices,
+            delta_series=delta_series,
+            timestamp_series=timestamp_series,
+        )
         cphi_values = _microsector_cphi_values(microsector)
         synchrony_values = _microsector_phase_synchrony_values(microsector)
         cphi_stats = _variance_payload(cphi_values)
@@ -1989,35 +2022,47 @@ def _microsector_variability(
             "label": f"Curva {microsector.index + 1}",
             "overall": {
                 "samples": len(sample_indices),
-                "delta_nfr": _variance_payload(delta_values),
-                "sense_index": _variance_payload(si_values),
+                "delta_nfr": _variance_payload(delta_slice.tolist()),
+                "sense_index": _variance_payload(sense_slice.tolist()),
                 "delta_nfr_integral": _variance_payload(integral_values),
                 "cphi": cphi_stats,
                 "phase_synchrony": synchrony_stats,
             },
         }
-        if include_laps and lap_indices:
+        if include_laps and lap_indices and sample_indices:
             lap_payload: Dict[str, Dict[str, object]] = {}
+            microsector_mask = xp.zeros(bundle_count, dtype=bool)
+            if _HAS_JAX:
+                microsector_mask = microsector_mask.at[sample_index_array].set(True)
+            else:
+                microsector_mask[sample_indices] = True
             for lap_entry in lap_metadata:
                 lap_index = int(lap_entry.get("index", 0))
                 lap_label = str(lap_entry.get("label", lap_index))
-                lap_specific_indices = [
-                    idx
-                    for idx in sample_indices
-                    if idx < len(lap_indices) and lap_indices[idx] == lap_index
-                ]
-                if not lap_specific_indices:
+                lap_mask = xp.equal(lap_indices_array, lap_index)
+                combined_mask = xp.logical_and(microsector_mask, lap_mask)
+                combined_indices_tuple = xp.nonzero(combined_mask)
+                combined_indices = (
+                    combined_indices_tuple[0]
+                    if isinstance(combined_indices_tuple, tuple)
+                    else combined_indices_tuple
+                )
+                if combined_indices.size == 0:
                     continue
+                lap_specific_indices = [int(idx) for idx in combined_indices.tolist()]
+                lap_delta_slice = xp.take(delta_series, combined_indices)
+                lap_sense_slice = xp.take(sense_index_series, combined_indices)
                 lap_payload[lap_label] = {
                     "samples": len(lap_specific_indices),
-                    "delta_nfr": _variance_payload(
-                        [bundles[idx].delta_nfr for idx in lap_specific_indices]
-                    ),
-                    "sense_index": _variance_payload(
-                        [bundles[idx].sense_index for idx in lap_specific_indices]
-                    ),
+                    "delta_nfr": _variance_payload(lap_delta_slice.tolist()),
+                    "sense_index": _variance_payload(lap_sense_slice.tolist()),
                     "delta_nfr_integral": _variance_payload(
-                        _delta_integral_series(bundles, lap_specific_indices)
+                        _delta_integral_series(
+                            bundles,
+                            lap_specific_indices,
+                            delta_series=delta_series,
+                            timestamp_series=timestamp_series,
+                        )
                     ),
                     "cphi": dict(cphi_stats),
                     "phase_synchrony": dict(synchrony_stats),
