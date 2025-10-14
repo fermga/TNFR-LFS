@@ -3,10 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from dataclasses import dataclass
+
 from tools.calibrate_detectors import (
     EvaluationResult,
     LabelledMicrosector,
+    MicrosectorSample,
     ParameterSet,
+    _evaluate_detector,
     _materialise_best_params,
     _load_labels,
     normalize_structural_operator_identifier,
@@ -63,6 +67,9 @@ def test_load_labels_jsonl(tmp_path: Path) -> None:
     assert labels[0].operators == {operator_alpha: True}
     assert labels[1].operators == {operator_beta: True}
     assert labels[2].operators == {operator_gamma: True}
+    assert labels[0].operator_intervals == {operator_alpha: ()}
+    assert labels[1].operator_intervals == {operator_beta: ()}
+    assert labels[2].operator_intervals == {operator_gamma: ()}
 
     assert labels[0].raf_path == (raf_root / "capture_a.raf").resolve()
     assert labels[2].raf_path == (raf_root / "capture_b.raf").resolve()
@@ -168,3 +175,134 @@ def test_materialise_best_params_integration(tmp_path: Path, monkeypatch) -> Non
         assert overridden_events and overridden_events[0]["duration"] == 2
     finally:
         operator_detection._load_detection_table.cache_clear()
+
+
+@dataclass
+class _StubRecord:
+    timestamp: float
+
+
+def test_interval_matching_overlap(monkeypatch) -> None:
+    operator_id = "NAV"
+
+    def stub_detector(window, **_kwargs):  # type: ignore[no-untyped-def]
+        return [{"start_time": 1.0, "end_time": 4.0}]
+
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._detector_callable", lambda _: stub_detector
+    )
+
+    records = [_StubRecord(timestamp) for timestamp in (0.0, 5.0, 10.0)]
+    sample = MicrosectorSample(
+        capture_id="capture",
+        microsector_index=1,
+        track="track",
+        car="car",
+        car_class=None,
+        compound=None,
+        start_index=0,
+        end_index=2,
+        start_time=0.0,
+        end_time=10.0,
+        records=records,
+        labels={operator_id: True},
+        label_intervals={operator_id: ((0.0, 5.0),)},
+    )
+
+    result = _evaluate_detector(
+        operator_id,
+        [sample],
+        ParameterSet(identifier="stub", parameters={}),
+        fold_assignments={},
+    )
+
+    assert result is not None
+    assert result.tp == 1
+    assert result.fp == 0
+    assert result.fn == 0
+    assert result.tn == 0
+    assert result.support == 1
+
+
+def test_interval_matching_non_overlap(monkeypatch) -> None:
+    operator_id = "NAV"
+
+    def stub_detector(window, **_kwargs):  # type: ignore[no-untyped-def]
+        return [{"start_time": 6.0, "end_time": 8.0}]
+
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._detector_callable", lambda _: stub_detector
+    )
+
+    records = [_StubRecord(timestamp) for timestamp in (0.0, 5.0, 10.0)]
+    sample = MicrosectorSample(
+        capture_id="capture",
+        microsector_index=1,
+        track="track",
+        car="car",
+        car_class=None,
+        compound=None,
+        start_index=0,
+        end_index=2,
+        start_time=0.0,
+        end_time=10.0,
+        records=records,
+        labels={operator_id: True},
+        label_intervals={operator_id: ((0.0, 5.0),)},
+    )
+
+    result = _evaluate_detector(
+        operator_id,
+        [sample],
+        ParameterSet(identifier="stub", parameters={}),
+        fold_assignments={},
+    )
+
+    assert result is not None
+    assert result.tp == 0
+    assert result.fp == 1
+    assert result.fn == 1
+    assert result.tn == 0
+    assert result.support == 1
+
+
+def test_interval_matching_negative_sample(monkeypatch) -> None:
+    operator_id = "NAV"
+
+    def stub_detector(window, **_kwargs):  # type: ignore[no-untyped-def]
+        return []
+
+    monkeypatch.setattr(
+        "tools.calibrate_detectors._detector_callable", lambda _: stub_detector
+    )
+
+    records = [_StubRecord(timestamp) for timestamp in (0.0, 5.0, 10.0)]
+    sample = MicrosectorSample(
+        capture_id="capture",
+        microsector_index=1,
+        track="track",
+        car="car",
+        car_class=None,
+        compound=None,
+        start_index=0,
+        end_index=2,
+        start_time=0.0,
+        end_time=10.0,
+        records=records,
+        labels={},
+        label_intervals={},
+    )
+
+    result = _evaluate_detector(
+        operator_id,
+        [sample],
+        ParameterSet(identifier="stub", parameters={}),
+        fold_assignments={},
+    )
+
+    assert result is not None
+    assert result.tp == 0
+    assert result.fp == 0
+    assert result.fn == 0
+    assert result.tn == 1
+    assert result.support == 0

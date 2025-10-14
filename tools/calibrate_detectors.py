@@ -27,7 +27,7 @@ import csv
 import json
 import logging
 import math
-from typing import Any, Callable, Iterator, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -62,6 +62,7 @@ class LabelledMicrosector:
     compound: str | None
     microsector_index: int
     operators: Mapping[str, bool]
+    operator_intervals: Mapping[str, Sequence[tuple[float | None, float | None]]]
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,7 @@ class MicrosectorSample:
     end_time: float
     records: Sequence[TelemetryRecord]
     labels: Mapping[str, bool]
+    label_intervals: Mapping[str, Sequence[tuple[float, float]]]
 
     @property
     def duration_seconds(self) -> float:
@@ -205,6 +207,15 @@ def _normalise_operator_labels(payload: Any) -> dict[str, bool]:
             if key is None:
                 continue
             identifier = normalize_structural_operator_identifier(str(key))
+            if isinstance(value, Mapping):
+                status = value.get("active")
+                if status is None:
+                    status = value.get("label")
+                if status is None:
+                    status = value.get("positive")
+                if status is not None:
+                    entries[identifier] = bool(status)
+                    continue
             if isinstance(value, str):
                 token = value.strip().lower()
                 entries[identifier] = token not in {"", "0", "false", "no"}
@@ -226,6 +237,122 @@ def _normalise_operator_labels(payload: Any) -> dict[str, bool]:
             for token in tokens
             if token
         }
+    return {}
+
+
+def _coerce_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return numeric
+
+
+def _coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        integer = int(value)
+    except (TypeError, ValueError):
+        return None
+    return integer
+
+
+def _parse_interval_payload(value: Any) -> list[tuple[float | None, float | None]]:
+    if value is None:
+        return []
+    if isinstance(value, Mapping):
+        for key in ("intervals", "ranges", "windows"):
+            nested = value.get(key)
+            parsed = _parse_interval_payload(nested)
+            if parsed:
+                return parsed
+        start = value.get("start")
+        if start is None:
+            start = value.get("begin") or value.get("t0")
+        end = value.get("end")
+        if end is None:
+            end = value.get("stop") or value.get("t1")
+        start_value = _coerce_float(start)
+        end_value = _coerce_float(end)
+        if start is None and end is None:
+            return []
+        return [(start_value, end_value)]
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        if len(value) == 2:
+            start_value = _coerce_float(value[0])
+            end_value = _coerce_float(value[1])
+            if start_value is not None or end_value is not None:
+                return [(start_value, end_value)]
+        intervals: list[tuple[float | None, float | None]] = []
+        for item in value:
+            intervals.extend(_parse_interval_payload(item))
+        return intervals
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            decoded = json.loads(text)
+        except json.JSONDecodeError:
+            return []
+        return _parse_interval_payload(decoded)
+    return []
+
+
+def _normalise_operator_intervals(
+    payload: Any,
+) -> dict[str, tuple[tuple[float | None, float | None], ...]]:
+    intervals: dict[str, list[tuple[float | None, float | None]]] = {}
+
+    def ensure(identifier: str) -> None:
+        intervals.setdefault(identifier, [])
+
+    def add(identifier: str, values: Iterable[tuple[float | None, float | None]]) -> None:
+        bucket = intervals.setdefault(identifier, [])
+        for start, end in values:
+            bucket.append((start, end))
+
+    if payload is None:
+        return {}
+    if isinstance(payload, Mapping):
+        for key, value in payload.items():
+            if key is None:
+                continue
+            identifier = normalize_structural_operator_identifier(str(key))
+            parsed = _parse_interval_payload(value)
+            if parsed:
+                add(identifier, parsed)
+            else:
+                ensure(identifier)
+        return {key: tuple(value) for key, value in intervals.items()}
+    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes)):
+        for item in payload:
+            if item is None:
+                continue
+            if isinstance(item, Mapping):
+                operator_token = item.get("operator") or item.get("name") or item.get("id")
+                if operator_token is None:
+                    continue
+                identifier = normalize_structural_operator_identifier(str(operator_token))
+                parsed = _parse_interval_payload(item)
+                if parsed:
+                    add(identifier, parsed)
+                else:
+                    ensure(identifier)
+            else:
+                identifier = normalize_structural_operator_identifier(str(item))
+                ensure(identifier)
+        return {key: tuple(value) for key, value in intervals.items()}
+    if isinstance(payload, str):
+        parsed = _parse_interval_payload(payload)
+        if parsed:
+            # Without operator context we cannot associate the intervals.
+            return {}
     return {}
 
 
@@ -300,13 +427,30 @@ def _load_labels_csv(path: Path, *, raf_root: Path) -> Iterator[LabelledMicrosec
             except (TypeError, ValueError):
                 LOGGER.debug("Skipping CSV row without a valid microsector index: %s", row)
                 continue
-            operators = _normalise_operator_labels(row.get("operators") or row.get("operator"))
+            operator_source = row.get("operators") or row.get("operator")
+            operators = _normalise_operator_labels(operator_source)
+            operator_intervals = _normalise_operator_intervals(operator_source)
+            extra_intervals_source = (
+                row.get("intervals")
+                or row.get("operator_intervals")
+                or row.get("ranges")
+            )
+            if extra_intervals_source:
+                extra_intervals = _normalise_operator_intervals(extra_intervals_source)
+                for identifier, values in extra_intervals.items():
+                    if identifier in operator_intervals:
+                        operator_intervals[identifier] = (
+                            operator_intervals[identifier] + values
+                        )
+                    else:
+                        operator_intervals[identifier] = values
             if not operators and row.get("label") is not None:
                 operators = {
                     normalize_structural_operator_identifier(str(row.get("operator"))): bool(
                         str(row.get("label")).strip() not in {"", "0", "false", "False"}
                     )
                 }
+                operator_intervals = {}
             raf_token = row.get("raf") or row.get("path") or row.get("capture")
             if not raf_token:
                 LOGGER.debug("CSV row missing RAF reference: %s", row)
@@ -324,6 +468,7 @@ def _load_labels_csv(path: Path, *, raf_root: Path) -> Iterator[LabelledMicrosec
                 ),
                 microsector_index=micro_index,
                 operators=operators,
+                operator_intervals={key: tuple(values) for key, values in operator_intervals.items()},
             )
 
 
@@ -364,17 +509,22 @@ def _load_labels_mapping(payload: Any, *, raf_root: Path) -> Iterator[LabelledMi
         for micro_index, micro_entry in iterator:
             index_value = micro_index
             operators = {}
+            operator_intervals: dict[str, tuple[tuple[float | None, float | None], ...]] = {}
             if isinstance(micro_entry, Mapping):
                 index_value = micro_entry.get("index", micro_index)
-                operators = _normalise_operator_labels(
+                operator_payload = (
                     micro_entry.get("operators")
                     or micro_entry.get("labels")
                     or micro_entry.get("events")
                 )
+                operators = _normalise_operator_labels(operator_payload)
+                operator_intervals = _normalise_operator_intervals(operator_payload)
             elif isinstance(micro_entry, Sequence) and not isinstance(micro_entry, (str, bytes)):
                 operators = _normalise_operator_labels(micro_entry)
+                operator_intervals = _normalise_operator_intervals(micro_entry)
             else:
                 operators = _normalise_operator_labels(micro_entry)
+                operator_intervals = _normalise_operator_intervals(micro_entry)
             try:
                 microsector_index = int(index_value)
             except (TypeError, ValueError):
@@ -389,6 +539,7 @@ def _load_labels_mapping(payload: Any, *, raf_root: Path) -> Iterator[LabelledMi
                 compound=compound,
                 microsector_index=microsector_index,
                 operators=operators,
+                operator_intervals=operator_intervals,
             )
 
 
@@ -401,6 +552,66 @@ def _microsector_span(microsector: Microsector) -> tuple[int, int]:
     start = min(indices)
     end = max(indices)
     return start, end
+
+
+def _normalise_interval_bounds(
+    intervals: Sequence[tuple[float | None, float | None]],
+    *,
+    default_start: float,
+    default_end: float,
+) -> list[tuple[float, float]]:
+    resolved: list[tuple[float, float]] = []
+    start_bound = min(default_start, default_end)
+    end_bound = max(default_start, default_end)
+    for raw_start, raw_end in intervals:
+        start_time = default_start if raw_start is None else float(raw_start)
+        end_time = default_end if raw_end is None else float(raw_end)
+        if not math.isfinite(start_time):
+            start_time = default_start
+        if not math.isfinite(end_time):
+            end_time = default_end
+        if end_time < start_time:
+            start_time, end_time = end_time, start_time
+        start_time = max(start_bound, start_time)
+        end_time = min(end_bound, end_time)
+        if end_time <= start_time:
+            continue
+        resolved.append((start_time, end_time))
+    resolved.sort(key=lambda item: item[0])
+    return resolved
+
+
+def _resolve_operator_truth(
+    label: LabelledMicrosector,
+    *,
+    micro_start_time: float,
+    micro_end_time: float,
+) -> tuple[dict[str, bool], dict[str, tuple[tuple[float, float], ...]]]:
+    operator_ids = set(label.operators)
+    operator_ids.update(label.operator_intervals)
+    if not operator_ids:
+        return {}, {}
+
+    labels: dict[str, bool] = {}
+    intervals: dict[str, tuple[tuple[float, float], ...]] = {}
+
+    for operator_id in sorted(operator_ids):
+        positive = label.operators.get(operator_id)
+        if positive is None:
+            positive = bool(label.operator_intervals.get(operator_id))
+        else:
+            positive = bool(positive)
+        resolved = _normalise_interval_bounds(
+            label.operator_intervals.get(operator_id, ()),
+            default_start=micro_start_time,
+            default_end=micro_end_time,
+        )
+        if positive and not resolved and micro_end_time > micro_start_time:
+            resolved = [(micro_start_time, micro_end_time)]
+        labels[operator_id] = bool(positive)
+        intervals[operator_id] = tuple(resolved)
+
+    return labels, intervals
 
 
 def _build_microsector_dataset(
@@ -471,6 +682,11 @@ def _build_microsector_dataset(
             car_model = label.car or raf_file.header.car_model or "__unknown__"
             car_class = label.car_class
             compound = label.compound
+            labels_map, interval_map = _resolve_operator_truth(
+                label,
+                micro_start_time=float(micro.start_time),
+                micro_end_time=float(micro.end_time),
+            )
             dataset.append(
                 MicrosectorSample(
                     capture_id=label.capture_id,
@@ -484,7 +700,8 @@ def _build_microsector_dataset(
                     start_time=float(micro.start_time),
                     end_time=float(micro.end_time),
                     records=records,
-                    labels=dict(label.operators),
+                    labels=labels_map or dict(label.operators),
+                    label_intervals=interval_map,
                 )
             )
     return dataset
@@ -620,6 +837,134 @@ def _build_folds(samples: Sequence[MicrosectorSample], kfold: int) -> dict[str, 
     return assignments
 
 
+def _event_attribute(event: Mapping[str, Any] | Any, name: str) -> Any:
+    if isinstance(event, Mapping) and name in event:
+        return event.get(name)
+    return getattr(event, name, None)
+
+
+def _normalise_event_interval(
+    event: Mapping[str, Any] | Any,
+    window: Sequence[TelemetryRecord],
+    sample: MicrosectorSample,
+) -> tuple[float, float] | None:
+    start_time = _coerce_float(_event_attribute(event, "start_time"))
+    end_time = _coerce_float(_event_attribute(event, "end_time"))
+    duration = _coerce_float(_event_attribute(event, "duration"))
+
+    def clamp_bounds(start: float, end: float) -> tuple[float, float]:
+        start_bound = min(sample.start_time, sample.end_time)
+        end_bound = max(sample.start_time, sample.end_time)
+        start_clamped = min(max(start, start_bound), end_bound)
+        end_clamped = min(max(end, start_bound), end_bound)
+        if end_clamped < start_clamped:
+            start_clamped, end_clamped = end_clamped, start_clamped
+        return start_clamped, end_clamped
+
+    if start_time is not None and end_time is not None:
+        start_time, end_time = clamp_bounds(start_time, end_time)
+        if end_time > start_time:
+            return start_time, end_time
+    if start_time is not None and duration is not None and duration >= 0.0:
+        interval = clamp_bounds(start_time, start_time + duration)
+        if interval[1] > interval[0]:
+            return interval
+    if end_time is not None and duration is not None and duration >= 0.0:
+        interval = clamp_bounds(end_time - duration, end_time)
+        if interval[1] > interval[0]:
+            return interval
+
+    start_index = _coerce_int(_event_attribute(event, "start_index"))
+    end_index = _coerce_int(_event_attribute(event, "end_index"))
+    if start_index is not None or end_index is not None:
+        if not window:
+            return None
+        window_len = len(window)
+        rel_start = start_index if start_index is not None else end_index
+        if rel_start is None:
+            return None
+        rel_end = end_index if end_index is not None else rel_start
+        rel_start = max(0, min(rel_start, window_len - 1))
+        rel_end = max(rel_start, min(rel_end, window_len - 1))
+        start_candidate = _coerce_float(getattr(window[rel_start], "timestamp", None))
+        end_candidate = _coerce_float(getattr(window[rel_end], "timestamp", None))
+        if start_candidate is None:
+            start_candidate = sample.start_time
+        if end_candidate is None:
+            end_candidate = sample.end_time
+        start_candidate, end_candidate = clamp_bounds(start_candidate, end_candidate)
+        if end_candidate > start_candidate:
+            return start_candidate, end_candidate
+
+    if duration is not None and duration >= 0.0:
+        interval = clamp_bounds(sample.start_time, sample.start_time + duration)
+        if interval[1] > interval[0]:
+            return interval
+
+    fallback = clamp_bounds(sample.start_time, sample.end_time)
+    if fallback[1] > fallback[0]:
+        return fallback
+    return None
+
+
+def _normalise_event_intervals(
+    events: Sequence[Mapping[str, Any] | Any],
+    window: Sequence[TelemetryRecord],
+    sample: MicrosectorSample,
+) -> list[tuple[float, float]]:
+    intervals: list[tuple[float, float]] = []
+    for event in events:
+        interval = _normalise_event_interval(event, window, sample)
+        if interval is None:
+            continue
+        start_time, end_time = interval
+        if end_time <= start_time:
+            continue
+        intervals.append((start_time, end_time))
+    intervals.sort(key=lambda item: item[0])
+    return intervals
+
+
+def _interval_iou(
+    lhs: tuple[float, float], rhs: tuple[float, float]
+) -> float:
+    start = max(lhs[0], rhs[0])
+    end = min(lhs[1], rhs[1])
+    intersection = max(0.0, end - start)
+    if intersection <= 0.0:
+        return 0.0
+    lhs_length = max(0.0, lhs[1] - lhs[0])
+    rhs_length = max(0.0, rhs[1] - rhs[0])
+    union = lhs_length + rhs_length - intersection
+    if union <= 0.0:
+        return 0.0
+    return intersection / union
+
+
+def _match_intervals(
+    truth: Sequence[tuple[float, float]],
+    predictions: Sequence[tuple[float, float]],
+    *,
+    threshold: float,
+) -> tuple[set[int], set[int]]:
+    if not truth or not predictions:
+        return set(), set()
+    candidates: list[tuple[float, int, int]] = []
+    for truth_index, pred_index in product(range(len(truth)), range(len(predictions))):
+        score = _interval_iou(truth[truth_index], predictions[pred_index])
+        if score >= threshold:
+            candidates.append((score, truth_index, pred_index))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    matched_truth: set[int] = set()
+    matched_predictions: set[int] = set()
+    for _, truth_index, pred_index in candidates:
+        if truth_index in matched_truth or pred_index in matched_predictions:
+            continue
+        matched_truth.add(truth_index)
+        matched_predictions.add(pred_index)
+    return matched_truth, matched_predictions
+
+
 def _evaluate_detector(
     operator_id: str,
     samples: Sequence[MicrosectorSample],
@@ -633,6 +978,7 @@ def _evaluate_detector(
     tp = fp = tn = fn = 0
     total_duration = 0.0
     support = 0
+    evaluated_samples = 0
 
     if fold_assignments:
         fold_indices = sorted(set(fold_assignments.values()))
@@ -644,10 +990,8 @@ def _evaluate_detector(
             sample_fold = fold_assignments.get(sample.track, 0)
             if sample_fold != fold_index:
                 continue
-            label = sample.labels.get(operator_id)
-            if label is None:
-                continue
-            truth = bool(label)
+            truth_intervals = list(sample.label_intervals.get(operator_id, ()))
+            is_positive = bool(sample.labels.get(operator_id)) or bool(truth_intervals)
             window = list(sample.records[sample.start_index : sample.end_index + 1])
             try:
                 events = detector(window, **parameter_set.parameters)
@@ -660,19 +1004,28 @@ def _evaluate_detector(
                     exc,
                 )
                 events = ()
-            prediction = bool(events)
-            support += 1
-            if truth and prediction:
-                tp += 1
-            elif truth and not prediction:
-                fn += 1
-            elif not truth and prediction:
-                fp += 1
-            else:
-                tn += 1
+            prediction_intervals = _normalise_event_intervals(events, window, sample)
+            matched_truth, matched_predictions = _match_intervals(
+                truth_intervals, prediction_intervals, threshold=0.5
+            )
+            evaluated_samples += 1
+            tp += len(matched_truth)
+            unmatched_predictions = len(prediction_intervals) - len(matched_predictions)
+            if unmatched_predictions > 0:
+                fp += unmatched_predictions
+            if truth_intervals:
+                support += len(truth_intervals)
+            elif is_positive:
+                support += 1
+            unmatched_truth = max(0, len(truth_intervals) - len(matched_truth))
+            if unmatched_truth > 0:
+                fn += unmatched_truth
+            if not truth_intervals and not is_positive:
+                if not prediction_intervals:
+                    tn += 1
             total_duration += sample.duration_seconds
 
-    if support == 0:
+    if evaluated_samples == 0:
         return None
 
     precision = tp / (tp + fp) if tp + fp > 0 else 0.0
