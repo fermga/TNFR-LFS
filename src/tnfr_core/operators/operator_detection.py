@@ -10,16 +10,19 @@ to the orchestration pipeline.
 
 from __future__ import annotations
 
+import inspect
 import math
 import warnings
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
+from functools import lru_cache, wraps
 from statistics import fmean, mean, pstdev
 from typing import Any, Dict, List, Mapping, Sequence, Tuple, Union
 
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
+from tnfr_core.config.loader import get_params, load_detection_config
 from tnfr_core.operators.interfaces import SupportsTelemetrySample
 from tnfr_core.operators.structural_time import compute_structural_timestamps
 
@@ -176,6 +179,120 @@ Number = float
 DeltaSample = Union[Number, Mapping[str, Number]]
 
 
+@lru_cache(maxsize=1)
+def _load_detection_table() -> Mapping[str, Any]:
+    """Return the cached detection override table."""
+
+    return load_detection_config()
+
+
+def _sequence_metadata(
+    records: Sequence[SupportsTelemetrySample] | None,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Extract (car_class, car_model, track_name, tyre_compound) metadata."""
+
+    car_class: str | None = None
+    car_model: str | None = None
+    track_name: str | None = None
+    tyre_compound: str | None = None
+
+    if not records:
+        return car_class, car_model, track_name, tyre_compound
+
+    for sample in records:
+        if sample is None:
+            continue
+        if car_class is None:
+            car_class = getattr(sample, "car_class", None)
+        if car_model is None:
+            car_model = getattr(sample, "car_model", None)
+        if track_name is None:
+            track_name = getattr(sample, "track_name", None)
+        if tyre_compound is None:
+            tyre_compound = getattr(sample, "tyre_compound", None)
+        if all(value is not None for value in (car_model, track_name, tyre_compound)):
+            break
+
+    return car_class, car_model, track_name, tyre_compound
+
+
+def _resolve_detection_parameters(
+    operator: str,
+    *,
+    defaults: Mapping[str, Any],
+    provided: Mapping[str, Any],
+    metadata_source: Sequence[SupportsTelemetrySample] | None,
+) -> Dict[str, Any]:
+    """Merge defaults, configuration overrides, and explicit parameters."""
+
+    resolved = dict(defaults)
+    table = _load_detection_table().get(operator)
+    if isinstance(table, Mapping):
+        car_class, car_model, track_name, tyre_compound = _sequence_metadata(metadata_source)
+        overrides = get_params(
+            table,
+            car_class=car_class,
+            car_model=car_model,
+            track_name=track_name,
+            tyre_compound=tyre_compound,
+        )
+        resolved.update(overrides)
+
+    for key, value in provided.items():
+        resolved[key] = value
+
+    return resolved
+
+
+def _with_detection_overrides(
+    operator: str,
+    *,
+    metadata_argument: str | None,
+    parameters: Sequence[str],
+):
+    """Decorator injecting detection overrides for ``operator``."""
+
+    def decorator(func):  # type: ignore[no-untyped-def]
+        signature = inspect.signature(func)
+        defaults: Dict[str, Any] = {}
+        for name in parameters:
+            param = signature.parameters.get(name)
+            if param is None or param.default is inspect._empty:
+                raise ValueError(
+                    f"{func.__name__} missing default value for parameter '{name}'"
+                )
+            defaults[name] = param.default
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):  # type: ignore[no-untyped-def]
+            bound = signature.bind(*args, **kwargs)
+            bound.apply_defaults()
+
+            metadata_source: Sequence[SupportsTelemetrySample] | None = None
+            if metadata_argument:
+                candidate = bound.arguments.get(metadata_argument)
+                if isinstance(candidate, SequenceABC):
+                    metadata_source = candidate  # type: ignore[assignment]
+
+            provided = {name: kwargs[name] for name in parameters if name in kwargs}
+            resolved = _resolve_detection_parameters(
+                operator,
+                defaults=defaults,
+                provided=provided,
+                metadata_source=metadata_source,
+            )
+
+            for name in parameters:
+                if name in resolved:
+                    bound.arguments[name] = resolved[name]
+
+            return func(*bound.args, **bound.kwargs)
+
+        return wrapper
+
+    return decorator
+
+
 def _is_mapping_sample(sample: DeltaSample) -> bool:
     return hasattr(sample, "keys") and hasattr(sample, "items")
 
@@ -196,6 +313,11 @@ def _closeness(value: float, target: float, eps: float) -> float:
     return 0.0
 
 
+@_with_detection_overrides(
+    "detect_nav",
+    metadata_argument=None,
+    parameters=("window", "eps"),
+)
 def detect_nav(
     series: Sequence[DeltaSample],
     *,
@@ -502,6 +624,11 @@ def _autocorrelation(series: Sequence[float], lag: int) -> float:
     return numerator / denominator
 
 
+@_with_detection_overrides(
+    "detect_en",
+    metadata_argument="records",
+    parameters=("window", "psi_threshold", "epi_norm_max"),
+)
 def detect_en(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -685,6 +812,12 @@ def detect_en(
 
     return events
 
+
+@_with_detection_overrides(
+    "detect_um",
+    metadata_argument="records",
+    parameters=("window", "rho_min", "phase_max", "min_duration"),
+)
 def detect_um(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -843,6 +976,12 @@ def detect_um(
 
     return events
 
+
+@_with_detection_overrides(
+    "detect_ra",
+    metadata_argument="records",
+    parameters=("window", "nu_band", "si_min", "delta_nfr_max", "k_min"),
+)
 def detect_ra(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -995,6 +1134,12 @@ def detect_ra(
 
     return events
 
+
+@_with_detection_overrides(
+    "detect_val",
+    metadata_argument="records",
+    parameters=("window", "epi_growth_min", "active_nodes_delta_min", "active_node_load_min"),
+)
 def detect_val(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -1114,6 +1259,12 @@ def detect_val(
 
     return events
 
+
+@_with_detection_overrides(
+    "detect_nul",
+    metadata_argument="records",
+    parameters=("window", "active_nodes_delta_max", "epi_concentration_min", "active_node_load_min"),
+)
 def detect_nul(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -1225,6 +1376,12 @@ def detect_nul(
 
     return events
 
+
+@_with_detection_overrides(
+    "detect_thol",
+    metadata_argument="records",
+    parameters=("epi_accel_min", "stability_window", "stability_tolerance"),
+)
 def detect_thol(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -1300,6 +1457,12 @@ def detect_thol(
 
     return events
 
+
+@_with_detection_overrides(
+    "detect_zhir",
+    metadata_argument="records",
+    parameters=("window", "xi_min", "min_persistence", "phase_jump_min"),
+)
 def detect_zhir(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -1389,6 +1552,12 @@ def detect_zhir(
 
     return events
 
+
+@_with_detection_overrides(
+    "detect_remesh",
+    metadata_argument="records",
+    parameters=("window", "tau_candidates", "acf_min", "min_repeats"),
+)
 def detect_remesh(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -1565,6 +1734,11 @@ def _finalise_event(
     )
 
 
+@_with_detection_overrides(
+    "detect_al",
+    metadata_argument="records",
+    parameters=("window", "lateral_threshold", "load_threshold"),
+)
 def detect_al(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -1629,6 +1803,11 @@ def detect_al(
     return [event.as_mapping() for event in events]
 
 
+@_with_detection_overrides(
+    "detect_oz",
+    metadata_argument="records",
+    parameters=("window", "slip_threshold", "yaw_threshold"),
+)
 def detect_oz(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -1686,6 +1865,11 @@ def detect_oz(
     return [event.as_mapping() for event in events]
 
 
+@_with_detection_overrides(
+    "detect_il",
+    metadata_argument="records",
+    parameters=("window", "base_threshold", "speed_gain"),
+)
 def detect_il(
     records: Sequence[SupportsTelemetrySample],
     *,
@@ -1756,6 +1940,11 @@ def detect_il(
     return [event.as_mapping() for event in events]
 
 
+@_with_detection_overrides(
+    "detect_silence",
+    metadata_argument="records",
+    parameters=("window", "load_threshold", "accel_threshold", "delta_nfr_threshold"),
+)
 def detect_silence(
     records: Sequence[SupportsTelemetrySample],
     *,
