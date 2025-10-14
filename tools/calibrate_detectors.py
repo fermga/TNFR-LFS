@@ -1076,7 +1076,12 @@ def _evaluate_detector(
                             )
                         except statistics.StatisticsError:  # pragma: no cover - defensive
                             nu_f_value = None
-                    events = detector(delta_series, nu_f=nu_f_value, **parameter_set.parameters)
+                    events = detector(
+                        delta_series,
+                        nu_f=nu_f_value,
+                        metadata=window,
+                        **parameter_set.parameters,
+                    )
                 else:
                     events = detector(window, **parameter_set.parameters)
             except Exception as exc:
