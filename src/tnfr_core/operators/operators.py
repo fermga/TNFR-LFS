@@ -7,6 +7,7 @@ from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import dataclass, field, fields
 import math
 from importlib import import_module
+from importlib.util import find_spec
 import warnings
 from math import sqrt
 from statistics import mean, pvariance
@@ -24,6 +25,24 @@ from typing import (
     TypeVar,
     cast,
 )
+
+import numpy as np
+
+
+def _is_module_available(module_name: str) -> bool:
+    """Return ``True`` if ``module_name`` can be imported."""
+
+    try:
+        return find_spec(module_name) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+_HAS_JAX = _is_module_available("jax.numpy")
+if _HAS_JAX:
+    import jax.numpy as jnp  # type: ignore[import-not-found]
+else:  # pragma: no cover - exercised when JAX is unavailable
+    jnp = None
 
 from tnfr_core.equations.constants import WHEEL_SUFFIXES
 
@@ -358,18 +377,16 @@ def coherence_operator(series: Sequence[float], window: int = 3) -> List[float]:
         raise ValueError("window must be a positive odd integer")
     if not series:
         return []
-    half_window = window // 2
-    smoothed: List[float] = []
-    for index in range(len(series)):
-        start = max(0, index - half_window)
-        end = min(len(series), index + half_window + 1)
-        smoothed.append(mean(series[start:end]))
-    original_mean = mean(series)
-    smoothed_mean = mean(smoothed)
-    bias = original_mean - smoothed_mean
-    if abs(bias) < 1e-12:
-        return smoothed
-    return [value + bias for value in smoothed]
+    xp = jnp if jnp is not None else np
+    array = xp.asarray(series, dtype=xp.float64)
+    kernel = xp.ones(window, dtype=array.dtype)
+    numerator = xp.convolve(array, kernel, mode="same")
+    counts = xp.convolve(xp.ones_like(array), kernel, mode="same")
+    smoothed = numerator / counts
+    bias = float(array.mean() - smoothed.mean())
+    if abs(bias) >= 1e-12:
+        smoothed = smoothed + bias
+    return np.asarray(smoothed, dtype=float).tolist()
 
 
 def dissonance_operator(series: Sequence[float], target: float) -> float:

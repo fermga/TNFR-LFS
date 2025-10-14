@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import replace
 from math import cos, pi, sin, sqrt
 from statistics import mean, pstdev, pvariance
-from typing import List, Mapping
+from typing import List, Mapping, Sequence
 
+import numpy as np
 import pytest
 
 from tests.helpers import (
@@ -274,12 +275,51 @@ class _ProtocolBundleStub:
         self.coherence_index = 0.0
         self.ackermann_parallel_index = 0.0
 
+
+def _reference_coherence(series: Sequence[float], window: int) -> List[float]:
+    half_window = window // 2
+    smoothed: List[float] = []
+    for index in range(len(series)):
+        start = max(0, index - half_window)
+        end = min(len(series), index + half_window + 1)
+        window_slice = series[start:end]
+        smoothed.append(sum(window_slice) / len(window_slice))
+    original_mean = sum(series) / len(series)
+    smoothed_mean = sum(smoothed) / len(smoothed)
+    bias = original_mean - smoothed_mean
+    if abs(bias) < 1e-12:
+        return smoothed
+    return [value + bias for value in smoothed]
+
+
+def test_coherence_operator_window_of_one_preserves_series() -> None:
+    series = [0.1, -0.4, 0.9, 0.0, -0.2]
+
+    result = coherence_operator(series, window=1)
+
+    assert isinstance(result, list)
+    assert result == pytest.approx(series, abs=1e-12)
+
+
+
 def test_coherence_operator_reduces_jitter_without_bias():
     raw_series = [0.2, 0.8, 0.1, 0.9, 0.2]
     smoothed = coherence_operator(raw_series, window=3)
 
     assert mean(smoothed) == pytest.approx(mean(raw_series), rel=1e-9)
     assert pstdev(smoothed) < pstdev(raw_series)
+
+
+
+def test_coherence_operator_matches_reference_for_large_series() -> None:
+    rng = np.random.default_rng(42)
+    series = rng.normal(size=5000).tolist()
+
+    result = coherence_operator(series, window=5)
+    expected = _reference_coherence(series, window=5)
+
+    assert len(result) == len(series)
+    assert result == pytest.approx(expected, rel=1e-12, abs=1e-12)
 
 
 def test_stage_coherence_accepts_protocol_bundles() -> None:
