@@ -1187,6 +1187,7 @@ def _write_curves_csv(
             writer = csv.writer(handle)
             writer.writerow(
                 [
+                    "operator",
                     "car_class",
                     "car",
                     "compound",
@@ -1207,6 +1208,7 @@ def _write_curves_csv(
             ):
                 writer.writerow(
                     [
+                        operator_id,
                         entry.combination[0],
                         entry.combination[1],
                         entry.combination[2],
@@ -1235,6 +1237,7 @@ def _write_confusion_csv(
             writer = csv.writer(handle)
             writer.writerow(
                 [
+                    "operator",
                     "car_class",
                     "car",
                     "compound",
@@ -1249,6 +1252,7 @@ def _write_confusion_csv(
             for entry in sorted(entries, key=lambda item: item.combination):
                 writer.writerow(
                     [
+                        operator_id,
                         entry.combination[0],
                         entry.combination[1],
                         entry.combination[2],
