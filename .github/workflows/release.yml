@@ -34,8 +34,4 @@ jobs:
         uses: python-semantic-release/python-semantic-release@v9.8.6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          repository_username: __token__
-          repository_password: ${{ secrets.PYPI_API_TOKEN }}
-          upload_to_pypi: true
-          upload_to_github: true
-          force: false
+          pypi_token: ${{ secrets.PYPI_API_TOKEN }}
