@@ -24,6 +24,7 @@ from tnfr_core.equations.epi import EPIExtractor, EPIBundle, TelemetryRecord
 from tnfr_lfs.math.conversions import _safe_float
 from .outsim_udp import OutSimPacket, OutSimWheelState
 from .outgauge_udp import OutGaugePacket
+from ._tyre_compound import normalise_compound_label
 
 __all__ = ["TelemetryFusion"]
 
@@ -586,6 +587,9 @@ class TelemetryFusion:
             track_name=(
                 getattr(outgauge, "track", None)
                 or getattr(outgauge, "layout", "")
+            ),
+            tyre_compound=normalise_compound_label(
+                getattr(outgauge, "tyre_compound", None)
             ),
         )
 

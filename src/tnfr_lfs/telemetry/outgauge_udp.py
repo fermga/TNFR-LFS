@@ -24,6 +24,7 @@ from typing import Optional, Tuple, cast
 from ._socket_poll import wait_for_read_ready
 from ._reorder_buffer import CircularReorderBuffer, DEFAULT_REORDER_BUFFER_SIZE
 from .pools import PacketPool, PoolItem
+from ._tyre_compound import extract_compound_hint, normalise_compound_label
 
 __all__ = [
     "AsyncOutGaugeUDPClient",
@@ -58,6 +59,13 @@ _FLOAT_STRUCT = struct.Struct("<f")
 _EXTENDED_BLOCKS = 5
 _EXTENDED_BLOCK_WIDTH = 4
 _MAX_DATAGRAM_SIZE = _PACK_STRUCT.size + _EXTENDED_BLOCKS * _EXTENDED_BLOCK_WIDTH * _FLOAT_STRUCT.size
+
+
+def _normalise_identifier(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = "".join(ch for ch in value.lower() if ch.isalnum())
+    return cleaned or None
 
 
 def _decode_string(value: bytes) -> str:
@@ -96,6 +104,7 @@ class FrozenOutGaugePacket:
     tyre_temps_middle: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     tyre_temps_outer: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     brake_temps: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    tyre_compound: str | None = None
 
 
 class OutGaugePacket(PoolItem):
@@ -132,6 +141,7 @@ class OutGaugePacket(PoolItem):
         "tyre_temps_middle",
         "tyre_temps_outer",
         "brake_temps",
+        "tyre_compound",
     )
 
     def __init__(
@@ -167,6 +177,7 @@ class OutGaugePacket(PoolItem):
         tyre_temps_middle: tuple[float, float, float, float] | None = None,
         tyre_temps_outer: tuple[float, float, float, float] | None = None,
         brake_temps: tuple[float, float, float, float] | None = None,
+        tyre_compound: str | None = None,
     ) -> None:
         super().__init__()
         self._reset_values()
@@ -206,6 +217,7 @@ class OutGaugePacket(PoolItem):
             self.tyre_temps_outer = tuple(tyre_temps_outer)
         if brake_temps is not None:
             self.brake_temps = tuple(brake_temps)
+        self.tyre_compound = normalise_compound_label(tyre_compound)
 
     def _reset_values(self) -> None:
         self.time = 0
@@ -238,6 +250,7 @@ class OutGaugePacket(PoolItem):
         self.tyre_temps_middle = (0.0, 0.0, 0.0, 0.0)
         self.tyre_temps_outer = (0.0, 0.0, 0.0, 0.0)
         self.brake_temps = (0.0, 0.0, 0.0, 0.0)
+        self.tyre_compound = None
 
     def _reset(self) -> None:
         self._reset_values()
@@ -310,6 +323,9 @@ class OutGaugePacket(PoolItem):
         self.tyre_temps_middle = extra_middle
         self.tyre_temps_outer = extra_outer
         self.brake_temps = extra_brakes
+        compound_hint = extract_compound_hint(self.display1, self.display2)
+        if compound_hint is not None:
+            self.tyre_compound = compound_hint
 
     def freeze(self) -> FrozenOutGaugePacket:
         return FrozenOutGaugePacket(
@@ -343,6 +359,7 @@ class OutGaugePacket(PoolItem):
             tyre_temps_middle=self.tyre_temps_middle,
             tyre_temps_outer=self.tyre_temps_outer,
             brake_temps=self.brake_temps,
+            tyre_compound=self.tyre_compound,
         )
 
     @classmethod
@@ -412,6 +429,10 @@ class OutGaugePacket(PoolItem):
             _average_layers(3),
         )
 
+        display1 = _decode_string(values[21])
+        display2 = _decode_string(values[22])
+        compound_hint = extract_compound_hint(display1, display2)
+
         if freeze:
             return FrozenOutGaugePacket(
                 time=int(values[0]),
@@ -435,8 +456,8 @@ class OutGaugePacket(PoolItem):
                 throttle=float(values[18]),
                 brake=float(values[19]),
                 clutch=float(values[20]),
-                display1=_decode_string(values[21]),
-                display2=_decode_string(values[22]),
+                display1=display1,
+                display2=display2,
                 packet_id=int(values[23]),
                 tyre_temps=averaged,
                 tyre_pressures=extra_pressures,
@@ -444,6 +465,7 @@ class OutGaugePacket(PoolItem):
                 tyre_temps_middle=extra_middle,
                 tyre_temps_outer=extra_outer,
                 brake_temps=extra_brakes,
+                tyre_compound=compound_hint,
             )
 
         packet = _OUTGAUGE_POOL.acquire()
@@ -762,6 +784,7 @@ class OutGaugeUDPClient:
         )
         self._timeouts = 0
         self._ignored_hosts = 0
+        self._tyre_compounds: dict[str, str] = {}
 
     @property
     def address(self) -> Tuple[str, int]:
@@ -781,11 +804,34 @@ class OutGaugeUDPClient:
 
         return self._processor.statistics
 
+    def update_tyre_compound(self, car: str, compound: str | None) -> None:
+        """Register ``compound`` for ``car`` so packets inherit the metadata."""
+
+        key = _normalise_identifier(car)
+        if key is None:
+            return
+        label = normalise_compound_label(compound)
+        if label is None:
+            self._tyre_compounds.pop(key, None)
+        else:
+            self._tyre_compounds[key] = label
+
+    def _apply_tyre_compound(self, packet: OutGaugePacket) -> OutGaugePacket:
+        if packet.tyre_compound:
+            return packet
+        key = _normalise_identifier(packet.car)
+        if key is None:
+            return packet
+        compound = self._tyre_compounds.get(key)
+        if compound is not None:
+            packet.tyre_compound = compound
+        return packet
+
     def recv(self) -> Optional[OutGaugePacket]:
         now = time.monotonic()
         ready = self._processor.pop_ready_packet(now, allow_grace=False)
         if ready is not None:
-            return ready
+            return self._apply_tyre_compound(ready)
 
         deadline = None
         if self._timeout > 0.0:
@@ -795,7 +841,7 @@ class OutGaugeUDPClient:
             if self._drain_datagrams():
                 ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=False)
                 if ready is not None:
-                    return ready
+                    return self._apply_tyre_compound(ready)
                 if self._processor.pending_buffered:
                     break
                 continue
@@ -828,13 +874,13 @@ class OutGaugeUDPClient:
                         time.monotonic(), allow_grace=False
                     )
                     if ready is not None:
-                        return ready
+                        return self._apply_tyre_compound(ready)
                     if not self._processor.pending_buffered:
                         break
                 deadline = self._processor.pending_deadline()
         ready = self._processor.pop_ready_packet(time.monotonic(), allow_grace=True)
         if ready is not None:
-            return ready
+            return self._apply_tyre_compound(ready)
         self._timeouts += 1
         logger.warning(
             "OutGauge recv retries exhausted without receiving a packet.",
@@ -921,7 +967,8 @@ class OutGaugeUDPClient:
         return addresses
 
     def drain_ready(self) -> list[OutGaugePacket]:
-        return self._processor.drain_ready(time.monotonic())
+        packets = self._processor.drain_ready(time.monotonic())
+        return [self._apply_tyre_compound(packet) for packet in packets]
 
     def _record_packet(self, packet: OutGaugePacket) -> None:
         self._processor.record_packet(packet, time.monotonic())
@@ -990,6 +1037,7 @@ class AsyncOutGaugeUDPClient:
         self._closed_event = asyncio.Event()
         self._closed_event.set()
         self._closing = False
+        self._tyre_compounds: dict[str, str] = {}
 
     @classmethod
     async def create(
@@ -1062,8 +1110,31 @@ class AsyncOutGaugeUDPClient:
                 "reordered": 0,
                 "loss_events": 0,
                 "recovered": 0,
-            }
+        }
         return self._processor.statistics
+
+    def update_tyre_compound(self, car: str, compound: str | None) -> None:
+        """Register ``compound`` for ``car`` packets handled by the client."""
+
+        key = _normalise_identifier(car)
+        if key is None:
+            return
+        label = normalise_compound_label(compound)
+        if label is None:
+            self._tyre_compounds.pop(key, None)
+        else:
+            self._tyre_compounds[key] = label
+
+    def _apply_tyre_compound(self, packet: OutGaugePacket) -> OutGaugePacket:
+        if packet.tyre_compound:
+            return packet
+        key = _normalise_identifier(packet.car)
+        if key is None:
+            return packet
+        compound = self._tyre_compounds.get(key)
+        if compound is not None:
+            packet.tyre_compound = compound
+        return packet
 
     async def recv(self, timeout: float | None = None) -> Optional[OutGaugePacket]:
         if self._transport is None or self._processor is None or self._condition is None:
@@ -1081,7 +1152,8 @@ class AsyncOutGaugeUDPClient:
                 self._pending_error = None
                 raise error
             if self._ready_packets:
-                return self._ready_packets.popleft()
+                packet = self._ready_packets.popleft()
+                return self._apply_tyre_compound(packet)
             if self._closing:
                 raise RuntimeError("AsyncOutGaugeUDPClient is closed")
             if timeout == 0.0:
@@ -1106,7 +1178,7 @@ class AsyncOutGaugeUDPClient:
                 continue
         packet = self._processor.pop_ready_packet(time.monotonic(), allow_grace=True)
         if packet is not None:
-            return packet
+            return self._apply_tyre_compound(packet)
         self._timeouts += 1
         logger.warning(
             "OutGauge recv retries exhausted without receiving a packet.",
@@ -1123,9 +1195,12 @@ class AsyncOutGaugeUDPClient:
     def drain_ready(self) -> list[OutGaugePacket]:
         packets: list[OutGaugePacket] = []
         while self._ready_packets:
-            packets.append(self._ready_packets.popleft())
+            packets.append(self._apply_tyre_compound(self._ready_packets.popleft()))
         if self._processor is not None:
-            packets.extend(self._processor.drain_ready(time.monotonic()))
+            packets.extend(
+                self._apply_tyre_compound(packet)
+                for packet in self._processor.drain_ready(time.monotonic())
+            )
         return packets
 
     async def close(self) -> None:
@@ -1195,7 +1270,7 @@ class AsyncOutGaugeUDPClient:
             ready = processor.pop_ready_packet(time.monotonic(), allow_grace=False)
             if ready is None:
                 break
-            self._ready_packets.append(ready)
+            self._ready_packets.append(self._apply_tyre_compound(ready))
             made_ready = True
         if made_ready:
             self._wake_waiters()
@@ -1273,7 +1348,7 @@ class AsyncOutGaugeUDPClient:
             packet = processor.pop_ready_packet(time.monotonic(), allow_grace=True)
             if packet is None:
                 break
-            self._ready_packets.append(packet)
+            self._ready_packets.append(self._apply_tyre_compound(packet))
             made_ready = True
         if made_ready:
             self._wake_waiters()

@@ -44,18 +44,18 @@ docs-language-check:
 
 report-similar-tests:
 	@if ! command -v python >/dev/null 2>&1; then \
-        	echo "Error: python command not found. Install Python before generating the similarity report."; \
-        	exit 1; \
+		echo "Error: python command not found. Install Python before generating the similarity report."; \
+		exit 1; \
 	fi
 	@echo "Generating similarity report for pytest functions..."
 	@python tools/report_similar_tests.py
 	@rm -f tests/_report/*.json
 
 report-similar-tests-sweep:
-        @if ! command -v python >/dev/null 2>&1; then \
-                echo "Error: python command not found. Install Python before generating the similarity report."; \
-                exit 1; \
-        fi
+	@if ! command -v python >/dev/null 2>&1; then \
+		echo "Error: python command not found. Install Python before generating the similarity report."; \
+		exit 1; \
+	fi
 	@echo "Sweeping similarity reports for thresholds 0.90, 0.88, and 0.85..."
 	@echo ""
 	@echo "Running report at threshold 0.90"
@@ -67,18 +67,18 @@ report-similar-tests-sweep:
 	@rm -f tests/_report/*.json
 	@echo ""
 	@echo "Running report at threshold 0.85"
-        @python tools/report_similar_tests.py --threshold 0.85
-        @rm -f tests/_report/*.json
+	@python tools/report_similar_tests.py --threshold 0.85
+	@rm -f tests/_report/*.json
 
 verify-tnfr-parity:
-        @if ! command -v python >/dev/null 2>&1; then \
-                echo "Error: python command not found. Install Python before running the parity verification."; \
-                exit 1; \
-        fi
-        @if [[ ! -f tests/data/synthetic_stint.csv ]]; then \
-                echo "Error: tests/data/synthetic_stint.csv not found. Provide a telemetry CSV before rerunning parity verification."; \
-                exit 1; \
-        fi
-        @echo "Running TNFR parity verification against the canonical engine..."
-        @python tools/verify_tnfr_parity.py tests/data/synthetic_stint.csv --strict
+	@if ! command -v python >/dev/null 2>&1; then \
+	        echo "Error: python command not found. Install Python before running the parity verification."; \
+	        exit 1; \
+	fi
+	@if [[ ! -f tests/data/synthetic_stint.csv ]]; then \
+	        echo "Error: tests/data/synthetic_stint.csv not found. Provide a telemetry CSV before rerunning parity verification."; \
+	        exit 1; \
+	fi
+	@echo "Running TNFR parity verification against the canonical engine..."
+	@python tools/verify_tnfr_parity.py tests/data/synthetic_stint.csv --strict
 

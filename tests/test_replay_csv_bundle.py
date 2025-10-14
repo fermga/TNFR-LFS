@@ -228,6 +228,15 @@ def test_replay_csv_to_records_reuses_cached_dataframe(monkeypatch: pytest.Monke
     assert copy_calls == initial_copy_calls
 
 
+def test_replay_csv_reader_sets_tyre_compound_from_labels() -> None:
+    reader = ReplayCSVBundleReader(BUNDLE_PATH, labels={"tyre_compound": "soft"})
+
+    records = reader.to_records()
+
+    assert records
+    assert records[0].tyre_compound == "soft"
+
+
 def test_replay_csv_to_records_uses_cached_results(monkeypatch: pytest.MonkeyPatch) -> None:
     reader = ReplayCSVBundleReader(BUNDLE_PATH)
 
