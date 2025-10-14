@@ -160,9 +160,10 @@ def main() -> None:
             "detect_remesh",
             detect_remesh,
             dict(
-                line_gradient_threshold=0.2,
-                yaw_rate_gradient_threshold=0.22,
-                structural_gap_threshold=0.4,
+                window=40,
+                tau_candidates=(0.6, 1.2, 1.8),
+                acf_min=0.7,
+                min_repeats=2,
             ),
         ),
     ]
