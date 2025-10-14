@@ -61,6 +61,94 @@ cascade (global defaults/compounds, tracks, classes, car overrides) so that the
 updated ``get_params`` and ``load_detection_config`` flows are verified end to
 end and precedence remains stable when the new sections are introduced.
 
+## Conflict resolution order
+
+``get_params`` already resolves overrides by walking the hierarchy in a strict
+sequence: top-level ``defaults`` → top-level ``compounds`` → ``tracks`` →
+``classes`` → ``cars``. Each layer reuses ``merge_section`` so that the
+sub-section ``defaults`` are applied first, followed by inline keys, compound
+overrides (including ``__default__``/``*`` fallbacks and the requested tyre),
+and finally nested ``tracks`` entries within that layer.【F:src/tnfr_core/config/loader.py†L37-L101】 This means that:
+
+* Track-wide tweaks override global defaults and compounds before class or car
+  logic runs.
+* Class-level data starts from the merged track payload and can be
+  refined per-compound or per-track before handing control to the car layer.
+* Car entries inherit everything resolved so far and can still specialise per
+  compound or track as needed.
+
+When writing ``best_params.yaml`` (or any other detection profile), structure
+the mapping to mirror that order. The snippet below shows the expected layout
+with explicit comments to highlight how overrides compose:
+
+```yaml
+defaults:
+  pressure: 1.0
+  brake_bias: 52
+
+compounds:
+  __default__:
+    pressure: 1.05        # Applies to every tyre before track/class/car logic
+  r2:
+    brake_bias: 53        # Global R2 tweak before track/class/car overrides
+
+tracks:
+  __default__:
+    defaults:
+      pressure: 1.1       # Baseline for every track
+    compounds:
+      __default__:
+        brake_bias: 54    # Track-level tweak applied before classes/cars
+  bl1:
+    defaults:
+      pressure: 1.2
+
+classes:
+  __default__:
+    defaults:
+      camber:
+        front: -2.0
+  tcr:
+    defaults:
+      pressure: 1.3
+    compounds:
+      r2:
+        brake_bias: 56    # Class + compound override
+    tracks:
+      bl1:
+        defaults:
+          pressure: 1.32  # Class + track override
+
+cars:
+  __default__:
+    defaults:
+      toe:
+        front: -0.05
+  xfg:
+    defaults:
+      pressure: 1.4
+    compounds:
+      r2:
+        pressure: 1.5     # Final car-specific compound tweak
+    tracks:
+      bl1:
+        defaults:
+          toe:
+            front: -0.08  # Car + track override (runs last)
+```
+
+### Changing the order intentionally
+
+If a different precedence is required, adjust the call order inside
+``get_params``—for example, moving class resolution ahead of track resolution
+would mean reordering the ``merge_section`` invocations for ``tracks_table``
+and ``classes_table`` and updating any nested ``tracks`` handling to match the
+new precedence.【F:src/tnfr_core/config/loader.py†L73-L101】 After doing so,
+refresh the expectations in ``tests/test_config_loader_core.py`` so the
+assertions that cover compound/track/class precedence continue to reflect the
+runtime behaviour.【F:tests/test_config_loader_core.py†L6-L107】 Adjust or add
+fixtures to match the intended cascade before touching production data.
+
 ## Search path compatibility
 
 Maintaining compatibility with the current search order is critical for existing
