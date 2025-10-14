@@ -2251,6 +2251,7 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         recommendation_engine=engine,
         session=session_payload,
         setup_planner=setup_planner,
+        show_operators=bool(getattr(namespace, "show_operators", False)),
     )
     controller = OSDController(
         host=str(namespace.host),
@@ -2264,6 +2265,7 @@ def _handle_osd(namespace: argparse.Namespace, *, config: Mapping[str, Any]) -> 
         layout=layout,
         hud=hud,
         telemetry_buffer_size=getattr(namespace, "telemetry_buffer_size", None),
+        show_operators=bool(getattr(namespace, "show_operators", False)),
     )
     return controller.run()
 
@@ -2876,6 +2878,7 @@ def _handle_suggest(namespace: argparse.Namespace, *, config: Mapping[str, Any])
         "series": bundles,
         "microsectors": microsectors,
         "recommendations": recommendations,
+        "trace": engine.trace,
         "car_model": namespace.car_model,
         "track": track_name,
         "phase_messages": phase_messages,
