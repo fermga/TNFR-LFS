@@ -45,6 +45,7 @@ from tnfr_core.operators.operator_detection import (
     normalize_structural_operator_identifier,
 )
 
+from tnfr_lfs.resources import data_root
 from tnfr_lfs.resources.tyre_compounds import (
     CAR_COMPOUND_COMPATIBILITY,
     normalise_car_model,
@@ -199,11 +200,199 @@ class EvaluationResult:
     duration_minutes: float
 
 
+_SENTINEL_IDENTIFIERS = {"__default__", "__unknown__"}
+
+
 def _normalise_identifier(value: str | None) -> str | None:
+    """Legacy generic normaliser retained for backwards compatibility."""
+
+    token = _normalise_raw_token(value)
+    if token is None:
+        return None
+    return token.lower()
+
+
+def _normalise_raw_token(value: str | None) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
-    return text if text else None
+    if not text:
+        return None
+    if text.strip().lower() in _SENTINEL_IDENTIFIERS:
+        return None
+    return text
+
+
+def _slugify_token(value: str | None) -> str:
+    if value is None:
+        return ""
+    return "".join(ch for ch in str(value).lower() if ch.isalnum())
+
+
+@lru_cache()
+def _car_aliases() -> Mapping[str, str]:
+    base = data_root() / "cars"
+    aliases: dict[str, str] = {}
+    for entry in base.glob("*.toml"):
+        try:
+            with entry.open("rb") as handle:
+                payload = tomllib.load(handle)
+        except OSError:  # pragma: no cover - resource missing
+            continue
+        canonical = str(payload.get("abbrev") or entry.stem).strip().upper()
+        if not canonical:
+            continue
+        tokens = {
+            canonical.lower(),
+            _slugify_token(canonical),
+        }
+        name = payload.get("name")
+        if name:
+            label = str(name).strip()
+            if label:
+                tokens.add(label.lower())
+                tokens.add(_slugify_token(label))
+        for token in tokens:
+            if token:
+                aliases[token] = canonical
+    return aliases
+
+
+@lru_cache()
+def _car_class_aliases() -> Mapping[str, str]:
+    base = data_root() / "cars"
+    aliases: dict[str, str] = {}
+    for entry in base.glob("*.toml"):
+        try:
+            with entry.open("rb") as handle:
+                payload = tomllib.load(handle)
+        except OSError:  # pragma: no cover - resource missing
+            continue
+        raw_class = payload.get("lfs_class")
+        label = _normalise_raw_token(str(raw_class) if raw_class is not None else None)
+        if not label:
+            continue
+        tokens = {label.lower(), _slugify_token(label)}
+        for token in tokens:
+            if token:
+                aliases[token] = label
+    return aliases
+
+
+@lru_cache()
+def _track_aliases() -> Mapping[str, str]:
+    base = data_root() / "tracks"
+    mapping: dict[str, str] = {}
+    canonical_targets: dict[str, str] = {}
+    token_map: dict[str, set[str]] = {}
+
+    for entry in base.glob("*.toml"):
+        try:
+            with entry.open("rb") as handle:
+                payload = tomllib.load(handle)
+        except OSError:  # pragma: no cover - resource missing
+            continue
+        configs = payload.get("config", {})
+        for identifier, values in configs.items():
+            canonical = str(identifier).strip().upper()
+            if not canonical:
+                continue
+            alias_target_raw = None
+            if isinstance(values, Mapping):
+                alias_target_raw = values.get("alias_of")
+                name = values.get("name")
+            else:
+                name = None
+            alias_target = (
+                str(alias_target_raw).strip().upper()
+                if alias_target_raw is not None
+                else canonical
+            )
+            canonical_targets[canonical] = alias_target or canonical
+            tokens = token_map.setdefault(canonical, set())
+            tokens.add(canonical.lower())
+            slug = _slugify_token(canonical)
+            if slug:
+                tokens.add(slug)
+            if name:
+                label = _normalise_raw_token(str(name))
+                if label:
+                    tokens.add(label.lower())
+                    slug_label = _slugify_token(label)
+                    if slug_label:
+                        tokens.add(slug_label)
+
+    def resolve(identifier: str) -> str:
+        current = identifier
+        visited: set[str] = set()
+        while True:
+            if current in visited:
+                return current
+            visited.add(current)
+            target = canonical_targets.get(current, current)
+            if target == current:
+                return current
+            current = target
+
+    for identifier, tokens in token_map.items():
+        canonical = resolve(identifier)
+        for token in tokens:
+            if token:
+                mapping[token] = canonical
+    return mapping
+
+
+def _normalise_car_identifier(value: str | None) -> str | None:
+    token = _normalise_raw_token(value)
+    if token is None:
+        return None
+    aliases = _car_aliases()
+    lookup = token.lower()
+    canonical = aliases.get(lookup) or aliases.get(_slugify_token(token))
+    if canonical:
+        return canonical
+    fallback = normalise_car_model(token)
+    if fallback:
+        return fallback
+    cleaned = "".join(ch for ch in token.upper() if ch.isalnum())
+    return cleaned or None
+
+
+def _normalise_car_class_identifier(value: str | None) -> str | None:
+    token = _normalise_raw_token(value)
+    if token is None:
+        return None
+    aliases = _car_class_aliases()
+    lookup = token.lower()
+    canonical = aliases.get(lookup) or aliases.get(_slugify_token(token))
+    if canonical:
+        return canonical
+    return token.upper()
+
+
+def _normalise_track_identifier(value: str | None) -> str | None:
+    token = _normalise_raw_token(value)
+    if token is None:
+        return None
+    aliases = _track_aliases()
+    lookup = token.lower()
+    canonical = aliases.get(lookup) or aliases.get(_slugify_token(token))
+    if canonical:
+        return canonical
+    cleaned = _slugify_token(token).upper()
+    if cleaned:
+        return cleaned
+    return token.upper()
+
+
+def _normalise_compound_token(value: str | None) -> str | None:
+    canonical = normalise_compound_identifier(value)
+    if canonical:
+        return canonical
+    token = _normalise_raw_token(value)
+    if token is None:
+        return None
+    return token.lower()
 
 
 def _normalise_operator_labels(payload: Any) -> dict[str, bool]:
@@ -472,10 +661,12 @@ def _load_labels_csv(path: Path, *, raf_root: Path) -> Iterator[LabelledMicrosec
             yield LabelledMicrosector(
                 capture_id=capture_id,
                 raf_path=raf_path,
-                track=_normalise_identifier(row.get("track") or row.get("track_name")),
-                car=_normalise_identifier(row.get("car") or row.get("car_model")),
-                car_class=_normalise_identifier(row.get("car_class") or row.get("class")),
-                compound=_normalise_identifier(
+                track=_normalise_track_identifier(row.get("track") or row.get("track_name")),
+                car=_normalise_car_identifier(row.get("car") or row.get("car_model")),
+                car_class=_normalise_car_class_identifier(
+                    row.get("car_class") or row.get("class")
+                ),
+                compound=_normalise_compound_token(
                     row.get("compound") or row.get("tyre") or row.get("tyre_compound")
                 ),
                 microsector_index=micro_index,
@@ -504,10 +695,10 @@ def _load_labels_mapping(payload: Any, *, raf_root: Path) -> Iterator[LabelledMi
             continue
         raf_path = (raf_root / str(raf_token)).resolve()
         capture_id = str(entry.get("id") or entry.get("capture_id") or raf_path.stem)
-        track = _normalise_identifier(entry.get("track") or entry.get("track_name"))
-        car = _normalise_identifier(entry.get("car") or entry.get("car_model"))
-        car_class = _normalise_identifier(entry.get("car_class") or entry.get("class"))
-        compound = _normalise_identifier(
+        track = _normalise_track_identifier(entry.get("track") or entry.get("track_name"))
+        car = _normalise_car_identifier(entry.get("car") or entry.get("car_model"))
+        car_class = _normalise_car_class_identifier(entry.get("car_class") or entry.get("class"))
+        compound = _normalise_compound_token(
             entry.get("compound") or entry.get("tyre") or entry.get("tyre_compound")
         )
         micro_payload = entry.get("microsectors") or entry.get("labels")
@@ -757,17 +948,10 @@ def _filter_samples(
     compounds: set[str] | None,
     tracks: set[str] | None,
 ) -> list[MicrosectorSample]:
-    def canonical(value: str | None) -> str | None:
-        normalised = _normalise_identifier(value)
-        if normalised is None and value is not None:
-            stripped = str(value).strip()
-            normalised = stripped or None
-        return normalised
-
     def include(sample: MicrosectorSample) -> bool:
-        sample_car = canonical(sample.car)
-        sample_compound = canonical(sample.compound)
-        sample_track = canonical(sample.track)
+        sample_car = _normalise_car_identifier(sample.car)
+        sample_compound = _normalise_compound_token(sample.compound)
+        sample_track = _normalise_track_identifier(sample.track)
 
         if cars and sample_car not in cars:
             return False
@@ -1399,20 +1583,20 @@ def calibrate_detectors(args: argparse.Namespace) -> None:
     if not samples:
         raise SystemExit("No microsector samples were produced from the supplied RAF captures")
 
-    def _normalised_filter_tokens(values: Sequence[str] | None) -> set[str]:
+    def _normalised_filter_tokens(
+        values: Sequence[str] | None,
+        normaliser: Callable[[str | None], str | None],
+    ) -> set[str]:
         tokens: set[str] = set()
         for value in values or []:
-            canonical = _normalise_identifier(value)
-            if canonical is None:
-                stripped = str(value).strip()
-                canonical = stripped or None
+            canonical = normaliser(value)
             if canonical:
                 tokens.add(canonical)
         return tokens
 
-    cars = _normalised_filter_tokens(args.cars)
-    compounds = _normalised_filter_tokens(args.compounds)
-    tracks = _normalised_filter_tokens(args.tracks)
+    cars = _normalised_filter_tokens(args.cars, _normalise_car_identifier)
+    compounds = _normalised_filter_tokens(args.compounds, _normalise_compound_token)
+    tracks = _normalised_filter_tokens(args.tracks, _normalise_track_identifier)
     if cars or compounds or tracks:
         try:
             samples = _filter_samples(
