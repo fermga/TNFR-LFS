@@ -143,6 +143,16 @@ suggestion files summarise the recommended setup changes, while
 Use the Markdown output to brief engineers or paste the JSON artefacts into
 notebooks for further processing.
 
+### Deploy detection calibrations {#deploy-detection-calibrations}
+
+When the detection calibrator produces bespoke thresholds, copy the generated
+``detection.yaml`` into the ``config`` directory of the pack that the CLI will
+consume. A pack rooted at ``packs/factory`` must therefore expose
+``packs/factory/config/detection.yaml`` so ``--pack-root packs/factory`` resolves
+the overrides automatically. If the calibrator emits several candidates it will
+report their absolute paths; pass the selected file via ``--detection-config`` or
+the equivalent API keyword to bypass the default search order.
+
 ## Next steps
 
 Continue with the [advanced workflows](advanced_workflows.md) to learn how to

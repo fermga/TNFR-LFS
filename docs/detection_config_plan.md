@@ -69,3 +69,27 @@ deployments. Any additional logic must preserve the candidate resolution used by
 Additions such as post-load validation or layered overrides will execute after
 this candidate list is resolved so ``pack_root``, ``search_paths``, and the
 packaged defaults continue to work exactly as they do today.
+
+### Calibrator hand-off
+
+The calibration tooling that generates bespoke detection heuristics must emit
+its overrides inside the same hierarchy inspected by ``load_detection_config``.
+When the calibrator materialises a pack, it will write the merged payload to
+``<pack_root>/config/detection.yaml`` so that the runtime can discover the file
+without any extra flags. If the tool needs to output multiple variants, it will
+surface the concrete destination and expose that path back to the runtime as an
+explicit override. This keeps the calibration workflow aligned with the search
+order above while allowing specialised deployments to point the loader at the
+exact artefact produced by the tool.
+
+## Deliverables
+
+Calibration runs hand over a detection bundle that mirrors the pack layout. The
+generated YAML must live under ``config/detection.yaml`` at the root of the pack
+that will be deployed (either a staging directory referenced via
+``--pack-root`` or the static bundle shipped with the release). Deployments that
+partition overrides per customer or environment should replicate the same
+layout, placing the calibrated payload under ``<pack_root>/config``. With this
+structure in place the loader will pick up the new thresholds automatically,
+falling back to caller-specified paths only when the calibrator exposes an
+alternative location.
