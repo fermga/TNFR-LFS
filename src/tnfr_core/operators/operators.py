@@ -1666,21 +1666,50 @@ def _stage_nodal_metrics(bundles: Sequence[SupportsEPIBundle]) -> Dict[str, obje
     chassis_nodes: Sequence[SupportsChassisNode] = [
         bundle.chassis for bundle in bundles
     ]
-    delta_by_node = {"tyres": [], "suspension": [], "chassis": []}
-    for tyre, suspension, chassis, factors in zip(
-        tyre_nodes, suspension_nodes, chassis_nodes, bundle_context
-    ):
-        multiplier = max(
-            context_matrix.min_multiplier,
-            min(context_matrix.max_multiplier, factors.multiplier),
-        )
-        delta_by_node["tyres"].append(tyre.delta_nfr * multiplier)
-        delta_by_node["suspension"].append(suspension.delta_nfr * multiplier)
-        delta_by_node["chassis"].append(chassis.delta_nfr * multiplier)
+    xp = jnp if _HAS_JAX else np
+    sample_count = min(
+        len(tyre_nodes),
+        len(suspension_nodes),
+        len(chassis_nodes),
+        len(bundle_context),
+    )
+    multipliers = xp.asarray(
+        [float(bundle_context[idx].multiplier) for idx in range(sample_count)],
+        dtype=float,
+    )
+    multipliers = xp.clip(
+        multipliers,
+        float(context_matrix.min_multiplier),
+        float(context_matrix.max_multiplier),
+    )
+    tyre_delta = xp.asarray(
+        [float(tyre_nodes[idx].delta_nfr) for idx in range(sample_count)],
+        dtype=float,
+    )
+    suspension_delta = xp.asarray(
+        [float(suspension_nodes[idx].delta_nfr) for idx in range(sample_count)],
+        dtype=float,
+    )
+    chassis_delta = xp.asarray(
+        [float(chassis_nodes[idx].delta_nfr) for idx in range(sample_count)],
+        dtype=float,
+    )
+    tyre_si = xp.asarray([float(node.sense_index) for node in tyre_nodes], dtype=float)
+    suspension_si = xp.asarray(
+        [float(node.sense_index) for node in suspension_nodes], dtype=float
+    )
+    chassis_si = xp.asarray(
+        [float(node.sense_index) for node in chassis_nodes], dtype=float
+    )
+    delta_by_node = {
+        "tyres": xp.multiply(tyre_delta, multipliers).tolist(),
+        "suspension": xp.multiply(suspension_delta, multipliers).tolist(),
+        "chassis": xp.multiply(chassis_delta, multipliers).tolist(),
+    }
     si_by_node = {
-        "tyres": [node.sense_index for node in tyre_nodes],
-        "suspension": [node.sense_index for node in suspension_nodes],
-        "chassis": [node.sense_index for node in chassis_nodes],
+        "tyres": tyre_si.tolist(),
+        "suspension": suspension_si.tolist(),
+        "chassis": chassis_si.tolist(),
     }
     pairwise_delta = pairwise_coupling_operator(delta_by_node, pairs=node_pairs)
     pairwise_si = pairwise_coupling_operator(si_by_node, pairs=node_pairs)
