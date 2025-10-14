@@ -107,7 +107,12 @@ def _normalise_columns(columns: Iterable[str]) -> dict[str, str]:
             mapping[column] = "compound"
         elif normalised in {"f1", "f1_score"}:
             mapping[column] = "f1"
-        elif normalised in {"fp_per_min", "false_positives_per_minute", "fp_min"}:
+        elif normalised in {
+            "fp_per_min",
+            "false_positives_per_minute",
+            "fp_min",
+            "fp_per_minute",
+        }:
             mapping[column] = "fp_per_min"
     return mapping
 

@@ -1194,7 +1194,7 @@ def _write_curves_csv(
                     "precision",
                     "recall",
                     "f1",
-                    "fp_per_minute",
+                    "fp_per_min",
                     "support",
                 ]
             )
