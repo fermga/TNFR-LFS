@@ -1092,12 +1092,51 @@ def test_tyre_balance_controller_computes_clamped_deltas():
     assert control.camber_delta_rear == pytest.approx(-0.0675, abs=1e-6)
     assert control.per_wheel_pressure["fl"] == pytest.approx(-0.0402, abs=1e-6)
     assert control.per_wheel_pressure["fr"] == pytest.approx(-0.0470, abs=1e-6)
+    assert control.per_wheel_pressure["rl"] == pytest.approx(-0.0518, abs=1e-6)
+    assert control.per_wheel_pressure["rr"] == pytest.approx(-0.0558, abs=1e-6)
 
     with_offsets = tyre_balance_controller(
         metrics, offsets={"pressure_front": 0.05, "camber_rear": 0.05}
     )
     assert with_offsets.pressure_delta_front == pytest.approx(0.005, abs=1e-6)
     assert with_offsets.camber_delta_rear == pytest.approx(-0.0175, abs=1e-6)
+
+
+def test_tyre_balance_controller_clips_per_wheel_biases():
+    metrics = {
+        "cphi_fl": 0.82,
+        "cphi_fr": 0.82,
+        "cphi_rl": 0.80,
+        "cphi_rr": 0.80,
+        "cphi_fl_gradient": 0.0,
+        "cphi_fr_gradient": 0.0,
+        "cphi_rl_gradient": 0.0,
+        "cphi_rr_gradient": 0.0,
+        "cphi_fl_temp_delta": 0.6,
+        "cphi_fr_temp_delta": -0.8,
+        "cphi_rl_temp_delta": 0.4,
+        "cphi_rr_temp_delta": -0.7,
+    }
+
+    control = tyre_balance_controller(
+        metrics,
+        pressure_max_step=0.1,
+        bias_gain=1.0,
+        pressure_gain=0.0,
+        camber_gain=0.0,
+        nfr_gain=0.0,
+    )
+
+    assert control.pressure_delta_front == 0.0
+    assert control.pressure_delta_rear == 0.0
+    assert control.camber_delta_front == 0.0
+    assert control.camber_delta_rear == 0.0
+    assert control.per_wheel_pressure == {
+        "fl": pytest.approx(0.1, abs=1e-6),
+        "fr": pytest.approx(-0.1, abs=1e-6),
+        "rl": pytest.approx(0.1, abs=1e-6),
+        "rr": pytest.approx(-0.1, abs=1e-6),
+    }
 
 
 def test_tyre_balance_controller_returns_zero_without_cphi():

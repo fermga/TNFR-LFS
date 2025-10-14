@@ -1236,9 +1236,6 @@ def tyre_balance_controller(
 ) -> TyreBalanceControlOutput:
     """Compute ΔP and camber tweaks from CPHI-derived tyre metrics."""
 
-    def _clamp(value: float, minimum: float, maximum: float) -> float:
-        return max(minimum, min(value, maximum))
-
     def _safe_value(key: str) -> float | None:
         value = filtered_metrics.get(key)
         try:
@@ -1249,8 +1246,30 @@ def tyre_balance_controller(
             return None
         return numeric
 
-    cphi_values = {suffix: _safe_value(f"cphi_{suffix}") for suffix in WHEEL_SUFFIXES}
-    if not any(value is not None for value in cphi_values.values()):
+    xp = jnp if jnp is not None else np
+
+    def _value_or_nan(key: str) -> float:
+        value = _safe_value(key)
+        return value if value is not None else float("nan")
+
+    def _to_bool(value: object) -> bool:
+        if hasattr(value, "item"):
+            return bool(value.item())  # type: ignore[attr-defined]
+        return bool(value)
+
+    def _to_float(value: object) -> float:
+        if isinstance(value, (float, int)):
+            return float(value)
+        if hasattr(value, "item"):
+            return float(value.item())  # type: ignore[attr-defined]
+        return float(value)  # pragma: no cover - defensive fallback
+
+    cphi_values = xp.asarray(
+        [_value_or_nan(f"cphi_{suffix}") for suffix in WHEEL_SUFFIXES], dtype=xp.float64
+    )
+
+    all_missing = _to_bool(xp.all(xp.isnan(cphi_values)))
+    if all_missing:
         zero_map = {suffix: 0.0 for suffix in WHEEL_SUFFIXES}
         return TyreBalanceControlOutput(
             pressure_delta_front=0.0,
@@ -1266,14 +1285,16 @@ def tyre_balance_controller(
         else float(filtered_metrics.get("d_nfr_flat", 0.0))
     )
 
-    def _min_value(values: Sequence[float | None]) -> float | None:
-        finite = [value for value in values if value is not None]
-        if not finite:
+    def _min_finite(values: Sequence[float] | object) -> float | None:
+        array = xp.asarray(values, dtype=xp.float64)
+        mask = xp.isfinite(array)
+        if not _to_bool(xp.any(mask)):
             return None
-        return min(finite)
+        minimum = xp.nanmin(array)
+        return _to_float(minimum)
 
-    front_health = _min_value([cphi_values.get("fl"), cphi_values.get("fr")])
-    rear_health = _min_value([cphi_values.get("rl"), cphi_values.get("rr")])
+    front_health = _min_finite(cphi_values[:2])
+    rear_health = _min_finite(cphi_values[2:])
 
     pressure_front = nfr_gain * delta_flat
     pressure_rear = nfr_gain * delta_flat
@@ -1286,31 +1307,62 @@ def tyre_balance_controller(
         pressure_front += float(offsets.get("pressure_front", 0.0))
         pressure_rear += float(offsets.get("pressure_rear", 0.0))
 
-    pressure_front = _clamp(pressure_front, -pressure_max_step, pressure_max_step)
-    pressure_rear = _clamp(pressure_rear, -pressure_max_step, pressure_max_step)
+    pressure_front = _to_float(
+        xp.clip(xp.asarray(pressure_front, dtype=xp.float64), -pressure_max_step, pressure_max_step)
+    )
+    pressure_rear = _to_float(
+        xp.clip(xp.asarray(pressure_rear, dtype=xp.float64), -pressure_max_step, pressure_max_step)
+    )
 
     def _component_average(suffixes: Sequence[str], key: str) -> float:
-        values = [_safe_value(f"cphi_{suffix}_{key}") for suffix in suffixes]
-        finite = [value for value in values if value is not None]
-        if not finite:
-            return 0.0
-        return float(mean(finite))
+        values = xp.asarray(
+            [_value_or_nan(f"cphi_{suffix}_{key}") for suffix in suffixes], dtype=xp.float64
+        )
+        mask = xp.isfinite(values)
+        counts = xp.sum(mask)
+        sums = xp.sum(xp.where(mask, values, 0.0))
+        counts_float = counts.astype(values.dtype)
+        safe_counts = xp.where(counts > 0, counts_float, xp.ones_like(counts_float))
+        mean_value = xp.where(counts > 0, sums / safe_counts, 0.0)
+        return _to_float(mean_value)
 
     front_gradient_component = _component_average(["fl", "fr"], "gradient")
     rear_gradient_component = _component_average(["rl", "rr"], "gradient")
 
-    camber_front = _clamp(-front_gradient_component * camber_gain, -camber_max_step, camber_max_step)
-    camber_rear = _clamp(-rear_gradient_component * camber_gain, -camber_max_step, camber_max_step)
+    camber_front = _to_float(
+        xp.clip(
+            xp.asarray(-front_gradient_component * camber_gain, dtype=xp.float64),
+            -camber_max_step,
+            camber_max_step,
+        )
+    )
+    camber_rear = _to_float(
+        xp.clip(
+            xp.asarray(-rear_gradient_component * camber_gain, dtype=xp.float64),
+            -camber_max_step,
+            camber_max_step,
+        )
+    )
 
     if offsets:
         camber_front += float(offsets.get("camber_front", 0.0))
         camber_rear += float(offsets.get("camber_rear", 0.0))
 
-    per_wheel: dict[str, float] = {}
-    for suffix in WHEEL_SUFFIXES:
-        base = pressure_front if suffix in {"fl", "fr"} else pressure_rear
-        bias = _safe_value(f"cphi_{suffix}_temp_delta") or 0.0
-        per_wheel[suffix] = _clamp(base + bias_gain * bias, -pressure_max_step, pressure_max_step)
+    bias_values = xp.asarray(
+        [_value_or_nan(f"cphi_{suffix}_temp_delta") for suffix in WHEEL_SUFFIXES], dtype=xp.float64
+    )
+    bias_safe = xp.where(xp.isfinite(bias_values), bias_values, 0.0)
+
+    base_pressures = xp.asarray(
+        [pressure_front, pressure_front, pressure_rear, pressure_rear], dtype=xp.float64
+    )
+    per_wheel_array = xp.clip(
+        base_pressures + bias_gain * bias_safe,
+        -pressure_max_step,
+        pressure_max_step,
+    )
+    per_wheel_numpy = np.asarray(per_wheel_array, dtype=float)
+    per_wheel = {suffix: float(value) for suffix, value in zip(WHEEL_SUFFIXES, per_wheel_numpy)}
 
     return TyreBalanceControlOutput(
         pressure_delta_front=pressure_front,
