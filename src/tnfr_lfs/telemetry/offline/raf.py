@@ -10,7 +10,7 @@ RAF recordings with the rest of the telemetry tooling.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import math
 import struct
@@ -106,7 +106,14 @@ class RafFrame:
     distance: float
     engine_rpm: float
     gear: int | None
+    yaw: float
     pitch: float
+    roll: float
+    throttle_input: float
+    brake_input: float
+    clutch_input: float
+    handbrake_input: float
+    steer_input: float
     wheels: tuple[RafWheelFrame, ...]
 
 
@@ -118,6 +125,116 @@ class RafFile:
     car: RafCarStatic
     wheels: tuple[RafWheelStatic, ...]
     frames: tuple[RafFrame, ...]
+
+
+def _decode_angle_pair(buffer: bytes, offset: int) -> float:
+    """Decode a packed cosine/sine pair into a single angle in radians."""
+
+    cos_raw, sin_raw = struct.unpack_from("<hh", buffer, offset)
+    return math.atan2(float(sin_raw), float(cos_raw))
+
+
+def _unwrap_angles(angles: Sequence[float]) -> list[float]:
+    """Return ``angles`` with discontinuities around ±π smoothed out."""
+
+    unwrapped: list[float] = []
+    previous: float | None = None
+    for angle in angles:
+        if previous is None:
+            unwrapped.append(angle)
+            previous = angle
+            continue
+        delta = angle - previous
+        delta = (delta + math.pi) % (2.0 * math.pi) - math.pi
+        unwrapped.append(unwrapped[-1] + delta)
+        previous = angle
+    return unwrapped
+
+
+def _compute_derivative(values: Sequence[float], dt: float) -> list[float]:
+    """Compute the finite difference derivative of ``values`` with spacing ``dt``."""
+
+    length = len(values)
+    if length == 0 or not math.isfinite(dt) or dt <= 0.0:
+        return [math.nan] * length
+
+    derivatives = [math.nan] * length
+    if length == 1:
+        return derivatives
+
+    derivatives[0] = (values[1] - values[0]) / dt
+    for index in range(1, length - 1):
+        derivatives[index] = (values[index + 1] - values[index - 1]) / (2.0 * dt)
+    derivatives[-1] = (values[-1] - values[-2]) / dt
+    return derivatives
+
+
+def _merge_overlays(
+    base: list[TelemetryRecord],
+    overlays: Sequence[TelemetryRecord],
+    *,
+    tolerance: float,
+) -> list[TelemetryRecord]:
+    """Return ``base`` enriched with values from ``overlays`` within ``tolerance`` seconds."""
+
+    if not overlays:
+        return base
+
+    overlay_sorted = sorted(overlays, key=lambda record: getattr(record, "timestamp", 0.0))
+    pointer = 0
+    total = len(overlay_sorted)
+    if total == 0:
+        return base
+
+    enriched: list[TelemetryRecord] = []
+    excluded = {
+        "timestamp",
+        "structural_timestamp",
+        "lap",
+        "reference",
+        "car_model",
+        "track_name",
+        "tyre_compound",
+    }
+
+    for record in base:
+        timestamp = getattr(record, "timestamp", 0.0)
+        while pointer + 1 < total and overlay_sorted[pointer + 1].timestamp <= timestamp:
+            pointer += 1
+
+        candidates = [overlay_sorted[pointer]]
+        if pointer + 1 < total:
+            candidates.append(overlay_sorted[pointer + 1])
+
+        best: TelemetryRecord | None = None
+        best_delta = tolerance
+        for candidate in candidates:
+            delta = abs(candidate.timestamp - timestamp)
+            if delta <= best_delta:
+                best_delta = delta
+                best = candidate
+
+        if best is None:
+            enriched.append(record)
+            continue
+
+        updates: dict[str, object] = {}
+        for name, field in TelemetryRecord.__dataclass_fields__.items():
+            if name in excluded:
+                continue
+            base_value = getattr(record, name)
+            if not isinstance(base_value, float) or math.isfinite(base_value):
+                continue
+            overlay_value = getattr(best, name, math.nan)
+            if isinstance(overlay_value, float) and math.isfinite(overlay_value):
+                updates[name] = overlay_value
+
+        if updates:
+            enriched.append(replace(record, **updates))
+        else:
+            enriched.append(record)
+
+    return enriched
 
 
 def read_raf(path: Path | str) -> RafFile:
@@ -178,9 +295,25 @@ def read_raf(path: Path | str) -> RafFile:
 
 
 def raf_to_telemetry_records(
-    raf: RafFile, *, metadata: Mapping[str, object] | None = None
+    raf: RafFile,
+    *,
+    metadata: Mapping[str, object] | None = None,
+    overlays: Sequence[TelemetryRecord] | None = None,
 ) -> list[TelemetryRecord]:
-    """Convert a parsed RAF file to :class:`TelemetryRecord` samples."""
+    """Convert a parsed RAF file to :class:`TelemetryRecord` samples.
+
+    Parameters
+    ----------
+    raf:
+        Parsed RAF capture produced by :func:`read_raf`.
+    metadata:
+        Optional mapping with metadata hints such as the tyre compound label.
+    overlays:
+        Optional sequence of :class:`TelemetryRecord` instances sourced from
+        OutSim/OutGauge captures or replay CSV bundles.  The overlay samples are
+        matched by timestamp and used to populate missing fields (for example
+        :attr:`TelemetryRecord.nfr` or :attr:`TelemetryRecord.si`).
+    """
 
     wheel_order = _resolve_wheel_order(raf.wheels)
     interval = raf.header.interval_seconds
@@ -188,8 +321,12 @@ def raf_to_telemetry_records(
     wheelbase = raf.car.wheelbase if raf.car.wheelbase else math.nan
     tyre_compound = normalise_compound_label(resolve_compound_metadata(metadata))
 
+    yaw_angles = [frame.yaw for frame in raf.frames]
+    unwrapped_yaw = _unwrap_angles(yaw_angles)
+    yaw_rates = _compute_derivative(unwrapped_yaw, interval)
+
     records: list[TelemetryRecord] = []
-    for frame in raf.frames:
+    for index, frame in enumerate(raf.frames):
         timestamp = frame.index * interval
 
         wheel_data: dict[str, RafWheelFrame] = {
@@ -222,24 +359,27 @@ def raf_to_telemetry_records(
         car_model = raf.header.car_model or None
         track_name = raf.header.track_name or None
 
+        yaw_angle = yaw_angles[index]
+        yaw_rate = yaw_rates[index] if index < len(yaw_rates) else math.nan
+
         record = TelemetryRecord(
             timestamp=timestamp,
             vertical_load=total_vertical_load,
             slip_ratio=slip_ratio,
             lateral_accel=math.nan,
             longitudinal_accel=math.nan,
-            yaw=math.nan,
+            yaw=yaw_angle,
             pitch=frame.pitch,
-            roll=math.nan,
+            roll=frame.roll,
             brake_pressure=math.nan,
             locking=math.nan,
             nfr=math.nan,
             si=math.nan,
             speed=frame.speed,
-            yaw_rate=math.nan,
+            yaw_rate=yaw_rate,
             slip_angle=slip_angle,
-            steer=math.nan,
-            throttle=math.nan,
+            steer=frame.steer_input,
+            throttle=frame.throttle_input,
             gear=frame.gear or 0,
             vertical_load_front=front_vertical_load,
             vertical_load_rear=rear_vertical_load,
@@ -293,7 +433,18 @@ def raf_to_telemetry_records(
             tyre_compound=tyre_compound,
         )
 
-        records.append(record)
+        records.append(
+            replace(
+                record,
+                brake_input=frame.brake_input,
+                clutch_input=frame.clutch_input,
+                handbrake_input=frame.handbrake_input,
+                steer_input=frame.steer_input,
+            )
+        )
+
+    if overlays:
+        records = _merge_overlays(records, overlays, tolerance=interval * 1.5)
 
     return records
 
@@ -438,7 +589,15 @@ def _parse_frames(
         if len(data) != metadata.frame_size:
             raise ValueError("RAF frame %d truncated" % index)
 
-        pitch = _F32.unpack_from(data, 8)[0]
+        throttle = _F32.unpack_from(data, 0)[0]
+        brake = _F32.unpack_from(data, 4)[0]
+        steer_input = _F32.unpack_from(data, 8)[0]
+        clutch = _F32.unpack_from(data, 12)[0]
+        handbrake = _F32.unpack_from(data, 16)[0]
+
+        roll = _decode_angle_pair(data, 52)
+        yaw = _decode_angle_pair(data, 56)
+        pitch = _decode_angle_pair(data, 60)
         speed = _F32.unpack_from(data, 24)[0]
         pos_x = _I32.unpack_from(data, 32)[0] / 65536.0
         pos_y = _I32.unpack_from(data, 36)[0] / 65536.0
@@ -484,7 +643,14 @@ def _parse_frames(
                 distance=distance,
                 engine_rpm=engine_rpm,
                 gear=gear,
+                yaw=yaw,
                 pitch=pitch,
+                roll=roll,
+                throttle_input=throttle,
+                brake_input=brake,
+                clutch_input=clutch,
+                handbrake_input=handbrake,
+                steer_input=steer_input,
                 wheels=tuple(wheel_frames),
             )
         )
