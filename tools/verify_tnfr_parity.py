@@ -57,47 +57,47 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "data_path",
         type=Path,
-        help="Ruta al fichero con las muestras de telemetría (CSV, JSON o JSONL).",
+        help="Path to the telemetry samples file (CSV, JSON, or JSONL).",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        help="Escribe el informe JSON en la ruta indicada (stdout por defecto).",
+        help="Write the JSON report to the given path (stdout by default).",
     )
     parser.add_argument(
         "--epi-rel-tol",
         type=float,
         default=_DEFAULT_REL_TOLERANCES["epi"],
-        help="Tolerancia relativa para la métrica EPI (por defecto: %(default)s).",
+        help="Relative tolerance for the EPI metric (default: %(default)s).",
     )
     parser.add_argument(
         "--delta-nfr-rel-tol",
         type=float,
         default=_DEFAULT_REL_TOLERANCES["delta_nfr"],
-        help="Tolerancia relativa para ΔNFR (por defecto: %(default)s).",
+        help="Relative tolerance for ΔNFR (default: %(default)s).",
     )
     parser.add_argument(
         "--sense-index-rel-tol",
         type=float,
         default=_DEFAULT_REL_TOLERANCES["sense_index"],
-        help="Tolerancia relativa para Sense Index (por defecto: %(default)s).",
+        help="Relative tolerance for Sense Index (default: %(default)s).",
     )
     parser.add_argument(
         "--nu-f-rel-tol",
         type=float,
         default=_DEFAULT_REL_TOLERANCES["nu_f"],
-        help="Tolerancia relativa para ν_f (por defecto: %(default)s).",
+        help="Relative tolerance for ν_f (default: %(default)s).",
     )
     parser.add_argument(
         "--phase-alignment-rel-tol",
         type=float,
         default=_DEFAULT_REL_TOLERANCES["phase_alignment"],
-        help="Tolerancia relativa para la alineación de fases (por defecto: %(default)s).",
+        help="Relative tolerance for phase alignment (default: %(default)s).",
     )
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Devuelve código de salida 1 si alguna métrica supera su tolerancia.",
+        help="Return exit code 1 if any metric exceeds its tolerance.",
     )
     return parser.parse_args()
 
@@ -116,7 +116,7 @@ def _load_tnfr_core(canonical_flag: str) -> Any:
         return importlib.import_module("tnfr_core")
     except ImportError as exc:  # pragma: no cover - runtime guard
         raise RuntimeError(
-            "No se pudo importar tnfr_core; instale el extra canónico 'tnfr'."
+            "Failed to import tnfr_core; install the canonical 'tnfr' extra."
         ) from exc
     finally:
         if original is None:
@@ -154,7 +154,7 @@ def _load_samples(
     data_path: Path, field_types: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
     if not data_path.exists():  # pragma: no cover - CLI guard
-        raise FileNotFoundError(f"No se encontró el fichero de datos: {data_path}")
+        raise FileNotFoundError(f"Data file not found: {data_path}")
 
     suffix = data_path.suffix.lower()
     if suffix == ".csv":
@@ -194,7 +194,7 @@ def _load_samples(
     if suffix == ".json":
         payload = json.loads(data_path.read_text(encoding="utf8"))
         if not isinstance(payload, list):  # pragma: no cover - guard rail
-            raise ValueError("El JSON debe contener una lista de muestras.")
+            raise ValueError("The JSON payload must contain a list of samples.")
         result: list[dict[str, Any]] = []
         for sample in payload:
             entry: dict[str, Any] = {}
@@ -206,7 +206,7 @@ def _load_samples(
         return result
 
     raise ValueError(
-        "Formato de datos no soportado. Use CSV, JSON o JSONL con cabeceras válidas."
+        "Unsupported data format. Use CSV, JSON, or JSONL with valid headers."
     )
 
 
