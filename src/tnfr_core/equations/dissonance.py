@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from math import isfinite
 from typing import Sequence, Tuple
+
+import numpy as np
+
+try:  # pragma: no cover - exercised when JAX is unavailable
+    import jax.numpy as jnp  # type: ignore[import-not-found]
+except ModuleNotFoundError:  # pragma: no cover - exercised when JAX is available
+    jnp = None  # type: ignore[assignment]
 
 __all__ = [
     "YAW_ACCELERATION_THRESHOLD",
@@ -40,33 +46,38 @@ def compute_useful_dissonance_stats(
         "high yaw energy" event.
     """
 
-    useful_samples = 0
-    high_energy_samples = 0
+    xp = jnp if jnp is not None else np
 
-    length = min(len(timestamps), len(delta_series), len(yaw_rate_series))
+    timestamps_arr = xp.asarray(timestamps, dtype=xp.float64)
+    delta_arr = xp.asarray(delta_series, dtype=xp.float64)
+    yaw_rate_arr = xp.asarray(yaw_rate_series, dtype=xp.float64)
+
+    length = int(
+        min(timestamps_arr.shape[0], delta_arr.shape[0], yaw_rate_arr.shape[0])
+    )
     if length < 2:
-        return useful_samples, high_energy_samples, 0.0
+        return 0, 0, 0.0
 
-    for index in range(1, length):
-        prev_time = timestamps[index - 1]
-        current_time = timestamps[index]
-        dt = current_time - prev_time
-        if dt <= 0.0 or not isfinite(dt):
-            continue
+    timestamps_arr = timestamps_arr[:length]
+    delta_arr = delta_arr[:length]
+    yaw_rate_arr = yaw_rate_arr[:length]
 
-        delta_derivative = (delta_series[index] - delta_series[index - 1]) / dt
-        yaw_acceleration = (yaw_rate_series[index] - yaw_rate_series[index - 1]) / dt
+    dt = xp.diff(timestamps_arr)
+    if dt.size == 0:
+        return 0, 0, 0.0
 
-        if not (isfinite(delta_derivative) and isfinite(yaw_acceleration)):
-            continue
+    delta_derivative = xp.diff(delta_arr) / dt
+    yaw_acceleration = xp.diff(yaw_rate_arr) / dt
 
-        if abs(yaw_acceleration) < yaw_acc_threshold:
-            continue
+    valid_mask = xp.isfinite(dt) & (dt > 0.0)
+    valid_mask &= xp.isfinite(delta_derivative) & xp.isfinite(yaw_acceleration)
 
-        high_energy_samples += 1
-        if delta_derivative < 0.0:
-            useful_samples += 1
+    high_energy_mask = valid_mask & (xp.abs(yaw_acceleration) >= yaw_acc_threshold)
+    useful_mask = high_energy_mask & (delta_derivative < 0.0)
 
-    ratio = useful_samples / high_energy_samples if high_energy_samples else 0.0
+    high_energy_samples = int(xp.sum(high_energy_mask).item())
+    useful_samples = int(xp.sum(useful_mask).item())
+
+    ratio = float(useful_samples / high_energy_samples) if high_energy_samples else 0.0
     return useful_samples, high_energy_samples, ratio
 
