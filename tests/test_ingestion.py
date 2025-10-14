@@ -454,6 +454,8 @@ def test_outgauge_from_bytes_decodes_extended_tyre_payload(
     for value, expected in zip(packet.tyre_temps, expected_average):
         assert value == pytest.approx(expected)
 
+    assert packet.tyre_compound is None
+
     fusion = TelemetryFusion()
     record = fusion.fuse(extended_outsim_packet, packet)
 
@@ -498,6 +500,73 @@ def test_fusion_uses_outgauge_tyre_temperatures(
     assert record.tyre_temp_fr_outer == pytest.approx(outer[1])
     assert record.tyre_temp_rl_outer == pytest.approx(outer[2])
     assert record.tyre_temp_rr_outer == pytest.approx(outer[3])
+
+
+def test_fusion_sets_tyre_compound(
+    extended_outsim_packet: FrozenOutSimPacket,
+    sample_outgauge_packet: FrozenOutGaugePacket,
+) -> None:
+    fusion = TelemetryFusion()
+    enriched_packet = replace(sample_outgauge_packet, tyre_compound="R3")
+
+    record = fusion.fuse(extended_outsim_packet, enriched_packet)
+
+    assert record.tyre_compound == "R3"
+
+
+def test_outgauge_packet_extracts_tyre_compound_hint() -> None:
+    def _pad(value: str, size: int) -> bytes:
+        encoded = value.encode("latin-1")
+        if len(encoded) > size:
+            raise AssertionError("value too long for OutGauge field")
+        return encoded + b"\x00" * (size - len(encoded))
+
+    payload = struct.pack(
+        "<I4s16s8s6s6sHBBfffffffIIfff16s16sI",
+        1234,
+        _pad("XFG", 4),
+        _pad("Driver", 16),
+        _pad("321", 8),
+        _pad("BL1", 6),
+        _pad("", 6),
+        0,
+        3,
+        0,
+        30.0,
+        4500.0,
+        0.0,
+        85.0,
+        30.0,
+        3.5,
+        70.0,
+        0,
+        0,
+        0.5,
+        0.1,
+        0.02,
+        _pad("TYRE", 16),
+        _pad("R2", 16),
+        42,
+    )
+
+    packet = OutGaugePacket.from_bytes(payload, freeze=True)
+
+    assert packet.tyre_compound == "R2"
+
+
+def test_outgauge_client_applies_registered_tyre_compound() -> None:
+    client = OutGaugeUDPClient(port=0)
+    try:
+        client.update_tyre_compound("XFG", "R3")
+        packet = OutGaugePacket(car="XFG")
+        packet = client._apply_tyre_compound(packet)  # type: ignore[attr-defined]
+        assert packet.tyre_compound == "R3"
+
+        packet2 = OutGaugePacket(car="XFG", tyre_compound="R2")
+        packet2 = client._apply_tyre_compound(packet2)  # type: ignore[attr-defined]
+        assert packet2.tyre_compound == "R2"
+    finally:
+        client.close()
 
 
 def test_fusion_marks_missing_wheel_block_as_nan(

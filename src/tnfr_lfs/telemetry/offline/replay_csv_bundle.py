@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import MappingProxyType
 import math
+import json
 import zipfile
 
 from typing import TYPE_CHECKING, Any
@@ -13,6 +15,16 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from tnfr_core.equations.epi import TelemetryRecord
+from .._tyre_compound import (
+    merge_compound_sources,
+    normalise_compound_label,
+    resolve_compound_metadata,
+)
+
+try:  # Python 3.11+
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+    import tomli as tomllib  # type: ignore
 
 _KMH_TO_MS = 1000.0 / 3600.0
 _G_TO_MS2 = 9.80665
@@ -21,6 +33,14 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking only.
     import pandas as pd
 
 _PANDAS: Any | None = None
+_LABEL_FILES: tuple[str, ...] = (
+    "labels.json",
+    "labels.toml",
+    "metadata.json",
+    "metadata.toml",
+    "combo.json",
+    "combo.toml",
+)
 
 
 def _get_pandas() -> Any:
@@ -30,6 +50,20 @@ def _get_pandas() -> Any:
 
         _PANDAS = _pd
     return _PANDAS
+
+
+def _parse_labels_bytes(data: bytes, suffix: str) -> Mapping[str, object] | None:
+    suffix = suffix.lower()
+    try:
+        if suffix.endswith(".json"):
+            payload = json.loads(data.decode("utf8"))
+        elif suffix.endswith(".toml"):
+            payload = tomllib.loads(data.decode("utf8"))
+        else:
+            return None
+    except (UnicodeDecodeError, json.JSONDecodeError, tomllib.TOMLDecodeError):
+        return None
+    return payload if isinstance(payload, Mapping) else None
 
 
 def _is_finite(value: float) -> bool:
@@ -170,11 +204,14 @@ class ReplayCSVBundleReader:
 
     source: Path | str
     cache_size: int = 1
+    labels: Mapping[str, object] | str | Path | None = None
     _path: Path = field(init=False)
     _frame_cache: Any | None = field(init=False, default=None)
     _records_cache: tuple[int, list[TelemetryRecord]] | None = field(
         init=False, default=None
     )
+    _labels: Mapping[str, object] | None = field(init=False, default=None)
+    _tyre_compound: str | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         if isinstance(self.source, Path):
@@ -183,6 +220,19 @@ class ReplayCSVBundleReader:
             self._path = Path(self.source)
         if self.cache_size < 0:
             raise ValueError("cache_size must be non-negative")
+        labels_sources: list[Mapping[str, object] | None] = []
+        if isinstance(self.labels, Mapping):
+            labels_sources.append(self.labels)
+        elif isinstance(self.labels, (str, Path)):
+            labels_sources.append(self._load_labels_file(Path(self.labels)))
+        bundle_labels = self._load_bundle_labels()
+        if bundle_labels:
+            labels_sources.append(bundle_labels)
+        merged = merge_compound_sources(labels_sources)
+        self._labels = MappingProxyType(merged) if merged else None
+        self._tyre_compound = normalise_compound_label(
+            resolve_compound_metadata(self._labels)
+        )
 
     def clear_cache(self) -> None:
         """Invalidate cached dataframe and record representations."""
@@ -327,6 +377,36 @@ class ReplayCSVBundleReader:
 
         raise ValueError(f"Unsupported bundle path: {path}")
 
+    def _load_labels_file(self, path: Path) -> Mapping[str, object] | None:
+        try:
+            data = path.read_bytes()
+        except OSError:
+            return None
+        return _parse_labels_bytes(data, path.suffix.lower())
+
+    def _load_bundle_labels(self) -> Mapping[str, object] | None:
+        path = self._path
+        if path.is_dir():
+            for name in _LABEL_FILES:
+                payload = self._load_labels_file(path / name)
+                if payload:
+                    return payload
+            return None
+        if path.is_file() and path.suffix.lower() == ".zip":
+            try:
+                with zipfile.ZipFile(path) as archive:
+                    for name in _LABEL_FILES:
+                        try:
+                            with archive.open(name) as handle:
+                                payload = _parse_labels_bytes(handle.read(), name.lower())
+                        except KeyError:
+                            continue
+                        if payload:
+                            return payload
+            except OSError:
+                return None
+        return None
+
     def _row_to_record(
         self, row: Sequence[object], column_index: Mapping[str, int]
     ) -> TelemetryRecord:
@@ -422,7 +502,7 @@ class ReplayCSVBundleReader:
             suspension_velocity_rear=suspension_velocity_rear,
         )
 
-        optional_fields: dict[str, float] = {}
+        optional_fields: dict[str, object] = {}
         for column in (
             "brake_input",
             "clutch_input",
@@ -458,5 +538,8 @@ class ReplayCSVBundleReader:
         for column in slip_ratio_columns:
             if _has_column(column):
                 optional_fields[column] = _get_float(column)
+
+        if self._tyre_compound is not None:
+            optional_fields["tyre_compound"] = self._tyre_compound
 
         return replace(record, **optional_fields)

@@ -57,3 +57,11 @@ def test_raf_to_telemetry_records_exposes_wheel_data(_raf_sample):
     assert first.suspension_travel_front == pytest.approx(0.0124925393, rel=1e-6)
     assert math.isnan(first.tyre_temp_fl)
     assert math.isnan(first.tyre_temp_rr)
+
+
+def test_raf_to_telemetry_records_applies_metadata_compound(_raf_sample):
+    records = raf_to_telemetry_records(
+        _raf_sample, metadata={"tyre_compound": "R2"}
+    )
+
+    assert records[0].tyre_compound == "R2"

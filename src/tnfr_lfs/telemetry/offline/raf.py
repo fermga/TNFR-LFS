@@ -17,6 +17,7 @@ import struct
 from typing import BinaryIO, Mapping, Sequence
 
 from tnfr_core.equations.epi import TelemetryRecord
+from .._tyre_compound import normalise_compound_label, resolve_compound_metadata
 
 _MAGIC = b"LFSRAF"
 _U16 = struct.Struct("<H")
@@ -176,13 +177,16 @@ def read_raf(path: Path | str) -> RafFile:
     return RafFile(header=header, car=car_static, wheels=wheel_statics, frames=frames)
 
 
-def raf_to_telemetry_records(raf: RafFile) -> list[TelemetryRecord]:
+def raf_to_telemetry_records(
+    raf: RafFile, *, metadata: Mapping[str, object] | None = None
+) -> list[TelemetryRecord]:
     """Convert a parsed RAF file to :class:`TelemetryRecord` samples."""
 
     wheel_order = _resolve_wheel_order(raf.wheels)
     interval = raf.header.interval_seconds
     front_track_width = raf.car.front_track_width if raf.car.front_track_width else math.nan
     wheelbase = raf.car.wheelbase if raf.car.wheelbase else math.nan
+    tyre_compound = normalise_compound_label(resolve_compound_metadata(metadata))
 
     records: list[TelemetryRecord] = []
     for frame in raf.frames:
@@ -286,6 +290,7 @@ def raf_to_telemetry_records(raf: RafFile) -> list[TelemetryRecord]:
             structural_timestamp=timestamp,
             car_model=car_model,
             track_name=track_name,
+            tyre_compound=tyre_compound,
         )
 
         records.append(record)
