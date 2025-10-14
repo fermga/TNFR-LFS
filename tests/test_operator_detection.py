@@ -755,3 +755,101 @@ def test_detect_nav_coexists_with_existing_detectors() -> None:
     assert callable(detect_il)
     assert callable(detect_oz)
     assert callable(detect_silence)
+
+
+@dataclass
+class _SimpleILRecord:
+    timestamp: float
+    speed: float
+    line_deviation: float
+    car_model: str | None = None
+    track_name: str | None = None
+    tyre_compound: str | None = None
+    structural_timestamp: float | None = None
+
+
+def _configure_detection(monkeypatch: pytest.MonkeyPatch, config: Mapping[str, object]):
+    import tnfr_core.operators.operator_detection as module
+
+    monkeypatch.setattr(module, "load_detection_config", lambda: config)
+    module._load_detection_table.cache_clear()
+    return module
+
+
+def _build_il_records() -> list[_SimpleILRecord]:
+    values = [0.1, 0.12, 0.18, 0.5, 0.52, 0.15]
+    records: list[_SimpleILRecord] = []
+    for index, deviation in enumerate(values):
+        records.append(
+            _SimpleILRecord(
+                timestamp=float(index),
+                speed=50.0,
+                line_deviation=deviation,
+                car_model="XFG",
+                track_name="BL1",
+                tyre_compound="R2",
+            )
+        )
+    return records
+
+
+def test_detect_il_uses_detection_config_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _configure_detection(
+        monkeypatch,
+        {
+            "detect_il": {
+                "defaults": {
+                    "window": 5,
+                    "base_threshold": 0.35,
+                    "speed_gain": 0.012,
+                },
+                "tracks": {
+                    "BL1": {
+                        "defaults": {"window": 3, "base_threshold": 0.2},
+                    }
+                },
+                "cars": {
+                    "XFG": {
+                        "compounds": {
+                            "R2": {"speed_gain": 0.005},
+                        }
+                    }
+                },
+            }
+        },
+    )
+
+    events = module.detect_il(_build_il_records())
+    module._load_detection_table.cache_clear()
+    assert events, "expected IL event triggered by detection overrides"
+
+
+def test_detect_il_explicit_kwargs_override_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _configure_detection(
+        monkeypatch,
+        {
+            "detect_il": {
+                "defaults": {
+                    "window": 5,
+                    "base_threshold": 0.35,
+                    "speed_gain": 0.012,
+                },
+                "tracks": {
+                    "BL1": {
+                        "defaults": {"window": 3, "base_threshold": 0.2},
+                    }
+                },
+                "cars": {
+                    "XFG": {
+                        "compounds": {
+                            "R2": {"speed_gain": 0.005},
+                        }
+                    }
+                },
+            }
+        },
+    )
+
+    events = module.detect_il(_build_il_records(), base_threshold=0.7)
+    module._load_detection_table.cache_clear()
+    assert not events
