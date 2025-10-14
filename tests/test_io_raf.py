@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -55,6 +56,15 @@ def test_raf_to_telemetry_records_exposes_wheel_data(_raf_sample):
     assert first.wheel_load_fl == pytest.approx(3056.1862793, rel=1e-6)
     assert first.wheel_longitudinal_force_rr == pytest.approx(901.4348755, rel=1e-6)
     assert first.suspension_travel_front == pytest.approx(0.0124925393, rel=1e-6)
+    assert first.yaw == pytest.approx(1.4579492139, rel=1e-9)
+    assert first.yaw_rate == pytest.approx(-0.2869451539, rel=1e-6)
+    assert first.roll == pytest.approx(-0.0852550721, rel=1e-6)
+    assert first.pitch == pytest.approx(-0.0823374001, rel=1e-6)
+    assert first.steer == pytest.approx(-0.0184237491, rel=1e-6)
+    assert first.steer_input == pytest.approx(-0.0184237491, rel=1e-6)
+    assert first.throttle == pytest.approx(1.0, rel=1e-6)
+    assert first.brake_input == pytest.approx(0.0, rel=1e-6)
+    assert first.clutch_input == pytest.approx(0.0, rel=1e-6)
     assert math.isnan(first.tyre_temp_fl)
     assert math.isnan(first.tyre_temp_rr)
 
@@ -65,3 +75,14 @@ def test_raf_to_telemetry_records_applies_metadata_compound(_raf_sample):
     )
 
     assert records[0].tyre_compound == "R2"
+
+
+def test_raf_to_telemetry_records_accepts_overlays(_raf_sample):
+    base = raf_to_telemetry_records(_raf_sample)
+    first = base[0]
+    overlay = replace(first, nfr=321.0, si=0.42)
+
+    enriched = raf_to_telemetry_records(_raf_sample, overlays=[overlay])
+
+    assert enriched[0].nfr == pytest.approx(321.0, rel=1e-9)
+    assert enriched[0].si == pytest.approx(0.42, rel=1e-9)
