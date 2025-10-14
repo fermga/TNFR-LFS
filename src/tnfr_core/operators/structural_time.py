@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from typing import Mapping, Sequence
 
+import numpy as np
+
 from tnfr_core.operators.interfaces import SupportsTelemetrySample
 
 __all__ = ["compute_structural_timestamps", "resolve_time_axis"]
@@ -38,30 +40,37 @@ def _coerce_float(value: object) -> float | None:
 
 def _resolve_feature_series(
     records: Sequence[SupportsTelemetrySample], feature: str
-) -> list[float]:
+) -> np.ndarray:
     series: list[float] = []
     for record in records:
         numeric = _coerce_float(getattr(record, feature, 0.0))
         series.append(numeric if numeric is not None else 0.0)
-    return series
+    return np.asarray(series, dtype=float)
 
 
-def _normalised_derivative(series: Sequence[float]) -> list[float]:
-    derivatives = [0.0] * len(series)
-    for index in range(1, len(series)):
-        derivatives[index] = abs(series[index] - series[index - 1])
-    peak = max(derivatives) if derivatives else 0.0
+def _normalised_derivative(series: Sequence[float]) -> np.ndarray:
+    values = np.asarray(series, dtype=float)
+    if values.size == 0:
+        return values
+    derivatives = np.zeros_like(values)
+    if values.size > 1:
+        derivatives[1:] = np.abs(np.diff(values))
+    peak = float(np.max(derivatives)) if derivatives.size else 0.0
     if peak <= 1e-9:
         return derivatives
-    return [value / peak for value in derivatives]
+    return derivatives / peak
 
 
-def _window_average(values: Sequence[float], index: int, window_size: int) -> float:
-    start = max(0, index - window_size + 1)
-    window = values[start : index + 1]
-    if not window:
-        return 0.0
-    return sum(window) / len(window)
+def _moving_average(values: Sequence[float], window_size: int) -> np.ndarray:
+    arr = np.asarray(values, dtype=float)
+    if arr.size == 0:
+        return arr
+    if window_size <= 0:
+        raise ValueError("window_size must be positive")
+    kernel = np.ones(window_size, dtype=float)
+    sums = np.convolve(arr, kernel, mode="full")[: arr.size]
+    counts = np.minimum(np.arange(1, arr.size + 1, dtype=float), float(window_size))
+    return sums / counts
 
 
 def compute_structural_timestamps(
@@ -90,17 +99,18 @@ def compute_structural_timestamps(
     features = tuple(DEFAULT_STRUCTURAL_WEIGHTS)
 
     series_map = {feature: _resolve_feature_series(records, feature) for feature in features}
-    derivative_map = {feature: _normalised_derivative(values) for feature, values in series_map.items()}
-
-    densities: list[float] = []
-    for index in range(len(records)):
-        density = 0.0
-        for feature in features:
-            derivative = derivative_map[feature]
-            if not derivative:
-                continue
-            density += weight_profile.get(feature, 0.0) * _window_average(derivative, index, window_size)
-        densities.append(min(density, 5.0))
+    derivative_matrix = np.stack(
+        [_normalised_derivative(series_map[feature]) for feature in features],
+        axis=0,
+    )
+    averages = np.stack(
+        [_moving_average(derivative_matrix[index], window_size) for index in range(len(features))],
+        axis=0,
+    )
+    weights_vector = np.asarray(
+        [weight_profile.get(feature, 0.0) for feature in features], dtype=float
+    )
+    densities = np.minimum(averages.T @ weights_vector, 5.0)
 
     first_record = records[0]
     base = _coerce_float(base_timestamp)
@@ -111,17 +121,16 @@ def compute_structural_timestamps(
     if base is None:
         base = 0.0
 
-    structural_timestamps = [base]
-    for index in range(1, len(records)):
-        previous = records[index - 1]
-        current = records[index]
-        chronological_dt = _coerce_float(current.timestamp) or 0.0
-        chronological_prev = _coerce_float(previous.timestamp) or 0.0
-        dt = max(0.0, chronological_dt - chronological_prev)
-        increment = dt * (1.0 + densities[index])
-        structural_timestamps.append(structural_timestamps[-1] + increment)
+    chronological = np.asarray(
+        [(_coerce_float(getattr(record, "timestamp", None)) or 0.0) for record in records],
+        dtype=float,
+    )
+    deltas = np.diff(chronological, prepend=chronological[:1])
+    deltas = np.maximum(deltas, 0.0)
+    increments = deltas * (1.0 + densities)
+    structural = base + np.cumsum(increments)
 
-    return structural_timestamps
+    return structural.tolist()
 
 
 def resolve_time_axis(
