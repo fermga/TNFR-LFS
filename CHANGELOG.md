@@ -1,5 +1,101 @@
 # CHANGELOG
 
+## v0.5.0 (2025-10-14)
+
+### Feature
+
+* feat: support JSONL labels in calibration ([`0d7c8e7`](https://github.com/fermga/TNFR-LFS/commit/0d7c8e7b9fb6861f734b8bc6a43b8f39cd62c658))
+
+### Unknown
+
+* Merge pull request #614 from fermga/codex/add-.jsonl-support-to-loader_map
+
+feat: support JSONL labels in calibration ([`7af1991`](https://github.com/fermga/TNFR-LFS/commit/7af1991ba91f754310a0cb2b4d4a768f02d04513))
+
+* Merge pull request #613 from fermga/codex/refactor-operator_detection.py-for-vectorization
+
+Vectorize EN detection metrics ([`5d85487`](https://github.com/fermga/TNFR-LFS/commit/5d85487da36d38f00689232c4ec45e952d19d7d1))
+
+* Vectorize EN detection metrics ([`0dca4b7`](https://github.com/fermga/TNFR-LFS/commit/0dca4b7e8a96c4bdd0ac17e4369b905979ea0e59))
+
+* Merge pull request #612 from fermga/codex/add-tools/calibrate_detectors.py-module
+
+Add detector calibration CLI ([`66e3984`](https://github.com/fermga/TNFR-LFS/commit/66e3984b73939296bfd8caf26fb502806d95ce01))
+
+* Add detector calibration CLI ([`13b36ef`](https://github.com/fermga/TNFR-LFS/commit/13b36ef0b6c2e12bb0cfe64950309207794faf1f))
+
+* Merge pull request #611 from fermga/codex/refactor-operators.py-to-use-arrays
+
+Vectorize tyre balance controller computations ([`2362bec`](https://github.com/fermga/TNFR-LFS/commit/2362beca3d2d6889a55e2764bc14c9a888a995fc))
+
+* Vectorize tyre balance controller calculations ([`71097db`](https://github.com/fermga/TNFR-LFS/commit/71097db316bb5de8a371b734322b07c228151559))
+
+* Merge pull request #610 from fermga/codex/update-dissonance_operator-in-operators.py
+
+Vectorize dissonance operator computations ([`96cb91d`](https://github.com/fermga/TNFR-LFS/commit/96cb91da7c67433b096f2a57ba99a2f97156366c))
+
+* Vectorize dissonance operator and align tests ([`7d3b9c7`](https://github.com/fermga/TNFR-LFS/commit/7d3b9c732e70976634e93da3c6afcd0c1e203827))
+
+* Merge pull request #609 from fermga/codex/refactorizar-operadores-en-structural_time.py
+
+Vectorize structural time computation ([`2c8af6c`](https://github.com/fermga/TNFR-LFS/commit/2c8af6c0632e8fd9f77bd588942ed6f9b660dfeb))
+
+* Vectorize structural time computation ([`cd43813`](https://github.com/fermga/TNFR-LFS/commit/cd43813f03edc6d19aeb56d47a32f90a7115bdbc))
+
+* Merge pull request #608 from fermga/codex/convertir-series-a-numpy-y-optimizar-calculos
+
+Vectorize coupling operators and extend coverage ([`c8ce85c`](https://github.com/fermga/TNFR-LFS/commit/c8ce85c10488a3a06f50540fb575bcdb2af2775b))
+
+* Vectorize coupling operators and extend tests ([`a77c9db`](https://github.com/fermga/TNFR-LFS/commit/a77c9dba81ca977cc712f584a479b2762f3b17c4))
+
+* Merge pull request #607 from fermga/codex/add-numpy-support-and-update-coherence_operator
+
+Vectorize coherence operator and extend tests ([`3178fe6`](https://github.com/fermga/TNFR-LFS/commit/3178fe63e476dfb5e44ef328618b8377bf22f2ae))
+
+* Vectorize coherence operator and extend tests ([`1be903c`](https://github.com/fermga/TNFR-LFS/commit/1be903c944d9b19a3fd8df613d7aab635488efb7))
+
+* Merge pull request #606 from fermga/codex/update-conflict-resolution-section
+
+Document detection override precedence ([`af12c3f`](https://github.com/fermga/TNFR-LFS/commit/af12c3f8f22110dca1bf7eaf051e63287fb55cc7))
+
+* Document detection override precedence ([`d553ddb`](https://github.com/fermga/TNFR-LFS/commit/d553ddb24314887575dd88a769e3c9759fc5478e))
+
+* Merge pull request #605 from fermga/codex/update-documentation-for-tnfr_core.config.loader
+
+Clarify detection loader extension plan ([`ad6efba`](https://github.com/fermga/TNFR-LFS/commit/ad6efba20107b9fe5365b8c35fe902213e2e4032))
+
+* Clarify detection loader extension plan ([`4f05a73`](https://github.com/fermga/TNFR-LFS/commit/4f05a73080193cd16de88b0bbbfb8a33e724212a))
+
+* Merge pull request #604 from fermga/codex/actualizar-implementacion-de-calibradores-y-documentacion
+
+Document detection calibration hand-off path ([`549185b`](https://github.com/fermga/TNFR-LFS/commit/549185b949deb6d2b365dc1c6141ab76ae76d832))
+
+* Align detection calibrator hand-off with loader hierarchy ([`0f9e0d4`](https://github.com/fermga/TNFR-LFS/commit/0f9e0d4ac9c68f0baafefe572a149bd9ad742dbe))
+
+* Merge pull request #603 from fermga/codex/add-support-for-classes-in-get_params
+
+Add class merge support to detection loader ([`cdb7f8d`](https://github.com/fermga/TNFR-LFS/commit/cdb7f8dd19f8253258352b5a46a74ed97e603d83))
+
+* Add class merge support to detection loader ([`389a50a`](https://github.com/fermga/TNFR-LFS/commit/389a50a5d0c22b44c3f4419873b062f07a7c83b3))
+
+* Merge pull request #602 from fermga/codex/review-loader.py-for-current-functionality
+
+Document detection config loader extension plan ([`119ece3`](https://github.com/fermga/TNFR-LFS/commit/119ece3d8c05cb108f4dc2c292e04e8025adb210))
+
+* Document detection config loader extension plan ([`9ea8cc7`](https://github.com/fermga/TNFR-LFS/commit/9ea8cc72fc54231a2736457cd135a4000209f5cf))
+
+* Merge pull request #601 from fermga/codex/relocate-detection.yaml-and-update-config-loader
+
+Bundle detection config and loader search ([`8be6b01`](https://github.com/fermga/TNFR-LFS/commit/8be6b011f871bdae30324273e41e1957be242cb6))
+
+* Bundle detection config and loader search ([`f3578c8`](https://github.com/fermga/TNFR-LFS/commit/f3578c80b8187e6186e2f620b74d14e3e9b89b26))
+
+* Merge pull request #600 from fermga/codex/audit-raf-specification-for-dynamics
+
+Decode steering and yaw dynamics from RAF captures ([`6dca445`](https://github.com/fermga/TNFR-LFS/commit/6dca4454296aa95d9c4ce15a299f7778295933c8))
+
+* Decode steering and yaw dynamics from RAF captures ([`e4268ce`](https://github.com/fermga/TNFR-LFS/commit/e4268ced286cab9f5fb2291f608d2a9581975511))
+
 ## v0.4.0 (2025-10-14)
 
 ### Chore
