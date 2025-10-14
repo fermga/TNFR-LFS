@@ -12,39 +12,40 @@ telemetry and recommendation workflow for Live for Speed.
 - [Examples gallery](docs/examples.md) – automation scripts for common
   engineering tasks.
 
-## Alineación TNFR
-La teoría operativa expone trece operadores estructurales; cada uno responde a
-un código abreviado que se transforma en su etiqueta canónica mediante
-`canonical_operator_label`:
+## TNFR alignment
+The operational theory defines thirteen structural operators; each one is
+addressed through a short code that `canonical_operator_label` expands into its
+canonical tag:
 
-| Código | Etiqueta canónica      | Descripción resumida |
-| ------ | ---------------------- | -------------------- |
-| `AL`   | Support                | Ajusta soportes y refuerzos estructurales. |
-| `EN`   | Reception              | Normaliza los paquetes EPI entrantes. |
-| `IL`   | Coherence              | Suaviza series sin perder promedio. |
-| `NAV`  | Transition             | Sincroniza transiciones entre fases. |
-| `NUL`  | Contraction            | Gestiona la contracción estructural. |
-| `OZ`   | Dissonance             | Aísla desviaciones ΔNFR útiles frente a parásitas. |
-| `RA`   | Propagation            | Propaga ajustes nodales avalando la resonancia. |
-| `REMESH` | Remeshing            | Re-malla el grafo nodal para detectar discontinuidades. |
-| `SILENCE` | Structural silence  | Marca las ventanas sin excitación estructural. |
-| `THOL` | Auto-organisation      | Observa la autoorganización durante cambios de régimen. |
-| `UM`   | Coupling               | Evalúa el acoplamiento entre nodos. |
-| `VAL`  | Amplification          | Identifica dónde amplificar soportes. |
-| `ZHIR` | Transformation         | Traza mutaciones profundas del arquetipo. |
+| Code | Canonical label          | Summary |
+| ---- | ------------------------ | ------- |
+| `AL`   | Support                | Tunes structural supports and reinforcements. |
+| `EN`   | Reception              | Normalises incoming EPI packets. |
+| `IL`   | Coherence              | Smooths series without altering their mean. |
+| `NAV`  | Transition             | Keeps phase transitions in sync. |
+| `NUL`  | Contraction            | Manages structural contraction. |
+| `OZ`   | Dissonance             | Isolates useful ΔNFR deviations from parasitic noise. |
+| `RA`   | Propagation            | Propagates nodal adjustments to preserve resonance. |
+| `REMESH` | Remeshing            | Re-meshes the nodal graph to detect discontinuities. |
+| `SILENCE` | Structural silence  | Marks windows with no structural excitation. |
+| `THOL` | Auto-organisation      | Observes self-organisation during regime changes. |
+| `UM`   | Coupling               | Evaluates coupling between nodes. |
+| `VAL`  | Amplification          | Highlights where to amplify structural supports. |
+| `ZHIR` | Transformation         | Traces deep archetype mutations. |
 
-La ecuación nodal extendida evalúa el índice de sentido penalizado por entropía
-incorporando el gradiente ΔNFR y las frecuencias naturales de cada nodo:
+The extended nodal equation evaluates the entropy-penalised Sense Index by
+incorporating the ΔNFR gradient and each node’s natural frequency:
 
 ```
 Sense Index = 1 / (1 + Σ w_i · |ΔNFR_i| · g(ν_f_i)) - λ · H
 ```
 
-* `w_i` pondera cada nodo según su rol estructural.
-* `g(ν_f_i)` corrige la respuesta por la frecuencia natural observada.
-* `H` resume la entropía de la distribución ΔNFR nodal.
+* `w_i` weights each node according to its structural role.
+* `g(ν_f_i)` adjusts the response using the observed natural frequency.
+* `H` captures the entropy of the nodal ΔNFR distribution.
 
-Nuevas métricas estructurales disponibles en la interfaz pública:
+New structural metrics exposed by the public interface maintain the terminology
+documented in `docs/DESIGN.md` and the API reference:
 
 - `support_effective`, `load_support_ratio`.
 - `structural_expansion_longitudinal` / `structural_contraction_longitudinal`.
@@ -53,26 +54,25 @@ Nuevas métricas estructurales disponibles en la interfaz pública:
 - `thermal_load`, `style_index`, `network_memory`.
 - `aero_balance_drift`, `slide_catch_budget`, `ackermann_parallel_index`.
 
-El informe de cobertura teórica se genera con:
+Generate the theoretical coverage report with:
 
 ```
 poetry run python tools/tnfr_theory_audit.py --core --tests --output tests/_report/theory_impl_matrix.md
 ```
 
-Una vez generado, puede consultarse en
+Once generated, review it in
 [`tests/_report/theory_impl_matrix.md`](tests/_report/theory_impl_matrix.md).
 
-## Verificación de paridad TNFR
+## TNFR parity verification
 
-Para comparar la implementación local del motor TNFR con el extra canónico
-instalado, utilice el verificador de paridad. El script analiza una serie de
-telemetría, ejecuta ambos motores y genera un informe JSON con los valores
-absolutos y las diferencias relativas observadas::
+Use the parity verifier to compare the local TNFR engine against the canonical
+extension. The script ingests a telemetry series, runs both engines, and
+emits a JSON report with absolute values and relative differences:
 
 ```
 poetry run python tools/verify_tnfr_parity.py tests/data/synthetic_stint.csv --output parity_report.json
 ```
 
-El mismo flujo está disponible a través del objetivo `make verify-tnfr-parity`,
-que activa el modo estricto y finaliza con código de salida distinto de cero si
-alguna métrica supera las tolerancias configuradas.
+The same workflow is available via the `make verify-tnfr-parity` target, which
+enables strict mode and exits with a non-zero status when any metric exceeds the
+configured tolerances.
