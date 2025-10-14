@@ -394,7 +394,10 @@ def dissonance_operator(series: Sequence[float], target: float) -> float:
 
     if not series:
         return 0.0
-    return mean(abs(value - target) for value in series)
+    xp = jnp if jnp is not None else np
+    array = xp.asarray(series, dtype=xp.float64)
+    differences = xp.abs(array - target)
+    return float(xp.mean(differences))
 
 
 def dissonance_breakdown_operator(
