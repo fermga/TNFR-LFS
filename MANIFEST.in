@@ -1,3 +1,4 @@
 recursive-include src/tnfr_lfs/resources/data *
 recursive-include src/tnfr_lfs/resources/config *
 recursive-include src/tnfr_lfs/resources/modifiers *
+include CHANGELOG.md

@@ -57,6 +57,7 @@ Homepage = "https://github.com/fermga/TNFR-LFS"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.dynamic]
 version = { attr = "tnfr_lfs._version.__version__" }
