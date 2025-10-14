@@ -2200,6 +2200,9 @@ class PhaseDeltaDeviationRule:
             event_summary: str | None = None
             bias_direction: str | None = None
             worst_ratio: float = 0.0
+            trigger_label, _ = _operator_trigger(microsector, goal.phase)
+            if not trigger_label:
+                trigger_label = self.operator_label
             if phase_key == "entry":
                 event_summary, bias_direction, worst_ratio = _brake_event_summary(
                     microsector
@@ -2233,6 +2236,7 @@ class PhaseDeltaDeviationRule:
                         priority=self.priority - 1,
                         reference_key=self.reference_key,
                         node=alignment_node,
+                        triggered_by=trigger_label,
                     )
                     geometry_actions_map = _merge_recommendations_by_parameter(
                         geometry_actions_map, alignment_actions
@@ -2257,6 +2261,7 @@ class PhaseDeltaDeviationRule:
                         priority=self.priority - 1,
                         reference_key=self.reference_key,
                         node=synchrony_node,
+                        triggered_by=trigger_label,
                     )
                     geometry_actions_map = _merge_recommendations_by_parameter(
                         geometry_actions_map, synchrony_actions
@@ -2279,6 +2284,7 @@ class PhaseDeltaDeviationRule:
                         priority=self.priority - 1,
                         reference_key=self.reference_key,
                         node=lag_node,
+                        triggered_by=trigger_label,
                     )
                     geometry_actions_map = _merge_recommendations_by_parameter(
                         geometry_actions_map, lag_actions
@@ -2301,6 +2307,7 @@ class PhaseDeltaDeviationRule:
                         priority=self.priority - 1,
                         reference_key=self.reference_key,
                         node=coherence_node,
+                        triggered_by=trigger_label,
                     )
                     geometry_actions_map = _merge_recommendations_by_parameter(
                         geometry_actions_map, coherence_actions
@@ -2360,6 +2367,7 @@ class PhaseDeltaDeviationRule:
                                 priority=self.priority - 2,
                                 reference_key=self.reference_key,
                                 node="suspension",
+                                triggered_by=trigger_label,
                             )
                             desired_parameter = (
                                 "rear_spring_stiffness" if phase_key == "exit" else "front_spring_stiffness"
@@ -2382,6 +2390,7 @@ class PhaseDeltaDeviationRule:
                     priority=self.priority,
                     reference_key=self.reference_key,
                     gradient=getattr(goal, "track_gradient", None),
+                    triggered_by=trigger_label,
                 )
             if adjustments and phase_key == "entry":
                 for recommendation in adjustments:
@@ -2427,6 +2436,8 @@ class PhaseDeltaDeviationRule:
                         message=summary_message,
                         rationale=summary_rationale,
                         priority=self.priority + 40,
+                        metric="delta_nfr",
+                        triggered_by=trigger_label,
                     )
                 )
 
@@ -2467,6 +2478,8 @@ class PhaseDeltaDeviationRule:
                             message=focus_message,
                             rationale=f"{focus_rationale} Refer to {MANUAL_REFERENCES[focus_reference]}.",
                             priority=min(self.priority - 2, self.priority - geometry_urgency),
+                            metric="phase_alignment",
+                            triggered_by=trigger_label,
                         )
                     )
                     for rec in recommendations[start_index:]:
@@ -2492,6 +2505,7 @@ class PhaseDeltaDeviationRule:
                             base_rationale=f"{base_rationale} {si_rationale}",
                             priority=self.priority + 5,
                             reference_key=self.reference_key,
+                            triggered_by=trigger_label,
                         )
                     )
             _apply_priority_scale(recommendations[start_index:], priority_scale)
