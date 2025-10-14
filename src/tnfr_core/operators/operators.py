@@ -1871,20 +1871,34 @@ def _variance_payload(values: Sequence[float]) -> Dict[str, float]:
 def _delta_integral_series(
     bundles: Sequence[SupportsEPIBundle], sample_indices: Sequence[int]
 ) -> List[float]:
-    integrals: List[float] = []
     if not bundles or not sample_indices:
-        return integrals
-    timestamps = [float(bundles[idx].timestamp) for idx in sample_indices]
-    for pos, idx in enumerate(sample_indices):
-        dt = 0.0
-        if pos + 1 < len(sample_indices):
-            dt = max(0.0, timestamps[pos + 1] - timestamps[pos])
-        elif pos > 0:
-            dt = max(0.0, timestamps[pos] - timestamps[pos - 1])
-        if dt <= 0.0:
-            dt = 1.0
-        integrals.append(abs(float(bundles[idx].delta_nfr)) * dt)
-    return integrals
+        return []
+
+    xp = jnp if _HAS_JAX else np
+    timestamps = xp.asarray([float(bundles[idx].timestamp) for idx in sample_indices], dtype=float)
+    delta_nfr = xp.asarray([float(bundles[idx].delta_nfr) for idx in sample_indices], dtype=float)
+
+    forward_dt = xp.diff(timestamps)
+    forward_dt = xp.concatenate(
+        (forward_dt, xp.zeros((1,), dtype=timestamps.dtype)),
+        axis=0,
+    )
+    backward_dt = xp.diff(timestamps)
+    backward_dt = xp.concatenate(
+        (xp.zeros((1,), dtype=timestamps.dtype), backward_dt),
+        axis=0,
+    )
+
+    forward_dt = xp.maximum(forward_dt, 0.0)
+    backward_dt = xp.maximum(backward_dt, 0.0)
+
+    positions = xp.arange(len(sample_indices))
+    use_forward = positions < len(sample_indices) - 1
+    dt = xp.where(use_forward, forward_dt, backward_dt)
+    dt = xp.where(dt <= 0.0, 1.0, dt)
+
+    integrals = xp.abs(delta_nfr) * dt
+    return np.asarray(integrals, dtype=float).tolist()
 
 
 def _microsector_cphi_values(microsector: SupportsMicrosector) -> List[float]:
