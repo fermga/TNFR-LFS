@@ -15,9 +15,13 @@ from tools.calibrate_detectors import (
     MicrosectorSample,
     ParameterSet,
     _evaluate_detector,
+    _filter_samples,
     _materialise_best_params,
     _load_labels,
+    _normalise_car_identifier,
+    _normalise_compound_token,
     _normalise_operator_labels,
+    _normalise_track_identifier,
     normalize_structural_operator_identifier,
     _group_combinations,
     calibrate_detectors,
@@ -35,6 +39,10 @@ def test_load_labels_jsonl(tmp_path: Path) -> None:
         {
             "id": "capture-a",
             "raf": "capture_a.raf",
+            "track": "Kyoto National ",
+            "car": "xFg",
+            "car_class": "Std",
+            "compound": "R2",
             "microsectors": [
                 {"index": 1, "operators": {"operator.alpha": True}},
                 {"index": 2, "operators": ["operator.beta"]},
@@ -45,8 +53,14 @@ def test_load_labels_jsonl(tmp_path: Path) -> None:
                 {
                     "id": "capture-b",
                     "raf": "capture_b.raf",
+                    "track": "South City Classic",
+                    "car": "fz5",
+                    "car_class": "lrf",
+                    "compound": "Road Super",
                     "microsectors": {
-                        "3": {"operators": {"operator.gamma": "true"}}
+                        "3": {
+                            "operators": {"operator.gamma": "true"},
+                        }
                     },
                 }
             ]
@@ -78,6 +92,19 @@ def test_load_labels_jsonl(tmp_path: Path) -> None:
     assert labels[1].operator_intervals == {operator_beta: ()}
     assert labels[2].operator_intervals == {operator_gamma: ()}
 
+    assert labels[0].track == "KY2"
+    assert labels[0].car == "XFG"
+    assert labels[0].car_class == "STD"
+    assert labels[0].compound == "r2"
+    assert labels[1].track == "KY2"
+    assert labels[1].car == "XFG"
+    assert labels[1].car_class == "STD"
+    assert labels[1].compound == "r2"
+    assert labels[2].track == "SO1"
+    assert labels[2].car == "FZ5"
+    assert labels[2].car_class == "LRF"
+    assert labels[2].compound == "road_super"
+
     assert labels[0].raf_path == (raf_root / "capture_a.raf").resolve()
     assert labels[2].raf_path == (raf_root / "capture_b.raf").resolve()
 
@@ -103,6 +130,33 @@ def test_normalise_operator_labels_mapping_string_values() -> None:
         operator_gamma: False,
         operator_delta: True,
     }
+
+
+def test_filter_samples_case_insensitive() -> None:
+    sample = MicrosectorSample(
+        capture_id="capture-a",
+        microsector_index=1,
+        track="KY2",
+        car="XFG",
+        car_class="STD",
+        compound="r2",
+        start_index=0,
+        end_index=10,
+        start_time=0.0,
+        end_time=1.0,
+        records=(),
+        labels={},
+        label_intervals={},
+    )
+
+    filtered = _filter_samples(
+        [sample],
+        cars={_normalise_car_identifier("xf gti")},
+        compounds={_normalise_compound_token("R2")},
+        tracks={_normalise_track_identifier("Kyoto National")},
+    )
+
+    assert filtered == [sample]
 
 
 def test_materialise_best_params_integration(tmp_path: Path, monkeypatch) -> None:
