@@ -2133,9 +2133,23 @@ def _compute_phase_boundaries(
     records: Sequence[SupportsTelemetrySample], start: int, end: int
 ) -> Dict[PhaseLiteral, Tuple[int, int]]:
     idx_range = range(start, end + 1)
-    entry_idx = min(idx_range, key=lambda i: records[i].longitudinal_accel)
-    apex_idx = max(idx_range, key=lambda i: abs(records[i].lateral_accel))
-    exit_idx = max(idx_range, key=lambda i: records[i].longitudinal_accel)
+    entry_idx = apex_idx = exit_idx = start
+    entry_long = records[start].longitudinal_accel
+    apex_lat = abs(records[start].lateral_accel)
+    exit_long = records[start].longitudinal_accel
+    for idx in idx_range:
+        record = records[idx]
+        long_accel = record.longitudinal_accel
+        lat_accel = abs(record.lateral_accel)
+        if long_accel < entry_long or (long_accel == entry_long and idx < entry_idx):
+            entry_long = long_accel
+            entry_idx = idx
+        if lat_accel > apex_lat or (lat_accel == apex_lat and idx < apex_idx):
+            apex_lat = lat_accel
+            apex_idx = idx
+        if long_accel > exit_long or (long_accel == exit_long and idx < exit_idx):
+            exit_long = long_accel
+            exit_idx = idx
 
     entry_idx = max(start, min(entry_idx, end))
     apex_idx = max(start, min(apex_idx, end))
