@@ -464,6 +464,36 @@ def test_segment_microsectors_reuses_node_delta_cache(
     assert call_count == len(records)
 
 
+def test_segment_microsectors_reuses_phase_nu_f_targets_cache(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    missing_cache_calls: list[dict[str, object]] = []
+    original_build = metrics_segmentation._build_goals
+
+    def _wrapped_build(*args, **kwargs):
+        if kwargs.get("phase_gradients") is not None:
+            if (
+                kwargs.get("phase_dominant_nodes") is None
+                or kwargs.get("phase_nu_f_targets") is None
+                or kwargs.get("phase_dominance_weights") is None
+            ):
+                missing_cache_calls.append(dict(kwargs))
+        return original_build(*args, **kwargs)
+
+    with monkeypatch.context() as patch_context:
+        patch_context.setattr(
+            metrics_segmentation,
+            "_build_goals",
+            _wrapped_build,
+        )
+        microsectors = segment_microsectors(
+            list(synthetic_records), list(synthetic_bundles)
+        )
+
+    assert microsectors, "expected synthetic segmentation"
+    assert not missing_cache_calls, "expected cached phase targets to be reused"
+
+
 def test_segment_microsectors_computes_wheel_dispersion(
     synthetic_records, synthetic_bundles
 ) -> None:
