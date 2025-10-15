@@ -247,6 +247,30 @@ def test_segment_microsectors_caches_delta_signature(
         assert style_index == pytest.approx(spec["avg_si"])
 
 
+def test_segment_microsectors_reuses_node_delta_cache(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    records = list(synthetic_records)
+    bundles = list(synthetic_bundles)
+    baseline = segment_microsectors(list(records), list(bundles))
+    assert len(baseline) >= 2
+
+    call_count = 0
+    original = metrics_segmentation.delta_nfr_by_node
+
+    def _wrapped(record):
+        nonlocal call_count
+        call_count += 1
+        return original(record)
+
+    with monkeypatch.context() as patch_context:
+        patch_context.setattr(metrics_segmentation, "delta_nfr_by_node", _wrapped)
+        result = segment_microsectors(list(records), list(bundles))
+
+    assert result == baseline
+    assert call_count == len(records)
+
+
 def test_segment_microsectors_computes_wheel_dispersion(
     synthetic_records, synthetic_bundles
 ) -> None:
