@@ -216,6 +216,32 @@ def _capture_analyzer_state(
     )
 
 
+def _bundle_node_delta(bundle: SupportsEPIBundle) -> Mapping[str, float]:
+    """Extract the ΔNFR distribution from the structured bundle."""
+
+    node_deltas: Dict[str, float] = {}
+    for node_name in (
+        "tyres",
+        "suspension",
+        "chassis",
+        "brakes",
+        "transmission",
+        "track",
+        "driver",
+    ):
+        node = getattr(bundle, node_name, None)
+        if node is None:
+            continue
+        try:
+            delta = float(getattr(node, "delta_nfr", 0.0))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(delta):
+            continue
+        node_deltas[node_name] = delta
+    return node_deltas
+
+
 def _restore_analyzer_state(
     analyzer: NaturalFrequencyAnalyzer,
     state: _AnalyzerState,
@@ -621,7 +647,7 @@ def segment_microsectors(
     session_components = _resolve_session_components(records, baseline)
 
     yaw_rate_cache = [_compute_yaw_rate(records, idx) for idx in range(len(records))]
-    node_delta_cache = [delta_nfr_by_node(record) for record in records]
+    node_delta_cache: Sequence[Mapping[str, float]] | None = None
 
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
@@ -706,6 +732,7 @@ def segment_microsectors(
     )
     recomputed_bundles = recompute_result.bundles
     analyzer_states = recompute_result.analyzer_states
+    node_delta_cache = tuple(_bundle_node_delta(bundle) for bundle in recomputed_bundles)
 
     weights_adjusted, weight_start_index = _adjust_phase_weights_with_dominance(
         specs,
@@ -730,6 +757,7 @@ def segment_microsectors(
         )
         recomputed_bundles = recompute_result.bundles
         analyzer_states = recompute_result.analyzer_states
+        node_delta_cache = tuple(_bundle_node_delta(bundle) for bundle in recomputed_bundles)
         _invalidate_goal_cache(specs, recompute_start)
 
     goal_nu_f_lookup: Dict[int, float] = {}
@@ -806,6 +834,7 @@ def segment_microsectors(
         )
         recomputed_bundles = recompute_result.bundles
         analyzer_states = recompute_result.analyzer_states
+        node_delta_cache = tuple(_bundle_node_delta(bundle) for bundle in recomputed_bundles)
         _invalidate_goal_cache(specs, goal_recompute_start)
 
     for spec in specs:
@@ -1286,6 +1315,7 @@ def segment_microsectors(
                 records,
                 start,
                 end,
+                bundles=recomputed_bundles,
                 node_delta_cache=node_delta_cache,
                 cache_offset=0,
             )
@@ -1812,6 +1842,7 @@ def _estimate_entropy(
     start: int,
     end: int,
     *,
+    bundles: Sequence[SupportsEPIBundle] | None = None,
     node_delta_cache: Sequence[Mapping[str, float]] | None = None,
     cache_offset: int = 0,
 ) -> float:
@@ -1822,6 +1853,8 @@ def _estimate_entropy(
             cache_index = index - cache_offset
             if 0 <= cache_index < len(node_delta_cache):
                 distribution = node_delta_cache[cache_index]
+        if distribution is None and bundles is not None and 0 <= index < len(bundles):
+            distribution = _bundle_node_delta(bundles[index])
         if distribution is None:
             distribution = delta_nfr_by_node(records[index])
         for node, delta in distribution.items():
@@ -2026,10 +2059,10 @@ def _phase_nu_f_targets(
 
     cache_offset = 0
     if node_delta_cache is None:
-        effective_stop = min(window_stop, len(records))
+        effective_stop = min(window_stop, len(bundles))
         effective_start = min(max(0, window_start), effective_stop)
         node_delta_cache = tuple(
-            delta_nfr_by_node(records[idx]) for idx in range(effective_start, effective_stop)
+            _bundle_node_delta(bundles[idx]) for idx in range(effective_start, effective_stop)
         )
         cache_offset = effective_start
     else:
@@ -2062,6 +2095,8 @@ def _phase_nu_f_targets(
             cache_index = idx - cache_offset
             if 0 <= cache_index < len(node_delta_cache):
                 node_deltas = node_delta_cache[cache_index]
+            elif 0 <= idx < len(bundles):
+                node_deltas = _bundle_node_delta(bundle)
             elif 0 <= idx < len(records):
                 node_deltas = delta_nfr_by_node(records[idx])
             else:

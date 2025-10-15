@@ -461,7 +461,7 @@ def test_segment_microsectors_reuses_node_delta_cache(
         result = segment_microsectors(list(records), list(bundles))
 
     assert result == baseline
-    assert call_count == len(records)
+    assert call_count == 0
 
 
 def test_segment_microsectors_reuses_phase_nu_f_targets_cache(
@@ -1392,7 +1392,12 @@ def test_segment_microsectors_recursivity_entropy_consistency(
 
     def _capture_entropy(records_arg, start, end, **kwargs):
         entropy_value = real_estimate_entropy(records_arg, start, end, **kwargs)
-        baseline_value = real_estimate_entropy(records_arg, start, end)
+        baseline_value = real_estimate_entropy(
+            records_arg,
+            start,
+            end,
+            bundles=bundles,
+        )
         entropy_calls.append(
             {
                 "entropy": entropy_value,
