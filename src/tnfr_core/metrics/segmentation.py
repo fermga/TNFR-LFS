@@ -2674,17 +2674,23 @@ def _build_goals(
     for phase in PHASE_SEQUENCE:
         start, stop = boundaries[phase]
         stop = max(start, min(stop, len(bundles), len(records)))
-        indices = range(start, stop)
-        segment = list(bundles[start:stop])
-        phase_records = list(records[start:stop])
-        yaw_slice = list(yaw_rates[start:stop]) if yaw_rates else []
-        if len(yaw_slice) < len(segment):
-            yaw_slice.extend(
-                _cached_yaw_rate(yaw_rates, idx)
-                for idx in range(start + len(yaw_slice), start + len(segment))
-            )
-        phase_yaw_rates = yaw_slice
-        if segment:
+        phase_length = max(0, stop - start)
+        phase_records = records[start:stop]
+        phase_yaw_rates: List[float]
+        if yaw_rates:
+            phase_yaw_rates = []
+            yaw_limit = len(yaw_rates)
+            for idx in range(start, stop):
+                if 0 <= idx < yaw_limit:
+                    try:
+                        phase_yaw_rates.append(float(yaw_rates[idx]))
+                    except (TypeError, ValueError):
+                        phase_yaw_rates.append(0.0)
+                else:
+                    phase_yaw_rates.append(_cached_yaw_rate(yaw_rates, idx))
+        else:
+            phase_yaw_rates = []
+        if phase_length:
             multipliers: List[float] = []
 
             def _clamp(value: float) -> float:
@@ -2694,10 +2700,10 @@ def _build_goals(
                 )
 
             use_direct_multipliers = False
-            if sample_multipliers is not None and indices:
-                if all(0 <= idx < len(sample_multipliers) for idx in indices):
+            if sample_multipliers is not None and phase_length:
+                if all(0 <= idx < len(sample_multipliers) for idx in range(start, stop)):
                     direct_values: List[float] = []
-                    for idx in indices:
+                    for idx in range(start, stop):
                         try:
                             numeric = float(sample_multipliers[idx])
                         except (TypeError, ValueError):
@@ -2710,6 +2716,16 @@ def _build_goals(
             if not use_direct_multipliers:
                 resolved_context: List[ContextFactors] = []
                 phase_fallback: Tuple[ContextFactors, ...] | None = None
+                phase_bundle_view: Tuple[SupportsEPIBundle, ...] | None = None
+
+                def _phase_segment() -> Tuple[SupportsEPIBundle, ...]:
+                    nonlocal phase_bundle_view
+                    if phase_bundle_view is None:
+                        phase_bundle_view = tuple(
+                            bundles[idx]
+                            for idx in range(start, stop)
+                        )
+                    return phase_bundle_view
 
                 def _phase_context(local_index: int, absolute_index: int) -> ContextFactors:
                     nonlocal phase_fallback, fallback_series, fallback_offset
@@ -2723,7 +2739,10 @@ def _build_goals(
                             return series[relative_index]
                     if phase_fallback is None:
                         phase_fallback = tuple(
-                            resolve_series_context(segment, matrix=context_matrix)
+                            resolve_series_context(
+                                _phase_segment(),
+                                matrix=context_matrix,
+                            )
                         )
                     if phase_fallback:
                         if 0 <= local_index < len(phase_fallback):
@@ -2742,13 +2761,13 @@ def _build_goals(
                     return ContextFactors()
 
                 if sample_context:
-                    for local_index, idx in enumerate(indices):
+                    for local_index, idx in enumerate(range(start, stop)):
                         if 0 <= idx < len(sample_context):
                             resolved_context.append(sample_context[idx])
                         else:
                             resolved_context.append(_phase_context(local_index, idx))
                 else:
-                    for local_index, idx in enumerate(indices):
+                    for local_index, idx in enumerate(range(start, stop)):
                         resolved_context.append(_phase_context(local_index, idx))
 
                 multipliers = [
@@ -2756,26 +2775,28 @@ def _build_goals(
                     for ctx in resolved_context
                 ]
             adjusted_delta = [
-                bundle.delta_nfr * multipliers[idx]
-                for idx, bundle in enumerate(segment)
+                bundles[idx].delta_nfr * multipliers[offset]
+                for offset, idx in enumerate(range(start, stop))
             ]
             avg_delta = fmean(adjusted_delta)
-            avg_si = fmean(bundle.sense_index for bundle in segment)
+            avg_si = fmean(
+                bundles[idx].sense_index for idx in range(start, stop)
+            )
             avg_long = fmean(
-                bundle.delta_nfr_proj_longitudinal * multipliers[idx]
-                for idx, bundle in enumerate(segment)
+                bundles[idx].delta_nfr_proj_longitudinal * multipliers[offset]
+                for offset, idx in enumerate(range(start, stop))
             )
             avg_lat = fmean(
-                bundle.delta_nfr_proj_lateral * multipliers[idx]
-                for idx, bundle in enumerate(segment)
+                bundles[idx].delta_nfr_proj_lateral * multipliers[offset]
+                for offset, idx in enumerate(range(start, stop))
             )
             abs_long = fmean(
-                abs(bundle.delta_nfr_proj_longitudinal) * multipliers[idx]
-                for idx, bundle in enumerate(segment)
+                abs(bundles[idx].delta_nfr_proj_longitudinal) * multipliers[offset]
+                for offset, idx in enumerate(range(start, stop))
             )
             abs_lat = fmean(
-                abs(bundle.delta_nfr_proj_lateral) * multipliers[idx]
-                for idx, bundle in enumerate(segment)
+                abs(bundles[idx].delta_nfr_proj_lateral) * multipliers[offset]
+                for offset, idx in enumerate(range(start, stop))
             )
         else:
             avg_delta = 0.0
@@ -2790,7 +2811,7 @@ def _build_goals(
                 return None
             window: List[float] = []
             limit = len(series)
-            for idx in indices:
+            for idx in range(start, stop):
                 if 0 <= idx < limit:
                     try:
                         window.append(float(series[idx]))
@@ -2828,7 +2849,7 @@ def _build_goals(
         )
         rho_target = nu_exc_target / nu_f_target if nu_f_target > 1e-9 else 0.0
 
-        sample_count = max(1, len(indices))
+        sample_count = max(1, phase_length)
         dominant_intensity = total_weight / sample_count
         influence_factor = 1.0 + min(2.0, nu_f_target) + min(1.5, dominant_intensity / 5.0)
 
