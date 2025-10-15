@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from statistics import mean, pstdev
+from statistics import fmean, pstdev
 from typing import (
     Dict,
     Iterable,
@@ -822,9 +822,9 @@ def segment_microsectors(
                 multiplier = 1.0
             adjusted_deltas.append(bundle.delta_nfr * multiplier)
         spec["adjusted_deltas"] = tuple(adjusted_deltas)
-        delta_signature = mean(adjusted_deltas)
+        delta_signature = fmean(adjusted_deltas)
         spec["delta_signature"] = float(delta_signature)
-        avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
+        avg_si = fmean(b.sense_index for b in recomputed_bundles[start : end + 1])
         spec["avg_si"] = float(avg_si)
         archetype = _classify_archetype(
             spec["curvature"],
@@ -945,11 +945,11 @@ def segment_microsectors(
             spec["adjusted_deltas"] = stored_deltas
         delta_signature = spec.get("delta_signature")
         if delta_signature is None:
-            delta_signature = mean(stored_deltas)
+            delta_signature = fmean(stored_deltas)
             spec["delta_signature"] = float(delta_signature)
         avg_si = spec.get("avg_si")
         if avg_si is None:
-            avg_si = mean(b.sense_index for b in bundle_window)
+            avg_si = fmean(b.sense_index for b in bundle_window)
             spec["avg_si"] = float(avg_si)
         archetype = _classify_archetype(
             curvature,
@@ -976,8 +976,8 @@ def segment_microsectors(
                     continue
                 phase_values.append(gradient_value)
                 gradient_samples.append(gradient_value)
-            phase_gradient_map[phase] = mean(phase_values) if phase_values else 0.0
-        microsector_gradient = mean(gradient_samples) if gradient_samples else 0.0
+            phase_gradient_map[phase] = fmean(phase_values) if phase_values else 0.0
+        microsector_gradient = fmean(gradient_samples) if gradient_samples else 0.0
 
         gradient_signature = _phase_gradient_signature(phase_gradient_map)
         cache_valid = bool(spec.get("goal_cache_valid"))
@@ -1052,7 +1052,7 @@ def segment_microsectors(
         surface_factor = float(getattr(context_factors_obj, "surface", 1.0))
         entry_goals = [goal for goal in goals if phase_family(goal.phase) == "entry"]
         if entry_goals:
-            base_delta_threshold = mean(abs(goal.target_delta_nfr) for goal in entry_goals)
+            base_delta_threshold = fmean(abs(goal.target_delta_nfr) for goal in entry_goals)
         else:
             base_delta_threshold = abs(delta_signature)
         delta_threshold = max(0.05, base_delta_threshold * surface_factor)
@@ -1518,14 +1518,16 @@ def segment_microsectors(
                 if candidate in phase_synchrony_map
             ]
             if lag_values:
-                phase_lag_map[legacy] = float(mean(value for value in lag_values if value is not None))
+                phase_lag_map[legacy] = float(
+                    fmean(value for value in lag_values if value is not None)
+                )
             if align_values:
                 phase_alignment_map[legacy] = float(
-                    mean(value for value in align_values if value is not None)
+                    fmean(value for value in align_values if value is not None)
                 )
             if synchrony_values:
                 phase_synchrony_map[legacy] = float(
-                    mean(value for value in synchrony_values if value is not None)
+                    fmean(value for value in synchrony_values if value is not None)
                 )
         operator_events: Dict[str, Tuple[Mapping[str, object], ...]] = {}
         silence_window = max(6, min(len(record_window), 25))
@@ -1577,7 +1579,7 @@ def segment_microsectors(
                         if 0 <= idx < len(recomputed_bundles):
                             delta_values.append(float(recomputed_bundles[idx].delta_nfr))
                     if delta_values:
-                        avg_delta = mean(delta_values)
+                        avg_delta = fmean(delta_values)
                         peak_delta = max(abs(value) for value in delta_values)
                     else:
                         avg_delta = 0.0
@@ -2087,7 +2089,7 @@ def _cached_yaw_rate(cache: Sequence[float], index: int) -> float:
 
 
 def _safe_mean(values: Sequence[float], default: float = 0.0) -> float:
-    return mean(values) if values else default
+    return fmean(values) if values else default
 
 
 def _window(values: Sequence[float], scale: float, minimum: float = 0.01) -> Tuple[float, float]:
@@ -2386,21 +2388,21 @@ def _build_goals(
                 bundle.delta_nfr * multipliers[idx]
                 for idx, bundle in enumerate(segment)
             ]
-            avg_delta = mean(adjusted_delta)
-            avg_si = mean(bundle.sense_index for bundle in segment)
-            avg_long = mean(
+            avg_delta = fmean(adjusted_delta)
+            avg_si = fmean(bundle.sense_index for bundle in segment)
+            avg_long = fmean(
                 bundle.delta_nfr_proj_longitudinal * multipliers[idx]
                 for idx, bundle in enumerate(segment)
             )
-            avg_lat = mean(
+            avg_lat = fmean(
                 bundle.delta_nfr_proj_lateral * multipliers[idx]
                 for idx, bundle in enumerate(segment)
             )
-            abs_long = mean(
+            abs_long = fmean(
                 abs(bundle.delta_nfr_proj_longitudinal) * multipliers[idx]
                 for idx, bundle in enumerate(segment)
             )
-            abs_lat = mean(
+            abs_lat = fmean(
                 abs(bundle.delta_nfr_proj_lateral) * multipliers[idx]
                 for idx, bundle in enumerate(segment)
             )
@@ -2523,20 +2525,20 @@ def _build_goals(
         if weight_values:
             axis_weights[legacy] = {
                 "longitudinal": float(
-                    mean(entry["longitudinal"] for entry in weight_values if entry is not None)
+                    fmean(entry["longitudinal"] for entry in weight_values if entry is not None)
                 ),
                 "lateral": float(
-                    mean(entry["lateral"] for entry in weight_values if entry is not None)
+                    fmean(entry["lateral"] for entry in weight_values if entry is not None)
                 ),
             }
         target_values = [axis_targets.get(candidate) for candidate in phases if candidate in axis_targets]
         if target_values:
             axis_targets[legacy] = {
                 "longitudinal": float(
-                    mean(entry["longitudinal"] for entry in target_values if entry is not None)
+                    fmean(entry["longitudinal"] for entry in target_values if entry is not None)
                 ),
                 "lateral": float(
-                    mean(entry["lateral"] for entry in target_values if entry is not None)
+                    fmean(entry["lateral"] for entry in target_values if entry is not None)
                 ),
             }
     return tuple(goals), dominant_nodes, axis_targets, axis_weights
@@ -2692,7 +2694,7 @@ def _compute_window_occupancy(
         aggregated: Dict[str, float] = {}
         keys = {key for entry in values for key in entry}
         for key in keys:
-            aggregated[key] = mean(entry.get(key, 0.0) for entry in values)
+            aggregated[key] = fmean(entry.get(key, 0.0) for entry in values)
         occupancy[legacy] = aggregated
     return occupancy
 
