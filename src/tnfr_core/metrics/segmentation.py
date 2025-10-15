@@ -700,21 +700,21 @@ def segment_microsectors(
     if not segments:
         return []
 
-    sample_context = [
-        resolve_context_from_record(
+    sample_context: List[ContextFactors] = []
+    sample_multipliers: List[float] = []
+    for record in records:
+        factors = resolve_context_from_record(
             context_matrix,
             record,
             baseline_vertical_load=baseline_vertical,
         )
-        for record in records
-    ]
-    sample_multipliers = [
-        _resolve_context_multiplier(
-            factors,
-            context_matrix=context_matrix,
+        sample_context.append(factors)
+        sample_multipliers.append(
+            _resolve_context_multiplier(
+                factors,
+                context_matrix=context_matrix,
+            )
         )
-        for factors in sample_context
-    ]
     session_components = _resolve_session_components(records, baseline_record)
     node_delta_cache: List[Mapping[str, float]] | None = None
 
