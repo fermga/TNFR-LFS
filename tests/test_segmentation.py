@@ -163,7 +163,53 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
                     if isinstance(payload, Mapping):
                         assert "si_variance" in payload
                         assert "epi_derivative_abs" in payload
-                        
+
+
+def test_segment_microsectors_incremental_recompute_matches_full(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    original_recompute = metrics_segmentation._recompute_bundles
+
+    incremental_result = segment_microsectors(
+        list(synthetic_records),
+        list(synthetic_bundles),
+        operator_state={},
+    )
+
+    def force_full_recompute(
+        records,
+        bundles,
+        baseline,
+        phase_assignments,
+        weight_lookup,
+        goal_nu_f_lookup=None,
+        *,
+        start_index=0,
+    ):
+        return original_recompute(
+            records,
+            bundles,
+            baseline,
+            phase_assignments,
+            weight_lookup,
+            goal_nu_f_lookup=goal_nu_f_lookup,
+            start_index=0,
+        )
+
+    with monkeypatch.context() as patch_context:
+        patch_context.setattr(
+            metrics_segmentation,
+            "_recompute_bundles",
+            force_full_recompute,
+        )
+        full_result = segment_microsectors(
+            list(synthetic_records),
+            list(synthetic_bundles),
+            operator_state={},
+        )
+
+    assert incremental_result == full_result
+
 
 def test_segment_microsectors_computes_wheel_dispersion(
     synthetic_records, synthetic_bundles
