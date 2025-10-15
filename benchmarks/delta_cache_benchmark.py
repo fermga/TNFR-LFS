@@ -18,10 +18,17 @@ from tnfr_core.cache import (
 )
 from tnfr_core.cache_settings import CacheOptions
 from tnfr_core.epi import (
+    DEFAULT_PHASE_WEIGHTS,
+    DeltaCalculator,
+    EPIExtractor,
     NaturalFrequencyAnalyzer,
     TelemetryRecord,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
+)
+from tnfr_core.metrics.segmentation import (
+    PHASE_SEQUENCE,
+    _recompute_bundles,
 )
 from tnfr_lfs.telemetry.offline import ReplayCSVBundleReader
 
@@ -118,6 +125,83 @@ def _measure_series(
             total += elapsed
         durations.append(total / iterations)
     return durations, last_delta, last_nu
+
+
+def _prepare_segmentation_inputs(
+    records: Sequence[TelemetryRecord],
+) -> tuple[
+    list,
+    TelemetryRecord,
+    Mapping[int, str],
+    Mapping[int, Mapping[str, Mapping[str, float] | float]],
+]:
+    extractor = EPIExtractor()
+    bundles = extractor.extract(records)
+    baseline = DeltaCalculator.derive_baseline(records)
+    phase_assignments = {idx: PHASE_SEQUENCE[0] for idx in range(len(records))}
+    weight_lookup = {
+        idx: DEFAULT_PHASE_WEIGHTS for idx in range(len(records))
+    }
+    return bundles, baseline, phase_assignments, weight_lookup
+
+
+def _benchmark_tail_recompute(
+    records: Sequence[TelemetryRecord],
+    *,
+    repeats: int,
+    tail_start: int,
+) -> tuple[float, float, int]:
+    sample_count = len(records)
+    if sample_count <= 1:
+        return math.nan, math.nan, tail_start
+
+    tail_start = max(0, min(tail_start, sample_count - 1))
+    bundles, baseline, phase_assignments, weight_lookup = _prepare_segmentation_inputs(records)
+    initial = _recompute_bundles(
+        records,
+        bundles,
+        baseline,
+        phase_assignments,
+        weight_lookup,
+    )
+    base_bundles = initial.bundles
+    base_states = initial.analyzer_states
+
+    naive_bundles = list(base_bundles)
+    naive_total = 0.0
+    for _ in range(repeats):
+        start = time.perf_counter()
+        naive_result = _recompute_bundles(
+            records,
+            naive_bundles,
+            baseline,
+            phase_assignments,
+            weight_lookup,
+            start_index=tail_start,
+            analyzer_states=None,
+        )
+        naive_total += time.perf_counter() - start
+        naive_bundles = naive_result.bundles
+
+    cached_bundles = list(base_bundles)
+    cached_states = list(base_states)
+    cached_total = 0.0
+    for _ in range(repeats):
+        start = time.perf_counter()
+        cached_result = _recompute_bundles(
+            records,
+            cached_bundles,
+            baseline,
+            phase_assignments,
+            weight_lookup,
+            start_index=tail_start,
+            analyzer_states=cached_states,
+        )
+        cached_total += time.perf_counter() - start
+        cached_bundles = cached_result.bundles
+        cached_states = cached_result.analyzer_states
+
+    return naive_total, cached_total, tail_start
 
 
 def _summarise(
@@ -270,6 +354,28 @@ def main() -> None:
         )
 
     _configure_caches(enable=True, nu_f_cache_size=cached_options.nu_f_cache_size)
+
+    tail_start = min(len(records) - 1, max(int(len(records) * 0.75), 0))
+    tail_iterations = max(args.iterations, 1)
+    if tail_start > 0 and len(records) > 1:
+        naive_tail, cached_tail, start_index = _benchmark_tail_recompute(
+            records,
+            repeats=tail_iterations,
+            tail_start=tail_start,
+        )
+        naive_avg = naive_tail / tail_iterations if tail_iterations else float("nan")
+        cached_avg = cached_tail / tail_iterations if tail_iterations else float("nan")
+        if cached_avg > 0.0:
+            tail_speedup = naive_avg / cached_avg
+        else:
+            tail_speedup = float("nan")
+        tail_delta = naive_avg - cached_avg
+        print(
+            "Tail recompute start="
+            f"{start_index}/{len(records)}: "
+            f"naive {naive_avg:.6f}s → cached {cached_avg:.6f}s over {tail_iterations} runs "
+            f"(×{tail_speedup:.2f}, {tail_delta:.6f}s saved per run)"
+        )
 
 
 if __name__ == "__main__":

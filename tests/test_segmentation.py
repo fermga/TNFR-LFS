@@ -185,6 +185,7 @@ def test_segment_microsectors_incremental_recompute_matches_full(
         goal_nu_f_lookup=None,
         *,
         start_index=0,
+        analyzer_states=None,
     ):
         return original_recompute(
             records,
@@ -194,6 +195,7 @@ def test_segment_microsectors_incremental_recompute_matches_full(
             weight_lookup,
             goal_nu_f_lookup=goal_nu_f_lookup,
             start_index=0,
+            analyzer_states=None,
         )
 
     with monkeypatch.context() as patch_context:
