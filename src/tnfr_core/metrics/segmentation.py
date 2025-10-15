@@ -162,6 +162,133 @@ def _resolve_context_multiplier(
 
 
 @dataclass(frozen=True)
+class _SegmentSummary:
+    curvature: float
+    brake_event: bool
+    support_event: bool
+    avg_vertical_load: float
+    duration: float
+    speed_drop: float
+    direction_changes: int
+    brake_temperatures: Dict[str, float]
+    brake_temperature_std: Dict[str, float]
+    end_timestamp: float
+
+
+def _accumulate_segment_metrics(
+    records: Sequence[SupportsTelemetrySample], start: int, end: int
+) -> _SegmentSummary:
+    if start > end:
+        return _SegmentSummary(
+            curvature=0.0,
+            brake_event=False,
+            support_event=False,
+            avg_vertical_load=0.0,
+            duration=0.0,
+            speed_drop=0.0,
+            direction_changes=0,
+            brake_temperatures={},
+            brake_temperature_std={},
+            end_timestamp=0.0,
+        )
+
+    brake_keys = tuple(f"brake_temp_{suffix}" for suffix in ("fl", "fr", "rl", "rr"))
+    brake_sums = {key: 0.0 for key in brake_keys}
+    brake_sums_sq = {key: 0.0 for key in brake_keys}
+    brake_counts = {key: 0 for key in brake_keys}
+
+    samples = end - start + 1
+    brake_event = False
+    sum_abs_lateral = 0.0
+    vertical_sum = 0.0
+    vertical_min = math.inf
+    vertical_max = -math.inf
+    direction_changes = 0
+    last_sign = 0
+
+    first_record = records[start]
+    entry_speed = float(first_record.speed)
+    min_speed = entry_speed
+    start_timestamp = float(first_record.timestamp)
+    end_timestamp = start_timestamp
+
+    for idx in range(start, end + 1):
+        record = records[idx]
+        lateral_value = float(record.lateral_accel)
+        sum_abs_lateral += abs(lateral_value)
+        if abs(lateral_value) >= 0.25:
+            sign = 1 if lateral_value > 0 else -1
+            if last_sign and sign != last_sign:
+                direction_changes += 1
+            last_sign = sign
+
+        longitudinal_value = float(record.longitudinal_accel)
+        if longitudinal_value <= BRAKE_THRESHOLD:
+            brake_event = True
+
+        vertical_value = float(record.vertical_load)
+        vertical_sum += vertical_value
+        vertical_min = min(vertical_min, vertical_value)
+        vertical_max = max(vertical_max, vertical_value)
+
+        speed_value = float(record.speed)
+        if speed_value < min_speed:
+            min_speed = speed_value
+
+        end_timestamp = float(record.timestamp)
+
+        for key in brake_keys:
+            raw_value = getattr(record, key, None)
+            if raw_value is None:
+                continue
+            try:
+                temperature_value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(temperature_value):
+                continue
+            brake_counts[key] += 1
+            brake_sums[key] += temperature_value
+            brake_sums_sq[key] += temperature_value * temperature_value
+
+    curvature = sum_abs_lateral / samples if samples else 0.0
+    if math.isfinite(vertical_min) and math.isfinite(vertical_max):
+        support_event = (vertical_max - vertical_min) >= SUPPORT_THRESHOLD
+    else:
+        support_event = False
+    avg_vertical_load = vertical_sum / samples if samples else 0.0
+    duration = max(0.0, end_timestamp - start_timestamp)
+    speed_drop = max(0.0, entry_speed - min_speed)
+
+    brake_temperatures: Dict[str, float] = {}
+    brake_temperature_std: Dict[str, float] = {}
+    for key, count in brake_counts.items():
+        if count <= 0:
+            brake_temperatures[key] = 0.0
+            brake_temperature_std[f"{key}_std"] = 0.0
+            continue
+        mean_value = brake_sums[key] / count
+        variance = (brake_sums_sq[key] / count) - (mean_value * mean_value)
+        if variance < 0.0:
+            variance = 0.0
+        brake_temperatures[key] = mean_value
+        brake_temperature_std[f"{key}_std"] = math.sqrt(variance) if variance > 0.0 else 0.0
+
+    return _SegmentSummary(
+        curvature=curvature,
+        brake_event=brake_event,
+        support_event=support_event,
+        avg_vertical_load=avg_vertical_load,
+        duration=duration,
+        speed_drop=speed_drop,
+        direction_changes=direction_changes,
+        brake_temperatures=brake_temperatures,
+        brake_temperature_std=brake_temperature_std,
+        end_timestamp=end_timestamp,
+    )
+
+
+@dataclass(frozen=True)
 class Goal:
     """Operational goal associated with a microsector phase."""
 
@@ -437,42 +564,19 @@ def segment_microsectors(
             for phase, bounds in phase_boundaries.items()
         }
         record_window = records[start : end + 1]
-        curvature = mean(abs(records[i].lateral_accel) for i in range(start, end + 1))
-        brake_event = any(records[i].longitudinal_accel <= BRAKE_THRESHOLD for i in range(start, end + 1))
-        support_event = _detect_support_event(records[start : end + 1])
-        avg_vertical_load = mean(record.vertical_load for record in records[start : end + 1])
-        baseline_vertical = getattr(baseline, "vertical_load", 0.0)
+        segment_summary = _accumulate_segment_metrics(records, start, end)
+        curvature = segment_summary.curvature
+        brake_event = segment_summary.brake_event
+        support_event = segment_summary.support_event
+        avg_vertical_load = segment_summary.avg_vertical_load
         grip_rel = (
             avg_vertical_load / baseline_vertical if baseline_vertical > 1e-9 else 0.0
         )
-        duration = max(0.0, record_window[-1].timestamp - record_window[0].timestamp)
-        entry_speed = float(record_window[0].speed)
-        min_speed = min(float(record.speed) for record in record_window)
-        speed_drop = max(0.0, entry_speed - min_speed)
-        direction_changes = _direction_changes(record_window)
-        def _mean_std(attribute: str) -> tuple[float, float]:
-            values: list[float] = []
-            for sample in record_window:
-                try:
-                    candidate = float(getattr(sample, attribute, 0.0))
-                except (TypeError, ValueError):
-                    continue
-                if not math.isfinite(candidate):
-                    continue
-                values.append(candidate)
-            if not values:
-                return 0.0, 0.0
-            avg_value = mean(values)
-            spread = pstdev(values) if len(values) > 1 else 0.0
-            return avg_value, spread
-
-        brake_temperatures: Dict[str, float] = {}
-        brake_temperature_dispersion: Dict[str, float] = {}
-        for suffix in ("fl", "fr", "rl", "rr"):
-            key = f"brake_temp_{suffix}"
-            avg_value, spread = _mean_std(key)
-            brake_temperatures[key] = avg_value
-            brake_temperature_dispersion[f"{key}_std"] = spread
+        duration = segment_summary.duration
+        speed_drop = segment_summary.speed_drop
+        direction_changes = segment_summary.direction_changes
+        brake_temperatures = segment_summary.brake_temperatures
+        brake_temperature_dispersion = segment_summary.brake_temperature_std
         phase_weight_map = _initial_phase_weight_map(
             records, phase_samples, yaw_rate_cache
         )
@@ -506,7 +610,7 @@ def segment_microsectors(
                 "duration": duration,
                 "speed_drop": speed_drop,
                 "direction_changes": direction_changes,
-                "end_timestamp": float(records[end].timestamp),
+                "end_timestamp": segment_summary.end_timestamp,
                 "context_factors": context_factors,
                 "sample_context": segment_span,
                 "context_multipliers": segment_span,
