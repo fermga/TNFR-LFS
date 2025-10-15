@@ -447,7 +447,7 @@ def segment_microsectors(
         weight_lookup,
     )
 
-    weights_adjusted = _adjust_phase_weights_with_dominance(
+    weights_adjusted, weight_start_index = _adjust_phase_weights_with_dominance(
         specs,
         recomputed_bundles,
         records,
@@ -463,9 +463,11 @@ def segment_microsectors(
             baseline,
             phase_assignments,
             weight_lookup,
+            start_index=weight_start_index if weight_start_index is not None else 0,
         )
 
     goal_nu_f_lookup: Dict[int, float] = {}
+    goal_start_index: int | None = None
     for spec in specs:
         start = spec["start"]
         end = spec["end"]
@@ -503,6 +505,13 @@ def segment_microsectors(
             indices = spec["phase_samples"].get(goal.phase, ())
             for sample_index in indices:
                 goal_nu_f_lookup[sample_index] = goal.nu_f_target
+                start_candidate = spec.get("start")
+                if not isinstance(start_candidate, int):
+                    start_candidate = sample_index
+                if goal_start_index is None:
+                    goal_start_index = start_candidate
+                else:
+                    goal_start_index = min(goal_start_index, start_candidate)
 
     if goal_nu_f_lookup:
         recomputed_bundles = _recompute_bundles(
@@ -512,6 +521,7 @@ def segment_microsectors(
             phase_assignments,
             weight_lookup,
             goal_nu_f_lookup=goal_nu_f_lookup,
+            start_index=goal_start_index if goal_start_index is not None else 0,
         )
 
     for spec in specs:
@@ -1285,19 +1295,49 @@ def _recompute_bundles(
     phase_assignments: Mapping[int, PhaseLiteral],
     weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]],
     goal_nu_f_lookup: Mapping[int, Mapping[str, float] | float] | None = None,
+    *,
+    start_index: int = 0,
 ) -> List[SupportsEPIBundle]:
+    if not records:
+        return list(bundles)
+
+    total_samples = len(records)
+    if start_index <= 0:
+        recompute_start = 0
+    elif start_index >= total_samples:
+        return list(bundles)
+    else:
+        recompute_start = start_index
+
     analyzer = NaturalFrequencyAnalyzer()
-    recomputed: List[SupportsEPIBundle] = []
+    result: List[SupportsEPIBundle] = list(bundles)
+
+    if recompute_start > 0:
+        for idx in range(min(recompute_start, len(records))):
+            phase = phase_assignments.get(idx, PHASE_SEQUENCE[0])
+            phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
+            resolve_nu_f_by_node(
+                records[idx],
+                phase=phase,
+                phase_weights=phase_weights,
+                analyzer=analyzer,
+            )
+
     prev_integrated: float | None = None
-    prev_timestamp = records[0].timestamp if records else 0.0
-    prev_structural = (
-        getattr(records[0], "structural_timestamp", None) if records else None
-    )
-    for idx, record in enumerate(records):
+    if recompute_start > 0 and recompute_start - 1 < len(result):
+        prev_integrated = result[recompute_start - 1].integrated_epi
+
+    for idx in range(recompute_start, total_samples):
+        record = records[idx]
         structural_ts = getattr(record, "structural_timestamp", None)
         if idx == 0:
             dt = 0.0
+            prev_timestamp = record.timestamp
+            prev_structural = structural_ts
         else:
+            prev_record = records[idx - 1]
+            prev_timestamp = prev_record.timestamp
+            prev_structural = getattr(prev_record, "structural_timestamp", None)
             if (
                 structural_ts is not None
                 and prev_structural is not None
@@ -1329,12 +1369,13 @@ def _recompute_bundles(
             phase_weights=phase_weights,
             phase_target_nu_f=target_nu_f,
         )
-        recomputed.append(recomputed_bundle)
+        if idx < len(result):
+            result[idx] = recomputed_bundle
+        else:
+            result.append(recomputed_bundle)
         prev_integrated = recomputed_bundle.integrated_epi
-        prev_timestamp = record.timestamp
-        if structural_ts is not None and math.isfinite(structural_ts):
-            prev_structural = structural_ts
-    return recomputed
+
+    return result
 
 
 def _estimate_entropy(
@@ -1985,8 +2026,9 @@ def _adjust_phase_weights_with_dominance(
     context_matrix: ContextMatrix,
     sample_context: Sequence[ContextFactors],
     yaw_rates: Sequence[float],
-) -> bool:
+) -> tuple[bool, int | None]:
     adjusted = False
+    first_index: int | None = None
     for spec in specs:
         phase_boundaries = spec["phase_boundaries"]
         archetype = _classify_archetype(
@@ -2027,8 +2069,15 @@ def _adjust_phase_weights_with_dominance(
             if changed:
                 profile[goal.phase] = phase_profile
                 adjusted = True
+                candidate = spec.get("start")
+                if not isinstance(candidate, int):
+                    indices = spec.get("phase_samples", {}).get(goal.phase, ())
+                    if indices:
+                        candidate = min(indices)
+                if isinstance(candidate, int):
+                    first_index = candidate if first_index is None else min(first_index, candidate)
         spec["phase_weights"] = profile
-    return adjusted
+    return adjusted, first_index
 
 
 def _phase_alignment_targets(archetype: str) -> Mapping[str, Tuple[float, float]]:
