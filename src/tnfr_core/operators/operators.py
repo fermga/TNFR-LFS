@@ -661,7 +661,7 @@ class RecursivityMicroState(TypedDict, total=False):
     filtered: Dict[str, float]
     phase: str | None
     samples: int
-    trace: List[Mapping[str, float | str | None]]
+    trace: Deque[Mapping[str, float | str | None]]
     last_measures: Dict[str, float | str | None]
     _rolling: MutableMapping[str, Deque[float]]
     converged: bool
@@ -991,7 +991,7 @@ def recursivity_operator(
                     "filtered": {},
                     "phase": None,
                     "samples": 0,
-                    "trace": [],
+                    "trace": deque(maxlen=history),
                     "last_measures": {},
                     "_rolling": {},
                     "converged": False,
@@ -1051,14 +1051,24 @@ def recursivity_operator(
 
     micro_state["samples"] = int(micro_state.get("samples", 0)) + 1
     trace_entry = {"phase": micro_state.get("phase"), **filtered_values}
-    trace_log = cast(
-        List[Mapping[str, float | str | None]],
-        micro_state.setdefault("trace", []),
-    )
+    trace_store = micro_state.get("trace")
+    if isinstance(trace_store, deque):
+        if trace_store.maxlen != history:
+            trace_log: Deque[Mapping[str, float | str | None]] = deque(
+                trace_store, maxlen=history
+            )
+            micro_state["trace"] = trace_log
+        else:
+            trace_log = trace_store
+    elif isinstance(trace_store, SequenceABC) and not isinstance(
+        trace_store, (str, bytes, bytearray)
+    ):
+        trace_log = deque(trace_store, maxlen=history)
+        micro_state["trace"] = trace_log
+    else:
+        trace_log = deque(maxlen=history)
+        micro_state["trace"] = trace_log
     trace_log.append(trace_entry)
-    if len(trace_log) > history:
-        overflow = len(trace_log) - history
-        del trace_log[:overflow]
 
     rolling_buffers = cast(
         MutableMapping[str, Deque[float]],
