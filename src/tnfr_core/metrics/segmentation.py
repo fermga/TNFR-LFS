@@ -21,7 +21,7 @@ import math
 from collections import defaultdict
 from heapq import nlargest
 from dataclasses import dataclass, field
-from statistics import fmean, pstdev
+from statistics import StatisticsError, fmean, pstdev
 from typing import (
     Dict,
     Iterable,
@@ -31,6 +31,7 @@ from typing import (
     MutableSequence,
     Sequence,
     Tuple,
+    TypeVar,
     cast,
 )
 
@@ -119,6 +120,37 @@ SUPPORT_THRESHOLD = 350.0  # Newtons of vertical load delta
 
 PhaseLiteral = str
 
+
+T = TypeVar("T")
+
+
+class _SequenceSegment(Sequence[T]):
+    """Lightweight read-only view of a sequence slice."""
+
+    __slots__ = ("_source", "_start", "_stop")
+
+    def __init__(self, source: Sequence[T], start: int, end: int):
+        length = len(source)
+        start_idx = max(0, start)
+        stop_idx = min(length, end + 1)
+        if stop_idx < start_idx:
+            stop_idx = start_idx
+        self._source = source
+        self._start = start_idx
+        self._stop = stop_idx
+
+    def __len__(self) -> int:
+        return self._stop - self._start
+
+    def __getitem__(self, index: int | slice) -> T | List[T]:
+        if isinstance(index, slice):
+            start, stop, step = index.indices(len(self))
+            return [self[i] for i in range(start, stop, step)]
+        if index < 0:
+            index += len(self)
+        if index < 0 or index >= len(self):
+            raise IndexError(index)
+        return self._source[self._start + index]
 
 def _extract_signal(records: Sequence[SupportsTelemetrySample], attr: str) -> List[float]:
     values: List[float] = []
@@ -987,8 +1019,19 @@ def segment_microsectors(
         end = spec["end"]
         multiplier_meta = spec.get("context_multipliers")
         multiplier_indices = _segment_index_range(multiplier_meta, start, end)
-        adjusted_deltas = []
-        for offset, bundle in zip(multiplier_indices, recomputed_bundles[start : end + 1]):
+        adjusted_deltas: List[float] = []
+        delta_sum = 0.0
+        si_sum = 0.0
+        count = 0
+        multiplier_iter = iter(multiplier_indices)
+        for idx in range(start, end + 1):
+            try:
+                offset = next(multiplier_iter)
+            except StopIteration:
+                break
+            if not (0 <= idx < len(recomputed_bundles)):
+                break
+            bundle = recomputed_bundles[idx]
             multiplier = None
             if isinstance(multiplier_meta, Mapping):
                 multiplier = multiplier_meta.get(offset)
@@ -996,12 +1039,16 @@ def segment_microsectors(
                 multiplier = sample_multipliers[offset]
             if multiplier is None:
                 multiplier = 1.0
-            adjusted_deltas.append(bundle.delta_nfr * multiplier)
+            adjusted_value = bundle.delta_nfr * multiplier
+            adjusted_deltas.append(adjusted_value)
+            delta_sum += adjusted_value
+            si_sum += bundle.sense_index
+            count += 1
         spec["adjusted_deltas"] = tuple(adjusted_deltas)
-        delta_signature = fmean(adjusted_deltas)
-        spec["delta_signature"] = float(delta_signature)
-        avg_si = fmean(b.sense_index for b in recomputed_bundles[start : end + 1])
-        spec["avg_si"] = float(avg_si)
+        if count == 0:
+            raise StatisticsError("segment window must contain at least one sample")
+        spec["delta_signature"] = float(delta_sum / count)
+        spec["avg_si"] = float(si_sum / count)
         archetype = _classify_archetype(
             spec["curvature"],
             spec.get("duration", 0.0),
@@ -1075,8 +1122,8 @@ def segment_microsectors(
     for spec in specs:
         start = spec["start"]
         end = spec["end"]
-        record_window = records[start : end + 1]
-        bundle_window = recomputed_bundles[start : end + 1]
+        record_window = _SequenceSegment(records, start, end)
+        bundle_window = _SequenceSegment(recomputed_bundles, start, end)
         phase_boundaries = spec["phase_boundaries"]
         phase_samples = spec["phase_samples"]
         phase_weights = {
@@ -1120,7 +1167,18 @@ def segment_microsectors(
             multiplier_meta = spec.get("context_multipliers")
             multiplier_indices = _segment_index_range(multiplier_meta, start, end)
             adjusted_deltas = []
-            for offset, bundle in zip(multiplier_indices, bundle_window):
+            delta_sum = 0.0
+            si_sum = 0.0
+            count = 0
+            multiplier_iter = iter(multiplier_indices)
+            for idx in range(start, end + 1):
+                try:
+                    offset = next(multiplier_iter)
+                except StopIteration:
+                    break
+                if not (0 <= idx < len(recomputed_bundles)):
+                    break
+                bundle = recomputed_bundles[idx]
                 multiplier = None
                 if isinstance(multiplier_meta, Mapping):
                     multiplier = multiplier_meta.get(offset)
@@ -1128,16 +1186,24 @@ def segment_microsectors(
                     multiplier = sample_multipliers[offset]
                 if multiplier is None:
                     multiplier = 1.0
-                adjusted_deltas.append(bundle.delta_nfr * multiplier)
+                adjusted_value = bundle.delta_nfr * multiplier
+                adjusted_deltas.append(adjusted_value)
+                delta_sum += adjusted_value
+                si_sum += bundle.sense_index
+                count += 1
+            if count == 0:
+                raise StatisticsError("segment window must contain at least one sample")
             stored_deltas = tuple(adjusted_deltas)
             spec["adjusted_deltas"] = stored_deltas
+            spec.setdefault("delta_signature", float(delta_sum / count))
+            spec.setdefault("avg_si", float(si_sum / count))
         delta_signature = spec.get("delta_signature")
         if delta_signature is None:
             delta_signature = fmean(stored_deltas)
             spec["delta_signature"] = float(delta_signature)
         avg_si = spec.get("avg_si")
         if avg_si is None:
-            avg_si = fmean(b.sense_index for b in bundle_window)
+            avg_si = fmean(bundle.sense_index for bundle in bundle_window)
             spec["avg_si"] = float(avg_si)
         archetype = _classify_archetype(
             curvature,
@@ -1147,21 +1213,30 @@ def segment_microsectors(
         )
         phase_gradient_map: Dict[PhaseLiteral, float] = {}
         gradient_samples: List[float] = []
-        for phase, (phase_start, phase_stop) in phase_boundaries.items():
-            phase_values: List[float] = []
-            for idx in range(phase_start, min(phase_stop, len(recomputed_bundles))):
-                if not (0 <= idx < len(recomputed_bundles)):
-                    continue
-                if track_gradient_cache is None:
-                    continue
+        phase_gradient_totals: Dict[PhaseLiteral, float] = {}
+        phase_gradient_counts: Dict[PhaseLiteral, int] = {}
+        for phase in phase_boundaries:
+            phase_gradient_totals[phase] = 0.0
+            phase_gradient_counts[phase] = 0
+        if track_gradient_cache is not None:
+            for idx in range(start, end + 1):
                 if not (0 <= idx < len(track_gradient_cache)):
                     continue
                 gradient_value = track_gradient_cache[idx]
                 if not math.isfinite(gradient_value):
                     continue
-                phase_values.append(gradient_value)
-                gradient_samples.append(gradient_value)
-            phase_gradient_map[phase] = fmean(phase_values) if phase_values else 0.0
+                for phase, (phase_start, phase_stop) in phase_boundaries.items():
+                    if not (phase_start <= idx < phase_stop):
+                        continue
+                    phase_gradient_totals[phase] += gradient_value
+                    phase_gradient_counts[phase] += 1
+                    gradient_samples.append(gradient_value)
+        for phase, total in phase_gradient_totals.items():
+            count = phase_gradient_counts[phase]
+            if count > 0:
+                phase_gradient_map[phase] = float(total / count)
+            else:
+                phase_gradient_map[phase] = 0.0
         microsector_gradient = fmean(gradient_samples) if gradient_samples else 0.0
 
         gradient_signature = _phase_gradient_signature(phase_gradient_map)
@@ -1273,7 +1348,7 @@ def segment_microsectors(
             )
             for phase, indices in phase_samples.items()
         }
-        window_yaw_rates = yaw_rate_cache[start : end + 1]
+        window_yaw_rates = _SequenceSegment(yaw_rate_cache, start, end)
 
         window_metrics = compute_window_metrics(
             record_window,
