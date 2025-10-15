@@ -686,6 +686,7 @@ def segment_microsectors(
                 "goal_cache_valid": False,
                 "goal_archetype": None,
                 "goal_gradient_signature": None,
+                "goal_phase_cache": None,
             }
         )
         for phase, indices in phase_samples.items():
@@ -760,9 +761,9 @@ def segment_microsectors(
             spec.get("direction_changes", 0),
         )
         (
-            _,
-            _,
-            _,
+            phase_dominant_nodes,
+            phase_nu_f_targets,
+            phase_dominance_weights,
             sample_nu_f_lookup,
         ) = _phase_nu_f_targets(
             recomputed_bundles,
@@ -773,6 +774,13 @@ def segment_microsectors(
             context_matrix=context_matrix,
             sample_context=sample_context,
             node_delta_cache=node_delta_cache,
+        )
+        _store_phase_goal_cache(
+            spec,
+            phase_dominant_nodes,
+            phase_nu_f_targets,
+            phase_dominance_weights,
+            sample_nu_f_lookup,
         )
         for sample_index, nu_f_target in sample_nu_f_lookup.items():
             goal_nu_f_lookup[sample_index] = nu_f_target
@@ -811,6 +819,29 @@ def segment_microsectors(
             phase: dict(profile)
             for phase, profile in spec["phase_weights"].items()
         }
+        if spec.get("goal_phase_cache") is None:
+            (
+                phase_dominant_nodes,
+                phase_nu_f_targets,
+                phase_dominance_weights,
+                sample_nu_f_lookup,
+            ) = _phase_nu_f_targets(
+                recomputed_bundles,
+                records,
+                phase_boundaries,
+                phase_samples,
+                yaw_rates=yaw_rate_cache,
+                context_matrix=context_matrix,
+                sample_context=sample_context,
+                node_delta_cache=node_delta_cache,
+            )
+            _store_phase_goal_cache(
+                spec,
+                phase_dominant_nodes,
+                phase_nu_f_targets,
+                phase_dominance_weights,
+                sample_nu_f_lookup,
+            )
         curvature = spec["curvature"]
         brake_event = spec["brake_event"]
         support_event = spec["support_event"]
@@ -875,6 +906,12 @@ def segment_microsectors(
         cache_valid = bool(spec.get("goal_cache_valid"))
         cached_archetype = spec.get("goal_archetype")
         cached_signature = spec.get("goal_gradient_signature")
+        (
+            cached_dominant_nodes,
+            cached_nu_f_targets,
+            cached_dominance_weights,
+            _,
+        ) = _extract_phase_goal_cache(spec)
         if (
             not cache_valid
             or cached_archetype != archetype
@@ -895,6 +932,9 @@ def segment_microsectors(
                 sample_context=sample_context,
                 node_delta_cache=node_delta_cache,
                 phase_gradients=phase_gradient_map,
+                phase_dominant_nodes=cached_dominant_nodes,
+                phase_nu_f_targets=cached_nu_f_targets,
+                phase_dominance_weights=cached_dominance_weights,
             )
             spec["goals"] = goals_tuple
             spec["dominant_nodes"] = dominant_nodes_map
@@ -1279,6 +1319,9 @@ def segment_microsectors(
                     sample_context=sample_context,
                     node_delta_cache=node_delta_cache,
                     phase_gradients=phase_gradient_map,
+                    phase_dominant_nodes=cached_dominant_nodes,
+                    phase_nu_f_targets=cached_nu_f_targets,
+                    phase_dominance_weights=cached_dominance_weights,
                 )
                 spec["goals"] = goals
                 spec["dominant_nodes"] = dominant_nodes
@@ -2045,6 +2088,63 @@ def _phase_nu_f_targets(
     return dominant_nodes, nu_f_targets, dominance_weights, sample_lookup
 
 
+def _store_phase_goal_cache(
+    spec: MutableMapping[str, object],
+    dominant_nodes: Mapping[PhaseLiteral, Tuple[str, ...]],
+    nu_f_targets: Mapping[PhaseLiteral, float],
+    dominance_weights: Mapping[PhaseLiteral, float],
+    sample_lookup: Mapping[int, float],
+) -> None:
+    spec["goal_phase_cache"] = {
+        "dominant_nodes": {
+            str(phase): tuple(nodes)
+            for phase, nodes in dominant_nodes.items()
+        },
+        "nu_f_targets": {
+            str(phase): float(value)
+            for phase, value in nu_f_targets.items()
+        },
+        "dominance_weights": {
+            str(phase): float(value)
+            for phase, value in dominance_weights.items()
+        },
+        "sample_lookup": {
+            int(idx): float(value)
+            for idx, value in sample_lookup.items()
+        },
+    }
+
+
+def _extract_phase_goal_cache(
+    spec: Mapping[str, object]
+) -> Tuple[
+    Mapping[PhaseLiteral, Tuple[str, ...]] | None,
+    Mapping[PhaseLiteral, float] | None,
+    Mapping[PhaseLiteral, float] | None,
+    Mapping[int, float] | None,
+]:
+    payload = spec.get("goal_phase_cache")
+    if isinstance(payload, Mapping):
+        dominant_nodes = cast(
+            Mapping[PhaseLiteral, Tuple[str, ...]] | None,
+            payload.get("dominant_nodes"),
+        )
+        nu_f_targets = cast(
+            Mapping[PhaseLiteral, float] | None,
+            payload.get("nu_f_targets"),
+        )
+        dominance_weights = cast(
+            Mapping[PhaseLiteral, float] | None,
+            payload.get("dominance_weights"),
+        )
+        sample_lookup = cast(
+            Mapping[int, float] | None,
+            payload.get("sample_lookup"),
+        )
+        return dominant_nodes, nu_f_targets, dominance_weights, sample_lookup
+    return None, None, None, None
+
+
 def _build_goals(
     archetype: str,
     bundles: Sequence[SupportsEPIBundle],
@@ -2056,6 +2156,9 @@ def _build_goals(
     sample_context: Sequence[ContextFactors] | None = None,
     node_delta_cache: Sequence[Mapping[str, float]] | None = None,
     phase_gradients: Mapping[PhaseLiteral, float] | None = None,
+    phase_dominant_nodes: Mapping[PhaseLiteral, Tuple[str, ...]] | None = None,
+    phase_nu_f_targets: Mapping[PhaseLiteral, float] | None = None,
+    phase_dominance_weights: Mapping[PhaseLiteral, float] | None = None,
 ) -> Tuple[
     Tuple[Goal, ...],
     Mapping[PhaseLiteral, Tuple[str, ...]],
@@ -2071,21 +2174,32 @@ def _build_goals(
     axis_weights: Dict[PhaseLiteral, Dict[str, float]] = {}
     context_matrix = context_matrix or load_context_matrix()
 
-    (
-        base_dominant_nodes,
-        phase_nu_f_targets,
-        dominance_weights,
-        _,
-    ) = _phase_nu_f_targets(
-        bundles,
-        records,
-        boundaries,
-        None,
-        yaw_rates,
-        context_matrix=context_matrix,
-        sample_context=sample_context,
-        node_delta_cache=node_delta_cache,
-    )
+    if (
+        phase_dominant_nodes is None
+        or phase_nu_f_targets is None
+        or phase_dominance_weights is None
+    ):
+        (
+            base_dominant_nodes,
+            resolved_nu_f_targets,
+            resolved_dominance_weights,
+            _,
+        ) = _phase_nu_f_targets(
+            bundles,
+            records,
+            boundaries,
+            None,
+            yaw_rates,
+            context_matrix=context_matrix,
+            sample_context=sample_context,
+            node_delta_cache=node_delta_cache,
+        )
+    else:
+        base_dominant_nodes = dict(phase_dominant_nodes)
+        resolved_nu_f_targets = dict(phase_nu_f_targets)
+        resolved_dominance_weights = dict(phase_dominance_weights)
+    phase_nu_f_targets = resolved_nu_f_targets
+    dominance_weights = resolved_dominance_weights
     dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = dict(base_dominant_nodes)
 
     for phase in PHASE_SEQUENCE:
@@ -2610,6 +2724,7 @@ def _invalidate_goal_cache(specs: Sequence[Dict[str, object]], start_index: int 
     for spec in affected:
         spec["goal_cache_valid"] = False
         spec["goal_gradient_signature"] = None
+        spec["goal_phase_cache"] = None
 
 
 def _phase_alignment_targets(archetype: str) -> Mapping[str, Tuple[float, float]]:
