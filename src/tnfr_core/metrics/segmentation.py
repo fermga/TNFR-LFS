@@ -597,6 +597,7 @@ def segment_microsectors(
     session_components = _resolve_session_components(records, baseline)
 
     yaw_rate_cache = [_compute_yaw_rate(records, idx) for idx in range(len(records))]
+    node_delta_cache = [delta_nfr_by_node(record) for record in records]
 
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
@@ -682,6 +683,7 @@ def segment_microsectors(
         context_matrix=context_matrix,
         sample_context=sample_context,
         yaw_rates=yaw_rate_cache,
+        node_delta_cache=node_delta_cache,
     )
 
     if weights_adjusted:
@@ -738,6 +740,7 @@ def segment_microsectors(
             yaw_rates=yaw_rate_cache,
             context_matrix=context_matrix,
             sample_context=sample_context,
+            node_delta_cache=node_delta_cache,
         )
         for sample_index, nu_f_target in sample_nu_f_lookup.items():
             goal_nu_f_lookup[sample_index] = nu_f_target
@@ -839,6 +842,7 @@ def segment_microsectors(
             yaw_rates=yaw_rate_cache,
             context_matrix=context_matrix,
             sample_context=sample_context,
+            node_delta_cache=node_delta_cache,
             phase_gradients=phase_gradient_map,
         )
         active_goal = max(
@@ -1187,6 +1191,7 @@ def segment_microsectors(
                     yaw_rates=yaw_rate_cache,
                     context_matrix=context_matrix,
                     sample_context=sample_context,
+                    node_delta_cache=node_delta_cache,
                 )
                 active_goal = max(
                     goals,
@@ -1840,6 +1845,8 @@ def _phase_nu_f_targets(
     *,
     context_matrix: ContextMatrix | None = None,
     sample_context: Sequence[ContextFactors] | None = None,
+    node_delta_cache: Sequence[Mapping[str, float]] | None = None,
+    cache_window: Tuple[int, int] | None = None,
 ) -> Tuple[
     Dict[PhaseLiteral, Tuple[str, ...]],
     Dict[PhaseLiteral, float],
@@ -1854,7 +1861,25 @@ def _phase_nu_f_targets(
     if phase_samples is None:
         phase_samples = {}
     bundle_count = len(bundles)
-    node_delta_cache = tuple(delta_nfr_by_node(record) for record in records)
+    window_start = 0
+    window_stop = len(records)
+    if cache_window is not None:
+        start_candidate, stop_candidate = cache_window
+        window_start = max(0, min(start_candidate, stop_candidate))
+        window_stop = max(window_start, max(start_candidate, stop_candidate))
+
+    cache_offset = 0
+    if node_delta_cache is None:
+        effective_stop = min(window_stop, len(records))
+        effective_start = min(max(0, window_start), effective_stop)
+        node_delta_cache = tuple(
+            delta_nfr_by_node(records[idx]) for idx in range(effective_start, effective_stop)
+        )
+        cache_offset = effective_start
+    else:
+        expected_length = max(0, window_stop - window_start)
+        if cache_window is not None and len(node_delta_cache) == expected_length:
+            cache_offset = window_start
     for phase in PHASE_SEQUENCE:
         start, stop = boundaries.get(phase, (0, 0))
         phase_range = range(start, min(stop, bundle_count))
@@ -1878,7 +1903,13 @@ def _phase_nu_f_targets(
         )
         for idx in range(start, upper_bound):
             bundle = bundles[idx]
-            node_deltas = node_delta_cache[idx] if idx < len(node_delta_cache) else {}
+            cache_index = idx - cache_offset
+            if 0 <= cache_index < len(node_delta_cache):
+                node_deltas = node_delta_cache[cache_index]
+            elif 0 <= idx < len(records):
+                node_deltas = delta_nfr_by_node(records[idx])
+            else:
+                node_deltas = {}
             for node, delta in node_deltas.items():
                 weight = abs(delta)
                 node_metrics[node]["abs_delta"] += weight
@@ -1927,6 +1958,7 @@ def _build_goals(
     *,
     context_matrix: ContextMatrix | None = None,
     sample_context: Sequence[ContextFactors] | None = None,
+    node_delta_cache: Sequence[Mapping[str, float]] | None = None,
     phase_gradients: Mapping[PhaseLiteral, float] | None = None,
 ) -> Tuple[
     Tuple[Goal, ...],
@@ -1956,6 +1988,7 @@ def _build_goals(
         yaw_rates,
         context_matrix=context_matrix,
         sample_context=sample_context,
+        node_delta_cache=node_delta_cache,
     )
     dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = dict(base_dominant_nodes)
 
@@ -2390,6 +2423,7 @@ def _adjust_phase_weights_with_dominance(
     context_matrix: ContextMatrix,
     sample_context: Sequence[ContextFactors],
     yaw_rates: Sequence[float],
+    node_delta_cache: Sequence[Mapping[str, float]] | None = None,
 ) -> tuple[bool, int | None]:
     adjusted = False
     first_index: int | None = None
@@ -2409,6 +2443,7 @@ def _adjust_phase_weights_with_dominance(
             yaw_rates=yaw_rates,
             context_matrix=context_matrix,
             sample_context=sample_context,
+            node_delta_cache=node_delta_cache,
         )
         spec["goals"] = goals
         spec["dominant_nodes"] = dominant_nodes
