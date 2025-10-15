@@ -1323,10 +1323,16 @@ def test_goal_targets_match_phase_averages(
             phase_records = [synthetic_records[i] for i in indices]
             if phase_bundles:
                 adjusted_values = []
+                multipliers: list[float] = []
                 for idx, bundle in zip(indices, phase_bundles):
                     factors = microsector.sample_context_factors.get(idx)
                     if not factors:
                         factors = microsector.context_factors
+                    multiplier = metrics_segmentation._resolve_context_multiplier(
+                        factors,
+                        context_matrix=matrix,
+                    )
+                    multipliers.append(multiplier)
                     adjusted_values.append(
                         apply_contextual_delta(
                             bundle.delta_nfr,
@@ -1339,6 +1345,39 @@ def test_goal_targets_match_phase_averages(
                 )
                 assert goal.target_sense_index == pytest.approx(
                     mean(bundle.sense_index for bundle in phase_bundles)
+                )
+                expected_long = sum(
+                    bundle.delta_nfr_proj_longitudinal * multiplier
+                    for bundle, multiplier in zip(phase_bundles, multipliers)
+                ) / len(phase_bundles)
+                expected_lat = sum(
+                    bundle.delta_nfr_proj_lateral * multiplier
+                    for bundle, multiplier in zip(phase_bundles, multipliers)
+                ) / len(phase_bundles)
+                expected_abs_long = sum(
+                    abs(bundle.delta_nfr_proj_longitudinal) * multiplier
+                    for bundle, multiplier in zip(phase_bundles, multipliers)
+                ) / len(phase_bundles)
+                expected_abs_lat = sum(
+                    abs(bundle.delta_nfr_proj_lateral) * multiplier
+                    for bundle, multiplier in zip(phase_bundles, multipliers)
+                ) / len(phase_bundles)
+                total_axis = expected_abs_long + expected_abs_lat
+                if total_axis > 1e-9:
+                    expected_weights = {
+                        "longitudinal": expected_abs_long / total_axis,
+                        "lateral": expected_abs_lat / total_axis,
+                    }
+                else:
+                    expected_weights = {"longitudinal": 0.5, "lateral": 0.5}
+
+                assert goal.target_delta_nfr_long == pytest.approx(expected_long)
+                assert goal.target_delta_nfr_lat == pytest.approx(expected_lat)
+                assert goal.delta_axis_weights["longitudinal"] == pytest.approx(
+                    expected_weights["longitudinal"]
+                )
+                assert goal.delta_axis_weights["lateral"] == pytest.approx(
+                    expected_weights["lateral"]
                 )
             lat_low, lat_high = goal.slip_lat_window
             long_low, long_high = goal.slip_long_window
