@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from tnfr_lfs.analysis import compute_session_robustness
 import inspect
+
+import pytest
+
+from tnfr_lfs.analysis import compute_session_robustness
+from tnfr_lfs.analysis import robustness as robustness_module
 
 from tnfr_core.epi import DeltaCalculator, EPIExtractor
 from tnfr_core.metrics import segmentation as segmentation_module
@@ -14,12 +18,12 @@ from tests.helpers import preloaded_profile_manager
 def test_compute_insights_matches_components(
     synthetic_records, tmp_path
 ) -> None:
-    manager = preloaded_profile_manager(tmp_path)
     extractor = EPIExtractor()
     reference_records = list(synthetic_records)
     expected_bundles = extractor.extract(reference_records)
     baseline = extractor.baseline_record
     assert baseline is not None
+    manager = preloaded_profile_manager(tmp_path)
     result = compute_insights(
         list(reference_records),
         car_model="FZR",
@@ -56,6 +60,50 @@ def test_compute_insights_matches_components(
         thresholds=getattr(result.thresholds, "robustness", None),
     )
     assert result.robustness == expected_robustness
+
+
+def test_compute_session_robustness_vectorised_matches_scalar(
+    synthetic_records, tmp_path, monkeypatch
+) -> None:
+    numpy = pytest.importorskip("numpy")
+    original_np = robustness_module.np
+
+    extractor = EPIExtractor()
+    reference_records = list(synthetic_records)
+    bundles = extractor.extract(reference_records)
+    baseline = extractor.baseline_record
+    assert baseline is not None
+    microsectors = segment_microsectors(
+        reference_records,
+        bundles,
+        baseline=baseline,
+    )
+
+    thresholds = {
+        "lap": {"delta_nfr": 0.5, "sense_index": 0.5},
+        "phase": {"delta_nfr": 0.4, "sense_index": 0.4},
+    }
+
+    vectorised = compute_session_robustness(
+        bundles,
+        lap_indices=list(range(len(bundles))),
+        microsectors=microsectors,
+        thresholds=thresholds,
+    )
+
+    monkeypatch.setattr(robustness_module, "np", None)
+    try:
+        scalar = compute_session_robustness(
+            bundles,
+            lap_indices=list(range(len(bundles))),
+            microsectors=microsectors,
+            thresholds=thresholds,
+        )
+    finally:
+        restored = original_np if original_np is not None else numpy
+        monkeypatch.setattr(robustness_module, "np", restored)
+
+    assert vectorised == scalar
 
 
 def test_compute_insights_handles_empty_records(tmp_path) -> None:

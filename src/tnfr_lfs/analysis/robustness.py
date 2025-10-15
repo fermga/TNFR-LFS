@@ -6,6 +6,11 @@ import math
 from collections import defaultdict
 from typing import Any, Iterable, Mapping, Sequence
 
+try:  # pragma: no cover - exercised in tests when NumPy is missing
+    import numpy as np
+except Exception:  # pragma: no cover - NumPy is optional
+    np = None  # type: ignore[assignment]
+
 from tnfr_core.equations.epi_models import EPIBundle
 from tnfr_core.equations.phases import PHASE_SEQUENCE, phase_family
 def _lap_groups(
@@ -88,11 +93,16 @@ def _phase_sample_map(
 
 def _bundle_delta_and_sense_values(
     bundles: Sequence[EPIBundle],
-) -> tuple[list[float], list[float]]:
-    """Return parallel lists with per-bundle ``delta_nfr`` and ``sense_index`` values."""
+) -> tuple[Sequence[float], Sequence[float]]:
+    """Return series with per-bundle ``delta_nfr`` and ``sense_index`` values.
 
-    delta_values: list[float] = []
-    sense_values: list[float] = []
+    The results prefer :class:`numpy.ndarray` when NumPy is available so callers can
+    leverage vectorised math, while continuing to behave like generic sequences for
+    existing scalar consumers.
+    """
+
+    delta_list: list[float] = []
+    sense_list: list[float] = []
 
     for bundle in bundles:
         delta_raw = getattr(bundle, "delta_nfr", math.nan)
@@ -104,7 +114,7 @@ def _bundle_delta_and_sense_values(
             delta_numeric = math.nan
         if not math.isfinite(delta_numeric):
             delta_numeric = math.nan
-        delta_values.append(delta_numeric)
+        delta_list.append(delta_numeric)
 
         try:
             sense_numeric = float(sense_raw)
@@ -112,9 +122,14 @@ def _bundle_delta_and_sense_values(
             sense_numeric = math.nan
         if not math.isfinite(sense_numeric):
             sense_numeric = math.nan
-        sense_values.append(sense_numeric)
+        sense_list.append(sense_numeric)
 
-    return delta_values, sense_values
+    if np is None:
+        return delta_list, sense_list
+
+    delta_array = np.asarray(delta_list, dtype=float)
+    sense_array = np.asarray(sense_list, dtype=float)
+    return delta_array, sense_array
 
 
 def _coefficient_summary_from_moments(
@@ -171,35 +186,112 @@ def _coefficient_summary_for_indices(
 ) -> tuple[dict[str, float | int | bool], dict[str, float | int | bool]]:
     """Summaries for ``delta_nfr`` and ``sense_index`` over the given indices."""
 
-    max_index = min(len(delta_values), len(sense_values))
+    def _scalar_summary() -> tuple[
+        dict[str, float | int | bool],
+        dict[str, float | int | bool],
+    ]:
+        max_index = min(len(delta_values), len(sense_values))
 
-    delta_count = 0
-    delta_sum = 0.0
-    delta_sum_abs = 0.0
-    delta_sum_sq = 0.0
+        delta_count = 0
+        delta_sum = 0.0
+        delta_sum_abs = 0.0
+        delta_sum_sq = 0.0
 
-    sense_count = 0
-    sense_sum = 0.0
-    sense_sum_abs = 0.0
-    sense_sum_sq = 0.0
+        sense_count = 0
+        sense_sum = 0.0
+        sense_sum_abs = 0.0
+        sense_sum_sq = 0.0
 
-    for index in sample_indices:
-        if not 0 <= index < max_index:
-            continue
+        for index in sample_indices:
+            if not 0 <= index < max_index:
+                continue
 
-        delta_value = delta_values[index]
-        if math.isfinite(delta_value):
-            delta_count += 1
-            delta_sum += delta_value
-            delta_sum_abs += abs(delta_value)
-            delta_sum_sq += delta_value * delta_value
+            delta_value = delta_values[index]
+            if math.isfinite(delta_value):
+                delta_count += 1
+                delta_sum += delta_value
+                delta_sum_abs += abs(delta_value)
+                delta_sum_sq += delta_value * delta_value
 
-        sense_value = sense_values[index]
-        if math.isfinite(sense_value):
-            sense_count += 1
-            sense_sum += sense_value
-            sense_sum_abs += abs(sense_value)
-            sense_sum_sq += sense_value * sense_value
+            sense_value = sense_values[index]
+            if math.isfinite(sense_value):
+                sense_count += 1
+                sense_sum += sense_value
+                sense_sum_abs += abs(sense_value)
+                sense_sum_sq += sense_value * sense_value
+
+        delta_summary = _coefficient_summary_from_moments(
+            delta_count,
+            delta_sum,
+            delta_sum_abs,
+            delta_sum_sq,
+            threshold=delta_threshold,
+        )
+        sense_summary = _coefficient_summary_from_moments(
+            sense_count,
+            sense_sum,
+            sense_sum_abs,
+            sense_sum_sq,
+            threshold=sense_threshold,
+        )
+        return delta_summary, sense_summary
+
+    if np is None:
+        return _scalar_summary()
+
+    try:
+        delta_array = np.asarray(delta_values, dtype=float)
+        sense_array = np.asarray(sense_values, dtype=float)
+        index_array = np.asarray(sample_indices, dtype=int)
+    except (TypeError, ValueError):
+        return _scalar_summary()
+
+    max_index = min(delta_array.size, sense_array.size)
+    if max_index <= 0:
+        return _coefficient_summary_from_moments(
+            0, 0.0, 0.0, 0.0, threshold=delta_threshold
+        ), _coefficient_summary_from_moments(
+            0, 0.0, 0.0, 0.0, threshold=sense_threshold
+        )
+
+    if index_array.size:
+        valid_mask = (index_array >= 0) & (index_array < max_index)
+        valid_indices = index_array[valid_mask]
+    else:
+        valid_indices = index_array
+
+    def _moments(values: Sequence[float]) -> tuple[int, float, float, float]:
+        if np is None:
+            raise RuntimeError("NumPy unexpectedly unavailable during vectorised path")
+        if valid_indices.size:
+            selected = np.take(values, valid_indices)
+        else:
+            selected = values[:0]  # type: ignore[index]
+        finite_mask = np.isfinite(selected)
+        if not np.any(finite_mask):
+            return 0, 0.0, 0.0, 0.0
+        finite_values = selected[finite_mask]
+        count = int(finite_values.size)
+        total = float(finite_values.sum(dtype=float))
+        total_abs = float(np.abs(finite_values).sum(dtype=float))
+        total_sq = float(np.square(finite_values).sum(dtype=float))
+        return count, total, total_abs, total_sq
+
+    try:
+        (
+            delta_count,
+            delta_sum,
+            delta_sum_abs,
+            delta_sum_sq,
+        ) = _moments(delta_array)
+        (
+            sense_count,
+            sense_sum,
+            sense_sum_abs,
+            sense_sum_sq,
+        ) = _moments(sense_array)
+    except Exception:
+        return _scalar_summary()
 
     delta_summary = _coefficient_summary_from_moments(
         delta_count,
