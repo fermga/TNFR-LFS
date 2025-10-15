@@ -257,7 +257,8 @@ class NaturalFrequencyAnalyzer:
         history: Sequence[TelemetryRecord],
         car_model: str | None,
     ) -> Tuple[Dict[str, float], float]:
-        history = tuple(history)
+        if not isinstance(history, tuple):
+            history = tuple(history)
         if len(history) < 2:
             return {}, 0.0
 
