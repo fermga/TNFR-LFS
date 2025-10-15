@@ -2834,7 +2834,8 @@ def _build_goals(
 
             use_direct_multipliers = False
             if sample_multipliers is not None and phase_length:
-                if all(0 <= idx < len(sample_multipliers) for idx in range(start, stop)):
+                if 0 <= start and stop <= len(sample_multipliers):
+                    # ``stop`` is already exclusive so it can be compared with the length.
                     direct_values: List[float] = []
                     for idx in range(start, stop):
                         try:
