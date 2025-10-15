@@ -8,7 +8,7 @@ import statistics
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, List, Mapping, Sequence
 
 from tnfr_lfs.resources import data_root
 from tnfr_core.cache import (
@@ -132,16 +132,14 @@ def _prepare_segmentation_inputs(
 ) -> tuple[
     list,
     TelemetryRecord,
-    Mapping[int, str],
-    Mapping[int, Mapping[str, Mapping[str, float] | float]],
+    List[str],
+    List[Mapping[str, Mapping[str, float] | float]],
 ]:
     extractor = EPIExtractor()
     bundles = extractor.extract(records)
     baseline = DeltaCalculator.derive_baseline(records)
-    phase_assignments = {idx: PHASE_SEQUENCE[0] for idx in range(len(records))}
-    weight_lookup = {
-        idx: DEFAULT_PHASE_WEIGHTS for idx in range(len(records))
-    }
+    phase_assignments = [PHASE_SEQUENCE[0] for _ in range(len(records))]
+    weight_lookup = [DEFAULT_PHASE_WEIGHTS for _ in range(len(records))]
     return bundles, baseline, phase_assignments, weight_lookup
 
 
