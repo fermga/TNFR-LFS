@@ -683,7 +683,9 @@ def segment_microsectors(
     ]
     session_components = _resolve_session_components(records, baseline_record)
 
-    yaw_rate_cache = [_compute_yaw_rate(records, idx) for idx in range(len(records))]
+    yaw_rate_cache = [
+        _resolve_yaw_rate(records, idx) for idx in range(len(records))
+    ]
     node_delta_cache: List[Mapping[str, float]] | None = None
 
     for index, (start, end) in enumerate(segments):
@@ -2066,15 +2068,43 @@ def _classify_archetype(
     return ARCHETYPE_MEDIUM
 
 
-def _compute_yaw_rate(records: Sequence[SupportsTelemetrySample], index: int) -> float:
+def _resolve_yaw_rate(
+    records: Sequence[SupportsTelemetrySample], index: int
+) -> float:
+    if not (0 <= index < len(records)):
+        return 0.0
+    record = records[index]
+    try:
+        yaw_rate = float(getattr(record, "yaw_rate"))
+    except (AttributeError, TypeError, ValueError):
+        yaw_rate = math.nan
+    if math.isfinite(yaw_rate):
+        return yaw_rate
+    return _compute_yaw_rate(records, index, record=record, yaw_rate=yaw_rate)
+
+
+def _compute_yaw_rate(
+    records: Sequence[SupportsTelemetrySample],
+    index: int,
+    *,
+    record: SupportsTelemetrySample | None = None,
+    yaw_rate: float | None = None,
+) -> float:
+    if yaw_rate is not None and math.isfinite(yaw_rate):
+        return float(yaw_rate)
+    if record is not None:
+        candidate = getattr(record, "yaw_rate", math.nan)
+        if math.isfinite(candidate):
+            return float(candidate)
     if index <= 0 or index >= len(records):
         return 0.0
-    current = records[index]
+    if record is None:
+        record = records[index]
     previous = records[index - 1]
-    dt = current.timestamp - previous.timestamp
+    dt = record.timestamp - previous.timestamp
     if dt <= 1e-9:
         return 0.0
-    delta = current.yaw - previous.yaw
+    delta = record.yaw - previous.yaw
     wrapped = (delta + math.pi) % (2.0 * math.pi) - math.pi
     return wrapped / dt
 

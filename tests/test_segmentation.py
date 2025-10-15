@@ -692,6 +692,59 @@ def test_segment_microsectors_node_delta_cache_consistency(
     assert microsectors, "expected synthetic segmentation"
 
 
+def test_segment_microsectors_prefers_record_yaw_rate(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    calls: list[int] = []
+    original_compute = metrics_segmentation._compute_yaw_rate
+
+    def _tracking(*args, **kwargs):
+        calls.append(kwargs.get("index") if "index" in kwargs else args[1])
+        return original_compute(*args, **kwargs)
+
+    with monkeypatch.context() as patch_context:
+        patch_context.setattr(
+            metrics_segmentation,
+            "_compute_yaw_rate",
+            _tracking,
+        )
+        microsectors = segment_microsectors(
+            list(synthetic_records),
+            list(synthetic_bundles),
+        )
+
+    assert microsectors, "expected synthetic segmentation"
+    assert calls == [], "expected direct yaw_rate usage without recomputation"
+
+
+def test_segment_microsectors_computes_fallback_yaw_rate(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    fallback_indices = {0, 5, 12}
+    records = list(synthetic_records)
+    for index in fallback_indices:
+        records[index] = replace(records[index], yaw_rate=math.nan)
+
+    calls: list[int] = []
+    original_compute = metrics_segmentation._compute_yaw_rate
+
+    def _tracking(*args, **kwargs):
+        call_index = kwargs.get("index") if "index" in kwargs else args[1]
+        calls.append(call_index)
+        return original_compute(*args, **kwargs)
+
+    with monkeypatch.context() as patch_context:
+        patch_context.setattr(
+            metrics_segmentation,
+            "_compute_yaw_rate",
+            _tracking,
+        )
+        microsectors = segment_microsectors(records, list(synthetic_bundles))
+
+    assert microsectors, "expected synthetic segmentation"
+    assert set(calls) >= fallback_indices
+
+
 def test_segment_microsectors_computes_wheel_dispersion(
     synthetic_records, synthetic_bundles
 ) -> None:
