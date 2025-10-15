@@ -18,7 +18,7 @@ engineering practice:
 from __future__ import annotations
 
 import math
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from statistics import mean, pstdev
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple, cast
@@ -27,6 +27,7 @@ from tnfr_core.equations.epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
     NaturalFrequencyAnalyzer,
+    NaturalFrequencySnapshot,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
@@ -173,6 +174,46 @@ class _SegmentSummary:
     brake_temperatures: Dict[str, float]
     brake_temperature_std: Dict[str, float]
     end_timestamp: float
+
+
+@dataclass(frozen=True)
+class _AnalyzerState:
+    """Minimal snapshot required to resume the ν_f analyzer."""
+
+    history: Tuple[SupportsTelemetrySample, ...]
+    smoothed: Tuple[Tuple[str, float], ...]
+    last_car: str | None
+    last_snapshot: NaturalFrequencySnapshot | None
+
+
+@dataclass(frozen=True)
+class _BundleRecomputeResult:
+    """Return value for bundle recomputation together with ν_f state."""
+
+    bundles: List[SupportsEPIBundle]
+    analyzer_states: List[_AnalyzerState | None]
+
+
+def _capture_analyzer_state(analyzer: NaturalFrequencyAnalyzer) -> _AnalyzerState:
+    """Serialise the incremental analyzer state for later reuse."""
+
+    return _AnalyzerState(
+        history=tuple(analyzer._history),
+        smoothed=tuple(analyzer._smoothed.items()),
+        last_car=analyzer._last_car,
+        last_snapshot=analyzer._last_snapshot,
+    )
+
+
+def _restore_analyzer_state(
+    analyzer: NaturalFrequencyAnalyzer, state: _AnalyzerState
+) -> None:
+    """Restore a previously captured analyzer state."""
+
+    analyzer._history = deque(state.history)
+    analyzer._smoothed = {key: value for key, value in state.smoothed}
+    analyzer._last_car = state.last_car
+    analyzer._last_snapshot = state.last_snapshot
 
 
 def _accumulate_segment_metrics(
@@ -621,13 +662,18 @@ def segment_microsectors(
                 phase_assignments[sample_index] = phase
                 weight_lookup[sample_index] = phase_weight_map
 
-    recomputed_bundles = _recompute_bundles(
+    analyzer_states: List[_AnalyzerState | None] | None = None
+
+    recompute_result = _recompute_bundles(
         records,
         bundle_list,
         baseline,
         phase_assignments,
         weight_lookup,
+        analyzer_states=analyzer_states,
     )
+    recomputed_bundles = recompute_result.bundles
+    analyzer_states = recompute_result.analyzer_states
 
     weights_adjusted, weight_start_index = _adjust_phase_weights_with_dominance(
         specs,
@@ -639,14 +685,17 @@ def segment_microsectors(
     )
 
     if weights_adjusted:
-        recomputed_bundles = _recompute_bundles(
+        recompute_result = _recompute_bundles(
             records,
             recomputed_bundles,
             baseline,
             phase_assignments,
             weight_lookup,
             start_index=weight_start_index if weight_start_index is not None else 0,
+            analyzer_states=analyzer_states,
         )
+        recomputed_bundles = recompute_result.bundles
+        analyzer_states = recompute_result.analyzer_states
 
     goal_nu_f_lookup: Dict[int, float] = {}
     goal_start_index: int | None = None
@@ -701,7 +750,7 @@ def segment_microsectors(
                 goal_start_index = min(goal_start_index, start_candidate)
 
     if goal_nu_f_lookup:
-        recomputed_bundles = _recompute_bundles(
+        recompute_result = _recompute_bundles(
             records,
             recomputed_bundles,
             baseline,
@@ -709,7 +758,10 @@ def segment_microsectors(
             weight_lookup,
             goal_nu_f_lookup=goal_nu_f_lookup,
             start_index=goal_start_index if goal_start_index is not None else 0,
+            analyzer_states=analyzer_states,
         )
+        recomputed_bundles = recompute_result.bundles
+        analyzer_states = recompute_result.analyzer_states
 
     for spec in specs:
         start = spec["start"]
@@ -1494,31 +1546,60 @@ def _recompute_bundles(
     goal_nu_f_lookup: Mapping[int, Mapping[str, float] | float] | None = None,
     *,
     start_index: int = 0,
-) -> List[SupportsEPIBundle]:
+    analyzer_states: Sequence[_AnalyzerState | None] | None = None,
+) -> _BundleRecomputeResult:
     if not records:
-        return list(bundles)
+        cached_states = list(analyzer_states) if analyzer_states is not None else []
+        return _BundleRecomputeResult(list(bundles), cached_states)
 
     total_samples = len(records)
     if start_index <= 0:
         recompute_start = 0
     elif start_index >= total_samples:
-        return list(bundles)
+        cached_states = list(analyzer_states) if analyzer_states is not None else [None] * total_samples
+        if len(cached_states) < total_samples:
+            cached_states.extend([None] * (total_samples - len(cached_states)))
+        elif len(cached_states) > total_samples:
+            cached_states = cached_states[:total_samples]
+        return _BundleRecomputeResult(list(bundles), cached_states)
     else:
         recompute_start = start_index
 
     analyzer = NaturalFrequencyAnalyzer()
     result: List[SupportsEPIBundle] = list(bundles)
 
-    if recompute_start > 0:
-        for idx in range(min(recompute_start, len(records))):
-            phase = phase_assignments.get(idx, PHASE_SEQUENCE[0])
-            phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
-            resolve_nu_f_by_node(
-                records[idx],
-                phase=phase,
-                phase_weights=phase_weights,
-                analyzer=analyzer,
-            )
+    if analyzer_states is None:
+        state_cache: List[_AnalyzerState | None] = [None for _ in range(total_samples)]
+    else:
+        state_cache = list(analyzer_states)
+        if len(state_cache) < total_samples:
+            state_cache.extend([None for _ in range(total_samples - len(state_cache))])
+        elif len(state_cache) > total_samples:
+            del state_cache[total_samples:]
+
+    restore_index = -1
+    if recompute_start > 0 and state_cache:
+        search_limit = min(recompute_start - 1, len(state_cache) - 1)
+        for candidate in range(search_limit, -1, -1):
+            cached_state = state_cache[candidate]
+            if cached_state is not None:
+                _restore_analyzer_state(analyzer, cached_state)
+                restore_index = candidate
+                break
+
+    prime_start = max(restore_index + 1, 0)
+    for idx in range(prime_start, recompute_start):
+        record = records[idx]
+        phase = phase_assignments.get(idx, PHASE_SEQUENCE[0])
+        phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
+        resolve_nu_f_by_node(
+            record,
+            phase=phase,
+            phase_weights=phase_weights,
+            analyzer=analyzer,
+        )
+        if idx < len(state_cache):
+            state_cache[idx] = _capture_analyzer_state(analyzer)
 
     prev_integrated: float | None = None
     if recompute_start > 0 and recompute_start - 1 < len(result):
@@ -1571,8 +1652,9 @@ def _recompute_bundles(
         else:
             result.append(recomputed_bundle)
         prev_integrated = recomputed_bundle.integrated_epi
-
-    return result
+        if idx < len(state_cache):
+            state_cache[idx] = _capture_analyzer_state(analyzer)
+    return _BundleRecomputeResult(result, state_cache)
 
 
 def _estimate_entropy(
