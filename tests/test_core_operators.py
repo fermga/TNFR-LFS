@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from math import cos, pi, sin, sqrt
 from statistics import mean, pstdev, pvariance
-from typing import List, Mapping, Sequence
+from typing import Dict, List, Mapping, Sequence
 
 import numpy as np
 import pytest
@@ -73,6 +73,7 @@ from tnfr_core.operators import (
 from tnfr_core.metrics import compute_window_metrics
 from tnfr_core.operator_detection import canonical_operator_label
 from tnfr_core.interfaces import SupportsEPIBundle
+import tnfr_core.operators.operators as operators_module
 
 
 @dataclass
@@ -314,6 +315,196 @@ def test_stage_epi_evolution_accepts_protocol_samples():
             assert len(actual_series) == len(reference_series)
             for actual, reference in zip(actual_series, reference_series):
                 assert actual == pytest.approx(reference)
+
+
+def _build_epi_stage_records() -> List[TelemetryRecord]:
+    base = build_dynamic_record(
+        timestamp=0.0,
+        vertical_load=5050.0,
+        slip_ratio=0.02,
+        lateral_accel=0.7,
+        longitudinal_accel=0.3,
+        nfr=5.2,
+        si=0.8,
+        throttle=0.42,
+        steer=0.12,
+        yaw_rate=0.15,
+    )
+    first = replace(base, reference=base)
+    second = replace(
+        first,
+        timestamp=0.1,
+        slip_ratio=0.05,
+        lateral_accel=0.9,
+        longitudinal_accel=0.4,
+        nfr=5.7,
+        si=0.82,
+        throttle=0.47,
+        steer=0.16,
+        yaw_rate=0.22,
+        reference=first,
+    )
+    third = replace(
+        second,
+        timestamp=0.2,
+        slip_ratio=0.07,
+        lateral_accel=1.05,
+        longitudinal_accel=0.55,
+        nfr=6.0,
+        si=0.85,
+        throttle=0.52,
+        steer=0.2,
+        yaw_rate=0.28,
+        reference=second,
+    )
+    return [first, second, third]
+
+
+def _build_epi_stage_bundles(
+    timestamps: Sequence[float],
+    integrated: Sequence[float],
+    derivatives: Sequence[float],
+    node_series: Sequence[Mapping[str, tuple[float, float]]],
+) -> List[EPIBundle]:
+    bundles: List[EPIBundle] = []
+    sense_index = 0.85
+    for idx, timestamp in enumerate(timestamps):
+        node_evolution = dict(node_series[idx])
+        node_derivative_sum = sum(values[1] for values in node_evolution.values())
+        tyres = TyresNode(delta_nfr=node_derivative_sum, sense_index=sense_index)
+        suspension = SuspensionNode(
+            delta_nfr=node_derivative_sum * 0.5,
+            sense_index=sense_index,
+        )
+        chassis = ChassisNode(
+            delta_nfr=node_derivative_sum * 0.25,
+            sense_index=sense_index,
+        )
+        bundles.append(
+            EPIBundle(
+                timestamp=timestamp,
+                epi=integrated[idx],
+                delta_nfr=node_derivative_sum,
+                sense_index=sense_index,
+                tyres=tyres,
+                suspension=suspension,
+                chassis=chassis,
+                brakes=BrakesNode(delta_nfr=0.0, sense_index=sense_index),
+                transmission=TransmissionNode(delta_nfr=0.0, sense_index=sense_index),
+                track=TrackNode(delta_nfr=0.0, sense_index=sense_index),
+                driver=DriverNode(delta_nfr=0.0, sense_index=sense_index),
+                dEPI_dt=derivatives[idx],
+                integrated_epi=integrated[idx],
+                node_evolution=node_evolution,
+            )
+        )
+    return bundles
+
+
+def test_stage_epi_evolution_reuses_bundle_history_when_no_phase_overrides(monkeypatch):
+    records = _build_epi_stage_records()
+    node_evolution_series = [
+        {"tyres": (0.05, 0.5), "suspension": (0.02, 0.2), "chassis": (0.01, 0.1)},
+        {"tyres": (0.04, 0.4), "suspension": (0.03, 0.3), "chassis": (0.015, 0.15)},
+        {"tyres": (0.06, 0.6), "suspension": (0.025, 0.25), "chassis": (0.02, 0.2)},
+    ]
+    integrated_series = [0.08, 0.165, 0.27]
+    derivative_series = [0.8, 0.85, 1.05]
+    timestamps = [record.timestamp for record in records]
+    bundles = _build_epi_stage_bundles(
+        timestamps, integrated_series, derivative_series, node_evolution_series
+    )
+
+    def _fail(*_args: object, **_kwargs: object) -> Mapping[str, float]:
+        raise AssertionError("EPI evolution should reuse existing bundle data")
+
+    monkeypatch.setattr(
+        "tnfr_core.operators.operators.delta_nfr_by_node",
+        _fail,
+    )
+    monkeypatch.setattr(
+        "tnfr_core.operators.operators.resolve_nu_f_by_node",
+        _fail,
+    )
+
+    result = _stage_epi_evolution(records, bundles=bundles)
+
+    assert result["integrated"] == pytest.approx(integrated_series)
+    assert result["derivative"] == pytest.approx(derivative_series)
+
+    nodes = {name for series in node_evolution_series for name in series}
+    expected_node_integrated: Dict[str, List[float]] = {name: [] for name in nodes}
+    expected_node_derivative: Dict[str, List[float]] = {name: [] for name in nodes}
+    cumulative: Dict[str, float] = {name: 0.0 for name in nodes}
+    for series in node_evolution_series:
+        for name in nodes:
+            integral, derivative = series.get(name, (0.0, 0.0))
+            cumulative[name] += integral
+            expected_node_integrated[name].append(cumulative[name])
+            expected_node_derivative[name].append(derivative)
+
+    assert set(result["per_node_integrated"]) == nodes
+    assert set(result["per_node_derivative"]) == nodes
+
+    for name in nodes:
+        assert result["per_node_integrated"][name] == pytest.approx(
+            expected_node_integrated[name]
+        )
+        assert result["per_node_derivative"][name] == pytest.approx(
+            expected_node_derivative[name]
+        )
+
+
+def test_stage_epi_evolution_recomputes_when_phase_customisation_requested(monkeypatch):
+    records = _build_epi_stage_records()
+    expected = _stage_epi_evolution(records, phase_assignments={1: "apex"})
+
+    node_evolution_series = [
+        {"tyres": (0.05, 0.5), "suspension": (0.02, 0.2), "chassis": (0.01, 0.1)},
+        {"tyres": (0.04, 0.4), "suspension": (0.03, 0.3), "chassis": (0.015, 0.15)},
+        {"tyres": (0.06, 0.6), "suspension": (0.025, 0.25), "chassis": (0.02, 0.2)},
+    ]
+    integrated_series = [0.08, 0.165, 0.27]
+    derivative_series = [0.8, 0.85, 1.05]
+    timestamps = [record.timestamp for record in records]
+    bundles = _build_epi_stage_bundles(
+        timestamps, integrated_series, derivative_series, node_evolution_series
+    )
+
+    delta_calls = 0
+    original_delta = operators_module.delta_nfr_by_node
+
+    def _spy_delta(record: TelemetryRecord) -> Mapping[str, float]:
+        nonlocal delta_calls
+        delta_calls += 1
+        return original_delta(record)
+
+    nu_calls = 0
+    original_nu = operators_module.resolve_nu_f_by_node
+
+    def _spy_nu(*args: object, **kwargs: object):
+        nonlocal nu_calls
+        nu_calls += 1
+        return original_nu(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "tnfr_core.operators.operators.delta_nfr_by_node",
+        _spy_delta,
+    )
+    monkeypatch.setattr(
+        "tnfr_core.operators.operators.resolve_nu_f_by_node",
+        _spy_nu,
+    )
+
+    result = _stage_epi_evolution(
+        records,
+        bundles=bundles,
+        phase_assignments={1: "apex"},
+    )
+
+    assert result == expected
+    assert delta_calls == len(records)
+    assert nu_calls == len(records)
 
 
 def _build_microsector(
