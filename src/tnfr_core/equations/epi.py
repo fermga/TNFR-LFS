@@ -408,28 +408,38 @@ class NaturalFrequencyAnalyzer:
         return mapping
 
     def _coherence_index(self) -> float:
-        history = list(self._history)
-        if len(history) < 2:
+        if len(self._history) < 2:
             return 0.0
-        densities: List[float] = []
-        for previous, current in zip(history[:-1], history[1:]):
+        window = max(1, int(self.settings.structural_density_window))
+        densities: Deque[float] = deque(maxlen=window)
+        iterator = iter(self._history)
+        previous = next(iterator, None)
+        for current in iterator:
+            if previous is None:
+                previous = current
+                continue
             chrono_dt = float(current.timestamp) - float(previous.timestamp)
             if chrono_dt <= 1e-9:
+                previous = current
                 continue
             structural_curr = getattr(current, "structural_timestamp", None)
             structural_prev = getattr(previous, "structural_timestamp", None)
             if structural_curr is None or structural_prev is None:
+                previous = current
                 continue
             structural_dt = float(structural_curr) - float(structural_prev)
             if structural_dt <= 0.0:
+                previous = current
                 continue
             ratio = structural_dt / chrono_dt
             densities.append(max(0.0, ratio - 1.0))
+            previous = current
         if not densities:
             return 0.0
-        window = max(1, int(self.settings.structural_density_window))
-        tail = densities[-window:]
-        average_density = sum(tail) / len(tail)
+        # The bounded deque ensures we only retain the recent values needed for the
+        # trailing average, matching the previous behaviour without materialising
+        # the entire history on every coherence calculation.
+        average_density = sum(densities) / len(densities)
         normaliser = max(1e-6, float(self.settings.structural_density_normaliser))
         return max(0.0, min(1.0, average_density / normaliser))
 

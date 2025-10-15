@@ -887,6 +887,66 @@ def test_natural_frequency_analysis_converges_to_dominant_signal():
         assert max_step < base_reference["driver"] * 0.6
 
 
+def test_coherence_index_with_large_history_focuses_on_recent_window():
+    window = 8
+    normaliser = 10.0
+    settings = NaturalFrequencySettings(
+        min_window_seconds=0.5,
+        max_window_seconds=1_000.0,
+        structural_density_window=window,
+        structural_density_normaliser=normaliser,
+    )
+    analyzer = NaturalFrequencyAnalyzer(settings)
+
+    sample_count = 128
+    chrono_dt = 0.25
+    low_ratio = 1.5
+    high_ratio = 6.0
+    structural_time = 0.0
+    history = []
+    for index in range(sample_count):
+        if index > 0:
+            if index > sample_count - window - 1:
+                ratio = high_ratio
+            else:
+                ratio = low_ratio
+            structural_time += ratio * chrono_dt
+        history.append(
+            build_frequency_record(
+                index * chrono_dt,
+                steer=0.1,
+                throttle=0.5,
+                brake=0.1,
+                suspension=0.02,
+                structural_timestamp=structural_time,
+            )
+        )
+
+    analyzer._history.clear()
+    analyzer._history.extend(history)
+
+    densities = []
+    for previous, current in zip(history[:-1], history[1:]):
+        chrono_dt = float(current.timestamp) - float(previous.timestamp)
+        if chrono_dt <= 1e-9:
+            continue
+        structural_curr = getattr(current, "structural_timestamp", None)
+        structural_prev = getattr(previous, "structural_timestamp", None)
+        if structural_curr is None or structural_prev is None:
+            continue
+        structural_dt = float(structural_curr) - float(structural_prev)
+        if structural_dt <= 0.0:
+            continue
+        ratio = structural_dt / chrono_dt
+        densities.append(max(0.0, ratio - 1.0))
+
+    tail = densities[-window:]
+    expected_density = sum(tail) / len(tail)
+    expected = max(0.0, min(1.0, expected_density / normaliser))
+
+    assert analyzer._coherence_index() == pytest.approx(expected)
+
+
 def test_resolve_nu_f_by_node_accepts_protocol_samples():
     history = [
         build_frequency_record(0.00, steer=0.10, throttle=0.50, brake=0.15, suspension=0.03),
