@@ -293,6 +293,59 @@ def _merge_phase_indices(sequences: Sequence[Tuple[int, ...]]) -> Tuple[int, ...
     return tuple(merged)
 
 
+def _segment_index_range(metadata: object, start: int, end: int) -> range:
+    """Return the inclusive range of indices covered by a segment payload."""
+
+    if isinstance(metadata, range):
+        return metadata
+    if (
+        isinstance(metadata, tuple)
+        and len(metadata) == 2
+        and all(isinstance(value, int) for value in metadata)
+    ):
+        first, last = metadata
+        if last < first:
+            first, last = last, first
+        return range(first, last + 1)
+    return range(start, end + 1)
+
+
+def _serialise_sample_context(
+    metadata: object,
+    start: int,
+    end: int,
+    sample_context: Sequence[ContextFactors],
+) -> Dict[int, Mapping[str, float]]:
+    """Materialise contextual factors for the indices referenced by ``metadata``."""
+
+    if not sample_context:
+        return {}
+
+    resolved: Dict[int, Mapping[str, float]] = {}
+    if isinstance(metadata, Mapping):
+        source = metadata.items()
+    else:
+        indices = _segment_index_range(metadata, start, end)
+        source = (
+            (idx, sample_context[idx])
+            for idx in indices
+            if 0 <= idx < len(sample_context)
+        )
+
+    for idx, factors in source:
+        if not isinstance(idx, int):
+            continue
+        if 0 <= idx < len(sample_context):
+            candidate = sample_context[idx]
+        else:
+            candidate = factors
+        if hasattr(candidate, "as_mapping"):
+            resolved[idx] = candidate.as_mapping()
+        else:
+            resolved[idx] = dict(candidate)
+    return resolved
+
+
 def segment_microsectors(
     records: Sequence[SupportsTelemetrySample],
     bundles: Sequence[SupportsEPIBundle],
@@ -434,16 +487,7 @@ def segment_microsectors(
             speed_drop=speed_drop,
             direction_changes=float(direction_changes),
         )
-        sample_context_map = {
-            sample_index: sample_context[sample_index]
-            for sample_index in range(start, end + 1)
-            if 0 <= sample_index < len(sample_context)
-        }
-        sample_multiplier_map = {
-            sample_index: sample_multipliers[sample_index]
-            for sample_index in range(start, end + 1)
-            if 0 <= sample_index < len(sample_multipliers)
-        }
+        segment_span = (start, end)
         specs.append(
             {
                 "index": index,
@@ -464,8 +508,8 @@ def segment_microsectors(
                 "direction_changes": direction_changes,
                 "end_timestamp": float(records[end].timestamp),
                 "context_factors": context_factors,
-                "sample_context": sample_context_map,
-                "context_multipliers": sample_multiplier_map,
+                "sample_context": segment_span,
+                "context_multipliers": segment_span,
             }
         )
         for phase, indices in phase_samples.items():
@@ -505,10 +549,13 @@ def segment_microsectors(
     for spec in specs:
         start = spec["start"]
         end = spec["end"]
-        sample_multiplier_map = spec.get("context_multipliers", {})
+        multiplier_meta = spec.get("context_multipliers")
+        multiplier_indices = _segment_index_range(multiplier_meta, start, end)
         adjusted_deltas = []
-        for offset, bundle in enumerate(recomputed_bundles[start : end + 1], start):
-            multiplier = sample_multiplier_map.get(offset)
+        for offset, bundle in zip(multiplier_indices, recomputed_bundles[start : end + 1]):
+            multiplier = None
+            if isinstance(multiplier_meta, Mapping):
+                multiplier = multiplier_meta.get(offset)
             if multiplier is None and 0 <= offset < len(sample_multipliers):
                 multiplier = sample_multipliers[offset]
             if multiplier is None:
@@ -568,10 +615,13 @@ def segment_microsectors(
         support_event = spec["support_event"]
         avg_vertical_load = float(spec.get("avg_vertical_load", 0.0))
         grip_rel = float(spec.get("grip_rel", 0.0))
-        sample_multiplier_map = spec.get("context_multipliers", {})
+        multiplier_meta = spec.get("context_multipliers")
+        multiplier_indices = _segment_index_range(multiplier_meta, start, end)
         adjusted_deltas = []
-        for offset, bundle in enumerate(recomputed_bundles[start : end + 1], start):
-            multiplier = sample_multiplier_map.get(offset)
+        for offset, bundle in zip(multiplier_indices, recomputed_bundles[start : end + 1]):
+            multiplier = None
+            if isinstance(multiplier_meta, Mapping):
+                multiplier = multiplier_meta.get(offset)
             if multiplier is None and 0 <= offset < len(sample_multipliers):
                 multiplier = sample_multipliers[offset]
             if multiplier is None:
@@ -1296,14 +1346,12 @@ def segment_microsectors(
                     if spec.get("context_factors")
                     else {}
                 ),
-                sample_context_factors={
-                    idx: (
-                        factors.as_mapping()
-                        if hasattr(factors, "as_mapping")
-                        else dict(factors)
-                    )
-                    for idx, factors in spec.get("sample_context", {}).items()
-                },
+                sample_context_factors=_serialise_sample_context(
+                    spec.get("sample_context"),
+                    start,
+                    end,
+                    sample_context,
+                ),
                 operator_events=operator_events,
             )
         )
