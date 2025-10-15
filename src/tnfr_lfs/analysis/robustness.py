@@ -143,24 +143,31 @@ def _phase_sample_map(
     return ordered
 
 
-def _bundle_metric_series(
-    bundles: Sequence[EPIBundle], sample_indices: Sequence[int], attribute: str
-) -> list[float]:
-    values: list[float] = []
+def _bundle_delta_and_sense_series(
+    bundles: Sequence[EPIBundle], sample_indices: Sequence[int]
+) -> tuple[list[float], list[float]]:
+    delta_values: list[float] = []
+    sense_values: list[float] = []
     bundle_count = len(bundles)
+
+    def append_numeric(value: Any, target: list[float]) -> None:
+        if value is None:
+            return
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(numeric_value):
+            target.append(numeric_value)
+
     for index in sample_indices:
         if not 0 <= index < bundle_count:
             continue
-        value = getattr(bundles[index], attribute, None)
-        if value is None:
-            continue
-        try:
-            numeric = float(value)
-        except (TypeError, ValueError):
-            continue
-        if math.isfinite(numeric):
-            values.append(numeric)
-    return values
+        bundle = bundles[index]
+        append_numeric(getattr(bundle, "delta_nfr", None), delta_values)
+        append_numeric(getattr(bundle, "sense_index", None), sense_values)
+
+    return delta_values, sense_values
 
 
 def compute_session_robustness(
@@ -193,8 +200,9 @@ def compute_session_robustness(
             lap_thresholds.get("sense_index") if isinstance(lap_thresholds, Mapping) else None
         )
         for lap_index, label, indices in lap_groups:
-            delta_values = _bundle_metric_series(bundle_list, indices, "delta_nfr")
-            si_values = _bundle_metric_series(bundle_list, indices, "sense_index")
+            delta_values, si_values = _bundle_delta_and_sense_series(
+                bundle_list, indices
+            )
             entries.append(
                 {
                     "index": lap_index,
@@ -229,8 +237,9 @@ def compute_session_robustness(
                     if isinstance(value, (int, float))
                 }
         for phase, indices in phase_map.items():
-            delta_values = _bundle_metric_series(bundle_list, indices, "delta_nfr")
-            si_values = _bundle_metric_series(bundle_list, indices, "sense_index")
+            delta_values, si_values = _bundle_delta_and_sense_series(
+                bundle_list, indices
+            )
             phase_limits = per_phase_thresholds.get(phase, phase_defaults)
             delta_limit = None
             sense_limit = None
