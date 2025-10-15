@@ -158,42 +158,68 @@ class CoordinateDescentOptimizer:
         return vector, best_score, self.max_iterations, evaluations
 
 
-def _timestamp_delta(results: Sequence[EPIBundle], index: int) -> float:
+def _timestamp_deltas(results: Sequence[EPIBundle]) -> list[float]:
     if not results:
-        return 0.0
-    if index + 1 < len(results):
-        return max(1e-3, results[index + 1].timestamp - results[index].timestamp)
-    if index > 0:
-        return max(1e-3, results[index].timestamp - results[index - 1].timestamp)
-    return 1e-3
+        return []
+    deltas: list[float] = []
+    for index, bundle in enumerate(results):
+        if index + 1 < len(results):
+            next_stamp = results[index + 1].timestamp
+            current_stamp = bundle.timestamp
+            delta = max(1e-3, next_stamp - current_stamp)
+        elif index > 0:
+            previous_stamp = results[index - 1].timestamp
+            delta = max(1e-3, bundle.timestamp - previous_stamp)
+        else:
+            delta = 1e-3
+        deltas.append(delta)
+    return deltas
 
 
-def _microsector_integral(results: Sequence[EPIBundle], microsector: Microsector) -> float:
+def _microsector_integral(
+    results: Sequence[EPIBundle],
+    microsector: Microsector,
+    deltas: Sequence[float] | None = None,
+) -> float:
+    if deltas is None:
+        deltas = _timestamp_deltas(results)
     integral = 0.0
     for start, stop in microsector.phase_boundaries.values():
         for idx in range(start, min(stop, len(results))):
-            integral += abs(results[idx].delta_nfr) * _timestamp_delta(results, idx)
+            if idx < len(deltas):
+                integral += abs(results[idx].delta_nfr) * deltas[idx]
     return integral
 
 
-def _absolute_delta_integral(results: Sequence[EPIBundle]) -> float:
+def _absolute_delta_integral(
+    results: Sequence[EPIBundle],
+    deltas: Sequence[float] | None = None,
+) -> float:
+    if deltas is None:
+        deltas = _timestamp_deltas(results)
     total = 0.0
     for idx, bundle in enumerate(results):
-        total += abs(bundle.delta_nfr) * _timestamp_delta(results, idx)
+        if idx < len(deltas):
+            total += abs(bundle.delta_nfr) * deltas[idx]
     return total
 
 
 def _phase_integrals(
-    results: Sequence[EPIBundle], microsectors: Sequence[Microsector] | None
+    results: Sequence[EPIBundle],
+    microsectors: Sequence[Microsector] | None,
+    deltas: Sequence[float] | None = None,
 ) -> Dict[str, float]:
     if not results or not microsectors:
         return {}
+    if deltas is None:
+        deltas = _timestamp_deltas(results)
     totals: Dict[str, float] = {}
     for microsector in microsectors:
         for phase, (start, stop) in microsector.phase_boundaries.items():
             subtotal = 0.0
             for idx in range(start, min(stop, len(results))):
-                subtotal += abs(results[idx].delta_nfr) * _timestamp_delta(results, idx)
+                if idx < len(deltas):
+                    subtotal += abs(results[idx].delta_nfr) * deltas[idx]
             if subtotal:
                 totals[phase] = totals.get(phase, 0.0) + subtotal
     return totals
@@ -264,7 +290,8 @@ def objective_score(
 
     mean_si = fmean(bundle.sense_index for bundle in results)
 
-    delta_integral = _absolute_delta_integral(results)
+    deltas = _timestamp_deltas(results)
+    delta_integral = _absolute_delta_integral(results, deltas)
     delta_reference = max(1e-3, _hint_float("delta_reference", 6.0))
     delta_density = delta_integral / duration
     delta_score = max(0.0, 1.0 - delta_density / delta_reference)
@@ -915,7 +942,11 @@ class SetupPlanner:
         def _integral_metrics(
             results: Sequence[EPIBundle],
         ) -> tuple[float, Dict[str, float]]:
-            return _absolute_delta_integral(results), _phase_integrals(results, microsectors)
+            deltas = _timestamp_deltas(results)
+            return (
+                _absolute_delta_integral(results, deltas),
+                _phase_integrals(results, microsectors, deltas),
+            )
 
         def _accumulate_phase_gradients(
             phase_deltas: Dict[str, Dict[str, Dict[str, float]]],

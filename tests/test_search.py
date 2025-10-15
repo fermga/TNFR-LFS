@@ -46,33 +46,14 @@ def test_front_wing_limits_defined_per_model() -> None:
         assert variable.lower == pytest.approx(limits[0])
         assert variable.upper == pytest.approx(limits[1])
         assert variable.step == pytest.approx(limits[2])
-def _timestamp_delta(results, index: int) -> float:
-    if index + 1 < len(results):
-        return max(1e-3, results[index + 1].timestamp - results[index].timestamp)
-    if index > 0:
-        return max(1e-3, results[index].timestamp - results[index - 1].timestamp)
-    return 1e-3
-
-
 def _absolute_integral(results) -> float:
-    total = 0.0
-    for idx, bundle in enumerate(results):
-        total += abs(bundle.delta_nfr) * _timestamp_delta(results, idx)
-    return total
+    deltas = search_module._timestamp_deltas(results)
+    return search_module._absolute_delta_integral(results, deltas)
 
 
 def _phase_integrals(results, microsectors) -> dict[str, float]:
-    totals: dict[str, float] = {}
-    if not microsectors:
-        return totals
-    for microsector in microsectors:
-        for phase, (start, stop) in microsector.phase_boundaries.items():
-            subtotal = 0.0
-            for idx in range(start, min(stop, len(results))):
-                subtotal += abs(results[idx].delta_nfr) * _timestamp_delta(results, idx)
-            if subtotal:
-                totals[phase] = totals.get(phase, 0.0) + subtotal
-    return totals
+    deltas = search_module._timestamp_deltas(results)
+    return search_module._phase_integrals(results, microsectors, deltas)
 def _microsector() -> Microsector:
     window = (-0.2, 0.2)
     yaw_window = (-0.5, 0.5)
