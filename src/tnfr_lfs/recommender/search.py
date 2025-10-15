@@ -144,9 +144,11 @@ class CoordinateDescentOptimizer:
                     candidate_value = variable.clamp(current_value + direction * variable.step)
                     if candidate_value == current_value:
                         continue
-                    candidate_vector = dict(vector)
-                    candidate_vector[variable.name] = candidate_value
-                    score = objective(candidate_vector)
+                    vector[variable.name] = candidate_value
+                    try:
+                        score = objective(vector)
+                    finally:
+                        vector[variable.name] = current_value
                     evaluations += 1
                     if score > local_best + self.tolerance:
                         local_best = score
