@@ -2774,30 +2774,44 @@ def _build_goals(
                     _clamp(ctx.multiplier)
                     for ctx in resolved_context
                 ]
-            adjusted_delta = [
-                bundles[idx].delta_nfr * multipliers[offset]
-                for offset, idx in enumerate(range(start, stop))
-            ]
-            avg_delta = fmean(adjusted_delta)
-            avg_si = fmean(
-                bundles[idx].sense_index for idx in range(start, stop)
-            )
-            avg_long = fmean(
-                bundles[idx].delta_nfr_proj_longitudinal * multipliers[offset]
-                for offset, idx in enumerate(range(start, stop))
-            )
-            avg_lat = fmean(
-                bundles[idx].delta_nfr_proj_lateral * multipliers[offset]
-                for offset, idx in enumerate(range(start, stop))
-            )
-            abs_long = fmean(
-                abs(bundles[idx].delta_nfr_proj_longitudinal) * multipliers[offset]
-                for offset, idx in enumerate(range(start, stop))
-            )
-            abs_lat = fmean(
-                abs(bundles[idx].delta_nfr_proj_lateral) * multipliers[offset]
-                for offset, idx in enumerate(range(start, stop))
-            )
+            sum_delta = 0.0
+            sum_si = 0.0
+            sum_long = 0.0
+            sum_lat = 0.0
+            sum_abs_long = 0.0
+            sum_abs_lat = 0.0
+            sample_count = 0
+
+            for offset, idx in enumerate(range(start, stop)):
+                if not (0 <= idx < len(bundles)):
+                    continue
+                bundle = bundles[idx]
+                multiplier = multipliers[offset] if offset < len(multipliers) else 1.0
+                sum_delta += bundle.delta_nfr * multiplier
+                sum_si += bundle.sense_index
+                long_component = bundle.delta_nfr_proj_longitudinal
+                lat_component = bundle.delta_nfr_proj_lateral
+                sum_long += long_component * multiplier
+                sum_lat += lat_component * multiplier
+                sum_abs_long += abs(long_component) * multiplier
+                sum_abs_lat += abs(lat_component) * multiplier
+                sample_count += 1
+
+            if sample_count:
+                inv_count = 1.0 / sample_count
+                avg_delta = sum_delta * inv_count
+                avg_si = sum_si * inv_count
+                avg_long = sum_long * inv_count
+                avg_lat = sum_lat * inv_count
+                abs_long = sum_abs_long * inv_count
+                abs_lat = sum_abs_lat * inv_count
+            else:
+                avg_delta = 0.0
+                avg_si = 1.0
+                avg_long = 0.0
+                avg_lat = 0.0
+                abs_long = 0.0
+                abs_lat = 0.0
         else:
             avg_delta = 0.0
             avg_si = 1.0
