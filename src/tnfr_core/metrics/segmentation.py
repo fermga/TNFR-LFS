@@ -201,7 +201,7 @@ class _AnalyzerState:
 class _BundleRecomputeResult:
     """Return value for bundle recomputation together with ν_f state."""
 
-    bundles: List[SupportsEPIBundle]
+    bundles: MutableSequence[SupportsEPIBundle]
     analyzer_states: List[_AnalyzerState | None]
 
 
@@ -1778,9 +1778,16 @@ def _recompute_bundles(
     start_index: int = 0,
     analyzer_states: Sequence[_AnalyzerState | None] | None = None,
 ) -> _BundleRecomputeResult:
+    def _ensure_mutable_bundles(
+        source: Sequence[SupportsEPIBundle],
+    ) -> MutableSequence[SupportsEPIBundle]:
+        if isinstance(source, MutableSequence):
+            return cast(MutableSequence[SupportsEPIBundle], source)
+        return cast(MutableSequence[SupportsEPIBundle], list(source))
+
     if not records:
         cached_states = list(analyzer_states) if analyzer_states is not None else []
-        return _BundleRecomputeResult(list(bundles), cached_states)
+        return _BundleRecomputeResult(_ensure_mutable_bundles(bundles), cached_states)
 
     total_samples = len(records)
     default_phase = PHASE_SEQUENCE[0] if PHASE_SEQUENCE else "entry1"
@@ -1809,12 +1816,15 @@ def _recompute_bundles(
             cached_states.extend([None] * (total_samples - len(cached_states)))
         elif len(cached_states) > total_samples:
             cached_states = cached_states[:total_samples]
-        return _BundleRecomputeResult(list(bundles), cached_states)
+        mutable_bundles = _ensure_mutable_bundles(bundles)
+        if len(mutable_bundles) > total_samples:
+            del mutable_bundles[total_samples:]
+        return _BundleRecomputeResult(mutable_bundles, cached_states)
     else:
         recompute_start = start_index
 
     analyzer = NaturalFrequencyAnalyzer()
-    result: List[SupportsEPIBundle] = list(bundles)
+    result = _ensure_mutable_bundles(bundles)
 
     if analyzer_states is None:
         state_cache: List[_AnalyzerState | None] = [None for _ in range(total_samples)]
