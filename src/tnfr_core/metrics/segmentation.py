@@ -1767,17 +1767,19 @@ def _phase_nu_f_targets(
 
     # The helper focuses on the dominance/ν_f calculations so consumers can
     # reuse the resulting maps without having to build full goal payloads.
-    phase_sample_map: Dict[PhaseLiteral, Tuple[int, ...]] = {}
+    phase_sample_map: Dict[PhaseLiteral, Sequence[int]] = {}
     if phase_samples is None:
         phase_samples = {}
+    bundle_count = len(bundles)
+    node_delta_cache = tuple(delta_nfr_by_node(record) for record in records)
     for phase in PHASE_SEQUENCE:
         start, stop = boundaries.get(phase, (0, 0))
-        indices = tuple(idx for idx in range(start, min(stop, len(bundles))))
+        phase_range = range(start, min(stop, bundle_count))
         provided = phase_samples.get(phase)
         if provided is not None:
             phase_sample_map[phase] = tuple(int(idx) for idx in provided)
         else:
-            phase_sample_map[phase] = indices
+            phase_sample_map[phase] = phase_range
 
     dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = {}
     nu_f_targets: Dict[PhaseLiteral, float] = {}
@@ -1786,17 +1788,14 @@ def _phase_nu_f_targets(
 
     for phase in PHASE_SEQUENCE:
         start, stop = boundaries.get(phase, (0, 0))
-        indices = [idx for idx in range(start, min(stop, len(bundles)))]
-        segment = [bundles[idx] for idx in indices]
-        phase_records = [records[idx] for idx in indices]
+        upper_bound = min(stop, bundle_count)
 
         node_metrics: Dict[str, Dict[str, float]] = defaultdict(
             lambda: {"abs_delta": 0.0, "nu_f_weight": 0.0}
         )
-        for local_index, idx in enumerate(indices):
-            record = phase_records[local_index]
-            bundle = segment[local_index]
-            node_deltas = delta_nfr_by_node(record)
+        for idx in range(start, upper_bound):
+            bundle = bundles[idx]
+            node_deltas = node_delta_cache[idx] if idx < len(node_delta_cache) else {}
             for node, delta in node_deltas.items():
                 weight = abs(delta)
                 node_metrics[node]["abs_delta"] += weight
