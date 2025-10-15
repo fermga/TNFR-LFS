@@ -4,67 +4,10 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from statistics import fmean, pstdev
 from typing import Any, Iterable, Mapping, Sequence
 
 from tnfr_core.equations.epi_models import EPIBundle
 from tnfr_core.equations.phases import PHASE_SEQUENCE, phase_family
-
-
-def _numeric_series(values: Iterable[Any]) -> list[float]:
-    """Return a list of finite floats extracted from ``values``."""
-
-    numeric: list[float] = []
-    for value in values:
-        try:
-            numeric_value = float(value)
-        except (TypeError, ValueError):
-            continue
-        if math.isfinite(numeric_value):
-            numeric.append(numeric_value)
-    return numeric
-
-
-def _robust_coefficient_summary(
-    values: Iterable[Any], *, threshold: float | None = None
-) -> dict[str, float | int | bool]:
-    """Compute dispersion metrics with a coefficient of variation safeguard."""
-
-    series = _numeric_series(values)
-    samples = len(series)
-    if not series:
-        payload: dict[str, float | int | bool] = {
-            "samples": 0,
-            "mean": 0.0,
-            "mean_abs": 0.0,
-            "stdev": 0.0,
-            "coefficient_of_variation": 0.0,
-        }
-        if threshold is not None:
-            payload["threshold"] = float(threshold)
-            payload["ok"] = True
-        return payload
-
-    average = fmean(series)
-    mean_abs = fmean(abs(value) for value in series)
-    stdev = pstdev(series) if samples > 1 else 0.0
-    baseline = max(abs(average), mean_abs, 1e-9)
-    coefficient = stdev / baseline if baseline > 0.0 else 0.0
-
-    payload = {
-        "samples": samples,
-        "mean": average,
-        "mean_abs": mean_abs,
-        "stdev": stdev,
-        "coefficient_of_variation": coefficient,
-    }
-    if threshold is not None:
-        limit = float(threshold)
-        payload["threshold"] = limit
-        payload["ok"] = coefficient <= limit
-    return payload
-
-
 def _lap_groups(
     bundles: Sequence[EPIBundle],
     lap_indices: Sequence[int] | None,
@@ -174,16 +117,71 @@ def _bundle_delta_and_sense_values(
     return delta_values, sense_values
 
 
-def _bundle_delta_and_sense_series(
+def _coefficient_summary_from_moments(
+    count: int,
+    total: float,
+    total_abs: float,
+    total_sq: float,
+    *,
+    threshold: float | None = None,
+) -> dict[str, float | int | bool]:
+    """Compute summary statistics from running moments."""
+
+    if count <= 0:
+        payload: dict[str, float | int | bool] = {
+            "samples": 0,
+            "mean": 0.0,
+            "mean_abs": 0.0,
+            "stdev": 0.0,
+            "coefficient_of_variation": 0.0,
+        }
+        if threshold is not None:
+            payload["threshold"] = float(threshold)
+            payload["ok"] = True
+        return payload
+
+    average = total / count
+    mean_abs = total_abs / count
+    variance = max(total_sq / count - average * average, 0.0)
+    stdev = math.sqrt(variance)
+    baseline = max(abs(average), mean_abs, 1e-9)
+    coefficient = stdev / baseline if baseline > 0.0 else 0.0
+
+    payload: dict[str, float | int | bool] = {
+        "samples": count,
+        "mean": average,
+        "mean_abs": mean_abs,
+        "stdev": stdev,
+        "coefficient_of_variation": coefficient,
+    }
+    if threshold is not None:
+        limit = float(threshold)
+        payload["threshold"] = limit
+        payload["ok"] = coefficient <= limit
+    return payload
+
+
+def _coefficient_summary_for_indices(
     delta_values: Sequence[float],
     sense_values: Sequence[float],
     sample_indices: Sequence[int],
-) -> tuple[list[float], list[float]]:
-    """Filter finite ``delta_nfr`` and ``sense_index`` values for the given indices."""
+    *,
+    delta_threshold: float | None = None,
+    sense_threshold: float | None = None,
+) -> tuple[dict[str, float | int | bool], dict[str, float | int | bool]]:
+    """Summaries for ``delta_nfr`` and ``sense_index`` over the given indices."""
 
-    filtered_delta: list[float] = []
-    filtered_sense: list[float] = []
     max_index = min(len(delta_values), len(sense_values))
+
+    delta_count = 0
+    delta_sum = 0.0
+    delta_sum_abs = 0.0
+    delta_sum_sq = 0.0
+
+    sense_count = 0
+    sense_sum = 0.0
+    sense_sum_abs = 0.0
+    sense_sum_sq = 0.0
 
     for index in sample_indices:
         if not 0 <= index < max_index:
@@ -191,13 +189,33 @@ def _bundle_delta_and_sense_series(
 
         delta_value = delta_values[index]
         if math.isfinite(delta_value):
-            filtered_delta.append(delta_value)
+            delta_count += 1
+            delta_sum += delta_value
+            delta_sum_abs += abs(delta_value)
+            delta_sum_sq += delta_value * delta_value
 
         sense_value = sense_values[index]
         if math.isfinite(sense_value):
-            filtered_sense.append(sense_value)
+            sense_count += 1
+            sense_sum += sense_value
+            sense_sum_abs += abs(sense_value)
+            sense_sum_sq += sense_value * sense_value
 
-    return filtered_delta, filtered_sense
+    delta_summary = _coefficient_summary_from_moments(
+        delta_count,
+        delta_sum,
+        delta_sum_abs,
+        delta_sum_sq,
+        threshold=delta_threshold,
+    )
+    sense_summary = _coefficient_summary_from_moments(
+        sense_count,
+        sense_sum,
+        sense_sum_abs,
+        sense_sum_sq,
+        threshold=sense_threshold,
+    )
+    return delta_summary, sense_summary
 
 
 def compute_session_robustness(
@@ -232,22 +250,20 @@ def compute_session_robustness(
             lap_thresholds.get("sense_index") if isinstance(lap_thresholds, Mapping) else None
         )
         for lap_index, label, indices in lap_groups:
-            delta_values, si_values = _bundle_delta_and_sense_series(
+            delta_summary, sense_summary = _coefficient_summary_for_indices(
                 delta_series,
                 sense_series,
                 indices,
+                delta_threshold=lap_delta_limit,
+                sense_threshold=lap_si_limit,
             )
             entries.append(
                 {
                     "index": lap_index,
                     "label": label,
                     "samples": len(indices),
-                    "delta_nfr": _robust_coefficient_summary(
-                        delta_values, threshold=lap_delta_limit
-                    ),
-                    "sense_index": _robust_coefficient_summary(
-                        si_values, threshold=lap_si_limit
-                    ),
+                    "delta_nfr": delta_summary,
+                    "sense_index": sense_summary,
                 }
             )
         robustness["laps"] = entries
@@ -271,25 +287,23 @@ def compute_session_robustness(
                     if isinstance(value, (int, float))
                 }
         for phase, indices in phase_map.items():
-            delta_values, si_values = _bundle_delta_and_sense_series(
-                delta_series,
-                sense_series,
-                indices,
-            )
             phase_limits = per_phase_thresholds.get(phase, phase_defaults)
             delta_limit = None
             sense_limit = None
             if isinstance(phase_limits, Mapping):
                 delta_limit = phase_limits.get("delta_nfr")
                 sense_limit = phase_limits.get("sense_index")
+            delta_summary, sense_summary = _coefficient_summary_for_indices(
+                delta_series,
+                sense_series,
+                indices,
+                delta_threshold=delta_limit,
+                sense_threshold=sense_limit,
+            )
             phase_payload[phase] = {
                 "samples": len(indices),
-                "delta_nfr": _robust_coefficient_summary(
-                    delta_values, threshold=delta_limit
-                ),
-                "sense_index": _robust_coefficient_summary(
-                    si_values, threshold=sense_limit
-                ),
+                "delta_nfr": delta_summary,
+                "sense_index": sense_summary,
             }
         robustness["phases"] = phase_payload
 
