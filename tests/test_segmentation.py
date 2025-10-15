@@ -1340,6 +1340,12 @@ def test_build_goals_prefers_cached_sample_context(
     sample_context = list(
         original_resolve(synthetic_bundles, matrix=context_matrix)
     )
+    sample_multipliers = [
+        metrics_segmentation._resolve_context_multiplier(
+            factors, context_matrix=context_matrix
+        )
+        for factors in sample_context
+    ]
     yaw_rates = [
         metrics_segmentation._compute_yaw_rate(synthetic_records, idx)
         for idx in range(len(synthetic_records))
@@ -1364,6 +1370,7 @@ def test_build_goals_prefers_cached_sample_context(
             yaw_rates,
             context_matrix=context_matrix,
             sample_context=sample_context,
+            sample_multipliers=sample_multipliers,
             phase_gradients=phase_gradients,
         )
     )
@@ -1379,6 +1386,7 @@ def test_build_goals_prefers_cached_sample_context(
             yaw_rates,
             context_matrix=context_matrix,
             sample_context=None,
+            sample_multipliers=None,
             phase_gradients=phase_gradients,
         )
     )
@@ -1388,6 +1396,78 @@ def test_build_goals_prefers_cached_sample_context(
     assert dominant_cached == dominant_fallback
     assert targets_cached == targets_fallback
     assert weights_cached == weights_fallback
+
+
+def test_build_goals_uses_sample_multipliers_without_context(
+    synthetic_microsectors,
+    synthetic_records,
+    synthetic_bundles,
+    monkeypatch,
+) -> None:
+    microsector = synthetic_microsectors[0]
+    assert microsector.goals
+    archetype = microsector.goals[0].archetype
+    boundaries = microsector.phase_boundaries
+    context_matrix = load_context_matrix()
+    original_resolve = metrics_segmentation.resolve_series_context
+    sample_context = list(
+        original_resolve(synthetic_bundles, matrix=context_matrix)
+    )
+    sample_multipliers = [
+        metrics_segmentation._resolve_context_multiplier(
+            factors, context_matrix=context_matrix
+        )
+        for factors in sample_context
+    ]
+    yaw_rates = [
+        metrics_segmentation._compute_yaw_rate(synthetic_records, idx)
+        for idx in range(len(synthetic_records))
+    ]
+    phase_gradients = {phase: 0.0 for phase in boundaries}
+
+    call_count = 0
+
+    def _spy(segment, *, matrix):
+        nonlocal call_count
+        call_count += 1
+        return original_resolve(segment, matrix=matrix)
+
+    monkeypatch.setattr(metrics_segmentation, "resolve_series_context", _spy)
+
+    goals_direct, dominant_direct, targets_direct, weights_direct = (
+        metrics_segmentation._build_goals(
+            archetype,
+            synthetic_bundles,
+            synthetic_records,
+            boundaries,
+            yaw_rates,
+            context_matrix=context_matrix,
+            sample_context=None,
+            sample_multipliers=sample_multipliers,
+            phase_gradients=phase_gradients,
+        )
+    )
+
+    assert call_count == 0
+
+    goals_reference, dominant_reference, targets_reference, weights_reference = (
+        metrics_segmentation._build_goals(
+            archetype,
+            synthetic_bundles,
+            synthetic_records,
+            boundaries,
+            yaw_rates,
+            context_matrix=context_matrix,
+            sample_context=sample_context,
+            sample_multipliers=sample_multipliers,
+            phase_gradients=phase_gradients,
+        )
+    )
+
+    assert goals_direct == goals_reference
+    assert dominant_direct == dominant_reference
+    assert targets_direct == targets_reference
+    assert weights_direct == weights_reference
 
 
 def test_build_goals_falls_back_when_sample_context_truncated(
@@ -1405,6 +1485,12 @@ def test_build_goals_falls_back_when_sample_context_truncated(
     sample_context = list(
         original_resolve(synthetic_bundles, matrix=context_matrix)
     )
+    sample_multipliers = [
+        metrics_segmentation._resolve_context_multiplier(
+            factors, context_matrix=context_matrix
+        )
+        for factors in sample_context
+    ]
     yaw_rates = [
         metrics_segmentation._compute_yaw_rate(synthetic_records, idx)
         for idx in range(len(synthetic_records))
@@ -1418,6 +1504,7 @@ def test_build_goals_falls_back_when_sample_context_truncated(
     assert all_indices
     max_index = max(all_indices)
     truncated_context = tuple(sample_context[: max_index])
+    truncated_multipliers = tuple(sample_multipliers[: max_index])
     assert len(truncated_context) < len(sample_context)
 
     call_count = 0
@@ -1438,6 +1525,7 @@ def test_build_goals_falls_back_when_sample_context_truncated(
             yaw_rates,
             context_matrix=context_matrix,
             sample_context=truncated_context,
+            sample_multipliers=truncated_multipliers,
             phase_gradients=phase_gradients,
         )
     )
@@ -1453,6 +1541,7 @@ def test_build_goals_falls_back_when_sample_context_truncated(
             yaw_rates,
             context_matrix=context_matrix,
             sample_context=None,
+            sample_multipliers=None,
             phase_gradients=phase_gradients,
         )
     )

@@ -812,6 +812,7 @@ def segment_microsectors(
         records,
         context_matrix=context_matrix,
         sample_context=sample_context,
+        sample_multipliers=sample_multipliers,
         yaw_rates=yaw_rate_cache,
         node_delta_cache=node_delta_cache,
         sample_rate=sample_rate,
@@ -1043,6 +1044,7 @@ def segment_microsectors(
                 yaw_rates=yaw_rate_cache,
                 context_matrix=context_matrix,
                 sample_context=sample_context,
+                sample_multipliers=sample_multipliers,
                 node_delta_cache=node_delta_cache,
                 phase_gradients=phase_gradient_map,
                 phase_dominant_nodes=cached_dominant_nodes,
@@ -1441,6 +1443,7 @@ def segment_microsectors(
                     yaw_rates=yaw_rate_cache,
                     context_matrix=context_matrix,
                     sample_context=sample_context,
+                    sample_multipliers=sample_multipliers,
                     node_delta_cache=node_delta_cache,
                     phase_gradients=phase_gradient_map,
                     phase_dominant_nodes=cached_dominant_nodes,
@@ -2367,6 +2370,7 @@ def _build_goals(
     *,
     context_matrix: ContextMatrix | None = None,
     sample_context: Sequence[ContextFactors] | None = None,
+    sample_multipliers: Sequence[float] | None = None,
     node_delta_cache: (
         Sequence[Mapping[str, float]]
         | MutableSequence[Mapping[str, float]]
@@ -2430,36 +2434,56 @@ def _build_goals(
         phase_records = [records[idx] for idx in indices]
         phase_yaw_rates = [_cached_yaw_rate(yaw_rates, idx) for idx in indices]
         if segment:
-            if sample_context:
-                resolved_context: List[ContextFactors] = []
-                if indices:
-                    first_idx = indices[0]
-                    last_idx = indices[-1]
-                    all_cached = 0 <= first_idx and last_idx < len(sample_context)
+            multipliers: List[float] = []
+
+            def _clamp(value: float) -> float:
+                return max(
+                    context_matrix.min_multiplier,
+                    min(context_matrix.max_multiplier, value),
+                )
+
+            use_direct_multipliers = False
+            if sample_multipliers is not None and indices:
+                if all(0 <= idx < len(sample_multipliers) for idx in indices):
+                    direct_values: List[float] = []
+                    for idx in indices:
+                        try:
+                            numeric = float(sample_multipliers[idx])
+                        except (TypeError, ValueError):
+                            break
+                        direct_values.append(_clamp(numeric))
+                    else:
+                        multipliers = direct_values
+                        use_direct_multipliers = True
+
+            if not use_direct_multipliers:
+                if sample_context:
+                    resolved_context: List[ContextFactors] = []
+                    if indices:
+                        first_idx = indices[0]
+                        last_idx = indices[-1]
+                        all_cached = 0 <= first_idx and last_idx < len(sample_context)
+                    else:
+                        all_cached = True
+                    if all_cached:
+                        resolved_context = [sample_context[idx] for idx in indices]
+                    else:
+                        fallback_context = resolve_series_context(
+                            segment, matrix=context_matrix
+                        )
+                        for local_index, idx in enumerate(indices):
+                            if 0 <= idx < len(sample_context):
+                                resolved_context.append(sample_context[idx])
+                            else:
+                                resolved_context.append(fallback_context[local_index])
                 else:
-                    all_cached = True
-                if all_cached:
-                    resolved_context = [sample_context[idx] for idx in indices]
-                else:
-                    fallback_context = resolve_series_context(
+                    resolved_context = resolve_series_context(
                         segment, matrix=context_matrix
                     )
-                    for local_index, idx in enumerate(indices):
-                        if 0 <= idx < len(sample_context):
-                            resolved_context.append(sample_context[idx])
-                        else:
-                            resolved_context.append(fallback_context[local_index])
-            else:
-                resolved_context = resolve_series_context(
-                    segment, matrix=context_matrix
-                )
-            multipliers = [
-                max(
-                    context_matrix.min_multiplier,
-                    min(context_matrix.max_multiplier, ctx.multiplier),
-                )
-                for ctx in resolved_context
-            ]
+                multipliers = [
+                    _clamp(ctx.multiplier)
+                    for ctx in resolved_context
+                ]
             adjusted_delta = [
                 bundle.delta_nfr * multipliers[idx]
                 for idx, bundle in enumerate(segment)
@@ -2880,6 +2904,7 @@ def _adjust_phase_weights_with_dominance(
     *,
     context_matrix: ContextMatrix,
     sample_context: Sequence[ContextFactors],
+    sample_multipliers: Sequence[float] | None = None,
     yaw_rates: Sequence[float],
     node_delta_cache: (
         Sequence[Mapping[str, float]]
@@ -2909,6 +2934,7 @@ def _adjust_phase_weights_with_dominance(
             yaw_rates=yaw_rates,
             context_matrix=context_matrix,
             sample_context=sample_context,
+            sample_multipliers=sample_multipliers,
             node_delta_cache=node_delta_cache,
             sample_rate=sample_rate,
             steer_norm=steer_norm,
