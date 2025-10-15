@@ -572,26 +572,29 @@ def segment_microsectors(
             spec.get("speed_drop", 0.0),
             spec.get("direction_changes", 0),
         )
-        goals, _, _, _ = _build_goals(
-            archetype,
+        (
+            _,
+            _,
+            _,
+            sample_nu_f_lookup,
+        ) = _phase_nu_f_targets(
             recomputed_bundles,
             records,
             spec["phase_boundaries"],
+            spec.get("phase_samples"),
             yaw_rates=yaw_rate_cache,
             context_matrix=context_matrix,
             sample_context=sample_context,
         )
-        for goal in goals:
-            indices = spec["phase_samples"].get(goal.phase, ())
-            for sample_index in indices:
-                goal_nu_f_lookup[sample_index] = goal.nu_f_target
-                start_candidate = spec.get("start")
-                if not isinstance(start_candidate, int):
-                    start_candidate = sample_index
-                if goal_start_index is None:
-                    goal_start_index = start_candidate
-                else:
-                    goal_start_index = min(goal_start_index, start_candidate)
+        for sample_index, nu_f_target in sample_nu_f_lookup.items():
+            goal_nu_f_lookup[sample_index] = nu_f_target
+            start_candidate = spec.get("start")
+            if not isinstance(start_candidate, int):
+                start_candidate = sample_index
+            if goal_start_index is None:
+                goal_start_index = start_candidate
+            else:
+                goal_start_index = min(goal_start_index, start_candidate)
 
     if goal_nu_f_lookup:
         recomputed_bundles = _recompute_bundles(
@@ -1641,6 +1644,94 @@ def _window(values: Sequence[float], scale: float, minimum: float = 0.01) -> Tup
     return (lower, upper)
 
 
+def _phase_nu_f_targets(
+    bundles: Sequence[SupportsEPIBundle],
+    records: Sequence[SupportsTelemetrySample],
+    boundaries: Mapping[PhaseLiteral, Tuple[int, int]],
+    phase_samples: Mapping[PhaseLiteral, Sequence[int]] | None,
+    yaw_rates: Sequence[float],
+    *,
+    context_matrix: ContextMatrix | None = None,
+    sample_context: Sequence[ContextFactors] | None = None,
+) -> Tuple[
+    Dict[PhaseLiteral, Tuple[str, ...]],
+    Dict[PhaseLiteral, float],
+    Dict[PhaseLiteral, float],
+    Dict[int, float],
+]:
+    """Resolve dominant nodes and ν_f targets for each phase."""
+
+    # The helper focuses on the dominance/ν_f calculations so consumers can
+    # reuse the resulting maps without having to build full goal payloads.
+    phase_sample_map: Dict[PhaseLiteral, Tuple[int, ...]] = {}
+    if phase_samples is None:
+        phase_samples = {}
+    for phase in PHASE_SEQUENCE:
+        start, stop = boundaries.get(phase, (0, 0))
+        indices = tuple(idx for idx in range(start, min(stop, len(bundles))))
+        provided = phase_samples.get(phase)
+        if provided is not None:
+            phase_sample_map[phase] = tuple(int(idx) for idx in provided)
+        else:
+            phase_sample_map[phase] = indices
+
+    dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = {}
+    nu_f_targets: Dict[PhaseLiteral, float] = {}
+    dominance_weights: Dict[PhaseLiteral, float] = {}
+    sample_lookup: Dict[int, float] = {}
+
+    for phase in PHASE_SEQUENCE:
+        start, stop = boundaries.get(phase, (0, 0))
+        indices = [idx for idx in range(start, min(stop, len(bundles)))]
+        segment = [bundles[idx] for idx in indices]
+        phase_records = [records[idx] for idx in indices]
+
+        node_metrics: Dict[str, Dict[str, float]] = defaultdict(
+            lambda: {"abs_delta": 0.0, "nu_f_weight": 0.0}
+        )
+        for local_index, idx in enumerate(indices):
+            record = phase_records[local_index]
+            bundle = segment[local_index]
+            node_deltas = delta_nfr_by_node(record)
+            for node, delta in node_deltas.items():
+                weight = abs(delta)
+                node_metrics[node]["abs_delta"] += weight
+                nu_f = getattr(bundle, node).nu_f if hasattr(bundle, node) else 0.0
+                node_metrics[node]["nu_f_weight"] += weight * nu_f
+
+        sorted_nodes = sorted(
+            (
+                node,
+                metrics,
+            )
+            for node, metrics in node_metrics.items()
+            if metrics["abs_delta"] > 0.0
+        )
+        sorted_nodes.sort(key=lambda item: item[1]["abs_delta"], reverse=True)
+        phase_nodes = tuple(node for node, _ in sorted_nodes[:3])
+        if not phase_nodes and node_metrics:
+            phase_nodes = tuple(list(node_metrics.keys())[:3])
+        dominant_nodes[phase] = phase_nodes
+
+        total_weight = sum(node_metrics[node]["abs_delta"] for node in phase_nodes)
+        if total_weight > 0.0:
+            weighted_nu_f = sum(
+                node_metrics[node]["nu_f_weight"] for node in phase_nodes
+            )
+            nu_f_target = weighted_nu_f / total_weight
+        else:
+            nu_f_target = 0.0
+
+        nu_f_targets[phase] = float(nu_f_target)
+        dominance_weights[phase] = float(total_weight)
+
+        for sample_index in phase_sample_map.get(phase, ()):  # pragma: no branch
+            if isinstance(sample_index, int) and 0 <= sample_index < len(bundles):
+                sample_lookup[sample_index] = float(nu_f_target)
+
+    return dominant_nodes, nu_f_targets, dominance_weights, sample_lookup
+
+
 def _build_goals(
     archetype: str,
     bundles: Sequence[SupportsEPIBundle],
@@ -1662,10 +1753,25 @@ def _build_goals(
     archetype_targets = archetype_phase_targets(archetype)
     default_targets = archetype_phase_targets(ARCHETYPE_MEDIUM)
     goals: List[Goal] = []
-    dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = {}
     axis_targets: Dict[PhaseLiteral, Dict[str, float]] = {}
     axis_weights: Dict[PhaseLiteral, Dict[str, float]] = {}
     context_matrix = context_matrix or load_context_matrix()
+
+    (
+        base_dominant_nodes,
+        phase_nu_f_targets,
+        dominance_weights,
+        _,
+    ) = _phase_nu_f_targets(
+        bundles,
+        records,
+        boundaries,
+        None,
+        yaw_rates,
+        context_matrix=context_matrix,
+        sample_context=sample_context,
+    )
+    dominant_nodes: Dict[PhaseLiteral, Tuple[str, ...]] = dict(base_dominant_nodes)
 
     for phase in PHASE_SEQUENCE:
         start, stop = boundaries[phase]
@@ -1743,34 +1849,9 @@ def _build_goals(
             phase, (phase_target.lag if phase_target else 0.0, phase_target.si_phi if phase_target else 0.9)
         )
 
-        node_metrics: Dict[str, Dict[str, float]] = defaultdict(lambda: {"abs_delta": 0.0, "nu_f_weight": 0.0})
-        for local_index, idx in enumerate(indices):
-            record = phase_records[local_index]
-            bundle = segment[local_index]
-            node_deltas = delta_nfr_by_node(record)
-            for node, delta in node_deltas.items():
-                weight = abs(delta)
-                node_metrics[node]["abs_delta"] += weight
-                nu_f = getattr(bundle, node).nu_f if hasattr(bundle, node) else 0.0
-                node_metrics[node]["nu_f_weight"] += weight * nu_f
-
-        sorted_nodes = sorted(
-            (node, metrics)
-            for node, metrics in node_metrics.items()
-            if metrics["abs_delta"] > 0.0
-        )
-        sorted_nodes.sort(key=lambda item: item[1]["abs_delta"], reverse=True)
-        phase_nodes = tuple(node for node, _ in sorted_nodes[:3])
-        if not phase_nodes and node_metrics:
-            phase_nodes = tuple(list(node_metrics.keys())[:3])
-        dominant_nodes[phase] = phase_nodes
-
-        total_weight = sum(node_metrics[node]["abs_delta"] for node in phase_nodes)
-        if total_weight > 0.0:
-            weighted_nu_f = sum(node_metrics[node]["nu_f_weight"] for node in phase_nodes)
-            nu_f_target = weighted_nu_f / total_weight
-        else:
-            nu_f_target = 0.0
+        phase_nodes = dominant_nodes.get(phase, ())
+        total_weight = dominance_weights.get(phase, 0.0)
+        nu_f_target = phase_nu_f_targets.get(phase, 0.0)
 
         nu_exc_target = estimate_excitation_frequency(phase_records)
         rho_target = nu_exc_target / nu_f_target if nu_f_target > 1e-9 else 0.0
