@@ -2859,21 +2859,48 @@ def _phase_gradient_signature(
     return tuple(signature)
 
 
+_BUNDLE_DERIVED_FIELDS = (
+    "goal_phase_cache",
+    "adjusted_deltas",
+    "delta_signature",
+    "avg_si",
+    "phase_axis_targets",
+    "phase_axis_weights",
+    "dominant_nodes",
+    "goals",
+    "active_phase",
+)
+
+
 def _invalidate_goal_cache(specs: Sequence[Dict[str, object]], start_index: int | None) -> None:
     if start_index is None:
         return
+
+    def _coerce_index(value: object, *, default: int | None = None) -> int | None:
+        if isinstance(value, bool):  # pragma: no cover - defensive guard
+            return int(value)
+        if isinstance(value, int):
+            return value
+        try:
+            return int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return default
+
     if start_index <= 0:
         affected = specs
     else:
-        affected = [
-            spec
-            for spec in specs
-            if int(spec.get("end", -1)) >= start_index
-        ]
+        affected = []
+        for spec in specs:
+            end_index = _coerce_index(spec.get("end"), default=-1)
+            if end_index is not None and end_index >= start_index:
+                affected.append(spec)
+
     for spec in affected:
         spec["goal_cache_valid"] = False
         spec["goal_gradient_signature"] = None
-        spec["goal_phase_cache"] = None
+        spec["goal_archetype"] = None
+        for field in _BUNDLE_DERIVED_FIELDS:
+            spec.pop(field, None)
 
 
 def _phase_alignment_targets(archetype: str) -> Mapping[str, Tuple[float, float]]:

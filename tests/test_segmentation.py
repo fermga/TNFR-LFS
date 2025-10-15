@@ -460,6 +460,123 @@ def test_segment_microsectors_caches_delta_signature(
         assert style_index == pytest.approx(spec["avg_si"])
 
 
+def test_segment_microsectors_partial_recompute_refreshes_metrics(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    forced_delta = -3.5
+    forced_si = 0.11
+    forced_nu_f = 42.0
+    captured_specs: list[dict[str, object]] = []
+    partial_triggered = False
+
+    original_adjust = metrics_segmentation._adjust_phase_weights_with_dominance
+    original_phase_targets = metrics_segmentation._phase_nu_f_targets
+    original_recompute = metrics_segmentation._recompute_bundles
+
+    def _capture_specs(specs, *args, **kwargs):
+        captured_specs.clear()
+        captured_specs.extend(specs)
+        return original_adjust(specs, *args, **kwargs)
+
+    def _forced_phase_targets(*args, **kwargs):
+        dominant, nu_f_targets, dominance_weights, sample_lookup = original_phase_targets(
+            *args, **kwargs
+        )
+        if isinstance(sample_lookup, Mapping):
+            sample_indices = sample_lookup.keys()
+        else:
+            sample_indices = ()
+        coerced_lookup = {int(idx): forced_nu_f for idx in sample_indices}
+        if not coerced_lookup:
+            boundaries = args[2] if len(args) >= 3 else {}
+            if isinstance(boundaries, Mapping):
+                for start, stop in boundaries.values():
+                    for idx in range(start, stop):
+                        coerced_lookup[int(idx)] = forced_nu_f
+        return (
+            dominant,
+            dict(nu_f_targets),
+            dict(dominance_weights),
+            coerced_lookup,
+        )
+
+    def _mutating_recompute(
+        records,
+        bundles,
+        baseline,
+        phase_assignments,
+        weight_lookup,
+        goal_nu_f_lookup=None,
+        **kwargs,
+    ):
+        nonlocal partial_triggered
+        result = original_recompute(
+            records,
+            bundles,
+            baseline,
+            phase_assignments,
+            weight_lookup,
+            goal_nu_f_lookup=goal_nu_f_lookup,
+            **kwargs,
+        )
+        if goal_nu_f_lookup:
+            partial_triggered = True
+            mutated = list(result.bundles)
+            for idx, bundle in enumerate(mutated):
+                if idx in goal_nu_f_lookup:
+                    mutated[idx] = replace(
+                        bundle,
+                        delta_nfr=forced_delta,
+                        sense_index=forced_si,
+                    )
+            result = metrics_segmentation._BundleRecomputeResult(
+                mutated, result.analyzer_states
+            )
+        return result
+
+    with monkeypatch.context() as patch_context:
+        patch_context.setattr(
+            metrics_segmentation,
+            "_adjust_phase_weights_with_dominance",
+            _capture_specs,
+        )
+        patch_context.setattr(
+            metrics_segmentation,
+            "_phase_nu_f_targets",
+            _forced_phase_targets,
+        )
+        patch_context.setattr(
+            metrics_segmentation,
+            "_recompute_bundles",
+            _mutating_recompute,
+        )
+        patch_context.setattr(
+            metrics_segmentation,
+            "_resolve_context_multiplier",
+            lambda *args, **kwargs: 1.0,
+        )
+        microsectors = segment_microsectors(
+            list(synthetic_records), list(synthetic_bundles)
+        )
+
+    assert partial_triggered, "expected goal-driven recompute to run"
+    assert captured_specs, "expected cached specifications"
+    assert microsectors, "expected synthetic segmentation"
+
+    spec = captured_specs[0]
+    adjusted = tuple(spec.get("adjusted_deltas", ()))
+    assert adjusted, "expected adjusted deltas to be recomputed"
+    for value in adjusted:
+        assert value == pytest.approx(forced_delta)
+    assert spec.get("delta_signature") == pytest.approx(forced_delta)
+    assert spec.get("avg_si") == pytest.approx(forced_si)
+
+    first_microsector = microsectors[0]
+    assert first_microsector.delta_nfr_signature == pytest.approx(forced_delta)
+    style_index = first_microsector.filtered_measures.get("style_index")
+    assert style_index == pytest.approx(forced_si)
+
+
 def test_segment_microsectors_reuses_node_delta_cache(
     synthetic_records, synthetic_bundles, monkeypatch
 ) -> None:
