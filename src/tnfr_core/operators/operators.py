@@ -1726,6 +1726,7 @@ def _stage_nodal_metrics(bundles: Sequence[SupportsEPIBundle]) -> Dict[str, obje
 def _stage_epi_evolution(
     records: Sequence[SupportsTelemetrySample],
     *,
+    bundles: Sequence[SupportsEPIBundle] | None = None,
     phase_assignments: Mapping[int, str] | None = None,
     phase_weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]] | None = None,
     global_phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
@@ -1738,11 +1739,44 @@ def _stage_epi_evolution(
             "per_node_derivative": {},
         }
 
+    assignment_map = dict(phase_assignments or {})
+    weight_lookup = dict(phase_weight_lookup or {})
+    has_global_weights = bool(global_phase_weights)
+    reuse_bundle_evolution = (
+        bundles is not None
+        and len(bundles) == len(records)
+        and not assignment_map
+        and not weight_lookup
+        and not has_global_weights
+    )
+
     integrated_series: List[float] = []
     derivative_series: List[float] = []
     per_node_integrated: Dict[str, List[float]] = {}
     per_node_derivative: Dict[str, List[float]] = {}
     cumulative_by_node: Dict[str, float] = {}
+
+    if reuse_bundle_evolution:
+        concrete_bundles = [_ensure_bundle(bundle) for bundle in bundles or ()]
+        for bundle in concrete_bundles:
+            integrated_series.append(float(bundle.integrated_epi))
+            derivative_series.append(float(bundle.dEPI_dt))
+            nodal = _normalise_node_evolution(getattr(bundle, "node_evolution", None))
+            nodes = set(per_node_integrated) | set(nodal)
+            for node in nodes:
+                node_integral, node_derivative = nodal.get(node, (0.0, 0.0))
+                node_integral = float(node_integral)
+                node_derivative = float(node_derivative)
+                cumulative = cumulative_by_node.get(node, 0.0) + node_integral
+                cumulative_by_node[node] = cumulative
+                per_node_integrated.setdefault(node, []).append(cumulative)
+                per_node_derivative.setdefault(node, []).append(node_derivative)
+        return {
+            "integrated": integrated_series,
+            "derivative": derivative_series,
+            "per_node_integrated": per_node_integrated,
+            "per_node_derivative": per_node_derivative,
+        }
 
     prev_epi = 0.0
     prev_timestamp = records[0].timestamp
@@ -1750,11 +1784,11 @@ def _stage_epi_evolution(
 
     for index, record in enumerate(records):
         delta_map = delta_nfr_by_node(record)
-        phase = phase_assignments.get(index) if phase_assignments else None
+        phase = assignment_map.get(index) if assignment_map else None
         weights = None
-        if phase_weight_lookup and index in phase_weight_lookup:
-            weights = phase_weight_lookup[index]
-        elif global_phase_weights:
+        if weight_lookup and index in weight_lookup:
+            weights = weight_lookup[index]
+        elif has_global_weights and global_phase_weights:
             weights = global_phase_weights
         nu_snapshot = resolve_nu_f_by_node(
             record,
@@ -2245,6 +2279,7 @@ def orchestrate_delta_metrics(
     nodal_stage = _stage_nodal_metrics(coherence_stage["bundles"])
     epi_stage = _stage_epi_evolution(
         flattened_records,
+        bundles=coherence_stage["bundles"],
         phase_assignments=phase_assignments,
         phase_weight_lookup=weight_lookup,
         global_phase_weights=phase_weights,
