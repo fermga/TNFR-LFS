@@ -514,6 +514,67 @@ def test_segment_microsectors_reuses_phase_nu_f_targets_cache(
     assert not missing_cache_calls, "expected cached phase targets to be reused"
 
 
+def test_segment_microsectors_node_delta_cache_consistency(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    original_phase_targets = metrics_segmentation._phase_nu_f_targets
+    original_build_goals = metrics_segmentation._build_goals
+    observed_lengths: list[int] = []
+
+    def _assert_consistent_cache(
+        bundles,
+        cache,
+        *,
+        cache_window=None,
+    ) -> None:
+        if cache is None:
+            return
+        start = 0
+        if cache_window is not None and isinstance(cache_window, tuple):
+            if cache_window:
+                start = min(cache_window)
+        observed_lengths.append(len(cache))
+        for offset, distribution in enumerate(cache):
+            bundle_index = start + offset
+            if not (0 <= bundle_index < len(bundles)):
+                continue
+            expected = metrics_segmentation._bundle_node_delta(bundles[bundle_index])
+            assert dict(distribution) == dict(expected)
+
+    def _wrapped_phase_targets(*args, **kwargs):
+        bundles = args[0]
+        cache = kwargs.get("node_delta_cache")
+        cache_window = kwargs.get("cache_window")
+        _assert_consistent_cache(bundles, cache, cache_window=cache_window)
+        return original_phase_targets(*args, **kwargs)
+
+    def _wrapped_build_goals(*args, **kwargs):
+        bundles = args[1]
+        cache = kwargs.get("node_delta_cache")
+        _assert_consistent_cache(bundles, cache)
+        return original_build_goals(*args, **kwargs)
+
+    with monkeypatch.context() as patch_context:
+        patch_context.setattr(
+            metrics_segmentation,
+            "_phase_nu_f_targets",
+            _wrapped_phase_targets,
+        )
+        patch_context.setattr(
+            metrics_segmentation,
+            "_build_goals",
+            _wrapped_build_goals,
+        )
+        microsectors = segment_microsectors(
+            list(synthetic_records),
+            list(synthetic_bundles),
+            operator_state={},
+        )
+
+    assert observed_lengths, "expected node delta cache to be provided"
+    assert microsectors, "expected synthetic segmentation"
+
+
 def test_segment_microsectors_computes_wheel_dispersion(
     synthetic_records, synthetic_bundles
 ) -> None:
