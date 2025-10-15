@@ -693,6 +693,36 @@ def _serialise_sample_context(
     return resolved
 
 
+def _prepare_fallback_contexts(
+    specs: Sequence[MutableMapping[str, object]],
+    bundles: Sequence[SupportsEPIBundle],
+    *,
+    context_matrix: ContextMatrix,
+) -> None:
+    """Materialise fallback context factors for each microsector."""
+
+    total_bundles = len(bundles)
+    for spec in specs:
+        start = int(spec.get("start", 0))
+        end = int(spec.get("end", start))
+        if start < 0:
+            start = 0
+        if end < start:
+            spec["fallback_context_start"] = start
+            spec["fallback_context_values"] = ()
+            continue
+        stop = min(end + 1, total_bundles)
+        window = bundles[start:stop]
+        if window:
+            fallback_values = tuple(
+                resolve_series_context(window, matrix=context_matrix)
+            )
+        else:
+            fallback_values = ()
+        spec["fallback_context_start"] = start
+        spec["fallback_context_values"] = fallback_values
+
+
 def segment_microsectors(
     records: Sequence[SupportsTelemetrySample],
     bundles: Sequence[SupportsEPIBundle],
@@ -853,6 +883,8 @@ def segment_microsectors(
                 "context_factors": context_factors,
                 "sample_context": segment_span,
                 "context_multipliers": segment_span,
+                "fallback_context_start": start,
+                "fallback_context_values": (),
                 "goals": (),
                 "dominant_nodes": {},
                 "phase_axis_targets": {},
@@ -889,6 +921,12 @@ def segment_microsectors(
     )
     track_gradient_cache = _refresh_track_gradient_cache(
         track_gradient_cache, recomputed_bundles
+    )
+
+    _prepare_fallback_contexts(
+        specs,
+        recomputed_bundles,
+        context_matrix=context_matrix,
     )
 
     weights_adjusted, weight_start_index = _adjust_phase_weights_with_dominance(
@@ -934,6 +972,11 @@ def segment_microsectors(
             track_gradient_cache,
             recomputed_bundles,
             start_index=recompute_start,
+        )
+        _prepare_fallback_contexts(
+            specs,
+            recomputed_bundles,
+            context_matrix=context_matrix,
         )
         _invalidate_goal_cache(specs, recompute_start)
 
@@ -1150,6 +1193,8 @@ def segment_microsectors(
                 context_matrix=context_matrix,
                 sample_context=sample_context,
                 sample_multipliers=sample_multipliers,
+                segment_start=spec.get("fallback_context_start"),
+                fallback_context=spec.get("fallback_context_values"),
                 node_delta_cache=node_delta_cache,
                 node_nu_cache=node_nu_cache,
                 phase_gradients=phase_gradient_map,
@@ -1550,6 +1595,8 @@ def segment_microsectors(
                     context_matrix=context_matrix,
                     sample_context=sample_context,
                     sample_multipliers=sample_multipliers,
+                    segment_start=spec.get("fallback_context_start"),
+                    fallback_context=spec.get("fallback_context_values"),
                     node_delta_cache=node_delta_cache,
                     node_nu_cache=node_nu_cache,
                     phase_gradients=phase_gradient_map,
@@ -2524,6 +2571,8 @@ def _build_goals(
     context_matrix: ContextMatrix | None = None,
     sample_context: Sequence[ContextFactors] | None = None,
     sample_multipliers: Sequence[float] | None = None,
+    segment_start: int | None = None,
+    fallback_context: Sequence[ContextFactors] | None = None,
     node_delta_cache: (
         Sequence[Mapping[str, float]]
         | MutableSequence[Mapping[str, float]]
@@ -2556,6 +2605,42 @@ def _build_goals(
     axis_targets: Dict[PhaseLiteral, Dict[str, float]] = {}
     axis_weights: Dict[PhaseLiteral, Dict[str, float]] = {}
     context_matrix = context_matrix or load_context_matrix()
+
+    if boundaries:
+        min_boundary = min(start for start, _ in boundaries.values())
+        max_boundary = max(stop for _, stop in boundaries.values())
+    else:
+        min_boundary = 0
+        max_boundary = 0
+
+    fallback_offset: int | None = segment_start if segment_start is not None else None
+    fallback_series: Tuple[ContextFactors, ...] | None
+    if fallback_context is not None:
+        fallback_series = tuple(fallback_context)
+        if fallback_offset is None:
+            fallback_offset = min_boundary
+    else:
+        fallback_series = None
+
+    def _ensure_fallback_series() -> Tuple[ContextFactors, ...]:
+        nonlocal fallback_series, fallback_offset
+        if fallback_series is not None:
+            return fallback_series
+        start_idx = fallback_offset if fallback_offset is not None else min_boundary
+        start_idx = max(0, min(start_idx, len(bundles)))
+        stop_idx = max_boundary
+        stop_idx = max(0, min(stop_idx, len(bundles)))
+        if stop_idx <= start_idx:
+            fallback_series = ()
+        else:
+            fallback_series = tuple(
+                resolve_series_context(
+                    bundles[start_idx:stop_idx],
+                    matrix=context_matrix,
+                )
+            )
+        fallback_offset = start_idx
+        return fallback_series
 
     if (
         phase_dominant_nodes is None
@@ -2623,29 +2708,49 @@ def _build_goals(
                         use_direct_multipliers = True
 
             if not use_direct_multipliers:
-                if sample_context:
-                    resolved_context: List[ContextFactors] = []
-                    if indices:
-                        first_idx = indices[0]
-                        last_idx = indices[-1]
-                        all_cached = 0 <= first_idx and last_idx < len(sample_context)
-                    else:
-                        all_cached = True
-                    if all_cached:
-                        resolved_context = [sample_context[idx] for idx in indices]
-                    else:
-                        fallback_context = resolve_series_context(
-                            segment, matrix=context_matrix
+                resolved_context: List[ContextFactors] = []
+                phase_fallback: Tuple[ContextFactors, ...] | None = None
+
+                def _phase_context(local_index: int, absolute_index: int) -> ContextFactors:
+                    nonlocal phase_fallback, fallback_series, fallback_offset
+                    series = fallback_series
+                    if series is None:
+                        series = _ensure_fallback_series()
+                    offset = fallback_offset
+                    if series and offset is not None:
+                        relative_index = absolute_index - offset
+                        if 0 <= relative_index < len(series):
+                            return series[relative_index]
+                    if phase_fallback is None:
+                        phase_fallback = tuple(
+                            resolve_series_context(segment, matrix=context_matrix)
                         )
-                        for local_index, idx in enumerate(indices):
-                            if 0 <= idx < len(sample_context):
-                                resolved_context.append(sample_context[idx])
-                            else:
-                                resolved_context.append(fallback_context[local_index])
+                    if phase_fallback:
+                        if 0 <= local_index < len(phase_fallback):
+                            return phase_fallback[local_index]
+                        return phase_fallback[min(local_index, len(phase_fallback) - 1)]
+                    series = _ensure_fallback_series()
+                    if series:
+                        if offset is not None:
+                            relative_index = absolute_index - offset
+                            if relative_index < 0:
+                                relative_index = 0
+                            elif relative_index >= len(series):
+                                relative_index = len(series) - 1
+                            return series[relative_index]
+                        return series[min(local_index, len(series) - 1)]
+                    return ContextFactors()
+
+                if sample_context:
+                    for local_index, idx in enumerate(indices):
+                        if 0 <= idx < len(sample_context):
+                            resolved_context.append(sample_context[idx])
+                        else:
+                            resolved_context.append(_phase_context(local_index, idx))
                 else:
-                    resolved_context = resolve_series_context(
-                        segment, matrix=context_matrix
-                    )
+                    for local_index, idx in enumerate(indices):
+                        resolved_context.append(_phase_context(local_index, idx))
+
                 multipliers = [
                     _clamp(ctx.multiplier)
                     for ctx in resolved_context
@@ -3106,6 +3211,8 @@ def _adjust_phase_weights_with_dominance(
             context_matrix=context_matrix,
             sample_context=sample_context,
             sample_multipliers=sample_multipliers,
+            segment_start=spec.get("fallback_context_start"),
+            fallback_context=spec.get("fallback_context_values"),
             node_delta_cache=node_delta_cache,
             node_nu_cache=node_nu_cache,
             sample_rate=sample_rate,
