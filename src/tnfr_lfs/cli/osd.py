@@ -311,6 +311,7 @@ class TelemetryHUD:
             return
 
         self._bundles = bundles
+        baseline = self.extractor.baseline_record
         self._microsectors = segment_microsectors(
             records,
             bundles,
@@ -318,6 +319,7 @@ class TelemetryHUD:
             phase_weight_overrides=self._thresholds.phase_weights
             if self._thresholds.phase_weights
             else None,
+            baseline=baseline,
         )
         quiet_sequences = detect_quiet_microsector_streaks(self._microsectors)
         self._quiet_sequences = tuple(tuple(sequence) for sequence in quiet_sequences)

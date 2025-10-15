@@ -1227,6 +1227,12 @@ class EPIExtractor:
         ] | None = None
         self._pending_baseline: TelemetryRecord | None = None
 
+    @property
+    def baseline_record(self) -> TelemetryRecord | None:
+        """Return the most recent baseline resolved during extraction."""
+
+        return self._baseline_record
+
     def reset(self) -> None:
         """Clear the incremental state."""
 

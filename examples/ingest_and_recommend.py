@@ -54,7 +54,11 @@ def main(args: argparse.Namespace | None = None) -> None:
     records = client.ingest(telemetry_path)
     extractor = EPIExtractor()
     results = extractor.extract(records)
-    microsectors = segment_microsectors(records, results)
+    microsectors = segment_microsectors(
+        records,
+        results,
+        baseline=getattr(extractor, "baseline_record", None),
+    )
     engine = RecommendationEngine()
     for recommendation in engine.generate(results, microsectors):
         print(f"[{recommendation.category}] {recommendation.message}\n  {recommendation.rationale}")

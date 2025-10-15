@@ -168,6 +168,26 @@ def test_segment_microsectors_creates_goals_with_stable_assignments(
                         assert "epi_derivative_abs" in payload
 
 
+def test_segment_microsectors_uses_supplied_baseline(
+    monkeypatch: "pytest.MonkeyPatch",
+    synthetic_records: Sequence[TelemetryRecord],
+    synthetic_bundles,
+) -> None:
+    baseline = DeltaCalculator.derive_baseline(synthetic_records)
+
+    def _fail(*_args, **_kwargs):  # pragma: no cover - defensive guard
+        raise AssertionError("derive_baseline should not be invoked")
+
+    monkeypatch.setattr(metrics_segmentation.DeltaCalculator, "derive_baseline", _fail)
+
+    result = metrics_segmentation.segment_microsectors(
+        synthetic_records,
+        synthetic_bundles,
+        baseline=baseline,
+    )
+    assert result
+
+
 def test_segment_microsectors_incremental_recompute_matches_full(
     synthetic_records, synthetic_bundles, monkeypatch
 ) -> None:

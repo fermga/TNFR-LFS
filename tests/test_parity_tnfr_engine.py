@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import math
 import os
 import sys
@@ -195,17 +196,46 @@ def _summarise_outputs(bundles: Iterable[Any], microsectors: Iterable[Any]) -> D
     }
 
 
+def _segment_microsectors_with_baseline(
+    core_module: Any,
+    records: List[Any],
+    bundles: List[Any],
+    extractor: Any,
+) -> Any:
+    segment = core_module.segment_microsectors
+    baseline = getattr(extractor, "baseline_record", None)
+    try:
+        signature = inspect.signature(segment)
+    except (TypeError, ValueError):  # pragma: no cover - builtins without signature
+        signature = None
+    if signature and "baseline" in signature.parameters:
+        return segment(records, bundles, baseline=baseline)
+    return segment(records, bundles)
+
+
 def _compute_engine_outputs(samples: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     fallback_core = _load_tnfr_core("0")
     fallback_records = [fallback_core.TelemetryRecord(**row) for row in samples]
-    fallback_bundles = fallback_core.EPIExtractor().extract(fallback_records)
-    fallback_micro = fallback_core.segment_microsectors(fallback_records, fallback_bundles)
+    fallback_extractor = fallback_core.EPIExtractor()
+    fallback_bundles = fallback_extractor.extract(fallback_records)
+    fallback_micro = _segment_microsectors_with_baseline(
+        fallback_core,
+        fallback_records,
+        fallback_bundles,
+        fallback_extractor,
+    )
     fallback_summary = _summarise_outputs(fallback_bundles, fallback_micro)
 
     canonical_core = _load_tnfr_core("1")
     canonical_records = [canonical_core.TelemetryRecord(**row) for row in samples]
-    canonical_bundles = canonical_core.EPIExtractor().extract(canonical_records)
-    canonical_micro = canonical_core.segment_microsectors(canonical_records, canonical_bundles)
+    canonical_extractor = canonical_core.EPIExtractor()
+    canonical_bundles = canonical_extractor.extract(canonical_records)
+    canonical_micro = _segment_microsectors_with_baseline(
+        canonical_core,
+        canonical_records,
+        canonical_bundles,
+        canonical_extractor,
+    )
     canonical_summary = _summarise_outputs(canonical_bundles, canonical_micro)
 
     return fallback_summary, canonical_summary

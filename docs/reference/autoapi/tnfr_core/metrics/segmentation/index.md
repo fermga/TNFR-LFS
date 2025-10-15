@@ -27,7 +27,7 @@ Segment of the lap grouped by curvature and ΔNFR behaviour.
   - Return the range of sample indices assigned to ``phase``.
 
 ## Functions
-- `segment_microsectors(records: Sequence[SupportsTelemetrySample], bundles: Sequence[SupportsEPIBundle], *, operator_state: MutableMapping[str, Mapping[str, object]] | None = None, recursion_decay: float = 0.4, mutation_thresholds: Mapping[str, float] | None = None, phase_weight_overrides: Mapping[str, Mapping[str, float] | float] | None = None) -> List[Microsector]`
+- `segment_microsectors(records: Sequence[SupportsTelemetrySample], bundles: Sequence[SupportsEPIBundle], *, operator_state: MutableMapping[str, Mapping[str, object]] | None = None, recursion_decay: float = 0.4, mutation_thresholds: Mapping[str, float] | None = None, phase_weight_overrides: Mapping[str, Mapping[str, float] | float] | None = None, baseline: SupportsTelemetrySample | None = None) -> List[Microsector]`
   - Derive microsectors from telemetry and ΔNFR signatures.
 
 Parameters
@@ -41,6 +41,10 @@ bundles:
     Computed :class:`~tnfr_core.operators.interfaces.SupportsEPIBundle` entries for
     the same timestamps as ``records``. Every bundle must also implement the
     :class:`~tnfr_core.operators.interfaces.SupportsContextBundle` contract.
+baseline:
+    Optional baseline sample obtained during EPI extraction. When omitted the
+    function derives a baseline from ``records`` before computing the
+    microsectors.
 
 Returns
 -------
