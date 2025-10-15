@@ -85,3 +85,26 @@ def test_insights_with_robustness_override(
     )
     assert updated.robustness == expected
     assert result.robustness != expected
+
+
+def test_compute_insights_preserves_microsector_goals(
+    synthetic_records, tmp_path
+) -> None:
+    manager = preloaded_profile_manager(tmp_path)
+    reference_records = list(synthetic_records)
+    first = compute_insights(
+        list(reference_records),
+        car_model="FZR",
+        track_name="generic",
+        profile_manager=manager,
+    )
+    second = compute_insights(
+        list(reference_records),
+        car_model="FZR",
+        track_name="generic",
+        profile_manager=manager,
+    )
+    assert len(first.microsectors) == len(second.microsectors)
+    first_goals = [microsector.goals for microsector in first.microsectors]
+    second_goals = [microsector.goals for microsector in second.microsectors]
+    assert first_goals == second_goals

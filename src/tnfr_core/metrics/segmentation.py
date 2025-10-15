@@ -679,6 +679,13 @@ def segment_microsectors(
                 "context_factors": context_factors,
                 "sample_context": segment_span,
                 "context_multipliers": segment_span,
+                "goals": (),
+                "dominant_nodes": {},
+                "phase_axis_targets": {},
+                "phase_axis_weights": {},
+                "goal_cache_valid": False,
+                "goal_archetype": None,
+                "goal_gradient_signature": None,
             }
         )
         for phase, indices in phase_samples.items():
@@ -710,17 +717,19 @@ def segment_microsectors(
     )
 
     if weights_adjusted:
+        recompute_start = weight_start_index if weight_start_index is not None else 0
         recompute_result = _recompute_bundles(
             records,
             recomputed_bundles,
             baseline,
             phase_assignments,
             weight_lookup,
-            start_index=weight_start_index if weight_start_index is not None else 0,
+            start_index=recompute_start,
             analyzer_states=analyzer_states,
         )
         recomputed_bundles = recompute_result.bundles
         analyzer_states = recompute_result.analyzer_states
+        _invalidate_goal_cache(specs, recompute_start)
 
     goal_nu_f_lookup: Dict[int, float] = {}
     goal_start_index: int | None = None
@@ -776,6 +785,7 @@ def segment_microsectors(
                 goal_start_index = min(goal_start_index, start_candidate)
 
     if goal_nu_f_lookup:
+        goal_recompute_start = goal_start_index if goal_start_index is not None else 0
         recompute_result = _recompute_bundles(
             records,
             recomputed_bundles,
@@ -783,11 +793,12 @@ def segment_microsectors(
             phase_assignments,
             weight_lookup,
             goal_nu_f_lookup=goal_nu_f_lookup,
-            start_index=goal_start_index if goal_start_index is not None else 0,
+            start_index=goal_recompute_start,
             analyzer_states=analyzer_states,
         )
         recomputed_bundles = recompute_result.bundles
         analyzer_states = recompute_result.analyzer_states
+        _invalidate_goal_cache(specs, goal_recompute_start)
 
     for spec in specs:
         start = spec["start"]
@@ -805,6 +816,9 @@ def segment_microsectors(
         support_event = spec["support_event"]
         avg_vertical_load = float(spec.get("avg_vertical_load", 0.0))
         grip_rel = float(spec.get("grip_rel", 0.0))
+        duration = float(spec.get("duration", 0.0))
+        speed_drop = float(spec.get("speed_drop", 0.0))
+        direction_changes = spec.get("direction_changes", 0)
         stored_deltas = spec.get("adjusted_deltas")
         if stored_deltas is None:
             multiplier_meta = spec.get("context_multipliers")
@@ -831,9 +845,9 @@ def segment_microsectors(
             spec["avg_si"] = float(avg_si)
         archetype = _classify_archetype(
             curvature,
-            spec.get("duration", 0.0),
-            spec.get("speed_drop", 0.0),
-            spec.get("direction_changes", 0),
+            duration,
+            speed_drop,
+            direction_changes,
         )
         phase_gradient_map: Dict[PhaseLiteral, float] = {}
         gradient_samples: List[float] = []
@@ -857,24 +871,68 @@ def segment_microsectors(
             phase_gradient_map[phase] = mean(phase_values) if phase_values else 0.0
         microsector_gradient = mean(gradient_samples) if gradient_samples else 0.0
 
-        goals, dominant_nodes, axis_targets, axis_weights = _build_goals(
-            archetype,
-            recomputed_bundles,
-            records,
-            phase_boundaries,
-            yaw_rates=yaw_rate_cache,
-            context_matrix=context_matrix,
-            sample_context=sample_context,
-            node_delta_cache=node_delta_cache,
-            phase_gradients=phase_gradient_map,
+        gradient_signature = _phase_gradient_signature(phase_gradient_map)
+        cache_valid = bool(spec.get("goal_cache_valid"))
+        cached_archetype = spec.get("goal_archetype")
+        cached_signature = spec.get("goal_gradient_signature")
+        if (
+            not cache_valid
+            or cached_archetype != archetype
+            or cached_signature != gradient_signature
+        ):
+            (
+                goals_tuple,
+                dominant_nodes_map,
+                axis_targets_map,
+                axis_weights_map,
+            ) = _build_goals(
+                archetype,
+                recomputed_bundles,
+                records,
+                phase_boundaries,
+                yaw_rates=yaw_rate_cache,
+                context_matrix=context_matrix,
+                sample_context=sample_context,
+                node_delta_cache=node_delta_cache,
+                phase_gradients=phase_gradient_map,
+            )
+            spec["goals"] = goals_tuple
+            spec["dominant_nodes"] = dominant_nodes_map
+            spec["phase_axis_targets"] = axis_targets_map
+            spec["phase_axis_weights"] = axis_weights_map
+            spec["goal_cache_valid"] = True
+            spec["goal_archetype"] = archetype
+            spec["goal_gradient_signature"] = gradient_signature
+        goals = cast(Tuple[Goal, ...], spec.get("goals", ()))
+        dominant_nodes = cast(
+            Mapping[PhaseLiteral, Tuple[str, ...]],
+            spec.get("dominant_nodes", {}),
+        )
+        axis_targets = cast(
+            Mapping[PhaseLiteral, Mapping[str, float]],
+            spec.get("phase_axis_targets", {}),
+        )
+        axis_weights = cast(
+            Mapping[PhaseLiteral, Mapping[str, float]],
+            spec.get("phase_axis_weights", {}),
         )
         active_goal = max(
             goals,
             key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
         )
+        spec["active_phase"] = active_goal.phase
+        context_factors_obj = spec.get("context_factors")
+        if context_factors_obj is None:
+            context_factors_obj = resolve_microsector_context(
+                context_matrix,
+                curvature=curvature,
+                grip_rel=grip_rel if grip_rel > 0.0 else 1.0,
+                speed_drop=speed_drop,
+                direction_changes=float(direction_changes),
+            )
         surface_band = context_matrix.surface_band(max(grip_rel, 1e-9))
         surface_label = surface_band[3] or "neutral"
-        surface_factor = float(context_factors.surface)
+        surface_factor = float(getattr(context_factors_obj, "surface", 1.0))
         entry_goals = [goal for goal in goals if phase_family(goal.phase) == "entry"]
         if entry_goals:
             base_delta_threshold = mean(abs(goal.target_delta_nfr) for goal in entry_goals)
@@ -1206,20 +1264,34 @@ def segment_microsectors(
             final_archetype = mutation_info["archetype"]
             if final_archetype != archetype:
                 archetype = final_archetype
-                goals, dominant_nodes, axis_targets, axis_weights = _build_goals(
+                (
+                    goals,
+                    dominant_nodes,
+                    axis_targets,
+                    axis_weights,
+                ) = _build_goals(
                     archetype,
-                    bundles,
+                    recomputed_bundles,
                     records,
                     phase_boundaries,
                     yaw_rates=yaw_rate_cache,
                     context_matrix=context_matrix,
                     sample_context=sample_context,
                     node_delta_cache=node_delta_cache,
+                    phase_gradients=phase_gradient_map,
                 )
+                spec["goals"] = goals
+                spec["dominant_nodes"] = dominant_nodes
+                spec["phase_axis_targets"] = axis_targets
+                spec["phase_axis_weights"] = axis_weights
+                spec["goal_cache_valid"] = True
+                spec["goal_archetype"] = archetype
+                spec["goal_gradient_signature"] = gradient_signature
                 active_goal = max(
                     goals,
                     key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
                 )
+                spec["active_phase"] = active_goal.phase
                 recursivity_operator(
                     rec_state_root,
                     session_components,
@@ -2473,6 +2545,9 @@ def _adjust_phase_weights_with_dominance(
         spec["dominant_nodes"] = dominant_nodes
         spec["phase_axis_targets"] = axis_targets
         spec["phase_axis_weights"] = axis_weights
+        spec["goal_cache_valid"] = True
+        spec["goal_archetype"] = archetype
+        spec["goal_gradient_signature"] = None
         active_goal = max(
             goals,
             key=lambda goal: abs(goal.target_delta_nfr) + goal.nu_f_target,
@@ -2501,6 +2576,40 @@ def _adjust_phase_weights_with_dominance(
                     first_index = candidate if first_index is None else min(first_index, candidate)
         spec["phase_weights"] = profile
     return adjusted, first_index
+
+
+def _phase_gradient_signature(
+    phase_gradients: Mapping[PhaseLiteral, float] | None,
+) -> Tuple[Tuple[str, float], ...] | None:
+    if not phase_gradients:
+        return None
+    signature: List[Tuple[str, float]] = []
+    for phase, value in phase_gradients.items():
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        signature.append((str(phase), numeric))
+    if not signature:
+        return None
+    signature.sort(key=lambda entry: entry[0])
+    return tuple(signature)
+
+
+def _invalidate_goal_cache(specs: Sequence[Dict[str, object]], start_index: int | None) -> None:
+    if start_index is None:
+        return
+    if start_index <= 0:
+        affected = specs
+    else:
+        affected = [
+            spec
+            for spec in specs
+            if int(spec.get("end", -1)) >= start_index
+        ]
+    for spec in affected:
+        spec["goal_cache_valid"] = False
+        spec["goal_gradient_signature"] = None
 
 
 def _phase_alignment_targets(archetype: str) -> Mapping[str, Tuple[float, float]]:
