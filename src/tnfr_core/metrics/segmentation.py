@@ -806,7 +806,6 @@ def segment_microsectors(
 
     baseline_record = baseline or DeltaCalculator.derive_baseline(records)
     context_matrix = load_context_matrix()
-    bundle_list = list(bundles)
     microsectors: List[Microsector] = []
     rec_state_root: RecursivityStateRoot | None = None
     mutation_state: MutableMapping[str, Dict[str, object]] | None = None
@@ -939,7 +938,7 @@ def segment_microsectors(
 
     recompute_result = _recompute_bundles(
         records,
-        bundle_list,
+        bundles,
         baseline_record,
         assigned_phases,
         assigned_weights,
