@@ -3,7 +3,7 @@ import pytest
 import math
 from dataclasses import replace
 from statistics import mean, pstdev
-from typing import List, Mapping, Tuple
+from typing import List, Mapping, Sequence, Tuple
 
 from tests.helpers import build_dynamic_record
 
@@ -1367,6 +1367,65 @@ def test_segment_microsectors_preserves_operator_state(
         assert after.last_mutation is not None
         assert before.last_mutation is not None
         assert after.last_mutation.get("archetype") == before.last_mutation.get("archetype")
+
+
+def test_segment_microsectors_recursivity_entropy_consistency(
+    synthetic_records,
+    synthetic_bundles,
+    monkeypatch,
+) -> None:
+    records = list(synthetic_records)
+    bundles = list(synthetic_bundles)
+
+    captured_triggers: list[float] = []
+    real_estimate_entropy = metrics_segmentation._estimate_entropy
+    entropy_calls: list[dict[str, object]] = []
+
+    def _capture_mutation_operator(state, triggers, **kwargs):
+        entropy_value = float(triggers.get("entropy", 0.0))
+        captured_triggers.append(entropy_value)
+        return {
+            "archetype": str(triggers.get("candidate_archetype", "")),
+            "mutated": False,
+            "entropy": entropy_value,
+        }
+
+    def _capture_entropy(records_arg, start, end, **kwargs):
+        entropy_value = real_estimate_entropy(records_arg, start, end, **kwargs)
+        baseline_value = real_estimate_entropy(records_arg, start, end)
+        entropy_calls.append(
+            {
+                "entropy": entropy_value,
+                "baseline": baseline_value,
+                "node_delta_cache": kwargs.get("node_delta_cache"),
+                "cache_offset": kwargs.get("cache_offset"),
+            }
+        )
+        return entropy_value
+
+    monkeypatch.setattr(metrics_segmentation, "mutation_operator", _capture_mutation_operator)
+    monkeypatch.setattr(metrics_segmentation, "_estimate_entropy", _capture_entropy)
+
+    operator_state: dict[str, dict[str, dict[str, object]]] = {}
+    segment_microsectors(
+        records,
+        bundles,
+        operator_state=operator_state,
+    )
+
+    assert captured_triggers
+    assert entropy_calls
+
+    for call in entropy_calls:
+        cache = call["node_delta_cache"]
+        assert cache is not None
+        assert isinstance(cache, Sequence)
+        assert len(cache) == len(records)
+        assert call["entropy"] == pytest.approx(call["baseline"], rel=1e-9)
+        assert call["cache_offset"] == 0
+
+    for trigger_entropy, call in zip(captured_triggers, entropy_calls):
+        assert trigger_entropy == pytest.approx(call["entropy"], rel=1e-9)
 
 
 def test_operator_detectors_receive_segment_windows(

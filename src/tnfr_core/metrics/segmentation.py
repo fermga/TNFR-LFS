@@ -1282,7 +1282,13 @@ def segment_microsectors(
                 decay=recursion_decay,
             )
             rec_phase = rec_info["phase"] or active_goal.phase
-            entropy_value = _estimate_entropy(records, start, end)
+            entropy_value = _estimate_entropy(
+                records,
+                start,
+                end,
+                node_delta_cache=node_delta_cache,
+                cache_offset=0,
+            )
             triggers = {
                 "microsector_id": str(index),
                 "current_archetype": archetype,
@@ -1802,11 +1808,22 @@ def _recompute_bundles(
 
 
 def _estimate_entropy(
-    records: Sequence[SupportsTelemetrySample], start: int, end: int
+    records: Sequence[SupportsTelemetrySample],
+    start: int,
+    end: int,
+    *,
+    node_delta_cache: Sequence[Mapping[str, float]] | None = None,
+    cache_offset: int = 0,
 ) -> float:
     node_weights: Dict[str, float] = defaultdict(float)
     for index in range(start, end + 1):
-        distribution = delta_nfr_by_node(records[index])
+        distribution: Mapping[str, float] | None = None
+        if node_delta_cache is not None:
+            cache_index = index - cache_offset
+            if 0 <= cache_index < len(node_delta_cache):
+                distribution = node_delta_cache[cache_index]
+        if distribution is None:
+            distribution = delta_nfr_by_node(records[index])
         for node, delta in distribution.items():
             weight = abs(delta)
             if weight > 0.0:
