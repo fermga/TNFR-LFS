@@ -295,6 +295,38 @@ def _refresh_node_delta_cache(
     return cache
 
 
+def _bundle_track_gradient(bundle: SupportsEPIBundle) -> float:
+    """Extract the track gradient from ``bundle`` guarding against NaNs."""
+
+    track = getattr(bundle, "track", None)
+    if track is None:
+        return math.nan
+    try:
+        gradient_value = float(getattr(track, "gradient", 0.0))
+    except (TypeError, ValueError):
+        return math.nan
+    if not math.isfinite(gradient_value):
+        return math.nan
+    return gradient_value
+
+
+def _refresh_track_gradient_cache(
+    cache: List[float] | None,
+    bundles: Sequence[SupportsEPIBundle],
+    *,
+    start_index: int = 0,
+) -> List[float]:
+    """Update ``cache`` with track gradient samples from ``bundles``."""
+
+    total = len(bundles)
+    effective_start = min(max(start_index, 0), total)
+    if cache is None or len(cache) != total or effective_start <= 0:
+        return [_bundle_track_gradient(bundle) for bundle in bundles]
+    for idx in range(effective_start, total):
+        cache[idx] = _bundle_track_gradient(bundles[idx])
+    return cache
+
+
 def _restore_analyzer_state(
     analyzer: NaturalFrequencyAnalyzer,
     state: _AnalyzerState,
@@ -718,6 +750,7 @@ def segment_microsectors(
         )
     session_components = _resolve_session_components(records, baseline_record)
     node_delta_cache: List[Mapping[str, float]] | None = None
+    track_gradient_cache: List[float] | None = None
 
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
@@ -806,6 +839,9 @@ def segment_microsectors(
     node_delta_cache = _refresh_node_delta_cache(
         node_delta_cache, recomputed_bundles
     )
+    track_gradient_cache = _refresh_track_gradient_cache(
+        track_gradient_cache, recomputed_bundles
+    )
 
     weights_adjusted, weight_start_index = _adjust_phase_weights_with_dominance(
         specs,
@@ -837,6 +873,11 @@ def segment_microsectors(
         analyzer_states = recompute_result.analyzer_states
         node_delta_cache = _refresh_node_delta_cache(
             node_delta_cache,
+            recomputed_bundles,
+            start_index=recompute_start,
+        )
+        track_gradient_cache = _refresh_track_gradient_cache(
+            track_gradient_cache,
             recomputed_bundles,
             start_index=recompute_start,
         )
@@ -921,6 +962,11 @@ def segment_microsectors(
             recomputed_bundles,
             start_index=goal_recompute_start,
         )
+        track_gradient_cache = _refresh_track_gradient_cache(
+            track_gradient_cache,
+            recomputed_bundles,
+            start_index=goal_recompute_start,
+        )
         _invalidate_goal_cache(specs, goal_recompute_start)
 
     for spec in specs:
@@ -1002,14 +1048,11 @@ def segment_microsectors(
             for idx in range(phase_start, min(phase_stop, len(recomputed_bundles))):
                 if not (0 <= idx < len(recomputed_bundles)):
                     continue
-                bundle = recomputed_bundles[idx]
-                track = getattr(bundle, "track", None)
-                if track is None:
+                if track_gradient_cache is None:
                     continue
-                try:
-                    gradient_value = float(getattr(track, "gradient", 0.0))
-                except (TypeError, ValueError):
+                if not (0 <= idx < len(track_gradient_cache)):
                     continue
+                gradient_value = track_gradient_cache[idx]
                 if not math.isfinite(gradient_value):
                     continue
                 phase_values.append(gradient_value)
