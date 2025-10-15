@@ -1131,30 +1131,6 @@ def segment_microsectors(
             phase: dict(profile)
             for phase, profile in spec["phase_weights"].items()
         }
-        if spec.get("goal_phase_cache") is None:
-            (
-                phase_dominant_nodes,
-                phase_nu_f_targets,
-                phase_dominance_weights,
-                sample_nu_f_lookup,
-            ) = _phase_nu_f_targets(
-                recomputed_bundles,
-                records,
-                phase_boundaries,
-                phase_samples,
-                yaw_rates=yaw_rate_cache,
-                context_matrix=context_matrix,
-                sample_context=sample_context,
-                node_delta_cache=node_delta_cache,
-                node_nu_cache=node_nu_cache,
-            )
-            _store_phase_goal_cache(
-                spec,
-                phase_dominant_nodes,
-                phase_nu_f_targets,
-                phase_dominance_weights,
-                sample_nu_f_lookup,
-            )
         curvature = spec["curvature"]
         brake_event = spec["brake_event"]
         support_event = spec["support_event"]
@@ -1248,13 +1224,50 @@ def segment_microsectors(
             cached_dominant_nodes,
             cached_nu_f_targets,
             cached_dominance_weights,
-            _,
+            cached_sample_lookup,
         ) = _extract_phase_goal_cache(spec)
-        if (
-            not cache_valid
-            or cached_archetype != archetype
-            or cached_signature != gradient_signature
-        ):
+        cache_matches = (
+            cache_valid
+            and cached_archetype == archetype
+            and cached_signature == gradient_signature
+            and cached_dominant_nodes is not None
+            and cached_nu_f_targets is not None
+            and cached_dominance_weights is not None
+        )
+        phase_dominant_nodes = cached_dominant_nodes
+        phase_nu_f_targets = cached_nu_f_targets
+        phase_dominance_weights = cached_dominance_weights
+        sample_nu_f_lookup = cached_sample_lookup
+        if not cache_matches:
+            if (
+                phase_dominant_nodes is None
+                or phase_nu_f_targets is None
+                or phase_dominance_weights is None
+            ):
+                (
+                    phase_dominant_nodes,
+                    phase_nu_f_targets,
+                    phase_dominance_weights,
+                    sample_nu_f_lookup,
+                ) = _phase_nu_f_targets(
+                    recomputed_bundles,
+                    records,
+                    phase_boundaries,
+                    phase_samples,
+                    yaw_rates=yaw_rate_cache,
+                    context_matrix=context_matrix,
+                    sample_context=sample_context,
+                    node_delta_cache=node_delta_cache,
+                    node_nu_cache=node_nu_cache,
+                )
+            if phase_dominant_nodes is None:
+                phase_dominant_nodes = {}
+            if phase_nu_f_targets is None:
+                phase_nu_f_targets = {}
+            if phase_dominance_weights is None:
+                phase_dominance_weights = {}
+            if sample_nu_f_lookup is None:
+                sample_nu_f_lookup = {}
             (
                 goals_tuple,
                 dominant_nodes_map,
@@ -1274,9 +1287,9 @@ def segment_microsectors(
                 node_delta_cache=node_delta_cache,
                 node_nu_cache=node_nu_cache,
                 phase_gradients=phase_gradient_map,
-                phase_dominant_nodes=cached_dominant_nodes,
-                phase_nu_f_targets=cached_nu_f_targets,
-                phase_dominance_weights=cached_dominance_weights,
+                phase_dominant_nodes=phase_dominant_nodes,
+                phase_nu_f_targets=phase_nu_f_targets,
+                phase_dominance_weights=phase_dominance_weights,
                 sample_rate=sample_rate,
                 steer_norm=steer_norm,
                 yaw_norm=yaw_norm,
@@ -1289,6 +1302,13 @@ def segment_microsectors(
             spec["goal_cache_valid"] = True
             spec["goal_archetype"] = archetype
             spec["goal_gradient_signature"] = gradient_signature
+            _store_phase_goal_cache(
+                spec,
+                phase_dominant_nodes,
+                phase_nu_f_targets,
+                phase_dominance_weights,
+                sample_nu_f_lookup,
+            )
         goals = cast(Tuple[Goal, ...], spec.get("goals", ()))
         dominant_nodes = cast(
             Mapping[PhaseLiteral, Tuple[str, ...]],
@@ -3339,6 +3359,38 @@ def _adjust_phase_weights_with_dominance(
     first_index: int | None = None
     for spec in specs:
         phase_boundaries = spec["phase_boundaries"]
+        phase_samples = spec.get("phase_samples")
+        (
+            phase_dominant_nodes,
+            phase_nu_f_targets,
+            phase_dominance_weights,
+            sample_nu_f_lookup,
+        ) = _phase_nu_f_targets(
+            bundles,
+            records,
+            phase_boundaries,
+            phase_samples,
+            yaw_rates=yaw_rates,
+            context_matrix=context_matrix,
+            sample_context=sample_context,
+            node_delta_cache=node_delta_cache,
+            node_nu_cache=node_nu_cache,
+        )
+        should_adjust = any(
+            phase_dominant_nodes.get(phase)
+            and phase_nu_f_targets.get(phase, 0.0) > 0.0
+            for phase in phase_boundaries
+        )
+        if not should_adjust:
+            _store_phase_goal_cache(
+                spec,
+                phase_dominant_nodes,
+                phase_nu_f_targets,
+                phase_dominance_weights,
+                sample_nu_f_lookup,
+            )
+            continue
+
         archetype = _classify_archetype(
             spec["curvature"],
             spec.get("duration", 0.0),
@@ -3358,10 +3410,20 @@ def _adjust_phase_weights_with_dominance(
             fallback_context=spec.get("fallback_context_values"),
             node_delta_cache=node_delta_cache,
             node_nu_cache=node_nu_cache,
+            phase_dominant_nodes=phase_dominant_nodes,
+            phase_nu_f_targets=phase_nu_f_targets,
+            phase_dominance_weights=phase_dominance_weights,
             sample_rate=sample_rate,
             steer_norm=steer_norm,
             yaw_norm=yaw_norm,
             lat_norm=lat_norm,
+        )
+        _store_phase_goal_cache(
+            spec,
+            phase_dominant_nodes,
+            phase_nu_f_targets,
+            phase_dominance_weights,
+            sample_nu_f_lookup,
         )
         spec["goals"] = goals
         spec["dominant_nodes"] = dominant_nodes

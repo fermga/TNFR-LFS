@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from tnfr_lfs.analysis import compute_session_robustness
-from tnfr_core.epi import EPIExtractor
+import inspect
+
+from tnfr_core.epi import DeltaCalculator, EPIExtractor
 from tnfr_core.metrics import segmentation as segmentation_module
 from tnfr_core.segmentation import segment_microsectors
 from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
@@ -165,3 +167,66 @@ def test_segment_microsectors_phase_samples_match_boundaries(
     for microsector in microsectors:
         for phase, indices in microsector.phase_samples.items():
             assert tuple(indices) == tuple(microsector.phase_indices(phase))
+
+
+def test_segment_microsectors_short_circuits_goal_cache(
+    synthetic_records,
+    synthetic_bundles,
+    monkeypatch,
+) -> None:
+    baseline = DeltaCalculator.derive_baseline(synthetic_records)
+    assert baseline is not None
+
+    source_lines, start_line = inspect.getsourcelines(segmentation_module.segment_microsectors)
+    call_sites = [
+        start_line + offset
+        for offset, line in enumerate(source_lines)
+        if "_phase_nu_f_targets(" in line
+    ]
+    assert call_sites, "segment_microsectors should call _phase_nu_f_targets"
+    goal_loop_line = max(call_sites)
+
+    original_phase_targets = segmentation_module._phase_nu_f_targets
+    original_invalidate = segmentation_module._invalidate_goal_cache
+    call_lines_baseline: list[int] = []
+    call_lines_short: list[int] = []
+    mode = "baseline"
+
+    def tracking_phase_targets(*args, **kwargs):
+        frame = inspect.stack()[1]
+        if mode == "baseline":
+            call_lines_baseline.append(frame.lineno)
+        else:
+            call_lines_short.append(frame.lineno)
+        return original_phase_targets(*args, **kwargs)
+
+    monkeypatch.setattr(
+        segmentation_module,
+        "_phase_nu_f_targets",
+        tracking_phase_targets,
+    )
+    segment_microsectors(list(synthetic_records), list(synthetic_bundles), baseline=baseline)
+
+    assert goal_loop_line in call_lines_baseline
+
+    mode = "short"
+    original_signature = segmentation_module._phase_gradient_signature
+    monkeypatch.setattr(
+        segmentation_module,
+        "_invalidate_goal_cache",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(segmentation_module, "_phase_gradient_signature", lambda _: None)
+
+    segment_microsectors(list(synthetic_records), list(synthetic_bundles), baseline=baseline)
+
+    monkeypatch.setattr(segmentation_module, "_phase_gradient_signature", original_signature)
+    monkeypatch.setattr(segmentation_module, "_phase_nu_f_targets", original_phase_targets)
+    monkeypatch.setattr(segmentation_module, "_invalidate_goal_cache", original_invalidate)
+
+    assert call_lines_short, "the profiling wrapper should record calls"
+
+    baseline_calls = call_lines_baseline.count(goal_loop_line)
+    short_circuit_calls = call_lines_short.count(goal_loop_line)
+    assert baseline_calls > 0
+    assert short_circuit_calls < baseline_calls
