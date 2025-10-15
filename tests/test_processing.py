@@ -15,6 +15,8 @@ def test_compute_insights_matches_components(
     extractor = EPIExtractor()
     reference_records = list(synthetic_records)
     expected_bundles = extractor.extract(reference_records)
+    baseline = extractor.baseline_record
+    assert baseline is not None
     result = compute_insights(
         list(reference_records),
         car_model="FZR",
@@ -35,12 +37,14 @@ def test_compute_insights_matches_components(
         list(reference_records),
         result.bundles,
         phase_weight_overrides=overrides_payload,
+        baseline=baseline,
     )
     assert result.microsectors == expected_microsectors
     tuple_microsectors = segment_microsectors(
         tuple(reference_records),
         list(result.bundles),
         phase_weight_overrides=overrides_payload,
+        baseline=baseline,
     )
     assert tuple_microsectors == expected_microsectors
     expected_robustness = compute_session_robustness(
@@ -116,7 +120,13 @@ def test_segment_microsectors_phase_samples_match_boundaries(
     extractor = EPIExtractor()
     reference_records = list(synthetic_records)
     bundles = extractor.extract(reference_records)
-    microsectors = segment_microsectors(reference_records, bundles)
+    baseline = extractor.baseline_record
+    assert baseline is not None
+    microsectors = segment_microsectors(
+        reference_records,
+        bundles,
+        baseline=baseline,
+    )
     assert microsectors
     for microsector in microsectors:
         for phase, indices in microsector.phase_samples.items():

@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib
+import inspect
 import json
 import os
 import sys
@@ -314,6 +315,23 @@ def _summarise_phase_alignment(
     }
 
 
+def _segment_microsectors_with_baseline(
+    core_module: Any,
+    records: list[Any],
+    bundles: list[Any],
+    extractor: Any,
+) -> Any:
+    segment = core_module.segment_microsectors
+    baseline = getattr(extractor, "baseline_record", None)
+    try:
+        signature = inspect.signature(segment)
+    except (TypeError, ValueError):  # pragma: no cover - builtins without signature
+        signature = None
+    if signature and "baseline" in signature.parameters:
+        return segment(records, bundles, baseline=baseline)
+    return segment(records, bundles)
+
+
 def main() -> int:
     args = _parse_args()
 
@@ -322,9 +340,13 @@ def main() -> int:
     samples = _load_samples(args.data_path, field_types)
 
     fallback_records = [fallback_core.TelemetryRecord(**sample) for sample in samples]
-    fallback_bundles = fallback_core.EPIExtractor().extract(fallback_records)
-    fallback_micro = fallback_core.segment_microsectors(
-        fallback_records, fallback_bundles
+    fallback_extractor = fallback_core.EPIExtractor()
+    fallback_bundles = fallback_extractor.extract(fallback_records)
+    fallback_micro = _segment_microsectors_with_baseline(
+        fallback_core,
+        fallback_records,
+        fallback_bundles,
+        fallback_extractor,
     )
     fallback_summary = _summarise_outputs(fallback_bundles, fallback_micro)
 
@@ -332,9 +354,13 @@ def main() -> int:
     canonical_records = [
         canonical_core.TelemetryRecord(**sample) for sample in samples
     ]
-    canonical_bundles = canonical_core.EPIExtractor().extract(canonical_records)
-    canonical_micro = canonical_core.segment_microsectors(
-        canonical_records, canonical_bundles
+    canonical_extractor = canonical_core.EPIExtractor()
+    canonical_bundles = canonical_extractor.extract(canonical_records)
+    canonical_micro = _segment_microsectors_with_baseline(
+        canonical_core,
+        canonical_records,
+        canonical_bundles,
+        canonical_extractor,
     )
     canonical_summary = _summarise_outputs(canonical_bundles, canonical_micro)
 
@@ -408,3 +434,4 @@ def main() -> int:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(main())
+

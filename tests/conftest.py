@@ -98,7 +98,7 @@ from tnfr_lfs.cli import run_cli
 
 from tnfr_core.cache_settings import CacheOptions
 
-from tnfr_core.epi import EPIExtractor, TelemetryRecord
+from tnfr_core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
 from tnfr_core.epi_models import (
     BrakesNode,
     ChassisNode,
@@ -635,7 +635,12 @@ def synthetic_microsectors(
 ) -> List[Microsector]:
     """Microsectors obtained from the bundled synthetic stint."""
 
-    return segment_microsectors(synthetic_records, synthetic_bundles)
+    baseline = DeltaCalculator.derive_baseline(synthetic_records)
+    return segment_microsectors(
+        synthetic_records,
+        synthetic_bundles,
+        baseline=baseline,
+    )
 
 
 @pytest.fixture(scope="session")

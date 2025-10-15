@@ -133,10 +133,12 @@ def compute_insights(
             robustness={},
         )
     overrides = snapshot.phase_weights if snapshot is not None else thresholds.phase_weights
+    baseline = extractor.baseline_record
     microsectors = segment_microsectors(
         records,
         bundles,
         phase_weight_overrides=overrides if overrides else None,
+        baseline=baseline,
     )
     robustness_reference = (
         robustness_thresholds

@@ -893,7 +893,8 @@ def _build_microsector_dataset(
             LOGGER.warning("Failed to extract EPI bundles for '%s': %s", raf_path, exc)
             continue
         try:
-            microsectors = segment_microsectors(records, bundles)
+            baseline = extractor.baseline_record
+            microsectors = segment_microsectors(records, bundles, baseline=baseline)
         except Exception as exc:  # pragma: no cover - defensive catch
             LOGGER.warning("Microsector segmentation failed for '%s': %s", raf_path, exc)
             continue

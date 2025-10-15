@@ -572,6 +572,7 @@ def segment_microsectors(
     recursion_decay: float = 0.4,
     mutation_thresholds: Mapping[str, float] | None = None,
     phase_weight_overrides: Mapping[str, Mapping[str, float] | float] | None = None,
+    baseline: SupportsTelemetrySample | None = None,
 ) -> List[Microsector]:
     """Derive microsectors from telemetry and ΔNFR signatures.
 
@@ -586,6 +587,10 @@ def segment_microsectors(
         Computed :class:`~tnfr_core.operators.interfaces.SupportsEPIBundle` entries for
         the same timestamps as ``records``. Every bundle must also implement the
         :class:`~tnfr_core.operators.interfaces.SupportsContextBundle` contract.
+    baseline:
+        Optional baseline sample obtained during EPI extraction. When omitted the
+        function derives a baseline from ``records`` before computing the
+        microsectors.
 
     Returns
     -------
@@ -610,7 +615,7 @@ def segment_microsectors(
     if not segments:
         return []
 
-    baseline = DeltaCalculator.derive_baseline(records)
+    baseline_record = baseline or DeltaCalculator.derive_baseline(records)
     context_matrix = load_context_matrix()
     bundle_list = list(bundles)
     microsectors: List[Microsector] = []
@@ -628,7 +633,7 @@ def segment_microsectors(
     phase_assignments: Dict[int, PhaseLiteral] = {}
     weight_lookup: Dict[int, Mapping[str, Mapping[str, float] | float]] = {}
     specs: List[Dict[str, object]] = []
-    baseline_vertical = float(getattr(baseline, "vertical_load", 0.0))
+    baseline_vertical = float(getattr(baseline_record, "vertical_load", 0.0))
     sample_context = [
         resolve_context_from_record(
             context_matrix,
@@ -644,7 +649,7 @@ def segment_microsectors(
         )
         for factors in sample_context
     ]
-    session_components = _resolve_session_components(records, baseline)
+    session_components = _resolve_session_components(records, baseline_record)
 
     yaw_rate_cache = [_compute_yaw_rate(records, idx) for idx in range(len(records))]
     node_delta_cache: Sequence[Mapping[str, float]] | None = None
@@ -725,7 +730,7 @@ def segment_microsectors(
     recompute_result = _recompute_bundles(
         records,
         bundle_list,
-        baseline,
+        baseline_record,
         phase_assignments,
         weight_lookup,
         analyzer_states=analyzer_states,
@@ -749,7 +754,7 @@ def segment_microsectors(
         recompute_result = _recompute_bundles(
             records,
             recomputed_bundles,
-            baseline,
+            baseline_record,
             phase_assignments,
             weight_lookup,
             start_index=recompute_start,
@@ -825,7 +830,7 @@ def segment_microsectors(
         recompute_result = _recompute_bundles(
             records,
             recomputed_bundles,
-            baseline,
+            baseline_record,
             phase_assignments,
             weight_lookup,
             goal_nu_f_lookup=goal_nu_f_lookup,
