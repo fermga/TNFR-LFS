@@ -97,7 +97,7 @@ from tnfr_core.equations.archetypes import (
     archetype_phase_targets,
 )
 from tnfr_core.metrics.resonance import estimate_excitation_frequency
-from tnfr_core.metrics.spectrum import phase_alignment
+from tnfr_core.metrics.spectrum import estimate_sample_rate, phase_alignment
 
 # Public API: core.__init__ re-exports segmentation artefacts via these names.
 __all__ = [
@@ -117,6 +117,30 @@ SUPPORT_THRESHOLD = 350.0  # Newtons of vertical load delta
 
 
 PhaseLiteral = str
+
+
+def _extract_signal(records: Sequence[SupportsTelemetrySample], attr: str) -> List[float]:
+    values: List[float] = []
+    for record in records:
+        try:
+            value = float(getattr(record, attr))
+        except (AttributeError, TypeError, ValueError):
+            value = 0.0
+        if not math.isfinite(value):
+            value = 0.0
+        values.append(value)
+    return values
+
+
+def _normalise_signal(values: Sequence[float]) -> List[float]:
+    if not values:
+        return []
+    mean_value = fmean(values)
+    variance = sum((value - mean_value) ** 2 for value in values) / len(values)
+    if variance <= 1e-12:
+        return [0.0 for _ in values]
+    scale = math.sqrt(variance)
+    return [(value - mean_value) / scale for value in values]
 
 
 def _resolve_session_components(
@@ -639,10 +663,6 @@ def segment_microsectors(
     if bundles and not isinstance(bundles[0], SupportsContextBundle):
         raise TypeError("bundles must expose chassis, tyres and transmission nodes")
 
-    segments = _identify_corner_segments(records)
-    if not segments:
-        return []
-
     baseline_record = baseline or DeltaCalculator.derive_baseline(records)
     context_matrix = load_context_matrix()
     bundle_list = list(bundles)
@@ -666,6 +686,20 @@ def segment_microsectors(
     ] * total_samples
     specs: List[Dict[str, object]] = []
     baseline_vertical = float(getattr(baseline_record, "vertical_load", 0.0))
+    sample_rate = estimate_sample_rate(records)
+    steer_series = _extract_signal(records, "steer")
+    lat_series = _extract_signal(records, "lateral_accel")
+    yaw_rate_cache = [
+        _resolve_yaw_rate(records, idx) for idx in range(len(records))
+    ]
+    steer_norm = _normalise_signal(steer_series)
+    yaw_norm = _normalise_signal(yaw_rate_cache)
+    lat_norm = _normalise_signal(lat_series)
+
+    segments = _identify_corner_segments(records)
+    if not segments:
+        return []
+
     sample_context = [
         resolve_context_from_record(
             context_matrix,
@@ -682,10 +716,6 @@ def segment_microsectors(
         for factors in sample_context
     ]
     session_components = _resolve_session_components(records, baseline_record)
-
-    yaw_rate_cache = [
-        _resolve_yaw_rate(records, idx) for idx in range(len(records))
-    ]
     node_delta_cache: List[Mapping[str, float]] | None = None
 
     for index, (start, end) in enumerate(segments):
@@ -784,6 +814,10 @@ def segment_microsectors(
         sample_context=sample_context,
         yaw_rates=yaw_rate_cache,
         node_delta_cache=node_delta_cache,
+        sample_rate=sample_rate,
+        steer_norm=steer_norm,
+        yaw_norm=yaw_norm,
+        lat_norm=lat_norm,
     )
 
     if weights_adjusted:
@@ -1014,6 +1048,10 @@ def segment_microsectors(
                 phase_dominant_nodes=cached_dominant_nodes,
                 phase_nu_f_targets=cached_nu_f_targets,
                 phase_dominance_weights=cached_dominance_weights,
+                sample_rate=sample_rate,
+                steer_norm=steer_norm,
+                yaw_norm=yaw_norm,
+                lat_norm=lat_norm,
             )
             spec["goals"] = goals_tuple
             spec["dominant_nodes"] = dominant_nodes_map
@@ -1408,6 +1446,10 @@ def segment_microsectors(
                     phase_dominant_nodes=cached_dominant_nodes,
                     phase_nu_f_targets=cached_nu_f_targets,
                     phase_dominance_weights=cached_dominance_weights,
+                    sample_rate=sample_rate,
+                    steer_norm=steer_norm,
+                    yaw_norm=yaw_norm,
+                    lat_norm=lat_norm,
                 )
                 spec["goals"] = goals
                 spec["dominant_nodes"] = dominant_nodes
@@ -2334,6 +2376,10 @@ def _build_goals(
     phase_dominant_nodes: Mapping[PhaseLiteral, Tuple[str, ...]] | None = None,
     phase_nu_f_targets: Mapping[PhaseLiteral, float] | None = None,
     phase_dominance_weights: Mapping[PhaseLiteral, float] | None = None,
+    sample_rate: float | None = None,
+    steer_norm: Sequence[float] | None = None,
+    yaw_norm: Sequence[float] | None = None,
+    lat_norm: Sequence[float] | None = None,
 ) -> Tuple[
     Tuple[Goal, ...],
     Mapping[PhaseLiteral, Tuple[str, ...]],
@@ -2444,7 +2490,32 @@ def _build_goals(
             abs_long = 0.0
             abs_lat = 0.0
 
-        _, measured_lag, measured_alignment = phase_alignment(phase_records)
+        def _slice_series(series: Sequence[float] | None) -> List[float] | None:
+            if series is None:
+                return None
+            window: List[float] = []
+            limit = len(series)
+            for idx in indices:
+                if 0 <= idx < limit:
+                    try:
+                        window.append(float(series[idx]))
+                    except (TypeError, ValueError):
+                        window.append(0.0)
+                else:
+                    window.append(0.0)
+            return window
+
+        steer_slice = _slice_series(steer_norm)
+        yaw_slice = _slice_series(yaw_norm)
+        lat_slice = _slice_series(lat_norm)
+
+        _, measured_lag, measured_alignment = phase_alignment(
+            phase_records,
+            sample_rate=sample_rate,
+            steer_norm=steer_slice,
+            yaw_norm=yaw_slice,
+            lat_norm=lat_slice,
+        )
         family = phase_family(phase)
         phase_target = archetype_targets.get(family)
         if phase_target is None:
@@ -2457,7 +2528,9 @@ def _build_goals(
         total_weight = dominance_weights.get(phase, 0.0)
         nu_f_target = phase_nu_f_targets.get(phase, 0.0)
 
-        nu_exc_target = estimate_excitation_frequency(phase_records)
+        nu_exc_target = estimate_excitation_frequency(
+            phase_records, sample_rate=sample_rate
+        )
         rho_target = nu_exc_target / nu_f_target if nu_f_target > 1e-9 else 0.0
 
         sample_count = max(1, len(indices))
@@ -2813,6 +2886,10 @@ def _adjust_phase_weights_with_dominance(
         | MutableSequence[Mapping[str, float]]
         | None
     ) = None,
+    sample_rate: float | None = None,
+    steer_norm: Sequence[float] | None = None,
+    yaw_norm: Sequence[float] | None = None,
+    lat_norm: Sequence[float] | None = None,
 ) -> tuple[bool, int | None]:
     adjusted = False
     first_index: int | None = None
@@ -2833,6 +2910,10 @@ def _adjust_phase_weights_with_dominance(
             context_matrix=context_matrix,
             sample_context=sample_context,
             node_delta_cache=node_delta_cache,
+            sample_rate=sample_rate,
+            steer_norm=steer_norm,
+            yaw_norm=yaw_norm,
+            lat_norm=lat_norm,
         )
         spec["goals"] = goals
         spec["dominant_nodes"] = dominant_nodes

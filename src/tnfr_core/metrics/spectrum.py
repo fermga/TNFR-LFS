@@ -435,8 +435,12 @@ def phase_alignment(
     *,
     steer_series: Iterable[float] | None = None,
     response_series: Iterable[float] | None = None,
+    sample_rate: float | None = None,
     dominant_strategy: Literal["auto", "fft", "goertzel"] = "auto",
     candidate_frequencies: Sequence[float] | None = None,
+    steer_norm: Iterable[float] | None = None,
+    yaw_norm: Iterable[float] | None = None,
+    lat_norm: Iterable[float] | None = None,
 ) -> Tuple[float, float, float]:
     """Estimate the dominant frequency and phase lag between steer and response.
 
@@ -447,6 +451,8 @@ def phase_alignment(
     steer_series, response_series:
         Explicit sequences containing steer input and the combined chassis
         response.  When omitted they are derived from ``records``.
+    sample_rate:
+        Optional sampling frequency to reuse when available.
     dominant_strategy:
         ``"auto"`` uses Goertzel when SciPy is available and falls back to the
         FFT cross-spectrum otherwise. ``"goertzel"`` enforces the Goertzel path
@@ -454,29 +460,51 @@ def phase_alignment(
         the dense FFT grid.
     candidate_frequencies:
         Optional override for the candidate bins evaluated by the Goertzel path.
+    steer_norm, yaw_norm, lat_norm:
+        Optional pre-normalised steer, yaw rate and lateral acceleration series.
+        When provided the function skips recomputing the z-scores for the same
+        data.
     """
 
-    if steer_series is None or response_series is None:
-        steer_values = [float(record.steer) for record in records]
-        yaw_values = [float(record.yaw_rate) for record in records]
-        lat_values = [float(record.lateral_accel) for record in records]
-        combined_response = []
-        yaw_norm = _normalise(yaw_values)
-        lat_norm = _normalise(lat_values)
-        for idx in range(len(records)):
-            yaw_component = yaw_norm[idx] if idx < len(yaw_norm) else 0.0
-            lat_component = lat_norm[idx] if idx < len(lat_norm) else 0.0
-            combined_response.append((yaw_component + lat_component) * 0.5)
-        steer_values = _normalise(steer_values)
+    if steer_series is None:
+        if steer_norm is not None:
+            steer_values = list(steer_norm)
+        else:
+            steer_values = [float(record.steer) for record in records]
+            steer_values = _normalise(steer_values)
     else:
         steer_values = list(steer_series)
+
+    if response_series is None:
+        if yaw_norm is not None and lat_norm is not None:
+            yaw_components = list(yaw_norm)
+            lat_components = list(lat_norm)
+        else:
+            yaw_values = [float(record.yaw_rate) for record in records]
+            lat_values = [float(record.lateral_accel) for record in records]
+            yaw_components = _normalise(yaw_values)
+            lat_components = _normalise(lat_values)
+        combined_length = max(
+            len(steer_values), len(yaw_components), len(lat_components)
+        )
+        combined_response = []
+        for idx in range(combined_length):
+            yaw_component = (
+                yaw_components[idx] if idx < len(yaw_components) else 0.0
+            )
+            lat_component = (
+                lat_components[idx] if idx < len(lat_components) else 0.0
+            )
+            combined_response.append((yaw_component + lat_component) * 0.5)
+    else:
         combined_response = list(response_series)
 
     length = min(len(steer_values), len(combined_response))
     if length < 2:
         return (0.0, 0.0, 1.0)
 
-    sample_rate = estimate_sample_rate(records)
+    if sample_rate is None:
+        sample_rate = estimate_sample_rate(records)
     if sample_rate <= 0.0:
         return (0.0, 0.0, 1.0)
 
