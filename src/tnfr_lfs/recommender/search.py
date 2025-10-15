@@ -30,6 +30,37 @@ from tnfr_lfs.recommender.rules import Recommendation, RecommendationEngine
 DecisionVector = Mapping[str, float]
 
 
+def _vector_key(
+    space: "DecisionSpace", mapping: Mapping[str, float]
+) -> tuple[tuple[str, float], ...]:
+    """Return a cache key respecting the decision space order.
+
+    The helper iterates through :class:`DecisionSpace` variables to avoid sorting
+    the mapping on every lookup.  If any expected variable is missing we fall
+    back to the legacy behaviour that sorts the entries to guarantee a stable
+    key even for partial vectors.
+    """
+
+    ordered: list[tuple[str, float]] = []
+    for variable in space.variables:
+        try:
+            ordered.append((variable.name, mapping[variable.name]))
+        except KeyError:
+            return tuple(sorted(mapping.items()))
+
+    if len(mapping) != len(ordered):
+        extras: list[tuple[str, float]] = []
+        ordered_names = [name for name, _ in ordered]
+        for name, value in mapping.items():
+            if name not in ordered_names:
+                extras.append((name, value))
+        if extras:
+            extras.sort(key=lambda item: item[0])
+            ordered.extend(extras)
+
+    return tuple(ordered)
+
+
 @dataclass(frozen=True)
 class DecisionVariable:
     """Represents an adjustable setup parameter bounded by the car model."""
@@ -339,7 +370,7 @@ def evaluate_candidate(
     """Evaluate ``vector`` returning a :class:`ParetoPoint`."""
 
     clamped = space.clamp(vector)
-    key = tuple(sorted(clamped.items()))
+    key = _vector_key(space, clamped)
     candidate_cache = cache or LRUCache(maxsize=0)
 
     def _compute() -> tuple[
@@ -404,7 +435,7 @@ def axis_sweep_vectors(
                 vectors.append(candidate)
     unique: Dict[tuple[tuple[str, float], ...], Dict[str, float]] = {}
     for vector in vectors:
-        key = tuple(sorted(vector.items()))
+        key = _vector_key(space, vector)
         unique[key] = vector
     return list(unique.values())
 
@@ -740,7 +771,7 @@ class SetupPlanner:
             vector: Mapping[str, float]
         ) -> tuple[float, tuple[EPIBundle, ...], Mapping[str, float]]:
             clamped = space.clamp(vector)
-            key = tuple(sorted(clamped.items()))
+            key = _vector_key(space, clamped)
             stored_score, stored_results, stored_breakdown = cache.get_or_create(
                 key, lambda: _materialise(clamped)
             )
@@ -922,7 +953,7 @@ class SetupPlanner:
             )
 
         def _simulate(clamped_vector: Mapping[str, float]) -> tuple[float, tuple[EPIBundle, ...]]:
-            key = tuple(sorted(clamped_vector.items()))
+            key = _vector_key(space, clamped_vector)
             stored_score, stored_results, _ = cache.get_or_create(
                 key,
                 lambda: _materialise(clamped_vector),
