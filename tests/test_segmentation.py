@@ -34,6 +34,7 @@ from tnfr_core.metrics import (
     WindowMetrics,
 )
 from tnfr_core.operator_detection import silence_event_payloads
+from tnfr_core.metrics import segmentation as metrics_segmentation
 from tnfr_core.segmentation import (
     Microsector,
     detect_quiet_microsector_streaks,
@@ -736,6 +737,144 @@ def test_goal_targets_match_phase_averages(
             yaw_rates = [_yaw_rate(synthetic_records, idx) for idx in indices]
             for value in yaw_rates:
                 assert yaw_low - 1e-6 <= value <= yaw_high + 1e-6
+
+
+def test_build_goals_prefers_cached_sample_context(
+    synthetic_microsectors,
+    synthetic_records,
+    synthetic_bundles,
+    monkeypatch,
+) -> None:
+    microsector = synthetic_microsectors[0]
+    assert microsector.goals
+    archetype = microsector.goals[0].archetype
+    boundaries = microsector.phase_boundaries
+    context_matrix = load_context_matrix()
+    original_resolve = metrics_segmentation.resolve_series_context
+    sample_context = list(
+        original_resolve(synthetic_bundles, matrix=context_matrix)
+    )
+    yaw_rates = [
+        metrics_segmentation._compute_yaw_rate(synthetic_records, idx)
+        for idx in range(len(synthetic_records))
+    ]
+    phase_gradients = {phase: 0.0 for phase in boundaries}
+
+    call_count = 0
+
+    def _spy(segment, *, matrix):
+        nonlocal call_count
+        call_count += 1
+        return original_resolve(segment, matrix=matrix)
+
+    monkeypatch.setattr(metrics_segmentation, "resolve_series_context", _spy)
+
+    goals_cached, dominant_cached, targets_cached, weights_cached = (
+        metrics_segmentation._build_goals(
+            archetype,
+            synthetic_bundles,
+            synthetic_records,
+            boundaries,
+            yaw_rates,
+            context_matrix=context_matrix,
+            sample_context=sample_context,
+            phase_gradients=phase_gradients,
+        )
+    )
+
+    assert call_count == 0
+
+    goals_fallback, dominant_fallback, targets_fallback, weights_fallback = (
+        metrics_segmentation._build_goals(
+            archetype,
+            synthetic_bundles,
+            synthetic_records,
+            boundaries,
+            yaw_rates,
+            context_matrix=context_matrix,
+            sample_context=None,
+            phase_gradients=phase_gradients,
+        )
+    )
+
+    assert call_count > 0
+    assert goals_cached == goals_fallback
+    assert dominant_cached == dominant_fallback
+    assert targets_cached == targets_fallback
+    assert weights_cached == weights_fallback
+
+
+def test_build_goals_falls_back_when_sample_context_truncated(
+    synthetic_microsectors,
+    synthetic_records,
+    synthetic_bundles,
+    monkeypatch,
+) -> None:
+    microsector = synthetic_microsectors[0]
+    assert microsector.goals
+    archetype = microsector.goals[0].archetype
+    boundaries = microsector.phase_boundaries
+    context_matrix = load_context_matrix()
+    original_resolve = metrics_segmentation.resolve_series_context
+    sample_context = list(
+        original_resolve(synthetic_bundles, matrix=context_matrix)
+    )
+    yaw_rates = [
+        metrics_segmentation._compute_yaw_rate(synthetic_records, idx)
+        for idx in range(len(synthetic_records))
+    ]
+    phase_gradients = {phase: 0.0 for phase in boundaries}
+    all_indices = [
+        idx
+        for start, stop in boundaries.values()
+        for idx in range(start, min(stop, len(synthetic_bundles)))
+    ]
+    assert all_indices
+    max_index = max(all_indices)
+    truncated_context = tuple(sample_context[: max_index])
+    assert len(truncated_context) < len(sample_context)
+
+    call_count = 0
+
+    def _spy(segment, *, matrix):
+        nonlocal call_count
+        call_count += 1
+        return original_resolve(segment, matrix=matrix)
+
+    monkeypatch.setattr(metrics_segmentation, "resolve_series_context", _spy)
+
+    goals_truncated, dominant_truncated, targets_truncated, weights_truncated = (
+        metrics_segmentation._build_goals(
+            archetype,
+            synthetic_bundles,
+            synthetic_records,
+            boundaries,
+            yaw_rates,
+            context_matrix=context_matrix,
+            sample_context=truncated_context,
+            phase_gradients=phase_gradients,
+        )
+    )
+
+    assert call_count > 0
+
+    goals_reference, dominant_reference, targets_reference, weights_reference = (
+        metrics_segmentation._build_goals(
+            archetype,
+            synthetic_bundles,
+            synthetic_records,
+            boundaries,
+            yaw_rates,
+            context_matrix=context_matrix,
+            sample_context=None,
+            phase_gradients=phase_gradients,
+        )
+    )
+
+    assert goals_truncated == goals_reference
+    assert dominant_truncated == dominant_reference
+    assert targets_truncated == targets_reference
+    assert weights_truncated == weights_reference
 
 
 def test_goals_expose_archetype_targets(synthetic_microsectors) -> None:

@@ -1546,14 +1546,23 @@ def _build_goals(
         if segment:
             if sample_context:
                 resolved_context: List[ContextFactors] = []
-                fallback_context = resolve_series_context(
-                    segment, matrix=context_matrix
-                )
-                for local_index, idx in enumerate(indices):
-                    if 0 <= idx < len(sample_context):
-                        resolved_context.append(sample_context[idx])
-                    else:
-                        resolved_context.append(fallback_context[local_index])
+                if indices:
+                    first_idx = indices[0]
+                    last_idx = indices[-1]
+                    all_cached = 0 <= first_idx and last_idx < len(sample_context)
+                else:
+                    all_cached = True
+                if all_cached:
+                    resolved_context = [sample_context[idx] for idx in indices]
+                else:
+                    fallback_context = resolve_series_context(
+                        segment, matrix=context_matrix
+                    )
+                    for local_index, idx in enumerate(indices):
+                        if 0 <= idx < len(sample_context):
+                            resolved_context.append(sample_context[idx])
+                        else:
+                            resolved_context.append(fallback_context[local_index])
             else:
                 resolved_context = resolve_series_context(
                     segment, matrix=context_matrix
