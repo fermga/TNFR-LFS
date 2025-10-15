@@ -18,7 +18,7 @@ engineering practice:
 from __future__ import annotations
 
 import math
-from collections import defaultdict, deque
+from collections import defaultdict
 from dataclasses import dataclass, field
 from statistics import mean, pstdev
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple, cast
@@ -180,7 +180,8 @@ class _SegmentSummary:
 class _AnalyzerState:
     """Minimal snapshot required to resume the ν_f analyzer."""
 
-    history: Tuple[SupportsTelemetrySample, ...]
+    history_start: int | None
+    history_end: int | None
     smoothed: Tuple[Tuple[str, float], ...]
     last_car: str | None
     last_snapshot: NaturalFrequencySnapshot | None
@@ -194,11 +195,21 @@ class _BundleRecomputeResult:
     analyzer_states: List[_AnalyzerState | None]
 
 
-def _capture_analyzer_state(analyzer: NaturalFrequencyAnalyzer) -> _AnalyzerState:
+def _capture_analyzer_state(
+    analyzer: NaturalFrequencyAnalyzer, current_index: int
+) -> _AnalyzerState:
     """Serialise the incremental analyzer state for later reuse."""
 
+    history_length = len(analyzer._history)
+    if history_length <= 0:
+        history_start: int | None = None
+        history_end: int | None = None
+    else:
+        history_start = max(0, current_index - history_length + 1)
+        history_end = current_index
     return _AnalyzerState(
-        history=tuple(analyzer._history),
+        history_start=history_start,
+        history_end=history_end,
         smoothed=tuple(analyzer._smoothed.items()),
         last_car=analyzer._last_car,
         last_snapshot=analyzer._last_snapshot,
@@ -206,14 +217,27 @@ def _capture_analyzer_state(analyzer: NaturalFrequencyAnalyzer) -> _AnalyzerStat
 
 
 def _restore_analyzer_state(
-    analyzer: NaturalFrequencyAnalyzer, state: _AnalyzerState
-) -> None:
+    analyzer: NaturalFrequencyAnalyzer,
+    state: _AnalyzerState,
+    records: Sequence[SupportsTelemetrySample],
+) -> int | None:
     """Restore a previously captured analyzer state."""
 
-    analyzer._history = deque(state.history)
+    analyzer.reset()
+    history_end: int | None = None
+    history_start = state.history_start
+    history_stop = state.history_end
+    if history_start is not None and history_stop is not None and records:
+        start_index = max(0, history_start)
+        stop_index = min(len(records) - 1, history_stop)
+        if stop_index >= start_index:
+            for index in range(start_index, stop_index + 1):
+                analyzer._append_record(records[index])
+            history_end = stop_index
     analyzer._smoothed = {key: value for key, value in state.smoothed}
     analyzer._last_car = state.last_car
     analyzer._last_snapshot = state.last_snapshot
+    return history_end
 
 
 def _accumulate_segment_metrics(
@@ -1588,9 +1612,10 @@ def _recompute_bundles(
         for candidate in range(search_limit, -1, -1):
             cached_state = state_cache[candidate]
             if cached_state is not None:
-                _restore_analyzer_state(analyzer, cached_state)
-                restore_index = candidate
-                break
+                restored = _restore_analyzer_state(analyzer, cached_state, records)
+                if restored is not None:
+                    restore_index = restored
+                    break
 
     prime_start = max(restore_index + 1, 0)
     for idx in range(prime_start, recompute_start):
@@ -1604,7 +1629,7 @@ def _recompute_bundles(
             analyzer=analyzer,
         )
         if idx < len(state_cache):
-            state_cache[idx] = _capture_analyzer_state(analyzer)
+            state_cache[idx] = _capture_analyzer_state(analyzer, idx)
 
     prev_integrated: float | None = None
     if recompute_start > 0 and recompute_start - 1 < len(result):
@@ -1658,7 +1683,7 @@ def _recompute_bundles(
             result.append(recomputed_bundle)
         prev_integrated = recomputed_bundle.integrated_epi
         if idx < len(state_cache):
-            state_cache[idx] = _capture_analyzer_state(analyzer)
+            state_cache[idx] = _capture_analyzer_state(analyzer, idx)
     return _BundleRecomputeResult(result, state_cache)
 
 
