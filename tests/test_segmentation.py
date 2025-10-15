@@ -636,9 +636,10 @@ def test_segment_microsectors_node_delta_cache_consistency(
 ) -> None:
     original_phase_targets = metrics_segmentation._phase_nu_f_targets
     original_build_goals = metrics_segmentation._build_goals
-    observed_lengths: list[int] = []
+    observed_delta_lengths: list[int] = []
+    observed_nu_lengths: list[int] = []
 
-    def _assert_consistent_cache(
+    def _assert_delta_cache(
         bundles,
         cache,
         *,
@@ -650,7 +651,7 @@ def test_segment_microsectors_node_delta_cache_consistency(
         if cache_window is not None and isinstance(cache_window, tuple):
             if cache_window:
                 start = min(cache_window)
-        observed_lengths.append(len(cache))
+        observed_delta_lengths.append(len(cache))
         for offset, distribution in enumerate(cache):
             bundle_index = start + offset
             if not (0 <= bundle_index < len(bundles)):
@@ -658,17 +659,41 @@ def test_segment_microsectors_node_delta_cache_consistency(
             expected = metrics_segmentation._bundle_node_delta(bundles[bundle_index])
             assert dict(distribution) == dict(expected)
 
+    def _assert_nu_cache(
+        bundles,
+        cache,
+        *,
+        cache_window=None,
+    ) -> None:
+        if cache is None:
+            return
+        start = 0
+        if cache_window is not None and isinstance(cache_window, tuple):
+            if cache_window:
+                start = min(cache_window)
+        observed_nu_lengths.append(len(cache))
+        for offset, distribution in enumerate(cache):
+            bundle_index = start + offset
+            if not (0 <= bundle_index < len(bundles)):
+                continue
+            expected = metrics_segmentation._bundle_node_nu_f(bundles[bundle_index])
+            assert dict(distribution) == dict(expected)
+
     def _wrapped_phase_targets(*args, **kwargs):
         bundles = args[0]
-        cache = kwargs.get("node_delta_cache")
+        delta_cache = kwargs.get("node_delta_cache")
+        nu_cache = kwargs.get("node_nu_cache")
         cache_window = kwargs.get("cache_window")
-        _assert_consistent_cache(bundles, cache, cache_window=cache_window)
+        _assert_delta_cache(bundles, delta_cache, cache_window=cache_window)
+        _assert_nu_cache(bundles, nu_cache, cache_window=cache_window)
         return original_phase_targets(*args, **kwargs)
 
     def _wrapped_build_goals(*args, **kwargs):
         bundles = args[1]
-        cache = kwargs.get("node_delta_cache")
-        _assert_consistent_cache(bundles, cache)
+        delta_cache = kwargs.get("node_delta_cache")
+        nu_cache = kwargs.get("node_nu_cache")
+        _assert_delta_cache(bundles, delta_cache)
+        _assert_nu_cache(bundles, nu_cache)
         return original_build_goals(*args, **kwargs)
 
     with monkeypatch.context() as patch_context:
@@ -688,7 +713,8 @@ def test_segment_microsectors_node_delta_cache_consistency(
             operator_state={},
         )
 
-    assert observed_lengths, "expected node delta cache to be provided"
+    assert observed_delta_lengths, "expected node delta cache to be provided"
+    assert observed_nu_lengths, "expected node nu_f cache to be provided"
     assert microsectors, "expected synthetic segmentation"
 
 

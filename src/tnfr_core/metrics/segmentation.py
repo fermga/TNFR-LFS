@@ -277,6 +277,32 @@ def _bundle_node_delta(bundle: SupportsEPIBundle) -> Mapping[str, float]:
     return node_deltas
 
 
+def _bundle_node_nu_f(bundle: SupportsEPIBundle) -> Mapping[str, float]:
+    """Extract finite ν_f values from ``bundle`` nodes."""
+
+    node_nu_f: Dict[str, float] = {}
+    for node_name in (
+        "tyres",
+        "suspension",
+        "chassis",
+        "brakes",
+        "transmission",
+        "track",
+        "driver",
+    ):
+        node = getattr(bundle, node_name, None)
+        if node is None:
+            continue
+        try:
+            nu_f = float(getattr(node, "nu_f", 0.0))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(nu_f):
+            continue
+        node_nu_f[node_name] = nu_f
+    return node_nu_f
+
+
 def _refresh_node_delta_cache(
     cache: List[Mapping[str, float]] | None,
     bundles: Sequence[SupportsEPIBundle],
@@ -291,6 +317,24 @@ def _refresh_node_delta_cache(
         return [_bundle_node_delta(bundle) for bundle in bundles]
     cache[effective_start:] = [
         _bundle_node_delta(bundles[idx]) for idx in range(effective_start, total)
+    ]
+    return cache
+
+
+def _refresh_node_nu_cache(
+    cache: List[Mapping[str, float]] | None,
+    bundles: Sequence[SupportsEPIBundle],
+    *,
+    start_index: int = 0,
+) -> List[Mapping[str, float]]:
+    """Update ``cache`` with ν_f snapshots from ``bundles``."""
+
+    total = len(bundles)
+    effective_start = min(max(start_index, 0), total)
+    if cache is None or len(cache) != total or effective_start <= 0:
+        return [_bundle_node_nu_f(bundle) for bundle in bundles]
+    cache[effective_start:] = [
+        _bundle_node_nu_f(bundles[idx]) for idx in range(effective_start, total)
     ]
     return cache
 
@@ -750,6 +794,7 @@ def segment_microsectors(
         )
     session_components = _resolve_session_components(records, baseline_record)
     node_delta_cache: List[Mapping[str, float]] | None = None
+    node_nu_cache: List[Mapping[str, float]] | None = None
     track_gradient_cache: List[float] | None = None
 
     for index, (start, end) in enumerate(segments):
@@ -839,6 +884,9 @@ def segment_microsectors(
     node_delta_cache = _refresh_node_delta_cache(
         node_delta_cache, recomputed_bundles
     )
+    node_nu_cache = _refresh_node_nu_cache(
+        node_nu_cache, recomputed_bundles
+    )
     track_gradient_cache = _refresh_track_gradient_cache(
         track_gradient_cache, recomputed_bundles
     )
@@ -852,6 +900,7 @@ def segment_microsectors(
         sample_multipliers=sample_multipliers,
         yaw_rates=yaw_rate_cache,
         node_delta_cache=node_delta_cache,
+        node_nu_cache=node_nu_cache,
         sample_rate=sample_rate,
         steer_norm=steer_norm,
         yaw_norm=yaw_norm,
@@ -873,6 +922,11 @@ def segment_microsectors(
         analyzer_states = recompute_result.analyzer_states
         node_delta_cache = _refresh_node_delta_cache(
             node_delta_cache,
+            recomputed_bundles,
+            start_index=recompute_start,
+        )
+        node_nu_cache = _refresh_node_nu_cache(
+            node_nu_cache,
             recomputed_bundles,
             start_index=recompute_start,
         )
@@ -925,6 +979,7 @@ def segment_microsectors(
             context_matrix=context_matrix,
             sample_context=sample_context,
             node_delta_cache=node_delta_cache,
+            node_nu_cache=node_nu_cache,
         )
         _store_phase_goal_cache(
             spec,
@@ -962,6 +1017,11 @@ def segment_microsectors(
             recomputed_bundles,
             start_index=goal_recompute_start,
         )
+        node_nu_cache = _refresh_node_nu_cache(
+            node_nu_cache,
+            recomputed_bundles,
+            start_index=goal_recompute_start,
+        )
         track_gradient_cache = _refresh_track_gradient_cache(
             track_gradient_cache,
             recomputed_bundles,
@@ -995,6 +1055,7 @@ def segment_microsectors(
                 context_matrix=context_matrix,
                 sample_context=sample_context,
                 node_delta_cache=node_delta_cache,
+                node_nu_cache=node_nu_cache,
             )
             _store_phase_goal_cache(
                 spec,
@@ -1090,6 +1151,7 @@ def segment_microsectors(
                 sample_context=sample_context,
                 sample_multipliers=sample_multipliers,
                 node_delta_cache=node_delta_cache,
+                node_nu_cache=node_nu_cache,
                 phase_gradients=phase_gradient_map,
                 phase_dominant_nodes=cached_dominant_nodes,
                 phase_nu_f_targets=cached_nu_f_targets,
@@ -1489,6 +1551,7 @@ def segment_microsectors(
                     sample_context=sample_context,
                     sample_multipliers=sample_multipliers,
                     node_delta_cache=node_delta_cache,
+                    node_nu_cache=node_nu_cache,
                     phase_gradients=phase_gradient_map,
                     phase_dominant_nodes=cached_dominant_nodes,
                     phase_nu_f_targets=cached_nu_f_targets,
@@ -2243,6 +2306,11 @@ def _phase_nu_f_targets(
         | MutableSequence[Mapping[str, float]]
         | None
     ) = None,
+    node_nu_cache: (
+        Sequence[Mapping[str, float]]
+        | MutableSequence[Mapping[str, float]]
+        | None
+    ) = None,
     cache_window: Tuple[int, int] | None = None,
 ) -> Tuple[
     Dict[PhaseLiteral, Tuple[str, ...]],
@@ -2265,18 +2333,31 @@ def _phase_nu_f_targets(
         window_start = max(0, min(start_candidate, stop_candidate))
         window_stop = max(window_start, max(start_candidate, stop_candidate))
 
-    cache_offset = 0
+    delta_cache_offset = 0
     if node_delta_cache is None:
         effective_stop = min(window_stop, len(bundles))
         effective_start = min(max(0, window_start), effective_stop)
         node_delta_cache = [
             _bundle_node_delta(bundles[idx]) for idx in range(effective_start, effective_stop)
         ]
-        cache_offset = effective_start
+        delta_cache_offset = effective_start
     else:
         expected_length = max(0, window_stop - window_start)
         if cache_window is not None and len(node_delta_cache) == expected_length:
-            cache_offset = window_start
+            delta_cache_offset = window_start
+
+    nu_cache_offset = 0
+    if node_nu_cache is None:
+        effective_stop = min(window_stop, len(bundles))
+        effective_start = min(max(0, window_start), effective_stop)
+        node_nu_cache = [
+            _bundle_node_nu_f(bundles[idx]) for idx in range(effective_start, effective_stop)
+        ]
+        nu_cache_offset = effective_start
+    else:
+        expected_length = max(0, window_stop - window_start)
+        if cache_window is not None and len(node_nu_cache) == expected_length:
+            nu_cache_offset = window_start
     for phase in PHASE_SEQUENCE:
         start, stop = boundaries.get(phase, (0, 0))
         phase_range = range(start, min(stop, bundle_count))
@@ -2300,19 +2381,33 @@ def _phase_nu_f_targets(
         )
         for idx in range(start, upper_bound):
             bundle = bundles[idx]
-            cache_index = idx - cache_offset
-            if 0 <= cache_index < len(node_delta_cache):
-                node_deltas = node_delta_cache[cache_index]
+            delta_cache_index = idx - delta_cache_offset
+            if 0 <= delta_cache_index < len(node_delta_cache):
+                node_deltas = node_delta_cache[delta_cache_index]
             elif 0 <= idx < len(bundles):
                 node_deltas = _bundle_node_delta(bundle)
             elif 0 <= idx < len(records):
                 node_deltas = delta_nfr_by_node(records[idx])
             else:
                 node_deltas = {}
+            nu_cache_index = idx - nu_cache_offset
+            node_nu_values: Mapping[str, float] | None = None
+            if 0 <= nu_cache_index < len(node_nu_cache):
+                node_nu_values = node_nu_cache[nu_cache_index]
+            elif 0 <= idx < len(bundles):
+                node_nu_values = _bundle_node_nu_f(bundle)
+            else:
+                node_nu_values = {}
             for node, delta in node_deltas.items():
                 weight = abs(delta)
                 node_metrics[node]["abs_delta"] += weight
-                nu_f = getattr(bundle, node).nu_f if hasattr(bundle, node) else 0.0
+                nu_candidate = node_nu_values.get(node) if node_nu_values else None
+                try:
+                    nu_f = float(nu_candidate) if nu_candidate is not None else 0.0
+                except (TypeError, ValueError):
+                    nu_f = 0.0
+                if not math.isfinite(nu_f):
+                    nu_f = 0.0
                 node_metrics[node]["nu_f_weight"] += weight * nu_f
 
         significant_nodes = (
@@ -2420,6 +2515,11 @@ def _build_goals(
         | MutableSequence[Mapping[str, float]]
         | None
     ) = None,
+    node_nu_cache: (
+        Sequence[Mapping[str, float]]
+        | MutableSequence[Mapping[str, float]]
+        | None
+    ) = None,
     phase_gradients: Mapping[PhaseLiteral, float] | None = None,
     phase_dominant_nodes: Mapping[PhaseLiteral, Tuple[str, ...]] | None = None,
     phase_nu_f_targets: Mapping[PhaseLiteral, float] | None = None,
@@ -2462,6 +2562,7 @@ def _build_goals(
             context_matrix=context_matrix,
             sample_context=sample_context,
             node_delta_cache=node_delta_cache,
+            node_nu_cache=node_nu_cache,
         )
     else:
         base_dominant_nodes = dict(phase_dominant_nodes)
@@ -2962,6 +3063,11 @@ def _adjust_phase_weights_with_dominance(
         | MutableSequence[Mapping[str, float]]
         | None
     ) = None,
+    node_nu_cache: (
+        Sequence[Mapping[str, float]]
+        | MutableSequence[Mapping[str, float]]
+        | None
+    ) = None,
     sample_rate: float | None = None,
     steer_norm: Sequence[float] | None = None,
     yaw_norm: Sequence[float] | None = None,
@@ -2987,6 +3093,7 @@ def _adjust_phase_weights_with_dominance(
             sample_context=sample_context,
             sample_multipliers=sample_multipliers,
             node_delta_cache=node_delta_cache,
+            node_nu_cache=node_nu_cache,
             sample_rate=sample_rate,
             steer_norm=steer_norm,
             yaw_norm=yaw_norm,
