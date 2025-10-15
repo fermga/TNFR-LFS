@@ -629,7 +629,6 @@ def segment_microsectors(
             phase: tuple(range(bounds[0], bounds[1]))
             for phase, bounds in phase_boundaries.items()
         }
-        record_window = records[start : end + 1]
         segment_summary = _accumulate_segment_metrics(records, start, end)
         curvature = segment_summary.curvature
         brake_event = segment_summary.brake_event
