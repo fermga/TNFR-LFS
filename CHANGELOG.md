@@ -1,5 +1,197 @@
 # CHANGELOG
 
+## v0.8.0 (2025-10-15)
+
+### Feature
+
+* feat: reuse bundle evolution in epi stage ([`7302431`](https://github.com/fermga/TNFR-LFS/commit/730243172a8fd1d34466dd14c4c993593cddbd27))
+
+### Unknown
+
+* Merge pull request #651 from fermga/codex/extend-_stage_epi_evolution-to-accept-epibundle
+
+feat: reuse coherence bundles for epi evolution ([`a2615d8`](https://github.com/fermga/TNFR-LFS/commit/a2615d8818218d1afa21de3859dae5c55d869abd))
+
+* Merge pull request #650 from fermga/codex/refactorizar-_coherence_index-y-optimizar-densidades
+
+Refactor coherence index history iteration ([`6cfa6ae`](https://github.com/fermga/TNFR-LFS/commit/6cfa6ae8c560752d120219fb57f3c0dd6bb11c5d))
+
+* Refactor coherence index history handling ([`1978d2b`](https://github.com/fermga/TNFR-LFS/commit/1978d2b5d7d666ba5ab2632e82daa4052c4a22fb))
+
+* Merge pull request #649 from fermga/codex/improve-context-resolution-in-_build_goals
+
+Optimize _build_goals context caching ([`6d0ebe2`](https://github.com/fermga/TNFR-LFS/commit/6d0ebe211fb2d699db0ee50a8f0b6216659a1623))
+
+* Optimize goal context resolution ([`84c43d1`](https://github.com/fermga/TNFR-LFS/commit/84c43d1908f4a0fb33101621e9eb19e8e7d43552))
+
+* Merge pull request #648 from fermga/codex/optimize-yaw-rate-computation
+
+Optimize yaw rate reuse in segmentation helpers ([`410d04d`](https://github.com/fermga/TNFR-LFS/commit/410d04ddc816e9b39878e7d8ab74c6e96d331e7e))
+
+* Optimize yaw rate reuse in segmentation helpers ([`36b685f`](https://github.com/fermga/TNFR-LFS/commit/36b685f7ef78e799b58d609dd00133112d365e57))
+
+* Merge pull request #647 from fermga/codex/add-helper-for-canonical-tuple-key
+
+Optimize recommender cache key ordering ([`df0a9b9`](https://github.com/fermga/TNFR-LFS/commit/df0a9b97dc10329e74391b56cd0de529a5aaf32d))
+
+* Optimize recommender cache key ordering ([`957b52c`](https://github.com/fermga/TNFR-LFS/commit/957b52c0ab208931e0d9bbf943b7eadcb8afd1bb))
+
+* Merge pull request #646 from fermga/codex/refactor-operators.py-for-performance
+
+Vectorize microsector variability aggregation ([`4a79151`](https://github.com/fermga/TNFR-LFS/commit/4a7915154fa36b3674a462707d8d3f262e38984a))
+
+* Vectorize microsector variability aggregation ([`0eecca9`](https://github.com/fermga/TNFR-LFS/commit/0eecca9b1e921295241249961a8b602fcb81f133))
+
+* Merge pull request #645 from fermga/codex/refactor-_stage_nodal_metrics-for-vectorization
+
+Refactor nodal metrics staging to use vector operations ([`8a2a5ae`](https://github.com/fermga/TNFR-LFS/commit/8a2a5ae9ba8547a78e54badb6ffc84e0a45d9678))
+
+* Refactor nodal metrics staging to use vector ops ([`95ab8a9`](https://github.com/fermga/TNFR-LFS/commit/95ab8a96b50f664b7de64302c805b5a1c25353fb))
+
+* Merge pull request #644 from fermga/codex/update-compute_useful_dissonance_stats
+
+Vectorize dissonance stats computation ([`4aeb934`](https://github.com/fermga/TNFR-LFS/commit/4aeb93460259964966d7026615f03d9593ce54b7))
+
+* Vectorize dissonance stats computation ([`cb2e5e5`](https://github.com/fermga/TNFR-LFS/commit/cb2e5e5e1c159ec041255b40febfe0aa794b6c7e))
+
+* Merge pull request #643 from fermga/codex/refactor-_variance_payload-for-array-support
+
+Vectorize variance payload computation ([`2543401`](https://github.com/fermga/TNFR-LFS/commit/2543401f38bb7b1aab073122dbd1c1d9fac9b749))
+
+* Use array ops for variance payload ([`82e15ed`](https://github.com/fermga/TNFR-LFS/commit/82e15edf51016d7a74f9803004063b39443b95d1))
+
+* Merge pull request #642 from fermga/codex/refactorizar-_delta_integral_series-para-usar-xp
+
+Vectorize delta integral series computation ([`a7b3cae`](https://github.com/fermga/TNFR-LFS/commit/a7b3cae98c8f036803b15351916da011df9be91b))
+
+* Vectorize delta integral series computation ([`c4e6965`](https://github.com/fermga/TNFR-LFS/commit/c4e696564a3dcb70f905152bd1fd6a280b021a6e))
+
+* Merge pull request #641 from fermga/codex/vectorize-recursive_filter_operator-implementation
+
+Vectorize recursive filter operator ([`9a65e18`](https://github.com/fermga/TNFR-LFS/commit/9a65e181663de867563c9055b6e7807b09d671af))
+
+* Vectorize recursive filter operator ([`41afa34`](https://github.com/fermga/TNFR-LFS/commit/41afa340d317b50f3f16a45f78caed3daf39daf5))
+
+* Merge pull request #640 from fermga/codex/update-_load_detection_table-functionality
+
+Load detection configs from pack overrides ([`9c38032`](https://github.com/fermga/TNFR-LFS/commit/9c38032b48766dfceeef4b178e393416a749ca1f))
+
+* Load detection configs from pack overrides ([`91adf68`](https://github.com/fermga/TNFR-LFS/commit/91adf6850f8078cf8d162885c933888ff8eee5b5))
+
+* Merge pull request #639 from fermga/codex/update-operator-detection-fallback-behavior
+
+Support global detection config fallback ([`4796c88`](https://github.com/fermga/TNFR-LFS/commit/4796c88ae8bc2825dddb74af41fadd6357c157b0))
+
+* Support global detection config fallback ([`e2dea8d`](https://github.com/fermga/TNFR-LFS/commit/e2dea8d0e2e538a7ffeaca273972761c36663928))
+
+* Merge pull request #638 from fermga/codex/update-gtr-compatibility-for-road-tyres
+
+Expand GTR tyre compound compatibility ([`56a2371`](https://github.com/fermga/TNFR-LFS/commit/56a23717f4d243ff0db9c75cc85d7507d6f2ce84))
+
+* Expand GTR tyre compatibility ([`81f9ddc`](https://github.com/fermga/TNFR-LFS/commit/81f9ddcd2bbd3c993fb46eeaa6072974c2b83fd9))
+
+* Merge pull request #637 from fermga/codex/implement-calibrador-cli
+
+Enforce FP/min ceiling in calibration selection ([`4802853`](https://github.com/fermga/TNFR-LFS/commit/4802853f15d51eabf01d50e25251a50670f76499))
+
+* Respect FP/min threshold during calibration selection ([`de69206`](https://github.com/fermga/TNFR-LFS/commit/de692061e23c33986d3eef2245eaffb947ddf534))
+
+* Merge pull request #636 from fermga/codex/update-interval-validation-in-label_check
+
+Validate raw label intervals in label_check ([`40ee2bc`](https://github.com/fermga/TNFR-LFS/commit/40ee2bc850576ea4d10ba1ed31bb70bc0009a5f3))
+
+* Validate label intervals without normalisation ([`a858b7a`](https://github.com/fermga/TNFR-LFS/commit/a858b7a52d6e785803afa218df46d9fd2620fadd))
+
+* Merge pull request #635 from fermga/codex/extend-csv-output-for-calibrate_detectors
+
+Add best selection metrics export and adjust calibration report loading ([`900a7f5`](https://github.com/fermga/TNFR-LFS/commit/900a7f5d118cb471a1b2be4f6ddea159d932acef))
+
+* Add best selection metrics export and refine report aggregation ([`dc3dd06`](https://github.com/fermga/TNFR-LFS/commit/dc3dd067e5c6d6a681e1eccae670addc537e0d27))
+
+* Merge pull request #634 from fermga/codex/extend-operator-detection-for-car-class
+
+Infer car classes from car model metadata ([`018085d`](https://github.com/fermga/TNFR-LFS/commit/018085d9ee37c987139748cdba4ac39f0b3a5838))
+
+* Infer car classes from car model metadata ([`d9c96bc`](https://github.com/fermga/TNFR-LFS/commit/d9c96bce4966adeb0bdf78e2f684d581da9f0f7e))
+
+* Merge pull request #633 from fermga/codex/update-calibrate_detectors-for-operator-evaluation
+
+Handle calibration of unlabelled operators ([`ea4ec96`](https://github.com/fermga/TNFR-LFS/commit/ea4ec9634d2d2d2a3d343e4cfb6b968e12b330bc))
+
+* Handle unlabelled operators in calibration ([`0095369`](https://github.com/fermga/TNFR-LFS/commit/0095369c16232dc9117b46be575e28813c79fabb))
+
+* Merge pull request #632 from fermga/codex/update-load_labels_csv-for-boolean-label-handling
+
+Handle CSV label overrides when loading calibration data ([`c60f87a`](https://github.com/fermga/TNFR-LFS/commit/c60f87aff0cb20afb45c7bd543a8d92e95a0288d))
+
+* Handle CSV label overrides when loading calibration data ([`7ee7dbb`](https://github.com/fermga/TNFR-LFS/commit/7ee7dbb02edb5c2ba6ee85c688ba285aafc17b48))
+
+* Merge pull request #631 from fermga/codex/canonicalise-token-values-for-case-insensitivity
+
+Canonicalise LFS metadata for calibration filters ([`57ccf33`](https://github.com/fermga/TNFR-LFS/commit/57ccf3359dfa35fb2d588745be77e18d0bc61335))
+
+* Canonicalise LFS metadata for calibration filters ([`413741e`](https://github.com/fermga/TNFR-LFS/commit/413741e369362a2b975a62dceae982f2b1134bbd))
+
+* Merge pull request #630 from fermga/codex/modify-detect_nav-to-accept-session-metadata
+
+Allow detect_nav to use metadata overrides ([`875aa59`](https://github.com/fermga/TNFR-LFS/commit/875aa5933b6a5460aeb51a27233a35e3202dd4eb))
+
+* Allow detect_nav to use metadata overrides ([`93f00a9`](https://github.com/fermga/TNFR-LFS/commit/93f00a97927d8d82a7f3bf29eb17a879457c2588))
+
+* Merge pull request #629 from fermga/codex/update-normalise_operator_labels-for-string-values
+
+Normalize string statuses in operator label mappings ([`ccea5a8`](https://github.com/fermga/TNFR-LFS/commit/ccea5a8aa9f9c77ee569815b8f266af69579b769))
+
+* Normalize string statuses in operator label mappings ([`750a2de`](https://github.com/fermga/TNFR-LFS/commit/750a2de7663e2ff212863c4c8ac5f8ca81219668))
+
+* Merge pull request #628 from fermga/codex/update-import-block-in-calibrate_detectors.py
+
+Fix calibrate detectors import ([`a55bc97`](https://github.com/fermga/TNFR-LFS/commit/a55bc97602da59ec83fbe667a22ca5813f3445df))
+
+* Fix calibrate detectors import ([`1c56758`](https://github.com/fermga/TNFR-LFS/commit/1c567589925f1da374e0de0e385320318d18448c))
+
+* Merge pull request #627 from fermga/codex/add-compatibility-table-for-lfs-car-models
+
+Add tyre compound compatibility validation to calibrator ([`dfb82d2`](https://github.com/fermga/TNFR-LFS/commit/dfb82d2f3c61a4ffb76d48b2509d3d0755850eb2))
+
+* Add tyre compound compatibility validation ([`fe2226b`](https://github.com/fermga/TNFR-LFS/commit/fe2226b1e18c8fbaa0ffa59a916098864a567aec))
+
+* Merge pull request #626 from fermga/codex/update-microsectorsample-for-na-v-support
+
+Ensure NA&#39;V calibration uses ΔNFR inputs ([`a23e2a1`](https://github.com/fermga/TNFR-LFS/commit/a23e2a15b85a32dee74657d1ca8dc1ec863bfbcd))
+
+* Ensure NA&#39;V calibration uses ΔNFR inputs ([`26daae2`](https://github.com/fermga/TNFR-LFS/commit/26daae246f2888f4a3f053685a97423573b5eb95))
+
+* Merge pull request #625 from fermga/codex/update-csv-writing-to-include-operator-id
+
+Include operator identifier in calibration CSV exports ([`99de8c0`](https://github.com/fermga/TNFR-LFS/commit/99de8c0d60ff561982c40b56e2045b0bf65ee7f7))
+
+* Include operator identifier in calibration CSV exports ([`e0d1580`](https://github.com/fermga/TNFR-LFS/commit/e0d1580dc222acb4251e05518a89a271c21e2cba))
+
+* Merge pull request #624 from fermga/codex/rename-fp_per_minute-header
+
+Align calibration curve FP column naming with report ingestion ([`90ef670`](https://github.com/fermga/TNFR-LFS/commit/90ef6707b231319112a332b82813892edfbc98c1))
+
+* Align curve CSV FP column name with report ([`3e15adf`](https://github.com/fermga/TNFR-LFS/commit/3e15adf2b82db568a2a77ea04cca3a195ac5ed31))
+
+* Merge pull request #623 from fermga/codex/normalize-filters-in-calibrate_detectors
+
+Normalise calibration filters ([`615897b`](https://github.com/fermga/TNFR-LFS/commit/615897b1b2be53d910ff1d9fc508aabe4f0a5a7d))
+
+* Normalise filter tokens for calibration CLI ([`4021dec`](https://github.com/fermga/TNFR-LFS/commit/4021dec1750d8d4735065934af16d7e883117998))
+
+* Merge pull request #622 from fermga/codex/add-calibration-workflow-documentation
+
+Add calibration workflow documentation ([`9177f8d`](https://github.com/fermga/TNFR-LFS/commit/9177f8d5b2dc99daab2503ca97e6ff40f076ca5a))
+
+* Add calibration workflow documentation ([`a3ed7b6`](https://github.com/fermga/TNFR-LFS/commit/a3ed7b66dd0173ed436c6894bcffe8532262e2c9))
+
+* Merge pull request #621 from fermga/codex/implement-cli-for-label-checking
+
+Add label validation CLI and smoke tests ([`581e8a3`](https://github.com/fermga/TNFR-LFS/commit/581e8a3d827fa317c9afcd1dce95ec7e08a6fc18))
+
+* Add label validation CLI and tests ([`95b9697`](https://github.com/fermga/TNFR-LFS/commit/95b9697da717a895542b6f67b3e5d2cc5de870b2))
+
 ## v0.7.0 (2025-10-14)
 
 ### Feature
