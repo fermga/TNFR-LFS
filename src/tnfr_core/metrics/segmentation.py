@@ -22,6 +22,7 @@ from collections import defaultdict
 from heapq import nlargest
 from dataclasses import dataclass, field
 from statistics import StatisticsError, fmean, pstdev
+from itertools import islice
 from typing import (
     Dict,
     Iterable,
@@ -744,10 +745,10 @@ def _prepare_fallback_contexts(
             spec["fallback_context_values"] = ()
             continue
         stop = min(end + 1, total_bundles)
-        window = bundles[start:stop]
-        if window:
+        if start < stop:
+            window_iter = islice(bundles, start, stop)
             fallback_values = tuple(
-                resolve_series_context(window, matrix=context_matrix)
+                resolve_series_context(window_iter, matrix=context_matrix)
             )
         else:
             fallback_values = ()
