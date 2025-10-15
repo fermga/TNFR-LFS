@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from tnfr_lfs.analysis.robustness import compute_session_robustness
+from tnfr_lfs.analysis.robustness import _lap_groups, compute_session_robustness
 
 from tests.helpers import build_balanced_bundle
 
@@ -58,3 +58,32 @@ def test_multi_lap_cov_computation(multi_lap_session: tuple[Sequence, Sequence[i
     assert second_lap["sense_index"]["coefficient_of_variation"] == pytest.approx(0.0)
     assert second_lap["delta_nfr"]["ok"] is True
     assert second_lap["sense_index"]["ok"] is True
+
+
+def test_lap_groups_with_metadata() -> None:
+    bundles = [object() for _ in range(5)]
+    lap_indices = [0, 0, 1, 2, 2]
+    metadata = [
+        {"index": 0, "label": "Warmup"},
+        {"index": 2, "label": "Final"},
+    ]
+
+    groups = _lap_groups(bundles, lap_indices, metadata)
+
+    assert groups == [
+        (0, "Warmup", [0, 1]),
+        (2, "Final", [3, 4]),
+        (1, "Lap 2", [2]),
+    ]
+
+
+def test_lap_groups_without_metadata() -> None:
+    bundles = [object() for _ in range(4)]
+    lap_indices = [0, 0, 1, 1]
+
+    groups = _lap_groups(bundles, lap_indices, [])
+
+    assert groups == [
+        (0, "Lap 1", [0, 1]),
+        (1, "Lap 2", [2, 3]),
+    ]

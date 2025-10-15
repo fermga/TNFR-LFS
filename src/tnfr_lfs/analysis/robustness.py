@@ -73,6 +73,11 @@ def _lap_groups(
     if not bundles or not lap_indices:
         return []
     sample_count = min(len(bundles), len(lap_indices))
+    lap_samples: dict[Any, list[int]] = {}
+    for position in range(sample_count):
+        lap_value = lap_indices[position]
+        lap_samples.setdefault(lap_value, []).append(position)
+
     groups: list[tuple[int, str, list[int]]] = []
     processed: set[int] = set()
     if lap_metadata:
@@ -81,38 +86,24 @@ def _lap_groups(
                 lap_index = int(entry.get("index", 0))
             except (TypeError, ValueError):
                 continue
-            label = str(entry.get("label", lap_index))
-            indices = [
-                position
-                for position in range(sample_count)
-                if lap_indices[position] == lap_index
-            ]
+            indices = lap_samples.get(lap_index)
             if not indices:
                 continue
+            label = str(entry.get("label", lap_index))
             processed.add(lap_index)
             groups.append((lap_index, label, indices))
-    remaining = [
-        index
-        for index in range(sample_count)
-        if lap_indices[index] not in processed
-    ]
-    if remaining:
-        unique_laps = sorted(
-            {
-                lap_indices[position]
-                for position in remaining
-                if lap_indices[position] is not None
-            }
-        )
-        for lap_index in unique_laps:
-            indices = [
-                position
-                for position in remaining
-                if lap_indices[position] == lap_index
-            ]
-            if not indices:
-                continue
-            groups.append((int(lap_index), f"Lap {int(lap_index) + 1}", indices))
+
+    remaining_laps = sorted(
+        lap_value
+        for lap_value, indices in lap_samples.items()
+        if lap_value not in processed and lap_value is not None and indices
+    )
+    for lap_value in remaining_laps:
+        indices = lap_samples.get(lap_value)
+        if not indices:
+            continue
+        lap_index = int(lap_value)
+        groups.append((lap_index, f"Lap {lap_index + 1}", indices))
     return groups
 
 
