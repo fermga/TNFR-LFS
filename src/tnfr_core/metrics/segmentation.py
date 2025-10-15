@@ -714,6 +714,8 @@ def segment_microsectors(
     for spec in specs:
         start = spec["start"]
         end = spec["end"]
+        record_window = records[start : end + 1]
+        bundle_window = recomputed_bundles[start : end + 1]
         phase_boundaries = spec["phase_boundaries"]
         phase_samples = spec["phase_samples"]
         phase_weights = {
@@ -730,9 +732,7 @@ def segment_microsectors(
             multiplier_meta = spec.get("context_multipliers")
             multiplier_indices = _segment_index_range(multiplier_meta, start, end)
             adjusted_deltas = []
-            for offset, bundle in zip(
-                multiplier_indices, recomputed_bundles[start : end + 1]
-            ):
+            for offset, bundle in zip(multiplier_indices, bundle_window):
                 multiplier = None
                 if isinstance(multiplier_meta, Mapping):
                     multiplier = multiplier_meta.get(offset)
@@ -749,7 +749,7 @@ def segment_microsectors(
             spec["delta_signature"] = float(delta_signature)
         avg_si = spec.get("avg_si")
         if avg_si is None:
-            avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
+            avg_si = mean(b.sense_index for b in bundle_window)
             spec["avg_si"] = float(avg_si)
         archetype = _classify_archetype(
             curvature,
@@ -826,10 +826,11 @@ def segment_microsectors(
             )
             for phase, indices in phase_samples.items()
         }
+        window_yaw_rates = yaw_rate_cache[start : end + 1]
 
         window_metrics = compute_window_metrics(
-            records[start : end + 1],
-            bundles=recomputed_bundles[start : end + 1],
+            record_window,
+            bundles=bundle_window,
             phase_indices=local_phase_indices,
         )
         front_velocity = window_metrics.suspension_velocity_front
@@ -1214,7 +1215,7 @@ def segment_microsectors(
                 for key, value in (mutation_info or {}).items()
             }
         occupancy = _compute_window_occupancy(
-            goals, phase_samples, records, yaw_rate_cache
+            goals, local_phase_indices, record_window, window_yaw_rates
         )
         phase_lag_map = {
             goal.phase: float(goal.measured_phase_lag) for goal in goals
@@ -2201,8 +2202,16 @@ def _compute_window_occupancy(
     occupancy: Dict[PhaseLiteral, Dict[str, float]] = {}
     for goal in goals:
         indices = phase_samples.get(goal.phase, ())
-        slip_values = [records[i].slip_ratio for i in indices]
-        phase_yaw_rates = [_cached_yaw_rate(yaw_rates, idx) for idx in indices]
+        slip_values = [
+            records[i].slip_ratio
+            for i in indices
+            if 0 <= i < len(records)
+        ]
+        phase_yaw_rates = [
+            _cached_yaw_rate(yaw_rates, idx)
+            for idx in indices
+            if 0 <= idx < len(yaw_rates)
+        ]
         occupancy[goal.phase] = {
             "slip_lat": _percentage(slip_values, goal.slip_lat_window),
             "slip_long": _percentage(slip_values, goal.slip_long_window),

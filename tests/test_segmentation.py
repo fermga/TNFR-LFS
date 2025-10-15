@@ -3,7 +3,7 @@ import pytest
 import math
 from dataclasses import replace
 from statistics import mean, pstdev
-from typing import Mapping, Tuple
+from typing import List, Mapping, Tuple
 
 from tests.helpers import build_dynamic_record
 
@@ -1118,3 +1118,63 @@ def test_segment_microsectors_preserves_operator_state(
         assert after.last_mutation is not None
         assert before.last_mutation is not None
         assert after.last_mutation.get("archetype") == before.last_mutation.get("archetype")
+
+
+def test_operator_detectors_receive_segment_windows(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    records = list(synthetic_records)
+    bundles = list(synthetic_bundles)
+
+    def _fake_detect_al(*args, **kwargs):
+        window = args[0] if args else kwargs.get("window", ())
+        signature = tuple(record.timestamp for record in window)
+        if not window:
+            return ()
+        return (
+            {
+                "start_index": 0,
+                "end_index": len(window) - 1,
+                "window_signature": signature,
+            },
+        )
+
+    monkeypatch.setattr(metrics_segmentation, "detect_al", _fake_detect_al)
+
+    def _empty_detector(*args, **kwargs):
+        return ()
+
+    for name in (
+        "detect_en",
+        "detect_il",
+        "detect_nul",
+        "detect_oz",
+        "detect_ra",
+        "detect_remesh",
+        "detect_thol",
+        "detect_um",
+        "detect_val",
+        "detect_zhir",
+        "detect_silence",
+    ):
+        monkeypatch.setattr(metrics_segmentation, name, _empty_detector)
+
+    microsectors = metrics_segmentation.segment_microsectors(records, bundles)
+    assert len(microsectors) >= 2
+
+    signatures: List[Tuple[float, ...]] = []
+    for microsector in microsectors[:2]:
+        events = microsector.operator_events.get("AL")
+        assert events, "expected synthetic AL detection event"
+        event = events[0]
+        signature = tuple(event["window_signature"])  # type: ignore[index]
+        global_start = int(event["global_start_index"])  # type: ignore[index]
+        global_end = int(event["global_end_index"])  # type: ignore[index]
+        expected = tuple(
+            record.timestamp for record in records[global_start : global_end + 1]
+        )
+        assert signature == expected
+        signatures.append(signature)
+
+    assert len(signatures) == 2
+    assert signatures[0] != signatures[1]
