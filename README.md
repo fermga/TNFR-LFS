@@ -76,3 +76,19 @@ poetry run python tools/verify_tnfr_parity.py tests/data/synthetic_stint.csv --o
 The same workflow is available via the `make verify-tnfr-parity` target, which
 enables strict mode and exits with a non-zero status when any metric exceeds the
 configured tolerances.
+
+## Insight profiling
+
+Inspect performance hotspots inside `compute_insights` with the profiling
+utility. The helper loads a telemetry CSV, runs the analysis under
+`cProfile`, and prints the top cumulative call paths so you can focus on the
+sections that dominate the execution time:
+
+```
+poetry run python tools/profile_insights.py tests/data/synthetic_stint.csv
+```
+
+Include `--profile-output profile.stats` to dump the raw statistics for deeper
+inspection with external tools, or tweak the car/track context with
+`--car-model` and `--track-name` to profile different setups. The workflow is
+also available through `make profile-insights`.

@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: quickstart install dev-install benchmark-delta-cache report-similar-tests report-similar-tests-sweep verify-tnfr-parity docs-language-check
+.PHONY: quickstart install dev-install benchmark-delta-cache report-similar-tests report-similar-tests-sweep verify-tnfr-parity docs-language-check profile-insights
 quickstart:
 	@if [[ ! -f examples/quickstart.sh ]]; then \
 		echo "Error: quickstart script examples/quickstart.sh not found. Please pull the examples directory or download the script before rerunning quickstart."; \
@@ -72,13 +72,25 @@ report-similar-tests-sweep:
 
 verify-tnfr-parity:
 	@if ! command -v python >/dev/null 2>&1; then \
-	        echo "Error: python command not found. Install Python before running the parity verification."; \
-	        exit 1; \
+		echo "Error: python command not found. Install Python before running the parity verification."; \
+		exit 1; \
 	fi
 	@if [[ ! -f tests/data/synthetic_stint.csv ]]; then \
-	        echo "Error: tests/data/synthetic_stint.csv not found. Provide a telemetry CSV before rerunning parity verification."; \
-	        exit 1; \
+		echo "Error: tests/data/synthetic_stint.csv not found. Provide a telemetry CSV before rerunning parity verification."; \
+		exit 1; \
 	fi
 	@echo "Running TNFR parity verification against the canonical engine..."
 	@python tools/verify_tnfr_parity.py tests/data/synthetic_stint.csv --strict
+
+profile-insights:
+	@if ! command -v python >/dev/null 2>&1; then \
+		echo "Error: python command not found. Install Python before running the insight profiler."; \
+		exit 1; \
+	fi
+	@if [[ ! -f tests/data/synthetic_stint.csv ]]; then \
+		echo "Error: tests/data/synthetic_stint.csv not found. Provide a telemetry CSV before rerunning the profiler."; \
+		exit 1; \
+	fi
+	@echo "Profiling compute_insights using the synthetic stint..."
+	@python tools/profile_insights.py tests/data/synthetic_stint.csv
 
