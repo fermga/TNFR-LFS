@@ -348,6 +348,12 @@ def test_segment_microsectors_returns_contextual_factors(
     for microsector in microsectors:
         assert set(microsector.context_factors) == {"curve", "surface", "traffic"}
         assert microsector.sample_context_factors
+        indices = sorted(microsector.sample_context_factors)
+        assert indices == list(range(indices[0], indices[-1] + 1))
+        phase_indices: set[int] = set()
+        for payload in microsector.phase_samples.values():
+            phase_indices.update(int(value) for value in payload)
+        assert phase_indices.issubset(set(indices))
         multipliers = [
             apply_contextual_delta(1.0, factors, context_matrix=matrix)
             for factors in microsector.sample_context_factors.values()
