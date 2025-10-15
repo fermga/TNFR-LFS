@@ -10,8 +10,7 @@ agnostic of where the resources live.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from collections.abc import Callable
-from typing import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping
 
 from tnfr_core.operators.interfaces import SupportsContextBundle, SupportsContextRecord
 
@@ -387,7 +386,7 @@ def resolve_microsector_context(
 
 
 def resolve_series_context(
-    series: Sequence[SupportsContextBundle | SupportsContextRecord | Mapping[str, object]],
+    series: Iterable[SupportsContextBundle | SupportsContextRecord | Mapping[str, object]],
     *,
     matrix: ContextMatrix | None = None,
     baseline_vertical_load: float | None = None,

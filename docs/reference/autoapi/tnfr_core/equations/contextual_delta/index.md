@@ -44,7 +44,7 @@ data directly.
   - Resolve factors using the information stored inside an :class:`EPIBundle`.
 - `resolve_microsector_context(matrix: ContextMatrix, *, curvature: float, grip_rel: float, speed_drop: float, direction_changes: float) -> ContextFactors`
   - Resolve aggregate factors for a microsector from its summary metrics.
-- `resolve_series_context(series: Sequence[SupportsContextBundle | SupportsContextRecord | Mapping[str, object]], *, matrix: ContextMatrix | None = None, baseline_vertical_load: float | None = None) -> list[ContextFactors]`
+- `resolve_series_context(series: Iterable[SupportsContextBundle | SupportsContextRecord | Mapping[str, object]], *, matrix: ContextMatrix | None = None, baseline_vertical_load: float | None = None) -> list[ContextFactors]`
   - Return context factors for every element in ``series``.
 
 ## Attributes
