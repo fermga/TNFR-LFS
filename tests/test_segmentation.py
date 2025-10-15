@@ -242,8 +242,8 @@ def test_recompute_bundles_partial_reuse_reduces_resolve_calls(
     records = list(synthetic_records[:80])
     bundles = list(synthetic_bundles[: len(records)])
     baseline = DeltaCalculator.derive_baseline(records)
-    phase_assignments = {idx: PHASE_SEQUENCE[0] for idx in range(len(records))}
-    weight_lookup = {idx: DEFAULT_PHASE_WEIGHTS for idx in range(len(records))}
+    phase_assignments = [PHASE_SEQUENCE[0] for _ in range(len(records))]
+    weight_lookup = [DEFAULT_PHASE_WEIGHTS for _ in range(len(records))]
 
     base_result = metrics_segmentation._recompute_bundles(
         records,
@@ -256,7 +256,7 @@ def test_recompute_bundles_partial_reuse_reduces_resolve_calls(
     base_states = list(base_result.analyzer_states)
 
     change_index = len(records) // 2
-    adjusted_lookup = dict(weight_lookup)
+    adjusted_lookup = list(weight_lookup)
     for idx in range(change_index, len(records)):
         adjusted_lookup[idx] = {"__default__": 1.5}
 
@@ -327,8 +327,8 @@ def test_recompute_bundles_restored_history_invalidates_dynamic_cache(
     records = list(synthetic_records[:60])
     bundles = list(synthetic_bundles[: len(records)])
     baseline = DeltaCalculator.derive_baseline(records)
-    phase_assignments = {idx: PHASE_SEQUENCE[0] for idx in range(len(records))}
-    weight_lookup = {idx: DEFAULT_PHASE_WEIGHTS for idx in range(len(records))}
+    phase_assignments = [PHASE_SEQUENCE[0] for _ in range(len(records))]
+    weight_lookup = [DEFAULT_PHASE_WEIGHTS for _ in range(len(records))]
 
     record_index = {id(record): idx for idx, record in enumerate(records)}
 

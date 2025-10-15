@@ -658,8 +658,12 @@ def segment_microsectors(
         )
         mutation_state = operator_state.setdefault("mutation", {})
     thresholds = mutation_thresholds or {}
-    phase_assignments: Dict[int, PhaseLiteral] = {}
-    weight_lookup: Dict[int, Mapping[str, Mapping[str, float] | float]] = {}
+    total_samples = len(records)
+    default_phase = PHASE_SEQUENCE[0] if PHASE_SEQUENCE else "entry1"
+    assigned_phases: List[PhaseLiteral] = [default_phase] * total_samples
+    assigned_weights: List[Mapping[str, Mapping[str, float] | float]] = [
+        DEFAULT_PHASE_WEIGHTS
+    ] * total_samples
     specs: List[Dict[str, object]] = []
     baseline_vertical = float(getattr(baseline_record, "vertical_load", 0.0))
     sample_context = [
@@ -750,8 +754,9 @@ def segment_microsectors(
         )
         for phase, indices in phase_samples.items():
             for sample_index in indices:
-                phase_assignments[sample_index] = phase
-                weight_lookup[sample_index] = phase_weight_map
+                if 0 <= sample_index < total_samples:
+                    assigned_phases[sample_index] = phase
+                    assigned_weights[sample_index] = phase_weight_map
 
     analyzer_states: List[_AnalyzerState | None] | None = None
 
@@ -759,8 +764,8 @@ def segment_microsectors(
         records,
         bundle_list,
         baseline_record,
-        phase_assignments,
-        weight_lookup,
+        assigned_phases,
+        assigned_weights,
         analyzer_states=analyzer_states,
     )
     recomputed_bundles = recompute_result.bundles
@@ -785,8 +790,8 @@ def segment_microsectors(
             records,
             recomputed_bundles,
             baseline_record,
-            phase_assignments,
-            weight_lookup,
+            assigned_phases,
+            assigned_weights,
             start_index=recompute_start,
             analyzer_states=analyzer_states,
         )
@@ -865,8 +870,8 @@ def segment_microsectors(
             records,
             recomputed_bundles,
             baseline_record,
-            phase_assignments,
-            weight_lookup,
+            assigned_phases,
+            assigned_weights,
             goal_nu_f_lookup=goal_nu_f_lookup,
             start_index=goal_recompute_start,
             analyzer_states=analyzer_states,
@@ -1616,7 +1621,10 @@ def segment_microsectors(
                     )
                 phase_votes: Dict[str, int] = {}
                 for idx in range(global_start, global_end + 1):
-                    phase_candidate = phase_assignments.get(idx)
+                    if 0 <= idx < len(assigned_phases):
+                        phase_candidate = assigned_phases[idx]
+                    else:
+                        phase_candidate = None
                     if not phase_candidate:
                         continue
                     phase_key = phase_family(str(phase_candidate))
@@ -1763,8 +1771,8 @@ def _recompute_bundles(
     records: Sequence[SupportsTelemetrySample],
     bundles: Sequence[SupportsEPIBundle],
     baseline: SupportsTelemetrySample,
-    phase_assignments: Mapping[int, PhaseLiteral],
-    weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]],
+    phase_assignments: Sequence[PhaseLiteral],
+    weight_lookup: Sequence[Mapping[str, Mapping[str, float] | float]],
     goal_nu_f_lookup: Mapping[int, Mapping[str, float] | float] | None = None,
     *,
     start_index: int = 0,
@@ -1775,6 +1783,24 @@ def _recompute_bundles(
         return _BundleRecomputeResult(list(bundles), cached_states)
 
     total_samples = len(records)
+    default_phase = PHASE_SEQUENCE[0] if PHASE_SEQUENCE else "entry1"
+    assignment_count = len(phase_assignments)
+    weight_count = len(weight_lookup)
+
+    def _phase_for(index: int) -> PhaseLiteral:
+        if 0 <= index < assignment_count:
+            candidate = phase_assignments[index]
+            if isinstance(candidate, str) and candidate:
+                return cast(PhaseLiteral, candidate)
+        return default_phase
+
+    def _weights_for(index: int) -> Mapping[str, Mapping[str, float] | float]:
+        if 0 <= index < weight_count:
+            candidate = weight_lookup[index]
+            if candidate is not None:
+                return candidate
+        return DEFAULT_PHASE_WEIGHTS
+
     if start_index <= 0:
         recompute_start = 0
     elif start_index >= total_samples:
@@ -1813,8 +1839,8 @@ def _recompute_bundles(
     prime_start = max(restore_index + 1, 0)
     for idx in range(prime_start, recompute_start):
         record = records[idx]
-        phase = phase_assignments.get(idx, PHASE_SEQUENCE[0])
-        phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
+        phase = _phase_for(idx)
+        phase_weights = _weights_for(idx)
         resolve_nu_f_by_node(
             record,
             phase=phase,
@@ -1848,8 +1874,8 @@ def _recompute_bundles(
                 dt = max(0.0, structural_ts - prev_structural)
             else:
                 dt = max(0.0, record.timestamp - prev_timestamp)
-        phase = phase_assignments.get(idx, PHASE_SEQUENCE[0])
-        phase_weights = weight_lookup.get(idx, DEFAULT_PHASE_WEIGHTS)
+        phase = _phase_for(idx)
+        phase_weights = _weights_for(idx)
         target_nu_f = goal_nu_f_lookup.get(idx) if goal_nu_f_lookup else None
         nu_snapshot = resolve_nu_f_by_node(
             record,
