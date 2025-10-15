@@ -475,7 +475,7 @@ class Microsector:
         return range(start, stop)
 
 
-def _merge_phase_indices(sequences: Sequence[Tuple[int, ...]]) -> Tuple[int, ...]:
+def _merge_phase_indices(sequences: Sequence[Iterable[int]]) -> Tuple[int, ...]:
     merged: list[int] = []
     for sequence in sequences:
         for value in sequence:
@@ -626,7 +626,7 @@ def segment_microsectors(
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
         phase_samples = {
-            phase: tuple(range(bounds[0], bounds[1]))
+            phase: range(bounds[0], bounds[1])
             for phase, bounds in phase_boundaries.items()
         }
         segment_summary = _accumulate_segment_metrics(records, start, end)
@@ -2287,7 +2287,7 @@ def _build_goals(
 
 def _initial_phase_weight_map(
     records: Sequence[SupportsTelemetrySample],
-    phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]],
+    phase_samples: Mapping[PhaseLiteral, Iterable[int]],
     yaw_rates: Sequence[float],
 ) -> Dict[PhaseLiteral, Dict[str, float]]:
     weights: Dict[PhaseLiteral, Dict[str, float]] = {}
@@ -2394,7 +2394,7 @@ def _blend_phase_weight_map(
 
 def _compute_window_occupancy(
     goals: Sequence[Goal],
-    phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]],
+    phase_samples: Mapping[PhaseLiteral, Iterable[int]],
     records: Sequence[SupportsTelemetrySample],
     yaw_rates: Sequence[float],
 ) -> Dict[PhaseLiteral, Dict[str, float]]:

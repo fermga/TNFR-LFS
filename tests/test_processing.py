@@ -108,3 +108,16 @@ def test_compute_insights_preserves_microsector_goals(
     first_goals = [microsector.goals for microsector in first.microsectors]
     second_goals = [microsector.goals for microsector in second.microsectors]
     assert first_goals == second_goals
+
+
+def test_segment_microsectors_phase_samples_match_boundaries(
+    synthetic_records,
+) -> None:
+    extractor = EPIExtractor()
+    reference_records = list(synthetic_records)
+    bundles = extractor.extract(reference_records)
+    microsectors = segment_microsectors(reference_records, bundles)
+    assert microsectors
+    for microsector in microsectors:
+        for phase, indices in microsector.phase_samples.items():
+            assert tuple(indices) == tuple(microsector.phase_indices(phase))
