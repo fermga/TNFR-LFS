@@ -150,22 +150,28 @@ def _bundle_delta_and_sense_series(
     sense_values: list[float] = []
     bundle_count = len(bundles)
 
-    def append_numeric(value: Any, target: list[float]) -> None:
-        if value is None:
-            return
-        try:
-            numeric_value = float(value)
-        except (TypeError, ValueError):
-            return
-        if math.isfinite(numeric_value):
-            target.append(numeric_value)
-
     for index in sample_indices:
         if not 0 <= index < bundle_count:
             continue
         bundle = bundles[index]
-        append_numeric(getattr(bundle, "delta_nfr", None), delta_values)
-        append_numeric(getattr(bundle, "sense_index", None), sense_values)
+        delta_value = getattr(bundle, "delta_nfr", None)
+        if delta_value is not None:
+            try:
+                delta_numeric = float(delta_value)
+            except (TypeError, ValueError):
+                pass
+            else:
+                if math.isfinite(delta_numeric):
+                    delta_values.append(delta_numeric)
+        sense_value = getattr(bundle, "sense_index", None)
+        if sense_value is not None:
+            try:
+                sense_numeric = float(sense_value)
+            except (TypeError, ValueError):
+                pass
+            else:
+                if math.isfinite(sense_numeric):
+                    sense_values.append(sense_numeric)
 
     return delta_values, sense_values
 
