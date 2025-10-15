@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from tnfr_lfs.analysis import compute_session_robustness
 from tnfr_core.epi import EPIExtractor
+from tnfr_core.metrics import segmentation as segmentation_module
 from tnfr_core.segmentation import segment_microsectors
 from tnfr_lfs.analysis.insights import InsightsResult, compute_insights
 
@@ -112,6 +113,39 @@ def test_compute_insights_preserves_microsector_goals(
     first_goals = [microsector.goals for microsector in first.microsectors]
     second_goals = [microsector.goals for microsector in second.microsectors]
     assert first_goals == second_goals
+
+
+def test_compute_insights_reuses_sample_rate(
+    synthetic_records, tmp_path, monkeypatch
+) -> None:
+    manager = preloaded_profile_manager(tmp_path)
+    reference_records = list(synthetic_records)
+
+    baseline = compute_insights(
+        list(reference_records),
+        car_model="FZR",
+        track_name="generic",
+        profile_manager=manager,
+    )
+
+    call_counter = {"count": 0}
+    original = segmentation_module.estimate_sample_rate
+
+    def counting(records):  # type: ignore[override]
+        call_counter["count"] += 1
+        return original(records)
+
+    monkeypatch.setattr(segmentation_module, "estimate_sample_rate", counting)
+
+    repeated = compute_insights(
+        list(reference_records),
+        car_model="FZR",
+        track_name="generic",
+        profile_manager=manager,
+    )
+
+    assert repeated == baseline
+    assert call_counter["count"] == 1
 
 
 def test_segment_microsectors_phase_samples_match_boundaries(
