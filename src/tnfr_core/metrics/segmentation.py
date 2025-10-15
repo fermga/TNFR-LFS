@@ -2714,7 +2714,6 @@ def _build_goals(
                         use_direct_multipliers = True
 
             if not use_direct_multipliers:
-                resolved_context: List[ContextFactors] = []
                 phase_fallback: Tuple[ContextFactors, ...] | None = None
                 phase_bundle_view: Tuple[SupportsEPIBundle, ...] | None = None
 
@@ -2727,16 +2726,51 @@ def _build_goals(
                         )
                     return phase_bundle_view
 
-                def _phase_context(local_index: int, absolute_index: int) -> ContextFactors:
+                def _phase_multiplier(local_index: int, absolute_index: int) -> float:
                     nonlocal phase_fallback, fallback_series, fallback_offset
-                    series = fallback_series
-                    if series is None:
-                        series = _ensure_fallback_series()
-                    offset = fallback_offset
-                    if series and offset is not None:
-                        relative_index = absolute_index - offset
-                        if 0 <= relative_index < len(series):
-                            return series[relative_index]
+
+                    def _from_series(
+                        series: Tuple[ContextFactors, ...] | None,
+                        offset: int | None,
+                        *,
+                        clamp: bool,
+                    ) -> float | None:
+                        if not series:
+                            return None
+                        length = len(series)
+                        if length == 0:
+                            return None
+                        if offset is not None:
+                            relative_index = absolute_index - offset
+                            if not clamp and not (0 <= relative_index < length):
+                                return None
+                            if relative_index < 0:
+                                relative_index = 0
+                            elif relative_index >= length:
+                                relative_index = length - 1
+                            return _clamp(series[relative_index].multiplier)
+                        index = local_index if 0 <= local_index < length else length - 1
+                        if index < 0:
+                            return None
+                        return _clamp(series[index].multiplier)
+
+                    multiplier = _from_series(
+                        fallback_series,
+                        fallback_offset,
+                        clamp=False,
+                    )
+                    if multiplier is not None:
+                        return multiplier
+
+                    if fallback_series is None:
+                        multiplier = _from_series(
+                            _ensure_fallback_series(),
+                            fallback_offset,
+                            clamp=False,
+                        )
+                        if multiplier is not None:
+                            return multiplier
+
                     if phase_fallback is None:
                         phase_fallback = tuple(
                             resolve_series_context(
@@ -2744,36 +2778,34 @@ def _build_goals(
                                 matrix=context_matrix,
                             )
                         )
-                    if phase_fallback:
-                        if 0 <= local_index < len(phase_fallback):
-                            return phase_fallback[local_index]
-                        return phase_fallback[min(local_index, len(phase_fallback) - 1)]
-                    series = _ensure_fallback_series()
-                    if series:
-                        if offset is not None:
-                            relative_index = absolute_index - offset
-                            if relative_index < 0:
-                                relative_index = 0
-                            elif relative_index >= len(series):
-                                relative_index = len(series) - 1
-                            return series[relative_index]
-                        return series[min(local_index, len(series) - 1)]
-                    return ContextFactors()
 
-                if sample_context:
-                    for local_index, idx in enumerate(range(start, stop)):
-                        if 0 <= idx < len(sample_context):
-                            resolved_context.append(sample_context[idx])
-                        else:
-                            resolved_context.append(_phase_context(local_index, idx))
-                else:
-                    for local_index, idx in enumerate(range(start, stop)):
-                        resolved_context.append(_phase_context(local_index, idx))
+                    multiplier = _from_series(
+                        phase_fallback,
+                        None,
+                        clamp=True,
+                    )
+                    if multiplier is not None:
+                        return multiplier
 
-                multipliers = [
-                    _clamp(ctx.multiplier)
-                    for ctx in resolved_context
-                ]
+                    multiplier = _from_series(
+                        _ensure_fallback_series(),
+                        fallback_offset,
+                        clamp=True,
+                    )
+                    if multiplier is not None:
+                        return multiplier
+
+                    return _clamp(ContextFactors().multiplier)
+
+                for local_index, idx in enumerate(range(start, stop)):
+                    if sample_context and 0 <= idx < len(sample_context):
+                        multipliers.append(
+                            _clamp(sample_context[idx].multiplier)
+                        )
+                    else:
+                        multipliers.append(
+                            _phase_multiplier(local_index, idx)
+                        )
             sum_delta = 0.0
             sum_si = 0.0
             sum_long = 0.0
