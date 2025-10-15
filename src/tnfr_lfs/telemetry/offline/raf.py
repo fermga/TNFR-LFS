@@ -316,6 +316,10 @@ def raf_to_telemetry_records(
     """
 
     wheel_order = _resolve_wheel_order(raf.wheels)
+    fl_idx = wheel_order["fl"]
+    fr_idx = wheel_order["fr"]
+    rl_idx = wheel_order["rl"]
+    rr_idx = wheel_order["rr"]
     interval = raf.header.interval_seconds
     front_track_width = raf.car.front_track_width if raf.car.front_track_width else math.nan
     wheelbase = raf.car.wheelbase if raf.car.wheelbase else math.nan
@@ -329,23 +333,20 @@ def raf_to_telemetry_records(
     for index, frame in enumerate(raf.frames):
         timestamp = frame.index * interval
 
-        wheel_data: dict[str, RafWheelFrame] = {
-            slot: frame.wheels[idx] for slot, idx in wheel_order.items()
-        }
+        front_left = frame.wheels[fl_idx]
+        front_right = frame.wheels[fr_idx]
+        rear_left = frame.wheels[rl_idx]
+        rear_right = frame.wheels[rr_idx]
 
         total_vertical_load = sum(w.vertical_load for w in frame.wheels)
-        front_vertical_load = sum(
-            wheel_data[key].vertical_load for key in ("fl", "fr") if key in wheel_data
-        )
-        rear_vertical_load = sum(
-            wheel_data[key].vertical_load for key in ("rl", "rr") if key in wheel_data
-        )
+        front_vertical_load = front_left.vertical_load + front_right.vertical_load
+        rear_vertical_load = rear_left.vertical_load + rear_right.vertical_load
 
         slip_ratio = sum(w.slip_ratio for w in frame.wheels) / max(len(frame.wheels), 1)
         slip_angle = sum(w.slip_angle for w in frame.wheels) / max(len(frame.wheels), 1)
 
-        front_deflections = [wheel_data[key].suspension_deflection for key in ("fl", "fr")]
-        rear_deflections = [wheel_data[key].suspension_deflection for key in ("rl", "rr")]
+        front_deflections = [front_left.suspension_deflection, front_right.suspension_deflection]
+        rear_deflections = [rear_left.suspension_deflection, rear_right.suspension_deflection]
 
         avg_front_deflection = (
             sum(front_deflections) / len(front_deflections) if front_deflections else math.nan
@@ -393,34 +394,34 @@ def raf_to_telemetry_records(
             suspension_travel_rear=avg_rear_deflection,
             suspension_velocity_front=math.nan,
             suspension_velocity_rear=math.nan,
-            slip_ratio_fl=wheel_data["fl"].slip_ratio,
-            slip_ratio_fr=wheel_data["fr"].slip_ratio,
-            slip_ratio_rl=wheel_data["rl"].slip_ratio,
-            slip_ratio_rr=wheel_data["rr"].slip_ratio,
-            slip_angle_fl=wheel_data["fl"].slip_angle,
-            slip_angle_fr=wheel_data["fr"].slip_angle,
-            slip_angle_rl=wheel_data["rl"].slip_angle,
-            slip_angle_rr=wheel_data["rr"].slip_angle,
-            brake_input=math.nan,
-            clutch_input=math.nan,
-            handbrake_input=math.nan,
-            steer_input=math.nan,
-            wheel_load_fl=wheel_data["fl"].vertical_load,
-            wheel_load_fr=wheel_data["fr"].vertical_load,
-            wheel_load_rl=wheel_data["rl"].vertical_load,
-            wheel_load_rr=wheel_data["rr"].vertical_load,
-            wheel_lateral_force_fl=wheel_data["fl"].lateral_force,
-            wheel_lateral_force_fr=wheel_data["fr"].lateral_force,
-            wheel_lateral_force_rl=wheel_data["rl"].lateral_force,
-            wheel_lateral_force_rr=wheel_data["rr"].lateral_force,
-            wheel_longitudinal_force_fl=wheel_data["fl"].longitudinal_force,
-            wheel_longitudinal_force_fr=wheel_data["fr"].longitudinal_force,
-            wheel_longitudinal_force_rl=wheel_data["rl"].longitudinal_force,
-            wheel_longitudinal_force_rr=wheel_data["rr"].longitudinal_force,
-            suspension_deflection_fl=wheel_data["fl"].suspension_deflection,
-            suspension_deflection_fr=wheel_data["fr"].suspension_deflection,
-            suspension_deflection_rl=wheel_data["rl"].suspension_deflection,
-            suspension_deflection_rr=wheel_data["rr"].suspension_deflection,
+            slip_ratio_fl=front_left.slip_ratio,
+            slip_ratio_fr=front_right.slip_ratio,
+            slip_ratio_rl=rear_left.slip_ratio,
+            slip_ratio_rr=rear_right.slip_ratio,
+            slip_angle_fl=front_left.slip_angle,
+            slip_angle_fr=front_right.slip_angle,
+            slip_angle_rl=rear_left.slip_angle,
+            slip_angle_rr=rear_right.slip_angle,
+            brake_input=frame.brake_input,
+            clutch_input=frame.clutch_input,
+            handbrake_input=frame.handbrake_input,
+            steer_input=frame.steer_input,
+            wheel_load_fl=front_left.vertical_load,
+            wheel_load_fr=front_right.vertical_load,
+            wheel_load_rl=rear_left.vertical_load,
+            wheel_load_rr=rear_right.vertical_load,
+            wheel_lateral_force_fl=front_left.lateral_force,
+            wheel_lateral_force_fr=front_right.lateral_force,
+            wheel_lateral_force_rl=rear_left.lateral_force,
+            wheel_lateral_force_rr=rear_right.lateral_force,
+            wheel_longitudinal_force_fl=front_left.longitudinal_force,
+            wheel_longitudinal_force_fr=front_right.longitudinal_force,
+            wheel_longitudinal_force_rl=rear_left.longitudinal_force,
+            wheel_longitudinal_force_rr=rear_right.longitudinal_force,
+            suspension_deflection_fl=front_left.suspension_deflection,
+            suspension_deflection_fr=front_right.suspension_deflection,
+            suspension_deflection_rl=rear_left.suspension_deflection,
+            suspension_deflection_rr=rear_right.suspension_deflection,
             rpm=rpm,
             line_deviation=math.nan,
             instantaneous_radius=math.nan,
@@ -433,15 +434,7 @@ def raf_to_telemetry_records(
             tyre_compound=tyre_compound,
         )
 
-        records.append(
-            replace(
-                record,
-                brake_input=frame.brake_input,
-                clutch_input=frame.clutch_input,
-                handbrake_input=frame.handbrake_input,
-                steer_input=frame.steer_input,
-            )
-        )
+        records.append(record)
 
     if overlays:
         records = _merge_overlays(records, overlays, tolerance=interval * 1.5)
