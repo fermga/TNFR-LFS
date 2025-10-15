@@ -33,7 +33,6 @@ from tnfr_core.equations.epi import (
 from tnfr_core.equations.contextual_delta import (
     ContextFactors,
     ContextMatrix,
-    apply_contextual_delta,
     load_context_matrix,
     resolve_context_from_record,
     resolve_microsector_context,
@@ -137,6 +136,28 @@ def _resolve_session_components(
         _normalise(car, "generic"),
         _normalise(track, "unknown"),
         _normalise(compound, "default"),
+    )
+
+
+def _resolve_context_multiplier(
+    factors: ContextFactors | Mapping[str, float] | None,
+    *,
+    context_matrix: ContextMatrix,
+) -> float:
+    """Clamp the contextual multiplier for ``factors`` to the matrix bounds."""
+
+    if isinstance(factors, ContextFactors):
+        multiplier = factors.multiplier
+    elif isinstance(factors, Mapping):
+        curve = float(factors.get("curve", 1.0))
+        surface = float(factors.get("surface", 1.0))
+        traffic = float(factors.get("traffic", 1.0))
+        multiplier = curve * surface * traffic
+    else:
+        multiplier = 1.0
+    return max(
+        context_matrix.min_multiplier,
+        min(context_matrix.max_multiplier, multiplier),
     )
 
 
@@ -345,6 +366,13 @@ def segment_microsectors(
         )
         for record in records
     ]
+    sample_multipliers = [
+        _resolve_context_multiplier(
+            factors,
+            context_matrix=context_matrix,
+        )
+        for factors in sample_context
+    ]
     session_components = _resolve_session_components(records, baseline)
 
     yaw_rate_cache = [_compute_yaw_rate(records, idx) for idx in range(len(records))]
@@ -411,6 +439,11 @@ def segment_microsectors(
             for sample_index in range(start, end + 1)
             if 0 <= sample_index < len(sample_context)
         }
+        sample_multiplier_map = {
+            sample_index: sample_multipliers[sample_index]
+            for sample_index in range(start, end + 1)
+            if 0 <= sample_index < len(sample_multipliers)
+        }
         specs.append(
             {
                 "index": index,
@@ -432,6 +465,7 @@ def segment_microsectors(
                 "end_timestamp": float(records[end].timestamp),
                 "context_factors": context_factors,
                 "sample_context": sample_context_map,
+                "context_multipliers": sample_multiplier_map,
             }
         )
         for phase, indices in phase_samples.items():
@@ -471,19 +505,15 @@ def segment_microsectors(
     for spec in specs:
         start = spec["start"]
         end = spec["end"]
-        sample_context_map = spec.get("sample_context", {})
+        sample_multiplier_map = spec.get("context_multipliers", {})
         adjusted_deltas = []
         for offset, bundle in enumerate(recomputed_bundles[start : end + 1], start):
-            factors = sample_context_map.get(offset)
-            if factors is None and 0 <= offset < len(sample_context):
-                factors = sample_context[offset]
-            adjusted_deltas.append(
-                apply_contextual_delta(
-                    bundle.delta_nfr,
-                    factors or {},
-                    context_matrix=context_matrix,
-                )
-            )
+            multiplier = sample_multiplier_map.get(offset)
+            if multiplier is None and 0 <= offset < len(sample_multipliers):
+                multiplier = sample_multipliers[offset]
+            if multiplier is None:
+                multiplier = 1.0
+            adjusted_deltas.append(bundle.delta_nfr * multiplier)
         delta_signature = mean(adjusted_deltas)
         avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
         archetype = _classify_archetype(
@@ -538,19 +568,15 @@ def segment_microsectors(
         support_event = spec["support_event"]
         avg_vertical_load = float(spec.get("avg_vertical_load", 0.0))
         grip_rel = float(spec.get("grip_rel", 0.0))
-        sample_context_map = spec.get("sample_context", {})
+        sample_multiplier_map = spec.get("context_multipliers", {})
         adjusted_deltas = []
         for offset, bundle in enumerate(recomputed_bundles[start : end + 1], start):
-            factors = sample_context_map.get(offset)
-            if factors is None and 0 <= offset < len(sample_context):
-                factors = sample_context[offset]
-            adjusted_deltas.append(
-                apply_contextual_delta(
-                    bundle.delta_nfr,
-                    factors or {},
-                    context_matrix=context_matrix,
-                )
-            )
+            multiplier = sample_multiplier_map.get(offset)
+            if multiplier is None and 0 <= offset < len(sample_multipliers):
+                multiplier = sample_multipliers[offset]
+            if multiplier is None:
+                multiplier = 1.0
+            adjusted_deltas.append(bundle.delta_nfr * multiplier)
         delta_signature = mean(adjusted_deltas)
         avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
         archetype = _classify_archetype(
