@@ -16,7 +16,7 @@ def test_compute_insights_matches_components(
     reference_records = list(synthetic_records)
     expected_bundles = extractor.extract(reference_records)
     result = compute_insights(
-        list(synthetic_records),
+        list(reference_records),
         car_model="FZR",
         track_name="generic",
         profile_manager=manager,
@@ -30,12 +30,19 @@ def test_compute_insights_matches_components(
         if result.snapshot is not None
         else result.thresholds.phase_weights
     )
+    overrides_payload = overrides if overrides else None
     expected_microsectors = segment_microsectors(
-        list(synthetic_records),
+        list(reference_records),
         result.bundles,
-        phase_weight_overrides=overrides if overrides else None,
+        phase_weight_overrides=overrides_payload,
     )
     assert result.microsectors == expected_microsectors
+    tuple_microsectors = segment_microsectors(
+        tuple(reference_records),
+        list(result.bundles),
+        phase_weight_overrides=overrides_payload,
+    )
+    assert tuple_microsectors == expected_microsectors
     expected_robustness = compute_session_robustness(
         result.bundles,
         microsectors=expected_microsectors,
