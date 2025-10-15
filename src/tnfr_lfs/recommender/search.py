@@ -160,18 +160,22 @@ class CoordinateDescentOptimizer:
         return vector, best_score, self.max_iterations, evaluations
 
 
-def _timestamp_deltas(results: Sequence[EPIBundle]) -> list[float]:
+def _timestamp_deltas(
+    results: Sequence[EPIBundle], timestamps: Sequence[float] | None = None
+) -> list[float]:
     if not results:
         return []
+    if timestamps is None:
+        timestamps = [float(bundle.timestamp) for bundle in results]
     deltas: list[float] = []
-    for index, bundle in enumerate(results):
+    for index in range(len(results)):
         if index + 1 < len(results):
-            next_stamp = results[index + 1].timestamp
-            current_stamp = bundle.timestamp
+            next_stamp = timestamps[index + 1]
+            current_stamp = timestamps[index]
             delta = max(1e-3, next_stamp - current_stamp)
         elif index > 0:
-            previous_stamp = results[index - 1].timestamp
-            delta = max(1e-3, bundle.timestamp - previous_stamp)
+            previous_stamp = timestamps[index - 1]
+            delta = max(1e-3, timestamps[index] - previous_stamp)
         else:
             delta = 1e-3
         deltas.append(delta)
@@ -274,52 +278,33 @@ def objective_score(
             return max(0.0, fmean(collected))
         return default
 
-    timestamps = [float(bundle.timestamp) for bundle in results]
-    duration = max(timestamps[-1] - timestamps[0], 1e-3) if len(timestamps) >= 2 else 1.0
+    size = len(results)
+    timestamps = [0.0] * size
+    delta_series = [0.0] * size
+    yaw_rates = [0.0] * size
+    front_travel = [0.0] * size
+    rear_travel = [0.0] * size
+    aero_differences = [0.0] * size
 
-    def _rate_series(series: Sequence[float], stamps: Sequence[float]) -> list[float]:
-        rates: list[float] = []
-        limit = min(len(series), len(stamps))
-        for index in range(1, limit):
-            dt = stamps[index] - stamps[index - 1]
-            if dt <= 0.0:
-                continue
-            delta = series[index] - series[index - 1]
-            rate = delta / dt
-            if math.isfinite(rate):
-                rates.append(rate)
-        return rates
+    sense_sum = 0.0
+    aero_count = 0
 
-    mean_si = fmean(bundle.sense_index for bundle in results)
+    for index, bundle in enumerate(results):
+        timestamp = float(bundle.timestamp)
+        timestamps[index] = timestamp
 
-    deltas = _timestamp_deltas(results)
-    delta_integral = _absolute_delta_integral(results, deltas)
-    delta_reference = max(1e-3, _hint_float("delta_reference", 6.0))
-    delta_density = delta_integral / duration
-    delta_score = max(0.0, 1.0 - delta_density / delta_reference)
+        delta_value = float(bundle.delta_nfr)
+        delta_series[index] = delta_value
 
-    yaw_rates = [float(bundle.chassis.yaw_rate) for bundle in results]
-    delta_series = [float(bundle.delta_nfr) for bundle in results]
-    _, _, udr_ratio = compute_useful_dissonance_stats(timestamps, delta_series, yaw_rates)
-    udr_score = max(0.0, min(1.0, udr_ratio))
+        yaw_rate = float(bundle.chassis.yaw_rate)
+        yaw_rates[index] = yaw_rate
 
-    bottoming_threshold_front = max(0.0, _hint_float("bottoming_threshold_front", 0.015))
-    bottoming_threshold_rear = max(0.0, _hint_float("bottoming_threshold_rear", 0.015))
-    front_travel = [float(bundle.suspension.travel_front) for bundle in results]
-    rear_travel = [float(bundle.suspension.travel_rear) for bundle in results]
-    if front_travel:
-        front_bottom_ratio = sum(1.0 for value in front_travel if value <= bottoming_threshold_front) / len(front_travel)
-    else:
-        front_bottom_ratio = 0.0
-    if rear_travel:
-        rear_bottom_ratio = sum(1.0 for value in rear_travel if value <= bottoming_threshold_rear) / len(rear_travel)
-    else:
-        rear_bottom_ratio = 0.0
-    bottoming_score = max(0.0, 1.0 - max(front_bottom_ratio, rear_bottom_ratio))
+        sense_sum += float(bundle.sense_index)
 
-    aero_reference = max(1e-3, _hint_float("aero_reference", 0.12))
-    aero_samples = []
-    for bundle in results:
+        suspension = bundle.suspension
+        front_travel[index] = float(suspension.travel_front)
+        rear_travel[index] = float(suspension.travel_rear)
+
         tyres = getattr(bundle, "tyres", None)
         if tyres is None:
             continue
@@ -329,8 +314,45 @@ def objective_score(
         except (TypeError, ValueError):
             continue
         if math.isfinite(front_component) and math.isfinite(rear_component):
-            aero_samples.append(abs(front_component - rear_component))
-    aero_imbalance = _mean(aero_samples, 0.0)
+            aero_differences[aero_count] = abs(front_component - rear_component)
+            aero_count += 1
+
+    duration = max(timestamps[-1] - timestamps[0], 1e-3) if size >= 2 else 1.0
+
+    mean_si = sense_sum / size if size else 0.0
+
+    deltas = _timestamp_deltas(results, timestamps)
+    delta_integral = 0.0
+    for index in range(min(len(deltas), size)):
+        delta_integral += abs(delta_series[index]) * deltas[index]
+    delta_reference = max(1e-3, _hint_float("delta_reference", 6.0))
+    delta_density = delta_integral / duration
+    delta_score = max(0.0, 1.0 - delta_density / delta_reference)
+
+    _, _, udr_ratio = compute_useful_dissonance_stats(timestamps, delta_series, yaw_rates)
+    udr_score = max(0.0, min(1.0, udr_ratio))
+
+    bottoming_threshold_front = max(0.0, _hint_float("bottoming_threshold_front", 0.015))
+    bottoming_threshold_rear = max(0.0, _hint_float("bottoming_threshold_rear", 0.015))
+    if front_travel:
+        front_bottom_ratio = sum(
+            1.0 for value in front_travel if value <= bottoming_threshold_front
+        ) / len(front_travel)
+    else:
+        front_bottom_ratio = 0.0
+    if rear_travel:
+        rear_bottom_ratio = sum(
+            1.0 for value in rear_travel if value <= bottoming_threshold_rear
+        ) / len(rear_travel)
+    else:
+        rear_bottom_ratio = 0.0
+    bottoming_score = max(0.0, 1.0 - max(front_bottom_ratio, rear_bottom_ratio))
+
+    aero_reference = max(1e-3, _hint_float("aero_reference", 0.12))
+    if aero_count:
+        aero_imbalance = _mean(aero_differences[:aero_count], 0.0)
+    else:
+        aero_imbalance = 0.0
     aero_score = max(0.0, 1.0 - aero_imbalance / aero_reference)
 
     weight_map = {
