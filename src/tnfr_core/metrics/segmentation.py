@@ -2731,7 +2731,7 @@ def _build_goals(
         else:
             fallback_series = tuple(
                 resolve_series_context(
-                    bundles[start_idx:stop_idx],
+                    _SequenceSegment(bundles, start_idx, stop_idx - 1),
                     matrix=context_matrix,
                 )
             )
@@ -2771,7 +2771,7 @@ def _build_goals(
         start, stop = boundaries[phase]
         stop = max(start, min(stop, len(bundles), len(records)))
         phase_length = max(0, stop - start)
-        phase_records = records[start:stop]
+        phase_records = _SequenceSegment(records, start, stop - 1)
         phase_yaw_rates: List[float]
         if yaw_rates:
             phase_yaw_rates = []
@@ -2811,14 +2811,13 @@ def _build_goals(
 
             if not use_direct_multipliers:
                 phase_fallback: Tuple[ContextFactors, ...] | None = None
-                phase_bundle_view: Tuple[SupportsEPIBundle, ...] | None = None
+                phase_bundle_view: Sequence[SupportsEPIBundle] | None = None
 
-                def _phase_segment() -> Tuple[SupportsEPIBundle, ...]:
+                def _phase_segment() -> Sequence[SupportsEPIBundle]:
                     nonlocal phase_bundle_view
                     if phase_bundle_view is None:
-                        phase_bundle_view = tuple(
-                            bundles[idx]
-                            for idx in range(start, stop)
+                        phase_bundle_view = _SequenceSegment(
+                            bundles, start, stop - 1
                         )
                     return phase_bundle_view
 
