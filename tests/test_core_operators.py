@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, replace
 from math import cos, pi, sin, sqrt
 from statistics import mean, pstdev, pvariance
@@ -1312,6 +1313,81 @@ def test_recursivity_operator_separates_sessions_and_tracks_history():
     for session_key, entry in state["sessions"].items():
         assert entry["active"]
         assert not entry.get("history")
+
+
+def test_recursivity_operator_trace_respects_history_limit():
+    state: dict[str, dict[str, object]] = {}
+    session = ("FZR", "aston", "soft")
+
+    for step in range(5):
+        recursivity_operator(
+            state,
+            session,
+            "ms-1",
+            {
+                "thermal_load": float(step),
+                "style_index": 0.6,
+                "phase": "entry",
+                "timestamp": float(step),
+            },
+            decay=0.0,
+            history=3,
+            convergence_window=10,
+        )
+
+    session_key = "|".join(session)
+    active_state = state["sessions"][session_key]["active"]
+    trace = active_state["ms-1"]["trace"]
+
+    assert isinstance(trace, deque)
+    assert list(entry["thermal_load"] for entry in trace) == [2.0, 3.0, 4.0]
+
+
+def test_recursivity_operator_upgrades_legacy_trace_list():
+    state: dict[str, dict[str, object]] = {}
+    session = ("FZR", "aston", "soft")
+
+    recursivity_operator(
+        state,
+        session,
+        "ms-1",
+        {
+            "thermal_load": 1.0,
+            "style_index": 0.6,
+            "phase": "entry",
+            "timestamp": 0.0,
+        },
+        decay=0.0,
+        history=4,
+    )
+
+    session_key = "|".join(session)
+    micro_state = state["sessions"][session_key]["active"]["ms-1"]
+    micro_state["trace"] = [
+        {"phase": "entry", "thermal_load": 1.0},
+        {"phase": "mid", "thermal_load": 2.0},
+    ]
+
+    result = recursivity_operator(
+        state,
+        session,
+        "ms-1",
+        {
+            "thermal_load": 3.0,
+            "style_index": 0.7,
+            "phase": "exit",
+            "timestamp": 1.0,
+        },
+        decay=0.0,
+        history=2,
+    )
+
+    trace = micro_state["trace"]
+
+    assert isinstance(trace, deque)
+    assert len(trace) == 2
+    assert [entry["phase"] for entry in trace] == ["mid", "exit"]
+    assert tuple(entry["phase"] for entry in result["trace"]) == ("mid", "exit")
 
 
 def test_recursivity_operator_rolls_over_on_limits():
