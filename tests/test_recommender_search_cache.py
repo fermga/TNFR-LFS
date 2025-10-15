@@ -10,6 +10,37 @@ from tnfr_core.cache_settings import (
 )
 
 
+def test_vector_key_orders_known_and_extra_parameters() -> None:
+    space = search_module.DecisionSpace(
+        car_model="dummy",
+        variables=(
+            search_module.DecisionVariable("alpha", 0.0, 1.0, 0.1),
+            search_module.DecisionVariable("beta", 0.0, 1.0, 0.1),
+        ),
+    )
+    vector = {"beta": 2.0, "alpha": 1.0, "gamma": 3.0, "delta": 4.0}
+
+    assert search_module._vector_key(space, vector) == (
+        ("alpha", 1.0),
+        ("beta", 2.0),
+        ("delta", 4.0),
+        ("gamma", 3.0),
+    )
+
+
+def test_vector_key_falls_back_to_sorted_for_partial_vectors() -> None:
+    space = search_module.DecisionSpace(
+        car_model="dummy",
+        variables=(
+            search_module.DecisionVariable("alpha", 0.0, 1.0, 0.1),
+            search_module.DecisionVariable("beta", 0.0, 1.0, 0.1),
+        ),
+    )
+    vector = {"alpha": 1.0, "gamma": 3.0}
+
+    assert search_module._vector_key(space, vector) == tuple(sorted(vector.items()))
+
+
 def test_resolve_recommender_cache_size_normalises_values() -> None:
     assert resolve_recommender_cache_size(None) == DEFAULT_RECOMMENDER_CACHE_SIZE
     assert resolve_recommender_cache_size(7) == 7

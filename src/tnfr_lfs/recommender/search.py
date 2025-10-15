@@ -42,17 +42,19 @@ def _vector_key(
     """
 
     ordered: list[tuple[str, float]] = []
+    seen: set[str] = set()
     for variable in space.variables:
         try:
-            ordered.append((variable.name, mapping[variable.name]))
+            value = mapping[variable.name]
         except KeyError:
             return tuple(sorted(mapping.items()))
+        ordered.append((variable.name, value))
+        seen.add(variable.name)
 
     if len(mapping) != len(ordered):
         extras: list[tuple[str, float]] = []
-        ordered_names = [name for name, _ in ordered]
         for name, value in mapping.items():
-            if name not in ordered_names:
+            if name not in seen:
                 extras.append((name, value))
         if extras:
             extras.sort(key=lambda item: item[0])
