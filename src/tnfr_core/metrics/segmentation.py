@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from heapq import nlargest
 from dataclasses import dataclass, field
 from statistics import fmean, pstdev
 from typing import (
@@ -2271,7 +2272,7 @@ def _phase_nu_f_targets(
                 nu_f = getattr(bundle, node).nu_f if hasattr(bundle, node) else 0.0
                 node_metrics[node]["nu_f_weight"] += weight * nu_f
 
-        sorted_nodes = sorted(
+        significant_nodes = (
             (
                 node,
                 metrics,
@@ -2279,8 +2280,8 @@ def _phase_nu_f_targets(
             for node, metrics in node_metrics.items()
             if metrics["abs_delta"] > 0.0
         )
-        sorted_nodes.sort(key=lambda item: item[1]["abs_delta"], reverse=True)
-        phase_nodes = tuple(node for node, _ in sorted_nodes[:3])
+        top_nodes = nlargest(3, significant_nodes, key=lambda item: item[1]["abs_delta"])
+        phase_nodes = tuple(node for node, _ in top_nodes)
         if not phase_nodes and node_metrics:
             phase_nodes = tuple(list(node_metrics.keys())[:3])
         dominant_nodes[phase] = phase_nodes
