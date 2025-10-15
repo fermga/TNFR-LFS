@@ -347,6 +347,8 @@ def segment_microsectors(
     ]
     session_components = _resolve_session_components(records, baseline)
 
+    yaw_rate_cache = [_compute_yaw_rate(records, idx) for idx in range(len(records))]
+
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
         phase_samples = {
@@ -390,7 +392,9 @@ def segment_microsectors(
             avg_value, spread = _mean_std(key)
             brake_temperatures[key] = avg_value
             brake_temperature_dispersion[f"{key}_std"] = spread
-        phase_weight_map = _initial_phase_weight_map(records, phase_samples)
+        phase_weight_map = _initial_phase_weight_map(
+            records, phase_samples, yaw_rate_cache
+        )
         if phase_weight_overrides:
             phase_weight_map = _blend_phase_weight_map(
                 phase_weight_map, phase_weight_overrides
@@ -449,6 +453,7 @@ def segment_microsectors(
         records,
         context_matrix=context_matrix,
         sample_context=sample_context,
+        yaw_rates=yaw_rate_cache,
     )
 
     if weights_adjusted:
@@ -490,6 +495,7 @@ def segment_microsectors(
             recomputed_bundles,
             records,
             spec["phase_boundaries"],
+            yaw_rates=yaw_rate_cache,
             context_matrix=context_matrix,
             sample_context=sample_context,
         )
@@ -570,6 +576,7 @@ def segment_microsectors(
             recomputed_bundles,
             records,
             phase_boundaries,
+            yaw_rates=yaw_rate_cache,
             context_matrix=context_matrix,
             sample_context=sample_context,
             phase_gradients=phase_gradient_map,
@@ -916,6 +923,7 @@ def segment_microsectors(
                     bundles,
                     records,
                     phase_boundaries,
+                    yaw_rates=yaw_rate_cache,
                     context_matrix=context_matrix,
                     sample_context=sample_context,
                 )
@@ -997,7 +1005,9 @@ def segment_microsectors(
                 )
                 for key, value in (mutation_info or {}).items()
             }
-        occupancy = _compute_window_occupancy(goals, phase_samples, records)
+        occupancy = _compute_window_occupancy(
+            goals, phase_samples, records, yaw_rate_cache
+        )
         phase_lag_map = {
             goal.phase: float(goal.measured_phase_lag) for goal in goals
         }
@@ -1470,6 +1480,15 @@ def _compute_yaw_rate(records: Sequence[SupportsTelemetrySample], index: int) ->
     return wrapped / dt
 
 
+def _cached_yaw_rate(cache: Sequence[float], index: int) -> float:
+    if 0 <= index < len(cache):
+        try:
+            return float(cache[index])
+        except (TypeError, ValueError):
+            return 0.0
+    return 0.0
+
+
 def _safe_mean(values: Sequence[float], default: float = 0.0) -> float:
     return mean(values) if values else default
 
@@ -1497,6 +1516,7 @@ def _build_goals(
     bundles: Sequence[SupportsEPIBundle],
     records: Sequence[SupportsTelemetrySample],
     boundaries: Mapping[PhaseLiteral, Tuple[int, int]],
+    yaw_rates: Sequence[float],
     *,
     context_matrix: ContextMatrix | None = None,
     sample_context: Sequence[ContextFactors] | None = None,
@@ -1522,6 +1542,7 @@ def _build_goals(
         indices = [idx for idx in range(start, min(stop, len(bundles)))]
         segment = [bundles[idx] for idx in indices]
         phase_records = [records[idx] for idx in indices]
+        phase_yaw_rates = [_cached_yaw_rate(yaw_rates, idx) for idx in indices]
         if segment:
             if sample_context:
                 resolved_context: List[ContextFactors] = []
@@ -1622,15 +1643,15 @@ def _build_goals(
         slip_values = [record.slip_ratio for record in phase_records]
         lat_values = [record.lateral_accel for record in phase_records]
         long_values = [record.longitudinal_accel for record in phase_records]
-        yaw_rates = [_compute_yaw_rate(records, idx) for idx in indices]
-
         lat_scale = influence_factor * (1.0 + min(1.5, abs(_safe_mean(lat_values)) / 5.0))
         long_scale = influence_factor * (1.0 + min(1.5, abs(_safe_mean(long_values)) / 5.0))
-        yaw_scale = influence_factor * (1.0 + min(1.5, abs(_safe_mean(yaw_rates)) / 2.0))
+        yaw_scale = influence_factor * (
+            1.0 + min(1.5, abs(_safe_mean(phase_yaw_rates)) / 2.0)
+        )
 
         slip_lat_window = _window(slip_values, lat_scale)
         slip_long_window = _window(slip_values, long_scale)
-        yaw_rate_window = _window(yaw_rates, yaw_scale, minimum=0.005)
+        yaw_rate_window = _window(phase_yaw_rates, yaw_scale, minimum=0.005)
 
         total_axis = abs_long + abs_lat
         if total_axis > 1e-9:
@@ -1732,6 +1753,7 @@ def _build_goals(
 def _initial_phase_weight_map(
     records: Sequence[SupportsTelemetrySample],
     phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]],
+    yaw_rates: Sequence[float],
 ) -> Dict[PhaseLiteral, Dict[str, float]]:
     weights: Dict[PhaseLiteral, Dict[str, float]] = {}
 
@@ -1746,12 +1768,12 @@ def _initial_phase_weight_map(
         slip_values = [record.slip_ratio for record in phase_records]
         lat_values = [record.lateral_accel for record in phase_records]
         long_values = [record.longitudinal_accel for record in phase_records]
-        yaw_rates = [_compute_yaw_rate(records, idx) for idx in indices]
+        phase_yaw_rates = [_cached_yaw_rate(yaw_rates, idx) for idx in indices]
 
         slip_factor = _tightness(slip_values, 0.25, 1.6)
         long_factor = _tightness(long_values, 0.8, 1.4)
         lat_factor = _tightness(lat_values, 1.0, 1.4)
-        yaw_factor = _tightness(yaw_rates, 0.5, 1.5)
+        yaw_factor = _tightness(phase_yaw_rates, 0.5, 1.5)
 
         profile = {
             "__default__": 1.0,
@@ -1839,6 +1861,7 @@ def _compute_window_occupancy(
     goals: Sequence[Goal],
     phase_samples: Mapping[PhaseLiteral, Tuple[int, ...]],
     records: Sequence[SupportsTelemetrySample],
+    yaw_rates: Sequence[float],
 ) -> Dict[PhaseLiteral, Dict[str, float]]:
     def _percentage(values: Sequence[float], window: Tuple[float, float]) -> float:
         if not values:
@@ -1856,11 +1879,11 @@ def _compute_window_occupancy(
     for goal in goals:
         indices = phase_samples.get(goal.phase, ())
         slip_values = [records[i].slip_ratio for i in indices]
-        yaw_rates = [_compute_yaw_rate(records, idx) for idx in indices]
+        phase_yaw_rates = [_cached_yaw_rate(yaw_rates, idx) for idx in indices]
         occupancy[goal.phase] = {
             "slip_lat": _percentage(slip_values, goal.slip_lat_window),
             "slip_long": _percentage(slip_values, goal.slip_long_window),
-            "yaw_rate": _percentage(yaw_rates, goal.yaw_rate_window),
+            "yaw_rate": _percentage(phase_yaw_rates, goal.yaw_rate_window),
         }
     for legacy, phases in LEGACY_PHASE_MAP.items():
         values = [occupancy.get(phase) for phase in phases if phase in occupancy]
@@ -1952,6 +1975,7 @@ def _adjust_phase_weights_with_dominance(
     *,
     context_matrix: ContextMatrix,
     sample_context: Sequence[ContextFactors],
+    yaw_rates: Sequence[float],
 ) -> bool:
     adjusted = False
     for spec in specs:
@@ -1967,6 +1991,7 @@ def _adjust_phase_weights_with_dominance(
             bundles,
             records,
             phase_boundaries,
+            yaw_rates=yaw_rates,
             context_matrix=context_matrix,
             sample_context=sample_context,
         )
