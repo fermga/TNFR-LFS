@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from collections.abc import Mapping as MappingABC
 from statistics import mean
 from importlib import import_module
@@ -1600,6 +1600,98 @@ class DeltaCalculator:
             coherence_index=nu_f_snapshot.coherence_index,
             ackermann_parallel_index=ackermann_delta,
         )
+
+    @staticmethod
+    def reproject_bundle_phase(
+        bundle: EPIBundle,
+        *,
+        nu_f_snapshot: NaturalFrequencySnapshot,
+        phase: str,
+        phase_weights: Mapping[str, Mapping[str, float] | float] | Mapping[str, float] | float | None,
+        baseline_nfr: float,
+        dt: float,
+        prev_integrated_epi: float | None = None,
+        phase_target_nu_f: Mapping[str, Mapping[str, float] | float]
+        | Mapping[str, float]
+        | float
+        | None = None,
+    ) -> EPIBundle:
+        """Reproject a cached bundle onto a new phase configuration."""
+
+        phase_weight_map: Mapping[str, Mapping[str, float] | float] | Mapping[str, float] | float
+        if phase_weights is None:
+            phase_weight_map = DEFAULT_PHASE_WEIGHTS
+        else:
+            phase_weight_map = phase_weights
+
+        nu_f_map = dict(nu_f_snapshot.by_node)
+        node_deltas = {
+            "tyres": bundle.tyres.delta_nfr,
+            "suspension": bundle.suspension.delta_nfr,
+            "chassis": bundle.chassis.delta_nfr,
+            "brakes": bundle.brakes.delta_nfr,
+            "transmission": bundle.transmission.delta_nfr,
+            "track": bundle.track.delta_nfr,
+            "driver": bundle.driver.delta_nfr,
+        }
+
+        global_si = sense_index(
+            bundle.delta_nfr,
+            node_deltas,
+            baseline_nfr,
+            nu_f_by_node=nu_f_map,
+            active_phase=phase,
+            w_phase=phase_weight_map,
+            nu_f_targets=phase_target_nu_f,
+        )
+
+        try:
+            from tnfr_core.operators.operators import evolve_epi
+        except ImportError:  # pragma: no cover - defensive fallback during circular import
+
+            def evolve_epi(prev_epi, delta_map, dt, nu_map):
+                nodal: Dict[str, tuple[float, float]] = {}
+                derivative = 0.0
+                for node in set(delta_map) | set(nu_map):
+                    node_derivative = nu_map.get(node, 0.0) * delta_map.get(node, 0.0)
+                    nodal[node] = (node_derivative * dt, node_derivative)
+                    derivative += node_derivative
+                return prev_epi + (derivative * dt), derivative, nodal
+
+        previous_state = bundle.epi if prev_integrated_epi is None else prev_integrated_epi
+        integrated_epi, derivative, nodal_evolution = evolve_epi(
+            previous_state, node_deltas, dt, nu_f_map
+        )
+
+        def _update_node(node_name: str, node_model):
+            integral, node_derivative = nodal_evolution.get(node_name, (0.0, 0.0))
+            return replace(
+                node_model,
+                nu_f=nu_f_map.get(node_name, 0.0),
+                integrated_epi=integral,
+                dEPI_dt=node_derivative,
+            )
+
+        updated_bundle = replace(
+            bundle,
+            sense_index=global_si,
+            dEPI_dt=derivative,
+            integrated_epi=integrated_epi,
+            node_evolution=dict(nodal_evolution),
+            tyres=_update_node("tyres", bundle.tyres),
+            suspension=_update_node("suspension", bundle.suspension),
+            chassis=_update_node("chassis", bundle.chassis),
+            brakes=_update_node("brakes", bundle.brakes),
+            transmission=_update_node("transmission", bundle.transmission),
+            track=_update_node("track", bundle.track),
+            driver=_update_node("driver", bundle.driver),
+            nu_f_classification=nu_f_snapshot.classification,
+            nu_f_category=nu_f_snapshot.category,
+            nu_f_label=nu_f_snapshot.frequency_label,
+            nu_f_dominant=nu_f_snapshot.dominant_frequency,
+            coherence_index=nu_f_snapshot.coherence_index,
+        )
+        return updated_bundle
 
 
     @staticmethod

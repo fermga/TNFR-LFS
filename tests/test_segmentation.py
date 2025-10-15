@@ -321,6 +321,145 @@ def test_recompute_bundles_partial_reuse_reduces_resolve_calls(
     assert cached_calls == len(records) - change_index
 
 
+def test_recompute_bundles_reprojects_without_weight_changes(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    records = list(synthetic_records[:80])
+    bundles = list(synthetic_bundles[: len(records)])
+    baseline = DeltaCalculator.derive_baseline(records)
+    phase_assignments = [PHASE_SEQUENCE[0] for _ in range(len(records))]
+    weight_lookup = [DEFAULT_PHASE_WEIGHTS for _ in range(len(records))]
+
+    base_result = metrics_segmentation._recompute_bundles(
+        records,
+        bundles,
+        baseline,
+        phase_assignments,
+        weight_lookup,
+    )
+    base_bundles = list(base_result.bundles)
+    base_states = list(base_result.analyzer_states)
+
+    start_index = max(1, len(records) // 3)
+
+    compute_calls = 0
+    reproject_calls = 0
+    original_compute = metrics_segmentation.DeltaCalculator.compute_bundle
+    original_reproject = metrics_segmentation.DeltaCalculator.reproject_bundle_phase
+
+    with monkeypatch.context() as patch_context:
+
+        def _tracking_compute(*args, **kwargs):
+            nonlocal compute_calls
+            compute_calls += 1
+            return original_compute(*args, **kwargs)
+
+        def _tracking_reproject(bundle, **kwargs):
+            nonlocal reproject_calls
+            reproject_calls += 1
+            return original_reproject(bundle, **kwargs)
+
+        patch_context.setattr(
+            metrics_segmentation.DeltaCalculator,
+            "compute_bundle",
+            staticmethod(_tracking_compute),
+        )
+        patch_context.setattr(
+            metrics_segmentation.DeltaCalculator,
+            "reproject_bundle_phase",
+            staticmethod(_tracking_reproject),
+        )
+
+        recomputed = metrics_segmentation._recompute_bundles(
+            records,
+            list(base_bundles),
+            baseline,
+            phase_assignments,
+            weight_lookup,
+            start_index=start_index,
+            analyzer_states=base_states,
+        )
+
+    assert list(recomputed.bundles) == base_bundles
+    assert compute_calls == 0
+    assert reproject_calls == len(records) - start_index
+
+
+def test_recompute_bundles_reprojects_with_phase_overrides(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    records = list(synthetic_records[:80])
+    bundles = list(synthetic_bundles[: len(records)])
+    baseline = DeltaCalculator.derive_baseline(records)
+    phase_assignments = [PHASE_SEQUENCE[0] for _ in range(len(records))]
+    weight_lookup = [DEFAULT_PHASE_WEIGHTS for _ in range(len(records))]
+
+    base_result = metrics_segmentation._recompute_bundles(
+        records,
+        bundles,
+        baseline,
+        phase_assignments,
+        weight_lookup,
+    )
+    base_bundles = list(base_result.bundles)
+    base_states = list(base_result.analyzer_states)
+
+    change_index = len(records) // 2
+    adjusted_lookup = list(weight_lookup)
+    for idx in range(change_index, len(records)):
+        adjusted_lookup[idx] = {"__default__": 1.5}
+
+    reference_result = metrics_segmentation._recompute_bundles(
+        records,
+        list(base_bundles),
+        baseline,
+        phase_assignments,
+        adjusted_lookup,
+    )
+
+    compute_calls = 0
+    reproject_calls = 0
+    original_compute = metrics_segmentation.DeltaCalculator.compute_bundle
+    original_reproject = metrics_segmentation.DeltaCalculator.reproject_bundle_phase
+
+    with monkeypatch.context() as patch_context:
+
+        def _tracking_compute(*args, **kwargs):
+            nonlocal compute_calls
+            compute_calls += 1
+            return original_compute(*args, **kwargs)
+
+        def _tracking_reproject(bundle, **kwargs):
+            nonlocal reproject_calls
+            reproject_calls += 1
+            return original_reproject(bundle, **kwargs)
+
+        patch_context.setattr(
+            metrics_segmentation.DeltaCalculator,
+            "compute_bundle",
+            staticmethod(_tracking_compute),
+        )
+        patch_context.setattr(
+            metrics_segmentation.DeltaCalculator,
+            "reproject_bundle_phase",
+            staticmethod(_tracking_reproject),
+        )
+
+        recomputed = metrics_segmentation._recompute_bundles(
+            records,
+            list(base_bundles),
+            baseline,
+            phase_assignments,
+            adjusted_lookup,
+            start_index=change_index,
+            analyzer_states=base_states,
+        )
+
+    assert list(recomputed.bundles) == list(reference_result.bundles)
+    assert compute_calls == 0
+    assert reproject_calls == len(records) - change_index
+
+
 def test_recompute_bundles_restored_history_invalidates_dynamic_cache(
     synthetic_records, synthetic_bundles, monkeypatch
 ) -> None:

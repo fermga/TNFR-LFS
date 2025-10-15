@@ -44,6 +44,7 @@ from tnfr_core.equations.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
+from tnfr_core.equations.epi_models import EPIBundle
 from tnfr_core.equations.contextual_delta import (
     ContextFactors,
     ContextMatrix,
@@ -2193,18 +2194,54 @@ def _recompute_bundles(
             analyzer=analyzer,
         )
         epi_value = bundles[idx].epi if idx < len(bundles) else 0.0
-        recomputed_bundle = DeltaCalculator.compute_bundle(
-            record,
-            baseline,
-            epi_value,
-            prev_integrated_epi=prev_integrated,
-            dt=dt,
-            nu_f_by_node=nu_snapshot.by_node,
-            nu_f_snapshot=nu_snapshot,
-            phase=phase,
-            phase_weights=phase_weights,
-            phase_target_nu_f=target_nu_f,
-        )
+        existing_bundle: SupportsEPIBundle | None = None
+        if idx < len(result):
+            existing_bundle = result[idx]
+        elif idx < len(bundles):
+            existing_bundle = bundles[idx]
+
+        recomputed_bundle: SupportsEPIBundle
+        if isinstance(existing_bundle, EPIBundle):
+            baseline_nfr = getattr(baseline, "nfr", None)
+            if baseline_nfr is None or not math.isfinite(baseline_nfr):
+                baseline_nfr = record.nfr - existing_bundle.delta_nfr
+            try:
+                recomputed_bundle = DeltaCalculator.reproject_bundle_phase(
+                    existing_bundle,
+                    nu_f_snapshot=nu_snapshot,
+                    phase=phase,
+                    phase_weights=phase_weights,
+                    baseline_nfr=baseline_nfr,
+                    dt=dt,
+                    prev_integrated_epi=prev_integrated,
+                    phase_target_nu_f=target_nu_f,
+                )
+            except Exception:  # pragma: no cover - defensive guard for unexpected models
+                recomputed_bundle = DeltaCalculator.compute_bundle(
+                    record,
+                    baseline,
+                    epi_value,
+                    prev_integrated_epi=prev_integrated,
+                    dt=dt,
+                    nu_f_by_node=nu_snapshot.by_node,
+                    nu_f_snapshot=nu_snapshot,
+                    phase=phase,
+                    phase_weights=phase_weights,
+                    phase_target_nu_f=target_nu_f,
+                )
+        else:
+            recomputed_bundle = DeltaCalculator.compute_bundle(
+                record,
+                baseline,
+                epi_value,
+                prev_integrated_epi=prev_integrated,
+                dt=dt,
+                nu_f_by_node=nu_snapshot.by_node,
+                nu_f_snapshot=nu_snapshot,
+                phase=phase,
+                phase_weights=phase_weights,
+                phase_target_nu_f=target_nu_f,
+            )
         if idx < len(result):
             result[idx] = recomputed_bundle
         else:
