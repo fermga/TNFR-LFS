@@ -3155,11 +3155,23 @@ def _initial_phase_weight_map(
         return 1.0 + min(cap, reference / (span + 1e-6))
 
     for phase, indices in phase_samples.items():
-        phase_records = [records[i] for i in indices]
-        slip_values = [record.slip_ratio for record in phase_records]
-        lat_values = [record.lateral_accel for record in phase_records]
-        long_values = [record.longitudinal_accel for record in phase_records]
-        phase_yaw_rates = [_cached_yaw_rate(yaw_rates, idx) for idx in indices]
+        tuple_indices = tuple(indices)  # Materialise to support single-pass iterables.
+        slip_values: List[float] = []
+        lat_values: List[float] = []
+        long_values: List[float] = []
+        phase_yaw_rates: List[float] = []
+
+        record_count = len(records)
+        yaw_count = len(yaw_rates)
+
+        for idx in tuple_indices:
+            if 0 <= idx < record_count:
+                record = records[idx]
+                slip_values.append(record.slip_ratio)
+                lat_values.append(record.lateral_accel)
+                long_values.append(record.longitudinal_accel)
+            if 0 <= idx < yaw_count:
+                phase_yaw_rates.append(_cached_yaw_rate(yaw_rates, idx))
 
         slip_factor = _tightness(slip_values, 0.25, 1.6)
         long_factor = _tightness(long_values, 0.8, 1.4)
