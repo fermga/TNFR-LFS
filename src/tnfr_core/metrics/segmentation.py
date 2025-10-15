@@ -561,8 +561,11 @@ def segment_microsectors(
             if multiplier is None:
                 multiplier = 1.0
             adjusted_deltas.append(bundle.delta_nfr * multiplier)
+        spec["adjusted_deltas"] = tuple(adjusted_deltas)
         delta_signature = mean(adjusted_deltas)
+        spec["delta_signature"] = float(delta_signature)
         avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
+        spec["avg_si"] = float(avg_si)
         archetype = _classify_archetype(
             spec["curvature"],
             spec.get("duration", 0.0),
@@ -615,20 +618,32 @@ def segment_microsectors(
         support_event = spec["support_event"]
         avg_vertical_load = float(spec.get("avg_vertical_load", 0.0))
         grip_rel = float(spec.get("grip_rel", 0.0))
-        multiplier_meta = spec.get("context_multipliers")
-        multiplier_indices = _segment_index_range(multiplier_meta, start, end)
-        adjusted_deltas = []
-        for offset, bundle in zip(multiplier_indices, recomputed_bundles[start : end + 1]):
-            multiplier = None
-            if isinstance(multiplier_meta, Mapping):
-                multiplier = multiplier_meta.get(offset)
-            if multiplier is None and 0 <= offset < len(sample_multipliers):
-                multiplier = sample_multipliers[offset]
-            if multiplier is None:
-                multiplier = 1.0
-            adjusted_deltas.append(bundle.delta_nfr * multiplier)
-        delta_signature = mean(adjusted_deltas)
-        avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
+        stored_deltas = spec.get("adjusted_deltas")
+        if stored_deltas is None:
+            multiplier_meta = spec.get("context_multipliers")
+            multiplier_indices = _segment_index_range(multiplier_meta, start, end)
+            adjusted_deltas = []
+            for offset, bundle in zip(
+                multiplier_indices, recomputed_bundles[start : end + 1]
+            ):
+                multiplier = None
+                if isinstance(multiplier_meta, Mapping):
+                    multiplier = multiplier_meta.get(offset)
+                if multiplier is None and 0 <= offset < len(sample_multipliers):
+                    multiplier = sample_multipliers[offset]
+                if multiplier is None:
+                    multiplier = 1.0
+                adjusted_deltas.append(bundle.delta_nfr * multiplier)
+            stored_deltas = tuple(adjusted_deltas)
+            spec["adjusted_deltas"] = stored_deltas
+        delta_signature = spec.get("delta_signature")
+        if delta_signature is None:
+            delta_signature = mean(stored_deltas)
+            spec["delta_signature"] = float(delta_signature)
+        avg_si = spec.get("avg_si")
+        if avg_si is None:
+            avg_si = mean(b.sense_index for b in recomputed_bundles[start : end + 1])
+            spec["avg_si"] = float(avg_si)
         archetype = _classify_archetype(
             curvature,
             spec.get("duration", 0.0),

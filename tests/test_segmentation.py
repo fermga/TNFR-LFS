@@ -211,6 +211,40 @@ def test_segment_microsectors_incremental_recompute_matches_full(
     assert incremental_result == full_result
 
 
+def test_segment_microsectors_caches_delta_signature(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    captured_specs = []
+    original_adjust = metrics_segmentation._adjust_phase_weights_with_dominance
+
+    def _wrapped_adjust(specs, bundles, records, **kwargs):
+        captured_specs.extend(specs)
+        return original_adjust(specs, bundles, records, **kwargs)
+
+    with monkeypatch.context() as patch_context:
+        patch_context.setattr(
+            metrics_segmentation,
+            "_adjust_phase_weights_with_dominance",
+            _wrapped_adjust,
+        )
+        microsectors = segment_microsectors(
+            list(synthetic_records), list(synthetic_bundles)
+        )
+
+    assert captured_specs, "expected cached specifications"
+    assert len(captured_specs) == len(microsectors)
+    for spec, microsector in zip(captured_specs, microsectors):
+        assert "adjusted_deltas" in spec
+        assert "delta_signature" in spec
+        assert "avg_si" in spec
+        adjusted = tuple(spec["adjusted_deltas"])
+        if adjusted:
+            assert spec["delta_signature"] == pytest.approx(mean(adjusted))
+        assert microsector.delta_nfr_signature == pytest.approx(spec["delta_signature"])
+        style_index = microsector.filtered_measures.get("style_index")
+        assert style_index == pytest.approx(spec["avg_si"])
+
+
 def test_segment_microsectors_computes_wheel_dispersion(
     synthetic_records, synthetic_bundles
 ) -> None:
