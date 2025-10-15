@@ -21,7 +21,17 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from statistics import mean, pstdev
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple, cast
+from typing import (
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    MutableSequence,
+    Sequence,
+    Tuple,
+    cast,
+)
 
 from tnfr_core.equations.epi import (
     DEFAULT_PHASE_WEIGHTS,
@@ -240,6 +250,24 @@ def _bundle_node_delta(bundle: SupportsEPIBundle) -> Mapping[str, float]:
             continue
         node_deltas[node_name] = delta
     return node_deltas
+
+
+def _refresh_node_delta_cache(
+    cache: List[Mapping[str, float]] | None,
+    bundles: Sequence[SupportsEPIBundle],
+    *,
+    start_index: int = 0,
+) -> List[Mapping[str, float]]:
+    """Update ``cache`` with ΔNFR snapshots from ``bundles``."""
+
+    total = len(bundles)
+    effective_start = min(max(start_index, 0), total)
+    if cache is None or len(cache) != total or effective_start <= 0:
+        return [_bundle_node_delta(bundle) for bundle in bundles]
+    cache[effective_start:] = [
+        _bundle_node_delta(bundles[idx]) for idx in range(effective_start, total)
+    ]
+    return cache
 
 
 def _restore_analyzer_state(
@@ -652,7 +680,7 @@ def segment_microsectors(
     session_components = _resolve_session_components(records, baseline_record)
 
     yaw_rate_cache = [_compute_yaw_rate(records, idx) for idx in range(len(records))]
-    node_delta_cache: Sequence[Mapping[str, float]] | None = None
+    node_delta_cache: List[Mapping[str, float]] | None = None
 
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
@@ -737,7 +765,9 @@ def segment_microsectors(
     )
     recomputed_bundles = recompute_result.bundles
     analyzer_states = recompute_result.analyzer_states
-    node_delta_cache = tuple(_bundle_node_delta(bundle) for bundle in recomputed_bundles)
+    node_delta_cache = _refresh_node_delta_cache(
+        node_delta_cache, recomputed_bundles
+    )
 
     weights_adjusted, weight_start_index = _adjust_phase_weights_with_dominance(
         specs,
@@ -762,7 +792,11 @@ def segment_microsectors(
         )
         recomputed_bundles = recompute_result.bundles
         analyzer_states = recompute_result.analyzer_states
-        node_delta_cache = tuple(_bundle_node_delta(bundle) for bundle in recomputed_bundles)
+        node_delta_cache = _refresh_node_delta_cache(
+            node_delta_cache,
+            recomputed_bundles,
+            start_index=recompute_start,
+        )
         _invalidate_goal_cache(specs, recompute_start)
 
     goal_nu_f_lookup: Dict[int, float] = {}
@@ -839,7 +873,11 @@ def segment_microsectors(
         )
         recomputed_bundles = recompute_result.bundles
         analyzer_states = recompute_result.analyzer_states
-        node_delta_cache = tuple(_bundle_node_delta(bundle) for bundle in recomputed_bundles)
+        node_delta_cache = _refresh_node_delta_cache(
+            node_delta_cache,
+            recomputed_bundles,
+            start_index=goal_recompute_start,
+        )
         _invalidate_goal_cache(specs, goal_recompute_start)
 
     for spec in specs:
@@ -1848,7 +1886,11 @@ def _estimate_entropy(
     end: int,
     *,
     bundles: Sequence[SupportsEPIBundle] | None = None,
-    node_delta_cache: Sequence[Mapping[str, float]] | None = None,
+    node_delta_cache: (
+        Sequence[Mapping[str, float]]
+        | MutableSequence[Mapping[str, float]]
+        | None
+    ) = None,
     cache_offset: int = 0,
 ) -> float:
     node_weights: Dict[str, float] = defaultdict(float)
@@ -2039,7 +2081,11 @@ def _phase_nu_f_targets(
     *,
     context_matrix: ContextMatrix | None = None,
     sample_context: Sequence[ContextFactors] | None = None,
-    node_delta_cache: Sequence[Mapping[str, float]] | None = None,
+    node_delta_cache: (
+        Sequence[Mapping[str, float]]
+        | MutableSequence[Mapping[str, float]]
+        | None
+    ) = None,
     cache_window: Tuple[int, int] | None = None,
 ) -> Tuple[
     Dict[PhaseLiteral, Tuple[str, ...]],
@@ -2066,9 +2112,9 @@ def _phase_nu_f_targets(
     if node_delta_cache is None:
         effective_stop = min(window_stop, len(bundles))
         effective_start = min(max(0, window_start), effective_stop)
-        node_delta_cache = tuple(
+        node_delta_cache = [
             _bundle_node_delta(bundles[idx]) for idx in range(effective_start, effective_stop)
-        )
+        ]
         cache_offset = effective_start
     else:
         expected_length = max(0, window_stop - window_start)
@@ -2211,7 +2257,11 @@ def _build_goals(
     *,
     context_matrix: ContextMatrix | None = None,
     sample_context: Sequence[ContextFactors] | None = None,
-    node_delta_cache: Sequence[Mapping[str, float]] | None = None,
+    node_delta_cache: (
+        Sequence[Mapping[str, float]]
+        | MutableSequence[Mapping[str, float]]
+        | None
+    ) = None,
     phase_gradients: Mapping[PhaseLiteral, float] | None = None,
     phase_dominant_nodes: Mapping[PhaseLiteral, Tuple[str, ...]] | None = None,
     phase_nu_f_targets: Mapping[PhaseLiteral, float] | None = None,
@@ -2690,7 +2740,11 @@ def _adjust_phase_weights_with_dominance(
     context_matrix: ContextMatrix,
     sample_context: Sequence[ContextFactors],
     yaw_rates: Sequence[float],
-    node_delta_cache: Sequence[Mapping[str, float]] | None = None,
+    node_delta_cache: (
+        Sequence[Mapping[str, float]]
+        | MutableSequence[Mapping[str, float]]
+        | None
+    ) = None,
 ) -> tuple[bool, int | None]:
     adjusted = False
     first_index: int | None = None
