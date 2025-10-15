@@ -40,6 +40,7 @@ class CircularReorderBuffer(Generic[T]):
         self._keys: list[int] = [0] * capacity
         self._start = 0
         self._size = 0
+        self._keys_present: set[int] = set()
 
     def __len__(self) -> int:
         return self._size
@@ -54,12 +55,10 @@ class CircularReorderBuffer(Generic[T]):
     def clear(self) -> None:
         self._start = 0
         self._size = 0
+        self._keys_present.clear()
 
     def contains_key(self, key: int) -> bool:
-        for index in range(self._size):
-            if self._keys[self._logical_index(index)] == key:
-                return True
-        return False
+        return key in self._keys_present
 
     def peek_oldest(self) -> Optional[tuple[float, T]]:
         if not self._size:
@@ -78,6 +77,7 @@ class CircularReorderBuffer(Generic[T]):
         self._packets[idx] = None
         self._start = (self._start + 1) % self._capacity
         self._size -= 1
+        self._keys_present.discard(self._keys[idx])
         if packet is None:  # pragma: no cover - defensive guard
             raise RuntimeError("CircularReorderBuffer stored None packet")
         return arrival, packet
@@ -104,6 +104,7 @@ class CircularReorderBuffer(Generic[T]):
         self._packets[idx] = packet
         self._keys[idx] = key
         self._size += 1
+        self._keys_present.add(key)
         return position, evicted
 
     def __iter__(self) -> Iterator[tuple[float, T, int]]:
@@ -146,5 +147,6 @@ class CircularReorderBuffer(Generic[T]):
         self._packets[idx] = None
         self._start = (self._start + 1) % self._capacity
         self._size -= 1
+        self._keys_present.discard(key)
         return arrival, packet, key
 
