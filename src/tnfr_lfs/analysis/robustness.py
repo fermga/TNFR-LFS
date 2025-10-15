@@ -143,37 +143,61 @@ def _phase_sample_map(
     return ordered
 
 
-def _bundle_delta_and_sense_series(
-    bundles: Sequence[EPIBundle], sample_indices: Sequence[int]
+def _bundle_delta_and_sense_values(
+    bundles: Sequence[EPIBundle],
 ) -> tuple[list[float], list[float]]:
+    """Return parallel lists with per-bundle ``delta_nfr`` and ``sense_index`` values."""
+
     delta_values: list[float] = []
     sense_values: list[float] = []
-    bundle_count = len(bundles)
 
-    for index in sample_indices:
-        if not 0 <= index < bundle_count:
-            continue
-        bundle = bundles[index]
-        delta_value = getattr(bundle, "delta_nfr", None)
-        if delta_value is not None:
-            try:
-                delta_numeric = float(delta_value)
-            except (TypeError, ValueError):
-                pass
-            else:
-                if math.isfinite(delta_numeric):
-                    delta_values.append(delta_numeric)
-        sense_value = getattr(bundle, "sense_index", None)
-        if sense_value is not None:
-            try:
-                sense_numeric = float(sense_value)
-            except (TypeError, ValueError):
-                pass
-            else:
-                if math.isfinite(sense_numeric):
-                    sense_values.append(sense_numeric)
+    for bundle in bundles:
+        delta_raw = getattr(bundle, "delta_nfr", math.nan)
+        sense_raw = getattr(bundle, "sense_index", math.nan)
+
+        try:
+            delta_numeric = float(delta_raw)
+        except (TypeError, ValueError):
+            delta_numeric = math.nan
+        if not math.isfinite(delta_numeric):
+            delta_numeric = math.nan
+        delta_values.append(delta_numeric)
+
+        try:
+            sense_numeric = float(sense_raw)
+        except (TypeError, ValueError):
+            sense_numeric = math.nan
+        if not math.isfinite(sense_numeric):
+            sense_numeric = math.nan
+        sense_values.append(sense_numeric)
 
     return delta_values, sense_values
+
+
+def _bundle_delta_and_sense_series(
+    delta_values: Sequence[float],
+    sense_values: Sequence[float],
+    sample_indices: Sequence[int],
+) -> tuple[list[float], list[float]]:
+    """Filter finite ``delta_nfr`` and ``sense_index`` values for the given indices."""
+
+    filtered_delta: list[float] = []
+    filtered_sense: list[float] = []
+    max_index = min(len(delta_values), len(sense_values))
+
+    for index in sample_indices:
+        if not 0 <= index < max_index:
+            continue
+
+        delta_value = delta_values[index]
+        if math.isfinite(delta_value):
+            filtered_delta.append(delta_value)
+
+        sense_value = sense_values[index]
+        if math.isfinite(sense_value):
+            filtered_sense.append(sense_value)
+
+    return filtered_delta, filtered_sense
 
 
 def compute_session_robustness(
@@ -196,6 +220,8 @@ def compute_session_robustness(
         phase_thresholds = thresholds.get("phase", {}) or {}
     robustness: dict[str, Any] = {}
 
+    delta_series, sense_series = _bundle_delta_and_sense_values(bundle_list)
+
     lap_groups = _lap_groups(bundle_list, lap_indices or [], lap_metadata or [])
     if lap_groups:
         entries: list[dict[str, Any]] = []
@@ -207,7 +233,9 @@ def compute_session_robustness(
         )
         for lap_index, label, indices in lap_groups:
             delta_values, si_values = _bundle_delta_and_sense_series(
-                bundle_list, indices
+                delta_series,
+                sense_series,
+                indices,
             )
             entries.append(
                 {
@@ -244,7 +272,9 @@ def compute_session_robustness(
                 }
         for phase, indices in phase_map.items():
             delta_values, si_values = _bundle_delta_and_sense_series(
-                bundle_list, indices
+                delta_series,
+                sense_series,
+                indices,
             )
             phase_limits = per_phase_thresholds.get(phase, phase_defaults)
             delta_limit = None
