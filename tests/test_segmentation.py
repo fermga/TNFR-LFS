@@ -19,6 +19,7 @@ from tnfr_core.epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
     EPIExtractor,
+    NaturalFrequencySettings,
     TelemetryRecord,
     delta_nfr_by_node,
     resolve_nu_f_by_node,
@@ -34,6 +35,8 @@ from tnfr_core.metrics import (
     WindowMetrics,
 )
 from tnfr_core.operator_detection import silence_event_payloads
+from tnfr_core.operators import cache as cache_module
+from tnfr_core.operators.interfaces import SupportsTelemetrySample
 from tnfr_core.metrics import segmentation as metrics_segmentation
 from tnfr_core.segmentation import (
     Microsector,
@@ -211,6 +214,196 @@ def test_segment_microsectors_incremental_recompute_matches_full(
         )
 
     assert incremental_result == full_result
+
+
+def test_recompute_bundles_partial_reuse_reduces_resolve_calls(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    records = list(synthetic_records[:80])
+    bundles = list(synthetic_bundles[: len(records)])
+    baseline = DeltaCalculator.derive_baseline(records)
+    phase_assignments = {idx: PHASE_SEQUENCE[0] for idx in range(len(records))}
+    weight_lookup = {idx: DEFAULT_PHASE_WEIGHTS for idx in range(len(records))}
+
+    base_result = metrics_segmentation._recompute_bundles(
+        records,
+        bundles,
+        baseline,
+        phase_assignments,
+        weight_lookup,
+    )
+    base_bundles = list(base_result.bundles)
+    base_states = list(base_result.analyzer_states)
+
+    change_index = len(records) // 2
+    adjusted_lookup = dict(weight_lookup)
+    for idx in range(change_index, len(records)):
+        adjusted_lookup[idx] = {"__default__": 1.5}
+
+    reference_result = metrics_segmentation._recompute_bundles(
+        records,
+        list(base_bundles),
+        baseline,
+        phase_assignments,
+        adjusted_lookup,
+    )
+    reference_bundles = list(reference_result.bundles)
+
+    resolve_call_count = 0
+    original_resolve = metrics_segmentation.resolve_nu_f_by_node
+
+    def _counting_resolve(*args, **kwargs):
+        nonlocal resolve_call_count
+        resolve_call_count += 1
+        return original_resolve(*args, **kwargs)
+
+    with monkeypatch.context() as patch_context:
+        resolve_call_count = 0
+        patch_context.setattr(
+            metrics_segmentation,
+            "resolve_nu_f_by_node",
+            _counting_resolve,
+        )
+        naive_result = metrics_segmentation._recompute_bundles(
+            records,
+            list(base_bundles),
+            baseline,
+            phase_assignments,
+            adjusted_lookup,
+            start_index=change_index,
+            analyzer_states=None,
+        )
+        naive_calls = resolve_call_count
+
+    assert list(naive_result.bundles) == reference_bundles
+    assert naive_calls == len(records)
+
+    with monkeypatch.context() as patch_context:
+        resolve_call_count = 0
+        patch_context.setattr(
+            metrics_segmentation,
+            "resolve_nu_f_by_node",
+            _counting_resolve,
+        )
+        cached_result = metrics_segmentation._recompute_bundles(
+            records,
+            list(base_bundles),
+            baseline,
+            phase_assignments,
+            adjusted_lookup,
+            start_index=change_index,
+            analyzer_states=base_states,
+        )
+        cached_calls = resolve_call_count
+
+    assert list(cached_result.bundles) == reference_bundles
+    assert cached_calls < naive_calls
+    assert cached_calls == len(records) - change_index
+
+
+def test_recompute_bundles_restored_history_invalidates_dynamic_cache(
+    synthetic_records, synthetic_bundles, monkeypatch
+) -> None:
+    records = list(synthetic_records[:60])
+    bundles = list(synthetic_bundles[: len(records)])
+    baseline = DeltaCalculator.derive_baseline(records)
+    phase_assignments = {idx: PHASE_SEQUENCE[0] for idx in range(len(records))}
+    weight_lookup = {idx: DEFAULT_PHASE_WEIGHTS for idx in range(len(records))}
+
+    record_index = {id(record): idx for idx, record in enumerate(records)}
+
+    class _TinyWindowAnalyzer(metrics_segmentation.NaturalFrequencyAnalyzer):
+        instances: list["_TinyWindowAnalyzer"] = []
+
+        def __init__(self) -> None:  # pragma: no cover - exercised via recompute
+            settings = NaturalFrequencySettings(
+                min_window_seconds=0.05,
+                max_window_seconds=0.1,
+            )
+            super().__init__(settings)
+            self.removed_records: list[SupportsTelemetrySample] = []
+            _TinyWindowAnalyzer.instances.append(self)
+
+        def _append_record(self, record):  # pragma: no cover - delegated to super
+            before = tuple(self._history)
+            super()._append_record(record)
+            if not before:
+                return
+            remaining = set(self._history)
+            for sample in before:
+                if sample not in remaining:
+                    self.removed_records.append(sample)
+
+    with monkeypatch.context() as patch_context:
+        patch_context.setattr(
+            metrics_segmentation,
+            "NaturalFrequencyAnalyzer",
+            _TinyWindowAnalyzer,
+        )
+
+        invalidated: list[int] = []
+        original_invalidate = cache_module.invalidate_dynamic_record
+
+        probe = metrics_segmentation.NaturalFrequencyAnalyzer()
+        assert probe._dynamic_cache_active()
+        _TinyWindowAnalyzer.instances.clear()
+
+        def _tracking_invalidate(record):
+            invalidated.append(record_index.get(id(record), -1))
+            return original_invalidate(record)
+
+        patch_context.setattr(
+            cache_module,
+            "invalidate_dynamic_record",
+            _tracking_invalidate,
+        )
+
+        base_result = metrics_segmentation._recompute_bundles(
+            records,
+            bundles,
+            baseline,
+            phase_assignments,
+            weight_lookup,
+        )
+        base_analyzer = _TinyWindowAnalyzer.instances[-1]
+        base_removed = [
+            record_index.get(id(sample), -1)
+            for sample in base_analyzer.removed_records
+        ]
+        base_invalidations = [index for index in invalidated if index >= 0]
+        assert any(index >= 0 for index in base_removed)
+        if base_invalidations:
+            assert base_invalidations[0] == base_removed[0]
+        base_states = list(base_result.analyzer_states)
+
+        change_index = max(2, len(records) // 2)
+        state = base_states[change_index - 1]
+        assert state is not None and state.history_start is not None
+
+        invalidated.clear()
+        _TinyWindowAnalyzer.instances.clear()
+        cached_result = metrics_segmentation._recompute_bundles(
+            records,
+            list(base_result.bundles),
+            baseline,
+            phase_assignments,
+            weight_lookup,
+            start_index=change_index,
+            analyzer_states=base_states,
+        )
+        cached_analyzer = _TinyWindowAnalyzer.instances[-1]
+        cached_removed = [
+            record_index.get(id(sample), -1)
+            for sample in cached_analyzer.removed_records
+        ]
+
+        assert cached_result.bundles == base_result.bundles
+        observed = [index for index in invalidated if index >= 0]
+        assert cached_removed, "expected samples to be dropped from analyzer history"
+        first_removed = next(index for index in cached_removed if index >= 0)
+        if observed:
+            assert observed[0] == state.history_start
+        assert first_removed == state.history_start
 
 
 def test_segment_microsectors_caches_delta_signature(
