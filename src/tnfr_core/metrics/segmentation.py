@@ -2473,10 +2473,17 @@ def _build_goals(
 
     for phase in PHASE_SEQUENCE:
         start, stop = boundaries[phase]
-        indices = [idx for idx in range(start, min(stop, len(bundles)))]
-        segment = [bundles[idx] for idx in indices]
-        phase_records = [records[idx] for idx in indices]
-        phase_yaw_rates = [_cached_yaw_rate(yaw_rates, idx) for idx in indices]
+        stop = max(start, min(stop, len(bundles), len(records)))
+        indices = range(start, stop)
+        segment = list(bundles[start:stop])
+        phase_records = list(records[start:stop])
+        yaw_slice = list(yaw_rates[start:stop]) if yaw_rates else []
+        if len(yaw_slice) < len(segment):
+            yaw_slice.extend(
+                _cached_yaw_rate(yaw_rates, idx)
+                for idx in range(start + len(yaw_slice), start + len(segment))
+            )
+        phase_yaw_rates = yaw_slice
         if segment:
             multipliers: List[float] = []
 
