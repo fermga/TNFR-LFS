@@ -7,5 +7,6 @@ Operator primitives exposed by :mod:`tnfr_core`.
 - [`tnfr_core.operators.interfaces`](interfaces/index.md)
 - [`tnfr_core.operators.operator_detection`](operator_detection/index.md)
 - [`tnfr_core.operators.operators`](operators/index.md)
+- [`tnfr_core.operators.structural`](structural/index.md)
 - [`tnfr_core.operators.structural_time`](structural_time/index.md)
 

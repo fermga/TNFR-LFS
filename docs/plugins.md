@@ -50,7 +50,7 @@ Plugins declare their dependencies on TNFR operators through the
 `tnfr_lfs.plugins.register_plugin_metadata` helper (or its
 `tnfr_lfs.plugins.plugin_metadata` decorator variant).  Each plugin registers a
 sequence of operator identifiers that correspond to the public names exported by
-[`tnfr_core.operators`](../src/tnfr_core/operators/operators.py).  The identifiers
+[`tnfr_core.operators`](../src/tnfr_core/operators/__init__.py).  The identifiers
 are validated against the module's `__all__` contents so pipelines can rely on
 the metadata at runtime.  The canonical list of identifiers can be retrieved via
 `tnfr_lfs.plugins.available_operator_identifiers()`.
