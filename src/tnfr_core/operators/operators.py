@@ -91,7 +91,6 @@ from tnfr_core.operators.structural.epi_evolution import (
     evolve_epi,
 )
 from tnfr_core.operators.pipeline import (
-    PipelineDependencies,
     orchestrate_delta_metrics as pipeline_orchestrate_delta_metrics,
 )
 from tnfr_core.operators.pipeline.coherence import (
@@ -1577,118 +1576,47 @@ def orchestrate_delta_metrics(
 ) -> Mapping[str, object]:
     """Pipeline orchestration producing aggregated ΔNFR and Si metrics."""
 
+    from tnfr_core.operators.pipeline.delta_workflow import (
+        build_delta_metrics_dependencies,
+    )
+
     xp_module = jnp if _HAS_JAX else np
     structural_component = StructuralDeltaComponent()
 
-    def _reception_stage(
-        segments: Sequence[Sequence[TelemetryRecord]],
-    ) -> tuple[Dict[str, object], Sequence[TelemetryRecord]]:
-        return pipeline_stage_reception(segments, reception_fn=reception_operator)
-
-    def _dissonance_wrapper(
-        series: Sequence[float],
-        target: float,
-        *,
-        microsectors: Sequence[SupportsMicrosector] | None = None,
-        bundles: Sequence[SupportsEPIBundle] | None = None,
-    ) -> DissonanceBreakdown:
-        return dissonance_breakdown_operator(
-            series,
-            target,
-            microsectors=microsectors,
-            bundles=bundles,
-        )
-
-    def _coherence_stage(
-        bundles: Sequence[SupportsEPIBundle],
-        objectives: Mapping[str, float],
-    ) -> Dict[str, object]:
-        return pipeline_stage_coherence(
-            bundles,
-            objectives,
-            coherence_window=coherence_window,
-            microsectors=microsectors,
-            load_context_matrix=load_context_matrix,
-            resolve_context_from_bundle=resolve_context_from_bundle,
-            apply_contextual_delta=apply_contextual_delta,
-            update_bundles=_update_bundles,
-            coherence_operator=coherence_operator,
-            dissonance_operator=_dissonance_wrapper,
-            coupling_operator=coupling_operator,
-            resonance_operator=resonance_operator,
-            empty_breakdown_factory=_zero_dissonance_breakdown,
-        )
-
-    def _pairwise(series_by_node: Mapping[str, Sequence[float]], pairs: Sequence[tuple[str, str]]) -> Dict[str, float]:
-        return pairwise_coupling_operator(series_by_node, pairs=pairs)
-
-    def _nodal_stage(bundles_seq: Sequence[SupportsEPIBundle]) -> Dict[str, object]:
-        return pipeline_stage_nodal(
-            bundles_seq,
-            load_context_matrix=load_context_matrix,
-            xp=xp_module,
-            structural_component=structural_component,
-            pairwise_coupling=_pairwise,
-        )
-
-    def _epi_stage(
-        records: Sequence[SupportsTelemetrySample],
-        *,
-        bundles: Sequence[SupportsEPIBundle] | None = None,
-        phase_assignments: Mapping[int, str] | None = None,
-        phase_weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]] | None = None,
-        global_phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
-    ) -> Dict[str, object]:
-        return pipeline_stage_epi(
-            records,
-            bundles=bundles,
-            phase_assignments=phase_assignments,
-            phase_weight_lookup=phase_weight_lookup,
-            global_phase_weights=global_phase_weights,
-            ensure_bundle=_ensure_bundle,
-            normalise_node_evolution=_normalise_node_evolution,
-        )
-
-    def _recursive_filter(series: Sequence[float], seed: float, decay: float) -> Sequence[float]:
-        return recursive_filter_operator(series, seed=seed, decay=decay)
-
-    def _sense_stage(series: Sequence[float]) -> Dict[str, object]:
-        return pipeline_stage_sense(
-            series,
-            recursion_decay=recursion_decay,
-            recursive_filter=_recursive_filter,
-        )
-
-    def _variability_stage(
-        microsectors_arg: Sequence[SupportsMicrosector] | None,
-        bundles_arg: Sequence[SupportsEPIBundle],
-        lap_indices: Sequence[int],
-        lap_metadata: Sequence[Mapping[str, object]],
-    ) -> Sequence[Mapping[str, object]]:
-        return pipeline_microsector_variability(
-            microsectors_arg,
-            bundles_arg,
-            lap_indices,
-            lap_metadata,
-            xp=xp_module,
-            has_jax=_HAS_JAX,
-            delta_integral=_delta_integral_series,
-            variance_payload=_variance_payload,
-        )
-
-    dependencies = PipelineDependencies(
+    dependencies = build_delta_metrics_dependencies(
+        coherence_window=coherence_window,
+        recursion_decay=recursion_decay,
+        microsectors=microsectors,
+        xp_module=xp_module,
+        has_jax=_HAS_JAX,
+        structural_component=structural_component,
         emission_operator=emission_operator,
-        reception_stage=_reception_stage,
-        coherence_stage=_coherence_stage,
-        nodal_stage=_nodal_stage,
-        epi_stage=_epi_stage,
-        sense_stage=_sense_stage,
-        variability_stage=_variability_stage,
+        reception_operator=reception_operator,
+        dissonance_breakdown_operator=dissonance_breakdown_operator,
+        coherence_operator=coherence_operator,
+        coupling_operator=coupling_operator,
+        resonance_operator=resonance_operator,
+        pairwise_coupling_operator=pairwise_coupling_operator,
+        recursive_filter_operator=recursive_filter_operator,
+        stage_reception=pipeline_stage_reception,
+        stage_coherence=pipeline_stage_coherence,
+        stage_nodal=pipeline_stage_nodal,
+        stage_epi=pipeline_stage_epi,
+        stage_sense=pipeline_stage_sense,
+        stage_variability=pipeline_microsector_variability,
         aggregate_events=pipeline_aggregate_operator_events,
-        window_metrics=pipeline_compute_window_metrics,
+        compute_window_metrics=pipeline_compute_window_metrics,
         phase_context_resolver=_phase_context_from_microsectors,
         network_memory_extractor=_extract_network_memory,
         zero_breakdown_factory=_zero_dissonance_breakdown,
+        load_context_matrix=load_context_matrix,
+        resolve_context_from_bundle=resolve_context_from_bundle,
+        apply_contextual_delta=apply_contextual_delta,
+        update_bundles=_update_bundles,
+        ensure_bundle=_ensure_bundle,
+        normalise_node_evolution=_normalise_node_evolution,
+        delta_integral=_delta_integral_series,
+        variance_payload=_variance_payload,
     )
 
     return pipeline_orchestrate_delta_metrics(
