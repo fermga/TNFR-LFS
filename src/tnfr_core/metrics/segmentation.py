@@ -691,6 +691,61 @@ def _segment_index_range(metadata: object, start: int, end: int) -> range:
     return range(start, end + 1)
 
 
+def _resolve_segment_adjustments(
+    multiplier_meta: object,
+    *,
+    start: int,
+    end: int,
+    default_adjusted_delta: Sequence[float],
+    delta_series: Sequence[float],
+    sense_series: Sequence[float],
+    sample_multipliers: Sequence[float | None],
+) -> Tuple[Tuple[float, ...], float, float, int]:
+    """Resolve adjusted ΔNFR values and cached sums for a segment window."""
+
+    if isinstance(multiplier_meta, Mapping):
+        adjusted: list[float] = []
+        delta_sum = 0.0
+        si_sum = 0.0
+        count = 0
+        for offset in range(start, end + 1):
+            if offset < 0 or offset >= len(delta_series):
+                break
+            base_value: float
+            if offset < len(default_adjusted_delta):
+                base_value = float(default_adjusted_delta[offset])
+            else:
+                multiplier = (
+                    sample_multipliers[offset]
+                    if offset < len(sample_multipliers)
+                    else None
+                )
+                factor = float(multiplier) if multiplier is not None else 1.0
+                base_value = float(delta_series[offset]) * factor
+            override = multiplier_meta.get(offset)
+            if override is not None:
+                adjusted_value = float(delta_series[offset]) * float(override)
+            else:
+                adjusted_value = base_value
+            adjusted.append(adjusted_value)
+            delta_sum += adjusted_value
+            if offset < len(sense_series):
+                si_sum += float(sense_series[offset])
+            count += 1
+        return tuple(adjusted), float(delta_sum), float(si_sum), count
+
+    indices = _segment_index_range(multiplier_meta, start, end)
+    clamped_start = max(indices.start, 0)
+    clamped_stop = min(indices.stop, len(default_adjusted_delta), len(sense_series))
+    if clamped_stop <= clamped_start:
+        return tuple(), 0.0, 0.0, 0
+    adjusted_slice = tuple(default_adjusted_delta[clamped_start:clamped_stop])
+    delta_sum = float(sum(adjusted_slice))
+    sense_slice = sense_series[clamped_start:clamped_stop]
+    si_sum = float(sum(float(value) for value in sense_slice))
+    return adjusted_slice, delta_sum, si_sum, len(adjusted_slice)
+
+
 def _serialise_sample_context(
     metadata: object,
     start: int,
@@ -841,7 +896,7 @@ def segment_microsectors(
         return []
 
     sample_context: List[ContextFactors] = []
-    sample_multipliers: List[float] = []
+    sample_multipliers: List[float | None] = []
     for record in records:
         factors = resolve_context_from_record(
             context_matrix,
@@ -859,6 +914,26 @@ def segment_microsectors(
     node_delta_cache: List[Mapping[str, float]] | None = None
     node_nu_cache: List[Mapping[str, float]] | None = None
     track_gradient_cache: List[float] | None = None
+
+    delta_series: List[float] = []
+    sense_series: List[float] = []
+    default_adjusted_delta: List[float] = []
+
+    def _refresh_series() -> None:
+        nonlocal delta_series, sense_series, default_adjusted_delta
+        delta_series = [float(bundle.delta_nfr) for bundle in recomputed_bundles]
+        sense_series = [float(bundle.sense_index) for bundle in recomputed_bundles]
+        series_length = min(total_samples, len(delta_series))
+        default_adjusted_delta = [
+            delta_series[i]
+            * (
+                float(sample_multipliers[i])
+                if i < len(sample_multipliers)
+                and sample_multipliers[i] is not None
+                else 1.0
+            )
+            for i in range(series_length)
+        ]
 
     for index, (start, end) in enumerate(segments):
         phase_boundaries = _compute_phase_boundaries(records, start, end)
@@ -960,6 +1035,7 @@ def segment_microsectors(
     track_gradient_cache = _refresh_track_gradient_cache(
         track_gradient_cache, recomputed_bundles
     )
+    _refresh_series()
 
     _prepare_fallback_contexts(
         specs,
@@ -1011,6 +1087,7 @@ def segment_microsectors(
             recomputed_bundles,
             start_index=recompute_start,
         )
+        _refresh_series()
         _prepare_fallback_contexts(
             specs,
             recomputed_bundles,
@@ -1024,35 +1101,26 @@ def segment_microsectors(
         start = spec["start"]
         end = spec["end"]
         multiplier_meta = spec.get("context_multipliers")
-        multiplier_indices = _segment_index_range(multiplier_meta, start, end)
-        adjusted_deltas: List[float] = []
-        delta_sum = 0.0
-        si_sum = 0.0
-        count = 0
-        multiplier_iter = iter(multiplier_indices)
-        for idx in range(start, end + 1):
-            try:
-                offset = next(multiplier_iter)
-            except StopIteration:
-                break
-            if not (0 <= idx < len(recomputed_bundles)):
-                break
-            bundle = recomputed_bundles[idx]
-            multiplier = None
-            if isinstance(multiplier_meta, Mapping):
-                multiplier = multiplier_meta.get(offset)
-            if multiplier is None and 0 <= offset < len(sample_multipliers):
-                multiplier = sample_multipliers[offset]
-            if multiplier is None:
-                multiplier = 1.0
-            adjusted_value = bundle.delta_nfr * multiplier
-            adjusted_deltas.append(adjusted_value)
-            delta_sum += adjusted_value
-            si_sum += bundle.sense_index
-            count += 1
-        spec["adjusted_deltas"] = tuple(adjusted_deltas)
+        (
+            adjusted_payload,
+            delta_sum,
+            si_sum,
+            count,
+        ) = _resolve_segment_adjustments(
+            multiplier_meta,
+            start=start,
+            end=end,
+            default_adjusted_delta=default_adjusted_delta,
+            delta_series=delta_series,
+            sense_series=sense_series,
+            sample_multipliers=sample_multipliers,
+        )
+        spec["adjusted_deltas"] = adjusted_payload
         if count == 0:
             raise StatisticsError("segment window must contain at least one sample")
+        spec["_delta_sum"] = float(delta_sum)
+        spec["_si_sum"] = float(si_sum)
+        spec["_delta_count"] = count
         spec["delta_signature"] = float(delta_sum / count)
         spec["avg_si"] = float(si_sum / count)
         archetype = _classify_archetype(
@@ -1123,6 +1191,7 @@ def segment_microsectors(
             recomputed_bundles,
             start_index=goal_recompute_start,
         )
+        _refresh_series()
         _invalidate_goal_cache(specs, goal_recompute_start)
 
     gradient_prefix_sums: List[float] = [0.0]
@@ -1160,45 +1229,46 @@ def segment_microsectors(
         stored_deltas = spec.get("adjusted_deltas")
         if stored_deltas is None:
             multiplier_meta = spec.get("context_multipliers")
-            multiplier_indices = _segment_index_range(multiplier_meta, start, end)
-            adjusted_deltas = []
-            delta_sum = 0.0
-            si_sum = 0.0
-            count = 0
-            multiplier_iter = iter(multiplier_indices)
-            for idx in range(start, end + 1):
-                try:
-                    offset = next(multiplier_iter)
-                except StopIteration:
-                    break
-                if not (0 <= idx < len(recomputed_bundles)):
-                    break
-                bundle = recomputed_bundles[idx]
-                multiplier = None
-                if isinstance(multiplier_meta, Mapping):
-                    multiplier = multiplier_meta.get(offset)
-                if multiplier is None and 0 <= offset < len(sample_multipliers):
-                    multiplier = sample_multipliers[offset]
-                if multiplier is None:
-                    multiplier = 1.0
-                adjusted_value = bundle.delta_nfr * multiplier
-                adjusted_deltas.append(adjusted_value)
-                delta_sum += adjusted_value
-                si_sum += bundle.sense_index
-                count += 1
+            (
+                stored_deltas,
+                delta_sum,
+                si_sum,
+                count,
+            ) = _resolve_segment_adjustments(
+                multiplier_meta,
+                start=start,
+                end=end,
+                default_adjusted_delta=default_adjusted_delta,
+                delta_series=delta_series,
+                sense_series=sense_series,
+                sample_multipliers=sample_multipliers,
+            )
             if count == 0:
                 raise StatisticsError("segment window must contain at least one sample")
-            stored_deltas = tuple(adjusted_deltas)
+            stored_deltas = tuple(stored_deltas)
             spec["adjusted_deltas"] = stored_deltas
+            spec["_delta_sum"] = float(delta_sum)
+            spec["_si_sum"] = float(si_sum)
+            spec["_delta_count"] = count
             spec.setdefault("delta_signature", float(delta_sum / count))
             spec.setdefault("avg_si", float(si_sum / count))
         delta_signature = spec.get("delta_signature")
         if delta_signature is None:
-            delta_signature = fmean(stored_deltas)
+            delta_sum = cast(float | None, spec.get("_delta_sum"))
+            sample_count = cast(int | None, spec.get("_delta_count"))
+            if delta_sum is not None and sample_count:
+                delta_signature = delta_sum / sample_count
+            else:
+                delta_signature = fmean(stored_deltas)
             spec["delta_signature"] = float(delta_signature)
         avg_si = spec.get("avg_si")
         if avg_si is None:
-            avg_si = fmean(bundle.sense_index for bundle in bundle_window)
+            si_sum = cast(float | None, spec.get("_si_sum"))
+            sample_count = cast(int | None, spec.get("_delta_count"))
+            if si_sum is not None and sample_count:
+                avg_si = si_sum / sample_count
+            else:
+                avg_si = fmean(bundle.sense_index for bundle in bundle_window)
             spec["avg_si"] = float(avg_si)
         archetype = _classify_archetype(
             curvature,
@@ -3610,6 +3680,9 @@ _BUNDLE_DERIVED_FIELDS = (
     "adjusted_deltas",
     "delta_signature",
     "avg_si",
+    "_delta_sum",
+    "_si_sum",
+    "_delta_count",
     "phase_axis_targets",
     "phase_axis_weights",
     "dominant_nodes",

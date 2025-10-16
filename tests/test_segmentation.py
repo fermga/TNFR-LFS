@@ -46,6 +46,54 @@ from tnfr_core.segmentation import (
 )
 
 
+def test_resolve_segment_adjustments_with_range_metadata() -> None:
+    metadata = (1, 3)
+    delta_series = [0.5, 1.0, 1.5, 2.0]
+    sample_multipliers = [2.0, 2.0, 2.0, 2.0]
+    default_adjusted_delta = [
+        delta_series[i] * sample_multipliers[i] for i in range(len(delta_series))
+    ]
+    sense_series = [0.1, 0.2, 0.3, 0.4]
+
+    adjusted, delta_sum, si_sum, count = segmentation_module._resolve_segment_adjustments(
+        metadata,
+        start=1,
+        end=3,
+        default_adjusted_delta=default_adjusted_delta,
+        delta_series=delta_series,
+        sense_series=sense_series,
+        sample_multipliers=sample_multipliers,
+    )
+
+    assert adjusted == (2.0, 3.0, 4.0)
+    assert delta_sum == pytest.approx(9.0)
+    assert si_sum == pytest.approx(0.9)
+    assert count == 3
+
+
+def test_resolve_segment_adjustments_with_mapping_overrides() -> None:
+    metadata = {2: 0.5}
+    delta_series = [0.5, 1.0, 1.5, 2.0]
+    default_adjusted_delta = delta_series[:]
+    sense_series = [0.1, 0.2, 0.3, 0.4]
+    sample_multipliers: List[float | None] = [None, None, None, None]
+
+    adjusted, delta_sum, si_sum, count = segmentation_module._resolve_segment_adjustments(
+        metadata,
+        start=1,
+        end=3,
+        default_adjusted_delta=default_adjusted_delta,
+        delta_series=delta_series,
+        sense_series=sense_series,
+        sample_multipliers=sample_multipliers,
+    )
+
+    assert adjusted == pytest.approx((1.0, 0.75, 2.0))
+    assert delta_sum == pytest.approx(3.75)
+    assert si_sum == pytest.approx(0.9)
+    assert count == 3
+
+
 def test_segment_microsectors_creates_goals_with_stable_assignments(
     synthetic_microsectors,
 ):
