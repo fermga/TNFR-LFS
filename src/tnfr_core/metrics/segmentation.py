@@ -829,9 +829,7 @@ def segment_microsectors(
     sample_rate = estimate_sample_rate(records)
     steer_series = _extract_signal(records, "steer")
     lat_series = _extract_signal(records, "lateral_accel")
-    yaw_rate_cache = [
-        _resolve_yaw_rate(records, idx) for idx in range(len(records))
-    ]
+    yaw_rate_cache = _precompute_yaw_rates(records)
     steer_norm = _normalise_signal(steer_series)
     yaw_norm = _normalise_signal(yaw_rate_cache)
     lat_norm = _normalise_signal(lat_series)
@@ -2451,6 +2449,37 @@ def _resolve_yaw_rate(
     if math.isfinite(yaw_rate):
         return yaw_rate
     return _compute_yaw_rate(records, index, record=record, yaw_rate=yaw_rate)
+
+
+def _precompute_yaw_rates(
+    records: Sequence[SupportsTelemetrySample],
+) -> List[float]:
+    """Materialise yaw-rate samples with a single pass over ``records``."""
+
+    total = len(records)
+    if total == 0:
+        return []
+
+    yaw_rates: List[float] = [0.0] * total
+
+    for index, record in enumerate(records):
+        raw_value: float
+        try:
+            raw_value = float(getattr(record, "yaw_rate"))
+        except (AttributeError, TypeError, ValueError):
+            raw_value = math.nan
+
+        if math.isfinite(raw_value):
+            yaw_rates[index] = raw_value
+        else:
+            yaw_rates[index] = _compute_yaw_rate(
+                records,
+                index,
+                record=record,
+                yaw_rate=raw_value,
+            )
+
+    return yaw_rates
 
 
 def _compute_yaw_rate(
