@@ -2,9 +2,6 @@
 High-level TNFR × LFS operators for telemetry analytics pipelines.
 
 ## Classes
-### `NodalEvolution` (dict[str, tuple[float, float]])
-Dictionary mapping nodes to ``(integral, derivative)`` tuples with metadata.
-
 ### `DissonanceBreakdown`
 Breakdown of dissonance events by usefulness.
 
@@ -39,22 +36,14 @@ Root payload returned by :func:`_extract_network_memory`.
 Aggregated ΔP/Δcamber recommendations for a stint.
 
 ## Functions
-- `evolve_epi(prev_epi: float, delta_map: Mapping[str, float], dt: float, nu_f_by_node: Mapping[str, float]) -> tuple[float, float, Dict[str, tuple[float, float]]]`
-  - Integrate the Event Performance Index using explicit Euler steps.
-
-The integrator now returns the global derivative/integral together with a
-per-node breakdown.  The nodal contribution dictionary maps the node name
-to a ``(integral, derivative)`` tuple representing the instantaneous
-change produced during ``dt``.  When contextual metadata is supplied in
-``delta_map`` the returned mapping exposes it through the ``metadata``
-attribute so that advanced consumers can inspect phase effects without
-affecting the tuple contract consumed elsewhere.
 - `emission_operator(target_delta_nfr: float, target_sense_index: float) -> Dict[str, float]`
   - Return normalised objectives for ΔNFR and sense index targets.
 - `reception_operator(records: Sequence[TelemetryRecord], extractor: EPIExtractor | None = None) -> List[EPIBundle]`
   - Convert raw telemetry records into EPI bundles.
 - `coherence_operator(series: Sequence[float], window: int = 3) -> List[float]`
   - Smooth a numeric series while preserving its average value.
+- `coherence_operator_il(series: Sequence[float], window: int = 5) -> List[float]`
+  - Mean-preserving coherence smoother aligned with ideal-line workflows.
 - `dissonance_operator(series: Sequence[float], target: float) -> float`
   - Compute the mean absolute deviation relative to a target value.
 - `dissonance_breakdown_operator(series: Sequence[float], target: float, *, microsectors: Sequence[SupportsMicrosector] | None = None, bundles: Sequence[SupportsEPIBundle] | None = None) -> DissonanceBreakdown`
