@@ -10,12 +10,14 @@ from . import cache as _cache
 from . import cache_settings as _cache_settings
 from . import interfaces as _interfaces
 from . import operator_detection as _operator_detection
+from . import structural as _structural
 from . import structural_time as _structural_time
 
 from .cache import *  # noqa: F401,F403
 from .cache_settings import *  # noqa: F401,F403
 from .interfaces import *  # noqa: F401,F403
 from .operator_detection import *  # noqa: F401,F403
+from .structural import *  # noqa: F401,F403
 from .structural_time import *  # noqa: F401,F403
 
 def _exported(module: object) -> list[str]:
@@ -25,7 +27,14 @@ def _exported(module: object) -> list[str]:
     return [name for name in vars(module) if not name.startswith("_")]
 
 
-_EAGER_MODULES = (_cache, _cache_settings, _interfaces, _operator_detection, _structural_time)
+_EAGER_MODULES = (
+    _cache,
+    _cache_settings,
+    _interfaces,
+    _operator_detection,
+    _structural,
+    _structural_time,
+)
 
 
 __all__ = [
@@ -33,6 +42,7 @@ __all__ = [
     *_exported(_cache_settings),
     *_exported(_interfaces),
     *_exported(_operator_detection),
+    *_exported(_structural),
     *_exported(_structural_time),
 ]
 
@@ -73,6 +83,7 @@ del _cache
 del _cache_settings
 del _interfaces
 del _operator_detection
+del _structural
 del _structural_time
 
 
