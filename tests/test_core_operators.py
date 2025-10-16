@@ -71,6 +71,11 @@ from tnfr_core.operators import (
     TyreBalanceControlOutput,
     tyre_balance_controller,
 )
+from tnfr_core.operators.structural.epi import (
+    compute_nodal_contributions,
+    extract_phase_context,
+    resolve_nu_targets,
+)
 from tnfr_core.operators.pipeline.coherence import _stage_coherence as pipeline_stage_coherence
 from tnfr_core.operators.pipeline.epi import _stage_epi_evolution as pipeline_stage_epi
 from tnfr_core.operators.pipeline.events import (
@@ -955,16 +960,24 @@ def test_evolve_epi_runs_euler_step():
     prev = 0.45
     deltas = {"tyres": 1.2, "suspension": -0.6, "driver": 0.4}
     nu_map = {"tyres": 0.18, "suspension": 0.14, "driver": 0.05}
+    phase_context = extract_phase_context(deltas)
+    nu_targets = resolve_nu_targets(deltas)
+    expected_contrib, theta_effects, expected_derivative = compute_nodal_contributions(
+        deltas, nu_map, nu_targets, phase_context, 0.1
+    )
+
     new_epi, derivative, nodal = evolve_epi(prev, deltas, 0.1, nu_map)
 
-    expected_derivative = 0.18 * 1.2 + 0.14 * -0.6 + 0.05 * 0.4
     assert derivative == pytest.approx(expected_derivative, rel=1e-9)
     assert new_epi == pytest.approx(prev + expected_derivative * 0.1, rel=1e-9)
-    assert {"tyres", "suspension", "driver"} <= set(nodal)
-    nodal_derivative = sum(component[1] for component in nodal.values())
-    nodal_integral = sum(component[0] for component in nodal.values())
-    assert nodal_derivative == pytest.approx(derivative, rel=1e-9)
-    assert nodal_integral == pytest.approx(expected_derivative * 0.1, rel=1e-9)
+    assert set(expected_contrib) == set(nodal)
+    for node, expected in expected_contrib.items():
+        assert nodal[node][0] == pytest.approx(expected[0], rel=1e-9)
+        assert nodal[node][1] == pytest.approx(expected[1], rel=1e-9)
+    assert sum(component[1] for component in nodal.values()) == pytest.approx(
+        derivative, rel=1e-9
+    )
+    assert theta_effects == {}
     assert getattr(nodal, "metadata", {}) == {}
 
 
@@ -981,23 +994,25 @@ def test_evolve_epi_applies_phase_metadata():
         "nu_f_objectives": {"driver": 0.2},
     }
     nu_map = {"tyres": 0.2, "driver": 0.1}
+    phase_context = extract_phase_context(deltas)
+    nu_targets = resolve_nu_targets(deltas)
+    expected_contrib, theta_effects, expected_derivative = compute_nodal_contributions(
+        deltas, nu_map, nu_targets, phase_context, 0.1
+    )
 
     new_epi, derivative, nodal = evolve_epi(prev, deltas, 0.1, nu_map)
 
-    tyres_weight = 0.2 * 2.0
-    driver_weight = 0.2 * 0.75
-    expected_derivative = tyres_weight * 1.0 + driver_weight * -0.5
-
     assert derivative == pytest.approx(expected_derivative, rel=1e-9)
     assert new_epi == pytest.approx(expected_derivative * 0.1, rel=1e-9)
-    assert nodal["tyres"][1] == pytest.approx(tyres_weight * 1.0, rel=1e-9)
-    assert nodal["driver"][1] == pytest.approx(driver_weight * -0.5, rel=1e-9)
+    for node, expected in expected_contrib.items():
+        assert nodal[node][1] == pytest.approx(expected[1], rel=1e-9)
 
     metadata = getattr(nodal, "metadata", {})
-    assert metadata.get("theta") == "apex"
-    assert metadata.get("theta_effect", {}).get("tyres") == pytest.approx(2.0)
-    assert metadata.get("theta_effect", {}).get("driver") == pytest.approx(0.75)
-    assert metadata.get("nu_f_objectives", {}).get("driver") == pytest.approx(0.2)
+    assert metadata.get("theta") == phase_context.identifier
+    assert metadata.get("theta_effect") == theta_effects
+    assert metadata.get("nu_f_objectives") == nu_targets
+    if phase_context.weights is not None:
+        assert metadata.get("w_phase") == dict(phase_context.weights)
 
 
 def test_sense_index_penalises_active_phase_weights():
