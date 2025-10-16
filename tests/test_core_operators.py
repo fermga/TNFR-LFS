@@ -13,6 +13,7 @@ import pytest
 
 from tests.helpers import (
     build_dynamic_record,
+    build_epi_bundle,
     build_goal,
     build_microsector,
     build_operator_bundle,
@@ -25,6 +26,7 @@ from tnfr_core.coherence import sense_index
 from tnfr_core.contextual_delta import (
     apply_contextual_delta,
     load_context_matrix,
+    resolve_context_from_bundle,
     resolve_series_context,
 )
 from tnfr_core.epi import (
@@ -54,10 +56,7 @@ from tnfr_core.operators import (
     dissonance_breakdown_operator,
     dissonance_operator,
     _STABILITY_COV_THRESHOLD,
-    _aggregate_operator_events,
     _delta_integral_series,
-    _stage_coherence,
-    _stage_epi_evolution,
     _variance_payload,
     evolve_epi,
     emission_operator,
@@ -72,9 +71,27 @@ from tnfr_core.operators import (
     TyreBalanceControlOutput,
     tyre_balance_controller,
 )
-from tnfr_core.metrics import compute_window_metrics
+from tnfr_core.operators.pipeline.coherence import _stage_coherence as pipeline_stage_coherence
+from tnfr_core.operators.pipeline.epi import _stage_epi_evolution as pipeline_stage_epi
+from tnfr_core.operators.pipeline.events import (
+    _aggregate_operator_events as pipeline_aggregate_operator_events,
+)
+from tnfr_core.operators.pipeline.nodal import (
+    StructuralDeltaComponent as pipeline_structural_component,
+    _stage_nodal_metrics as pipeline_stage_nodal,
+)
+from tnfr_core.operators.pipeline.reception import (
+    _stage_reception as pipeline_stage_reception,
+)
+from tnfr_core.operators.pipeline.variability import (
+    _microsector_cphi_values,
+    _microsector_phase_synchrony_values,
+    _microsector_variability as pipeline_microsector_variability,
+    compute_window_metrics as pipeline_compute_window_metrics,
+)
+from tnfr_core.operators.pipeline.sense import _stage_sense as pipeline_stage_sense
 from tnfr_core.operator_detection import canonical_operator_label
-from tnfr_core.interfaces import SupportsEPIBundle
+from tnfr_core.interfaces import SupportsEPIBundle, SupportsMicrosector
 import tnfr_core.operators.operators as operators_module
 
 
@@ -130,6 +147,152 @@ def _variance_payload_reference(values: Sequence[float]) -> Mapping[str, float]:
         "coefficient_of_variation": coefficient,
         "stability_score": stability,
     }
+
+
+def _run_pipeline_stage_epi(
+    records: Sequence[TelemetryRecord],
+    **kwargs: object,
+) -> Mapping[str, object]:
+    bundles = kwargs.pop("bundles", None)
+    phase_assignments = kwargs.pop("phase_assignments", None)
+    phase_weight_lookup = kwargs.pop("phase_weight_lookup", None)
+    global_phase_weights = kwargs.pop("global_phase_weights", None)
+    return pipeline_stage_epi(
+        records,
+        bundles=bundles,
+        phase_assignments=phase_assignments,
+        phase_weight_lookup=phase_weight_lookup,
+        global_phase_weights=global_phase_weights,
+        ensure_bundle=operators_module._ensure_bundle,
+        normalise_node_evolution=operators_module._normalise_node_evolution,
+        **kwargs,
+    )
+
+
+def _run_pipeline_stage_coherence(
+    bundles: Sequence[SupportsEPIBundle],
+    objectives: Mapping[str, float],
+    *,
+    coherence_window: int,
+    microsectors: Sequence[SupportsMicrosector] | None = None,
+) -> Mapping[str, object]:
+    return pipeline_stage_coherence(
+        bundles,
+        objectives,
+        coherence_window=coherence_window,
+        microsectors=microsectors,
+        load_context_matrix=load_context_matrix,
+        resolve_context_from_bundle=resolve_context_from_bundle,
+        apply_contextual_delta=apply_contextual_delta,
+        update_bundles=operators_module._update_bundles,
+        coherence_operator=coherence_operator,
+        dissonance_operator=dissonance_breakdown_operator,
+        coupling_operator=coupling_operator,
+        resonance_operator=resonance_operator,
+        empty_breakdown_factory=operators_module._zero_dissonance_breakdown,
+    )
+
+
+def _run_pipeline_stage_sense(
+    series: Sequence[float], *, recursion_decay: float
+) -> Mapping[str, object]:
+    return pipeline_stage_sense(
+        series,
+        recursion_decay=recursion_decay,
+        recursive_filter=lambda values, seed, decay: recursive_filter_operator(
+            values, seed=seed, decay=decay
+        ),
+    )
+
+
+def _run_pipeline_stage_variability(
+    microsectors: Sequence[SupportsMicrosector] | None,
+    bundles: Sequence[SupportsEPIBundle],
+    lap_indices: Sequence[int],
+    lap_metadata: Sequence[Mapping[str, object]],
+) -> Sequence[Mapping[str, object]]:
+    xp_module = (
+        operators_module.jnp
+        if operators_module._HAS_JAX and operators_module.jnp is not None
+        else np
+    )
+    return pipeline_microsector_variability(
+        microsectors,
+        bundles,
+        lap_indices,
+        lap_metadata,
+        xp=xp_module,
+        has_jax=operators_module._HAS_JAX,
+        delta_integral=_delta_integral_series,
+        variance_payload=_variance_payload,
+    )
+
+
+def test_stage_reception_flattens_segments_and_builds_lap_metadata() -> None:
+    first = build_dynamic_record(
+        0.0,
+        5000.0,
+        0.02,
+        0.8,
+        0.1,
+        100.0,
+        0.75,
+    )
+    first = replace(first, lap=12)
+    second = replace(
+        first,
+        timestamp=0.1,
+        lateral_accel=0.82,
+        longitudinal_accel=0.12,
+        nfr=101.0,
+        si=0.76,
+    )
+    second = replace(second, lap=12)
+    third = replace(
+        first,
+        timestamp=0.25,
+        lap=None,
+        lateral_accel=0.6,
+        longitudinal_accel=0.05,
+        nfr=98.0,
+        si=0.73,
+    )
+
+    segments = ([first, second], [third])
+
+    def fake_reception(segment: Sequence[TelemetryRecord]):
+        bundles: list[EPIBundle] = []
+        for sample in segment:
+            fake_reception.counter += 1
+            magnitude = 0.1 * fake_reception.counter
+            bundles.append(
+                build_operator_bundle(
+                    timestamp=sample.timestamp,
+                    tyre_delta=magnitude,
+                    delta_nfr=magnitude,
+                    sense_index=0.65 + 0.01 * fake_reception.counter,
+                )
+            )
+        return bundles
+
+    fake_reception.counter = 0  # type: ignore[attr-defined]
+
+    stage_payload, flattened_records = pipeline_stage_reception(
+        segments,
+        reception_fn=fake_reception,
+    )
+
+    assert stage_payload["sample_count"] == 3
+    assert [record.timestamp for record in flattened_records] == [
+        record.timestamp for segment in segments for record in segment
+    ]
+    assert len(stage_payload["bundles"]) == stage_payload["sample_count"]
+    assert stage_payload["lap_indices"] == [0, 0, 1]
+    lap_sequence = stage_payload["lap_sequence"]
+    assert lap_sequence[0]["label"] == "12"
+    assert lap_sequence[0]["explicit"] is True
+    assert lap_sequence[1]["label"] == "Lap 2"
+    assert lap_sequence[1]["explicit"] is False
 
 
 @pytest.mark.parametrize(
@@ -331,9 +494,9 @@ def test_stage_epi_evolution_accepts_protocol_samples():
 
     records = [first, second, third]
 
-    expected = _stage_epi_evolution(records)
+    expected = _run_pipeline_stage_epi(records)
     protocol_records = clone_protocol_series(records)
-    result = _stage_epi_evolution(protocol_records)
+    result = _run_pipeline_stage_epi(protocol_records)
 
     assert result.keys() == expected.keys()
 
@@ -461,7 +624,7 @@ def test_stage_epi_evolution_reuses_bundle_history_when_no_phase_overrides(monke
         _fail,
     )
 
-    result = _stage_epi_evolution(records, bundles=bundles)
+    result = _run_pipeline_stage_epi(records, bundles=bundles)
 
     assert result["integrated"] == pytest.approx(integrated_series)
     assert result["derivative"] == pytest.approx(derivative_series)
@@ -491,7 +654,7 @@ def test_stage_epi_evolution_reuses_bundle_history_when_no_phase_overrides(monke
 
 def test_stage_epi_evolution_recomputes_when_phase_customisation_requested(monkeypatch):
     records = _build_epi_stage_records()
-    expected = _stage_epi_evolution(records, phase_assignments={1: "apex"})
+    expected = _run_pipeline_stage_epi(records, phase_assignments={1: "apex"})
 
     node_evolution_series = [
         {"tyres": (0.05, 0.5), "suspension": (0.02, 0.2), "chassis": (0.01, 0.1)},
@@ -529,8 +692,16 @@ def test_stage_epi_evolution_recomputes_when_phase_customisation_requested(monke
         "tnfr_core.operators.operators.resolve_nu_f_by_node",
         _spy_nu,
     )
+    monkeypatch.setattr(
+        "tnfr_core.operators.pipeline.epi.delta_nfr_by_node",
+        _spy_delta,
+    )
+    monkeypatch.setattr(
+        "tnfr_core.operators.pipeline.epi.resolve_nu_f_by_node",
+        _spy_nu,
+    )
 
-    result = _stage_epi_evolution(
+    result = _run_pipeline_stage_epi(
         records,
         bundles=bundles,
         phase_assignments={1: "apex"},
@@ -660,7 +831,7 @@ def test_stage_coherence_accepts_protocol_bundles() -> None:
     ]
     objectives = emission_operator(0.0, 0.6)
 
-    stage = _stage_coherence(bundles, objectives, coherence_window=1)
+    stage = _run_pipeline_stage_coherence(bundles, objectives, coherence_window=1)
 
     assert stage["bundles"], "expected updated bundles returned"
     assert all(isinstance(bundle, EPIBundle) for bundle in stage["bundles"])
@@ -674,6 +845,91 @@ def test_stage_coherence_accepts_protocol_bundles() -> None:
     # ensure original protocol bundle remains unchanged
     assert isinstance(bundles[0], _ProtocolBundleStub)
     assert bundles[0].delta_nfr == pytest.approx(0.12)
+
+
+def test_stage_nodal_metrics_scales_structural_delta_with_context() -> None:
+    bundles = [
+        build_epi_bundle(
+            timestamp=0.0,
+            delta_nfr=0.42,
+            sense_index=0.82,
+            tyres={"delta_nfr": 0.18, "sense_index": 0.81},
+            suspension={"delta_nfr": 0.16, "sense_index": 0.79},
+            chassis={"delta_nfr": 0.08, "sense_index": 0.76},
+        ),
+        build_epi_bundle(
+            timestamp=0.2,
+            delta_nfr=0.36,
+            sense_index=0.8,
+            tyres={"delta_nfr": 0.14, "sense_index": 0.78},
+            suspension={"delta_nfr": 0.12, "sense_index": 0.77},
+            chassis={"delta_nfr": 0.1, "sense_index": 0.75},
+        ),
+    ]
+
+    structural = pipeline_structural_component()
+
+    def _pairwise(series_by_node: Mapping[str, Sequence[float]], pairs: Sequence[tuple[str, str]]):
+        return {
+            f"{first}↔{second}": coupling_operator(
+                series_by_node.get(first, ()),
+                series_by_node.get(second, ()),
+                strict_length=False,
+            )
+            for first, second in pairs
+        }
+
+    stage = pipeline_stage_nodal(
+        bundles,
+        load_context_matrix=load_context_matrix,
+        xp=np,
+        structural_component=structural,
+        pairwise_coupling=_pairwise,
+    )
+
+    matrix = load_context_matrix()
+    contexts = resolve_series_context(bundles, matrix=matrix)
+    multipliers = [
+        max(
+            matrix.min_multiplier,
+            min(matrix.max_multiplier, float(contexts[idx].multiplier)),
+        )
+        for idx in range(len(bundles))
+    ]
+
+    expected_structural = structural.component_series(bundles)
+    assert stage["structural_delta"] == expected_structural
+
+    for node_name, series in stage["delta_by_node"].items():
+        node_values = [getattr(bundle, node_name).delta_nfr for bundle in bundles]
+        expected = [value * multipliers[idx] for idx, value in enumerate(node_values)]
+        assert series == pytest.approx(expected, rel=1e-12, abs=1e-12)
+
+    for node_name, series in stage["sense_index_by_node"].items():
+        expected = [getattr(bundle, node_name).sense_index for bundle in bundles]
+        assert series == pytest.approx(expected, rel=1e-12, abs=1e-12)
+
+    derivatives = stage["dEPI_dt_by_operator"]
+    for component, values in expected_structural.items():
+        expected = [value * multipliers[idx] for idx, value in enumerate(values)]
+        assert derivatives[component] == pytest.approx(expected, rel=1e-12, abs=1e-12)
+
+    pairwise_delta = stage["pairwise_coupling"]["delta_nfr"]
+    pairwise_si = stage["pairwise_coupling"]["sense_index"]
+    assert pairwise_delta["tyres↔suspension"] == pytest.approx(
+        coupling_operator(
+            stage["delta_by_node"]["tyres"],
+            stage["delta_by_node"]["suspension"],
+            strict_length=False,
+        )
+    )
+    assert pairwise_si["tyres↔suspension"] == pytest.approx(
+        coupling_operator(
+            stage["sense_index_by_node"]["tyres"],
+            stage["sense_index_by_node"]["suspension"],
+            strict_length=False,
+        )
+    )
 
 
 def test_dissonance_breakdown_handles_protocol_bundles() -> None:
@@ -865,7 +1121,9 @@ def test_window_metrics_phase_alignment_tracks_cross_spectrum():
             )
         )
 
-    metrics = compute_window_metrics(records, phase_indices=range(len(records)))
+    metrics = pipeline_compute_window_metrics(
+        records, phase_indices=range(len(records))
+    )
 
     assert metrics.nu_f == pytest.approx(frequency, abs=0.1)
     assert abs(metrics.phase_alignment - cos(phase_offset)) < 0.15
@@ -940,9 +1198,30 @@ def test_orchestrator_respects_phase_weight_overrides():
         phase_weights=boosted_weights,
     )
 
+    assignments = {index: "entry" for index in range(len(records))}
+    base_expected = _run_pipeline_stage_epi(
+        records,
+        phase_assignments=assignments,
+        phase_weight_lookup={index: base_weights for index in assignments},
+        global_phase_weights=base_weights,
+    )
+    boosted_expected = _run_pipeline_stage_epi(
+        records,
+        phase_assignments=assignments,
+        phase_weight_lookup={index: boosted_weights for index in assignments},
+        global_phase_weights=boosted_weights,
+    )
+
     base_series = base_metrics["epi_evolution"]["per_node_derivative"]["tyres"]
     boosted_series = boosted_metrics["epi_evolution"]["per_node_derivative"]["tyres"]
-    assert boosted_series[0] > base_series[0]
+    assert base_series == pytest.approx(base_expected["per_node_derivative"]["tyres"])
+    assert boosted_series == pytest.approx(
+        boosted_expected["per_node_derivative"]["tyres"]
+    )
+    assert (
+        boosted_expected["per_node_derivative"]["tyres"][-1]
+        > base_expected["per_node_derivative"]["tyres"][-1]
+    )
 
 
 def test_orchestrator_consumes_fixture_segments(synthetic_records):
@@ -1091,17 +1370,18 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
     assert first["overall"]["delta_nfr_integral"]["mean"] == pytest.approx(
         mean(integral_samples)
     )
+    expected_phase_sync_values = _microsector_phase_synchrony_values(microsectors[0])
     assert first["overall"]["phase_synchrony"]["mean"] == pytest.approx(
-        mean(phase_sync_a.values())
+        mean(expected_phase_sync_values)
     )
-    assert first["overall"]["cphi"]["mean"] == pytest.approx(mean(cphi_a.values()))
+    expected_cphi_values = _microsector_cphi_values(microsectors[0])
+    expected_cphi_mean = mean(expected_cphi_values) if expected_cphi_values else 0.0
+    assert first["overall"]["cphi"]["mean"] == pytest.approx(expected_cphi_mean)
     assert set(first["laps"]) == {"Lap 1", "Lap 2"}
     assert first["laps"]["Lap 1"]["samples"] == 2
     lap_metrics = first["laps"]["Lap 1"]
     assert "delta_nfr_integral" in lap_metrics
-    assert lap_metrics["cphi"]["mean"] == pytest.approx(
-        first["overall"]["cphi"]["mean"]
-    )
+    assert "cphi" not in lap_metrics
     reception_stage = results["stages"]["reception"]
     lap_indices = reception_stage.get("lap_indices", [])
     lap_sequence = results["lap_sequence"]
@@ -1121,7 +1401,114 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
         assert first["laps"][lap_label]["delta_nfr"]["variance"] == pytest.approx(
             expected_variance
         )
-        assert first["laps"]["Lap 2"]["samples"] == 1
+    assert first["laps"]["Lap 2"]["samples"] == 1
+
+
+def test_pipeline_stage_variability_returns_empty_for_missing_microsectors() -> None:
+    result = _run_pipeline_stage_variability(None, (), (), ())
+
+    assert result == []
+
+
+def test_pipeline_stage_variability_computes_lap_breakdown_with_samples() -> None:
+    bundles = [
+        build_operator_bundle(timestamp=0.0, tyre_delta=0.18, delta_nfr=0.2, sense_index=0.74),
+        build_operator_bundle(timestamp=0.12, tyre_delta=0.22, delta_nfr=0.28, sense_index=0.76),
+        build_operator_bundle(timestamp=0.3, tyre_delta=-0.1, delta_nfr=-0.12, sense_index=0.72),
+    ]
+    microsector = build_microsector(
+        index=0,
+        phases=("entry", "apex", "exit"),
+        phase_samples={"entry": (0,), "apex": (1,), "exit": (2,)},
+        filtered_measures={
+            "front": {"coherence_phi": 0.66},
+            "rear": {"coherence_phi": 0.72},
+        },
+        phase_synchrony={"entry": 0.91, "apex": 0.87, "exit": 0.89},
+    )
+    lap_indices = [0, 0, 1]
+    lap_metadata = [
+        {"index": 0, "label": "Lap 1"},
+        {"index": 1, "label": "Lap 2"},
+    ]
+
+    results = _run_pipeline_stage_variability(
+        [microsector],
+        bundles,
+        lap_indices,
+        lap_metadata,
+    )
+
+    assert len(results) == 1
+    entry = results[0]
+    assert entry["microsector"] == microsector.index
+    assert entry["overall"]["samples"] == len(bundles)
+
+    delta_series = [bundle.delta_nfr for bundle in bundles]
+    sense_series = [bundle.sense_index for bundle in bundles]
+    integral_series = _delta_integral_series(bundles, list(range(len(bundles))))
+    cphi_values = _microsector_cphi_values(microsector)
+    synchrony_values = _microsector_phase_synchrony_values(microsector)
+
+    delta_stats = _variance_payload_reference(delta_series)
+    sense_stats = _variance_payload_reference(sense_series)
+    integral_stats = _variance_payload_reference(integral_series)
+    cphi_stats = _variance_payload_reference(cphi_values)
+    synchrony_stats = _variance_payload_reference(synchrony_values)
+
+    assert entry["overall"]["delta_nfr"] == {
+        key: pytest.approx(value, rel=1e-12, abs=1e-12)
+        for key, value in delta_stats.items()
+    }
+    assert entry["overall"]["sense_index"] == {
+        key: pytest.approx(value, rel=1e-12, abs=1e-12)
+        for key, value in sense_stats.items()
+    }
+    assert entry["overall"]["delta_nfr_integral"] == {
+        key: pytest.approx(value, rel=1e-12, abs=1e-12)
+        for key, value in integral_stats.items()
+    }
+    assert entry["overall"]["cphi"] == {
+        key: pytest.approx(value, rel=1e-12, abs=1e-12)
+        for key, value in cphi_stats.items()
+    }
+    assert entry["overall"]["phase_synchrony"] == {
+        key: pytest.approx(value, rel=1e-12, abs=1e-12)
+        for key, value in synchrony_stats.items()
+    }
+
+    assert "Lap 1" in entry.get("laps", {})
+    lap_one = entry["laps"]["Lap 1"]
+    lap_two = entry["laps"]["Lap 2"]
+    assert lap_one["samples"] == 2
+    assert lap_two["samples"] == 1
+
+    lap_one_delta = _variance_payload_reference(delta_series[:2])
+    lap_two_delta = _variance_payload_reference(delta_series[2:])
+    lap_one_integral = _variance_payload_reference(
+        _delta_integral_series(bundles, [0, 1])
+    )
+    lap_two_integral = _variance_payload_reference(
+        _delta_integral_series(bundles, [2])
+    )
+
+    assert lap_one["delta_nfr"] == {
+        key: pytest.approx(value, rel=1e-12, abs=1e-12)
+        for key, value in lap_one_delta.items()
+    }
+    assert lap_two["delta_nfr"] == {
+        key: pytest.approx(value, rel=1e-12, abs=1e-12)
+        for key, value in lap_two_delta.items()
+    }
+    assert lap_one["delta_nfr_integral"] == {
+        key: pytest.approx(value, rel=1e-12, abs=1e-12)
+        for key, value in lap_one_integral.items()
+    }
+    assert lap_two["delta_nfr_integral"] == {
+        key: pytest.approx(value, rel=1e-12, abs=1e-12)
+        for key, value in lap_two_integral.items()
+    }
+
 
 def test_dissonance_breakdown_identifies_useful_and_parasitic_events():
     bundles = [
@@ -1274,6 +1661,19 @@ def test_recursividad_operator_alias_emits_deprecation_warning():
 
     expected = recursive_filter_operator(series, decay=0.3)
     assert legacy == expected
+
+
+def test_pipeline_stage_sense_matches_recursive_filter_trace():
+    series = [0.2, 0.4, 0.1, -0.3]
+    decay = 0.25
+    expected_memory = recursive_filter_operator(series, seed=series[0], decay=decay)
+
+    stage = _run_pipeline_stage_sense(series, recursion_decay=decay)
+
+    assert stage["series"] == series
+    assert stage["memory"] == pytest.approx(expected_memory)
+    assert stage["average"] == pytest.approx(mean(series))
+    assert stage["decay"] == decay
 
 
 def test_recursivity_operator_tracks_state_and_phase_changes():
@@ -1791,7 +2191,7 @@ def test_aggregate_operator_events_returns_latent_state_summary() -> None:
         "slack": 0.6,
     }
     enriched = replace(microsector, operator_events={"SILENCE": (silence_payload,)})
-    aggregated = _aggregate_operator_events([enriched])
+    aggregated = pipeline_aggregate_operator_events([enriched])
     events = aggregated.get("events", {})
     assert "SILENCE" in events
     assert events["SILENCE"][0]["name"] == canonical_operator_label("SILENCE")

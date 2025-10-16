@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import dataclass, field, fields
+from functools import partial
 import math
 from importlib import import_module
 from importlib.util import find_spec
@@ -51,7 +52,6 @@ from tnfr_core.equations.contextual_delta import (
     resolve_context_from_bundle,
     resolve_series_context,
 )
-from tnfr_core.metrics.metrics import compute_window_metrics
 from tnfr_core.equations.dissonance import compute_useful_dissonance_stats
 from tnfr_core.equations.epi import (
     EPIExtractor,
@@ -90,6 +90,34 @@ from tnfr_core.operators.structural.epi_evolution import (
     NodalEvolution,
     evolve_epi,
 )
+from tnfr_core.operators.pipeline import (
+    PipelineDependencies,
+    orchestrate_delta_metrics as pipeline_orchestrate_delta_metrics,
+)
+from tnfr_core.operators.pipeline.coherence import (
+    _stage_coherence as pipeline_stage_coherence,
+)
+from tnfr_core.operators.pipeline.epi import (
+    _stage_epi_evolution as pipeline_stage_epi,
+)
+from tnfr_core.operators.pipeline.events import (
+    _aggregate_operator_events as pipeline_aggregate_operator_events,
+)
+from tnfr_core.operators.pipeline.nodal import (
+    StructuralDeltaComponent,
+    _stage_nodal_metrics as pipeline_stage_nodal,
+)
+from tnfr_core.operators.pipeline.reception import (
+    _stage_reception as pipeline_stage_reception,
+)
+from tnfr_core.operators.pipeline.sense import (
+    _stage_sense as pipeline_stage_sense,
+)
+from tnfr_core.operators.pipeline.variability import (
+    _microsector_variability as pipeline_microsector_variability,
+    _phase_context_from_microsectors,
+    compute_window_metrics as pipeline_compute_window_metrics,
+)
 
 
 _APEX_PHASE_CANDIDATES: Tuple[str, ...] = LEGACY_PHASE_MAP.get("apex", tuple())
@@ -115,6 +143,27 @@ class DissonanceBreakdown:
     useful_dissonance_percentage: float
     high_yaw_acc_samples: int
     useful_dissonance_samples: int
+
+
+def _zero_dissonance_breakdown() -> DissonanceBreakdown:
+    """Return a :class:`DissonanceBreakdown` filled with zeros."""
+
+    return DissonanceBreakdown(
+        value=0.0,
+        useful_magnitude=0.0,
+        parasitic_magnitude=0.0,
+        useful_ratio=0.0,
+        parasitic_ratio=0.0,
+        useful_percentage=0.0,
+        parasitic_percentage=0.0,
+        total_events=0,
+        useful_events=0,
+        parasitic_events=0,
+        useful_dissonance_ratio=0.0,
+        useful_dissonance_percentage=0.0,
+        high_yaw_acc_samples=0,
+        useful_dissonance_samples=0,
+    )
 
 
 NodeType = TypeVar("NodeType")
@@ -1398,330 +1447,6 @@ def recursividad_operator(
     return recursive_filter_operator(series, seed=seed, decay=decay)
 
 
-def _stage_reception(
-    telemetry_segments: Sequence[Sequence[TelemetryRecord]],
-) -> tuple[Dict[str, object], List[TelemetryRecord]]:
-    bundles: List[EPIBundle] = []
-    lap_indices: List[int] = []
-    lap_metadata: List[Dict[str, object]] = []
-    flattened_records: List[TelemetryRecord] = []
-
-    for lap_index, segment in enumerate(telemetry_segments):
-        segment_records = list(segment)
-        flattened_records.extend(segment_records)
-        label_value = next(
-            (record.lap for record in segment_records if getattr(record, "lap", None) is not None),
-            None,
-        )
-        explicit = label_value is not None
-        label = str(label_value) if explicit else f"Lap {lap_index + 1}"
-        lap_metadata.append(
-            {
-                "index": lap_index,
-                "label": label,
-                "value": label_value,
-                "explicit": explicit,
-            }
-        )
-        segment_bundles = reception_operator(segment_records)
-        lap_indices.extend([lap_index] * len(segment_bundles))
-        bundles.extend(segment_bundles)
-
-    stage_payload = {
-        "bundles": bundles,
-        "lap_indices": lap_indices,
-        "lap_sequence": lap_metadata,
-        "sample_count": len(bundles),
-    }
-    return stage_payload, flattened_records
-
-
-def _stage_coherence(
-    bundles: Sequence[SupportsEPIBundle],
-    objectives: Mapping[str, float],
-    *,
-    coherence_window: int,
-    microsectors: Sequence[SupportsMicrosector] | None = None,
-) -> Dict[str, object]:
-    if not bundles:
-        empty_breakdown = DissonanceBreakdown(
-            value=0.0,
-            useful_magnitude=0.0,
-            parasitic_magnitude=0.0,
-            useful_ratio=0.0,
-            parasitic_ratio=0.0,
-            useful_percentage=0.0,
-            parasitic_percentage=0.0,
-            total_events=0,
-            useful_events=0,
-            parasitic_events=0,
-            useful_dissonance_ratio=0.0,
-            useful_dissonance_percentage=0.0,
-            high_yaw_acc_samples=0,
-            useful_dissonance_samples=0,
-        )
-        return {
-            "raw_delta": [],
-            "raw_sense_index": [],
-            "smoothed_delta": [],
-            "smoothed_sense_index": [],
-            "bundles": [],
-            "dissonance": 0.0,
-            "dissonance_breakdown": empty_breakdown,
-            "coupling": 0.0,
-            "resonance": 0.0,
-            "coherence_index_series": [],
-            "coherence_index": 0.0,
-            "raw_coherence_index": 0.0,
-            "frequency_label": "",
-            "frequency_classification": "no data",
-        }
-
-    context_matrix = load_context_matrix()
-    bundle_context = [
-        resolve_context_from_bundle(context_matrix, bundle) for bundle in bundles
-    ]
-    delta_series = [
-        apply_contextual_delta(
-            bundle.delta_nfr,
-            factors,
-            context_matrix=context_matrix,
-        )
-        for bundle, factors in zip(bundles, bundle_context)
-    ]
-    si_series = [bundle.sense_index for bundle in bundles]
-    smoothed_delta = coherence_operator(delta_series, window=coherence_window)
-    smoothed_si = coherence_operator(si_series, window=coherence_window)
-    clamped_si = [max(0.0, min(1.0, value)) for value in smoothed_si]
-    updated_bundles = _update_bundles(bundles, smoothed_delta, clamped_si)
-    breakdown = dissonance_breakdown_operator(
-        smoothed_delta,
-        objectives["delta_nfr"],
-        microsectors=microsectors,
-        bundles=updated_bundles,
-    )
-    dissonance = breakdown.value
-    coupling = coupling_operator(smoothed_delta, clamped_si)
-    resonance = resonance_operator(clamped_si)
-    ct_series = [bundle.coherence_index for bundle in updated_bundles]
-    average_ct = mean(ct_series) if ct_series else 0.0
-    mean_si = mean(clamped_si) if clamped_si else 0.0
-    target_si = max(1e-6, min(1.0, float(objectives.get("sense_index", 0.75))))
-    normalised_ct = max(0.0, min(1.0, average_ct * (mean_si / target_si)))
-    frequency_label = ""
-    frequency_classification = "no data"
-    if updated_bundles:
-        last_bundle = updated_bundles[-1]
-        frequency_label = getattr(last_bundle, "nu_f_label", "")
-        frequency_classification = getattr(last_bundle, "nu_f_classification", "no data")
-
-    return {
-        "raw_delta": delta_series,
-        "raw_sense_index": si_series,
-        "smoothed_delta": smoothed_delta,
-        "smoothed_sense_index": clamped_si,
-        "bundles": updated_bundles,
-        "dissonance": dissonance,
-        "dissonance_breakdown": breakdown,
-        "coupling": coupling,
-        "resonance": resonance,
-        "coherence_index_series": ct_series,
-        "coherence_index": normalised_ct,
-        "raw_coherence_index": average_ct,
-        "frequency_label": frequency_label,
-        "frequency_classification": frequency_classification,
-    }
-
-
-def _stage_nodal_metrics(bundles: Sequence[SupportsEPIBundle]) -> Dict[str, object]:
-    node_pairs = (
-        ("tyres", "suspension"),
-        ("tyres", "chassis"),
-        ("suspension", "chassis"),
-    )
-    context_matrix = load_context_matrix()
-    bundle_context = resolve_series_context(bundles, matrix=context_matrix)
-    tyre_nodes: Sequence[SupportsTyresNode] = [bundle.tyres for bundle in bundles]
-    suspension_nodes: Sequence[SupportsSuspensionNode] = [
-        bundle.suspension for bundle in bundles
-    ]
-    chassis_nodes: Sequence[SupportsChassisNode] = [
-        bundle.chassis for bundle in bundles
-    ]
-    xp = jnp if _HAS_JAX else np
-    sample_count = min(
-        len(tyre_nodes),
-        len(suspension_nodes),
-        len(chassis_nodes),
-        len(bundle_context),
-    )
-    multipliers = xp.asarray(
-        [float(bundle_context[idx].multiplier) for idx in range(sample_count)],
-        dtype=float,
-    )
-    multipliers = xp.clip(
-        multipliers,
-        float(context_matrix.min_multiplier),
-        float(context_matrix.max_multiplier),
-    )
-    tyre_delta = xp.asarray(
-        [float(tyre_nodes[idx].delta_nfr) for idx in range(sample_count)],
-        dtype=float,
-    )
-    suspension_delta = xp.asarray(
-        [float(suspension_nodes[idx].delta_nfr) for idx in range(sample_count)],
-        dtype=float,
-    )
-    chassis_delta = xp.asarray(
-        [float(chassis_nodes[idx].delta_nfr) for idx in range(sample_count)],
-        dtype=float,
-    )
-    tyre_si = xp.asarray([float(node.sense_index) for node in tyre_nodes], dtype=float)
-    suspension_si = xp.asarray(
-        [float(node.sense_index) for node in suspension_nodes], dtype=float
-    )
-    chassis_si = xp.asarray(
-        [float(node.sense_index) for node in chassis_nodes], dtype=float
-    )
-    delta_by_node = {
-        "tyres": xp.multiply(tyre_delta, multipliers).tolist(),
-        "suspension": xp.multiply(suspension_delta, multipliers).tolist(),
-        "chassis": xp.multiply(chassis_delta, multipliers).tolist(),
-    }
-    si_by_node = {
-        "tyres": tyre_si.tolist(),
-        "suspension": suspension_si.tolist(),
-        "chassis": chassis_si.tolist(),
-    }
-    pairwise_delta = pairwise_coupling_operator(delta_by_node, pairs=node_pairs)
-    pairwise_si = pairwise_coupling_operator(si_by_node, pairs=node_pairs)
-    return {
-        "delta_by_node": delta_by_node,
-        "sense_index_by_node": si_by_node,
-        "pairwise_coupling": {
-            "delta_nfr": pairwise_delta,
-            "sense_index": pairwise_si,
-        },
-    }
-
-
-def _stage_epi_evolution(
-    records: Sequence[SupportsTelemetrySample],
-    *,
-    bundles: Sequence[SupportsEPIBundle] | None = None,
-    phase_assignments: Mapping[int, str] | None = None,
-    phase_weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]] | None = None,
-    global_phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
-) -> Dict[str, object]:
-    if not records:
-        return {
-            "integrated": [],
-            "derivative": [],
-            "per_node_integrated": {},
-            "per_node_derivative": {},
-        }
-
-    assignment_map = dict(phase_assignments or {})
-    weight_lookup = dict(phase_weight_lookup or {})
-    has_global_weights = bool(global_phase_weights)
-    reuse_bundle_evolution = (
-        bundles is not None
-        and len(bundles) == len(records)
-        and not assignment_map
-        and not weight_lookup
-        and not has_global_weights
-    )
-
-    integrated_series: List[float] = []
-    derivative_series: List[float] = []
-    per_node_integrated: Dict[str, List[float]] = {}
-    per_node_derivative: Dict[str, List[float]] = {}
-    cumulative_by_node: Dict[str, float] = {}
-
-    if reuse_bundle_evolution:
-        concrete_bundles = [_ensure_bundle(bundle) for bundle in bundles or ()]
-        for bundle in concrete_bundles:
-            integrated_series.append(float(bundle.integrated_epi))
-            derivative_series.append(float(bundle.dEPI_dt))
-            nodal = _normalise_node_evolution(getattr(bundle, "node_evolution", None))
-            nodes = set(per_node_integrated) | set(nodal)
-            for node in nodes:
-                node_integral, node_derivative = nodal.get(node, (0.0, 0.0))
-                node_integral = float(node_integral)
-                node_derivative = float(node_derivative)
-                cumulative = cumulative_by_node.get(node, 0.0) + node_integral
-                cumulative_by_node[node] = cumulative
-                per_node_integrated.setdefault(node, []).append(cumulative)
-                per_node_derivative.setdefault(node, []).append(node_derivative)
-        return {
-            "integrated": integrated_series,
-            "derivative": derivative_series,
-            "per_node_integrated": per_node_integrated,
-            "per_node_derivative": per_node_derivative,
-        }
-
-    prev_epi = 0.0
-    prev_timestamp = records[0].timestamp
-    analyzer = NaturalFrequencyAnalyzer()
-
-    for index, record in enumerate(records):
-        delta_map = delta_nfr_by_node(record)
-        phase = assignment_map.get(index) if assignment_map else None
-        weights = None
-        if weight_lookup and index in weight_lookup:
-            weights = weight_lookup[index]
-        elif has_global_weights and global_phase_weights:
-            weights = global_phase_weights
-        nu_snapshot = resolve_nu_f_by_node(
-            record,
-            phase=phase,
-            phase_weights=weights,
-            analyzer=analyzer,
-        )
-        dt = 0.0 if index == 0 else max(0.0, record.timestamp - prev_timestamp)
-        new_epi, derivative, nodal = evolve_epi(
-            prev_epi, delta_map, dt, nu_snapshot.by_node
-        )
-        integrated_series.append(new_epi)
-        derivative_series.append(derivative)
-        nodes = set(per_node_integrated) | set(nodal)
-        for node in nodes:
-            node_integral, node_derivative = nodal.get(node, (0.0, 0.0))
-            cumulative = cumulative_by_node.get(node, 0.0) + node_integral
-            cumulative_by_node[node] = cumulative
-            per_node_integrated.setdefault(node, []).append(cumulative)
-            per_node_derivative.setdefault(node, []).append(node_derivative)
-        prev_epi = new_epi
-        prev_timestamp = record.timestamp
-
-    return {
-        "integrated": integrated_series,
-        "derivative": derivative_series,
-        "per_node_integrated": per_node_integrated,
-        "per_node_derivative": per_node_derivative,
-    }
-
-
-def _stage_sense(
-    series: Sequence[float], *, recursion_decay: float
-) -> Dict[str, object]:
-    if not series:
-        return {
-            "series": [],
-            "memory": [],
-            "average": 0.0,
-            "decay": recursion_decay,
-        }
-
-    recursive_trace = recursive_filter_operator(series, seed=series[0], decay=recursion_decay)
-    return {
-        "series": list(series),
-        "memory": recursive_trace,
-        "average": mean(series),
-        "decay": recursion_decay,
-    }
-
-
 def _update_bundles(
     bundles: Sequence[SupportsEPIBundle],
     delta_series: Sequence[float],
@@ -1754,31 +1479,6 @@ def _microsector_sample_indices(microsector: SupportsMicrosector) -> List[int]:
     return sorted(indices)
 
 
-def _phase_context_from_microsectors(
-    microsectors: Sequence[SupportsMicrosector] | None,
-) -> tuple[Dict[int, str], Dict[int, Mapping[str, Mapping[str, float] | float]]]:
-    assignments: Dict[int, str] = {}
-    weight_lookup: Dict[int, Mapping[str, Mapping[str, float] | float]] = {}
-    if not microsectors:
-        return assignments, weight_lookup
-    for microsector in microsectors:
-        raw_weights = getattr(microsector, "phase_weights", {}) or {}
-        weight_profile: Dict[str, Mapping[str, float] | float] = {}
-        for phase, profile in raw_weights.items():
-            if isinstance(profile, Mapping):
-                weight_profile[str(phase)] = dict(profile)
-            else:
-                weight_profile[str(phase)] = float(profile)
-        for phase, samples in getattr(microsector, "phase_samples", {}).items():
-            if not samples:
-                continue
-            for sample in samples:
-                index = int(sample)
-                if index < 0:
-                    continue
-                assignments[index] = str(phase)
-                weight_lookup[index] = weight_profile
-    return assignments, weight_lookup
 
 
 _STABILITY_COV_THRESHOLD = 0.15
@@ -1860,197 +1560,8 @@ def _delta_integral_series(
     return np.asarray(integrals, dtype=float).tolist()
 
 
-def _microsector_cphi_values(microsector: SupportsMicrosector) -> List[float]:
-    values: List[float] = []
-    measures = getattr(microsector, "filtered_measures", {}) or {}
-    if isinstance(measures, Mapping):
-        cphi_payload = measures.get("cphi")
-        if isinstance(cphi_payload, Mapping):
-            wheels = cphi_payload.get("wheels")
-            if isinstance(wheels, Mapping):
-                for payload in wheels.values():
-                    if isinstance(payload, Mapping):
-                        value = payload.get("value")
-                        if isinstance(value, (int, float)) and math.isfinite(value):
-                            values.append(float(value))
-        for suffix in WHEEL_SUFFIXES:
-            key = f"cphi_{suffix}"
-            value = measures.get(key)
-            if isinstance(value, (int, float)) and math.isfinite(value):
-                values.append(float(value))
-    return values
 
 
-def _microsector_phase_synchrony_values(microsector: SupportsMicrosector) -> List[float]:
-    synchrony = getattr(microsector, "phase_synchrony", {}) or {}
-    values: List[float] = []
-    if isinstance(synchrony, Mapping):
-        for value in synchrony.values():
-            if isinstance(value, (int, float)) and math.isfinite(value):
-                values.append(float(value))
-    return values
-
-
-def _microsector_variability(
-    microsectors: Sequence[SupportsMicrosector] | None,
-    bundles: Sequence[SupportsEPIBundle],
-    lap_indices: Sequence[int],
-    lap_metadata: Sequence[Mapping[str, object]],
-) -> List[Dict[str, object]]:
-    if not microsectors:
-        return []
-    bundle_count = len(bundles)
-    include_laps = len(lap_metadata) > 1
-    xp = jnp if _HAS_JAX else np
-    delta_series = xp.asarray([float(bundle.delta_nfr) for bundle in bundles], dtype=float)
-    sense_index_series = xp.asarray([float(bundle.sense_index) for bundle in bundles], dtype=float)
-    timestamp_series = xp.asarray([float(bundle.timestamp) for bundle in bundles], dtype=float)
-    lap_indices_array = xp.full((bundle_count,), -1, dtype=int)
-    if lap_indices:
-        limit = min(len(lap_indices), bundle_count)
-        if limit > 0:
-            trimmed = xp.asarray([int(lap_indices[idx]) for idx in range(limit)], dtype=int)
-            target_indices = xp.arange(limit, dtype=int)
-            if _HAS_JAX:
-                lap_indices_array = lap_indices_array.at[target_indices].set(trimmed)
-            else:
-                lap_indices_array[:limit] = trimmed
-    variability: List[Dict[str, object]] = []
-    for microsector in microsectors:
-        sample_indices = [
-            idx for idx in _microsector_sample_indices(microsector) if 0 <= idx < bundle_count
-        ]
-        sample_index_array = xp.asarray(sample_indices, dtype=int)
-        delta_slice = xp.take(delta_series, sample_index_array)
-        sense_slice = xp.take(sense_index_series, sample_index_array)
-        integral_values = _delta_integral_series(
-            bundles,
-            sample_indices,
-            delta_series=delta_series,
-            timestamp_series=timestamp_series,
-        )
-        cphi_values = _microsector_cphi_values(microsector)
-        synchrony_values = _microsector_phase_synchrony_values(microsector)
-        cphi_stats = _variance_payload(cphi_values)
-        synchrony_stats = _variance_payload(synchrony_values)
-        entry: Dict[str, object] = {
-            "microsector": microsector.index,
-            "label": f"Curva {microsector.index + 1}",
-            "overall": {
-                "samples": len(sample_indices),
-                "delta_nfr": _variance_payload(delta_slice.tolist()),
-                "sense_index": _variance_payload(sense_slice.tolist()),
-                "delta_nfr_integral": _variance_payload(integral_values),
-                "cphi": cphi_stats,
-                "phase_synchrony": synchrony_stats,
-            },
-        }
-        if include_laps and lap_indices and sample_indices:
-            lap_payload: Dict[str, Dict[str, object]] = {}
-            microsector_mask = xp.zeros(bundle_count, dtype=bool)
-            if _HAS_JAX:
-                microsector_mask = microsector_mask.at[sample_index_array].set(True)
-            else:
-                microsector_mask[sample_indices] = True
-            for lap_entry in lap_metadata:
-                lap_index = int(lap_entry.get("index", 0))
-                lap_label = str(lap_entry.get("label", lap_index))
-                lap_mask = xp.equal(lap_indices_array, lap_index)
-                combined_mask = xp.logical_and(microsector_mask, lap_mask)
-                combined_indices_tuple = xp.nonzero(combined_mask)
-                combined_indices = (
-                    combined_indices_tuple[0]
-                    if isinstance(combined_indices_tuple, tuple)
-                    else combined_indices_tuple
-                )
-                if combined_indices.size == 0:
-                    continue
-                lap_specific_indices = [int(idx) for idx in combined_indices.tolist()]
-                lap_delta_slice = xp.take(delta_series, combined_indices)
-                lap_sense_slice = xp.take(sense_index_series, combined_indices)
-                lap_payload[lap_label] = {
-                    "samples": len(lap_specific_indices),
-                    "delta_nfr": _variance_payload(lap_delta_slice.tolist()),
-                    "sense_index": _variance_payload(lap_sense_slice.tolist()),
-                    "delta_nfr_integral": _variance_payload(
-                        _delta_integral_series(
-                            bundles,
-                            lap_specific_indices,
-                            delta_series=delta_series,
-                            timestamp_series=timestamp_series,
-                        )
-                    ),
-                    "cphi": dict(cphi_stats),
-                    "phase_synchrony": dict(synchrony_stats),
-                }
-            if lap_payload:
-                entry["laps"] = lap_payload
-        variability.append(entry)
-    return variability
-
-
-def _aggregate_operator_events(
-    microsectors: Sequence[SupportsMicrosector] | None,
-) -> Dict[str, object]:
-    aggregated: Dict[str, List[Mapping[str, object]]] = {}
-    latent_states: Dict[str, Dict[int, Dict[str, float]]] = {}
-    if not microsectors:
-        return {"events": aggregated, "latent_states": latent_states}
-    for microsector in microsectors:
-        raw_events = getattr(microsector, "operator_events", {}) or {}
-        events: Dict[str, Tuple[Mapping[str, object], ...]] = {}
-        for name, payload in raw_events.items():
-            normalized_name = normalize_structural_operator_identifier(name)
-            if isinstance(payload, SequenceABC) and not isinstance(payload, Mapping):
-                entries = tuple(payload)
-            elif payload is None:
-                entries = ()
-            else:
-                entries = (payload,)
-            if not entries:
-                continue
-            if normalized_name in events:
-                events[normalized_name] = events[normalized_name] + entries
-            else:
-                events[normalized_name] = entries
-        micro_duration = max(
-            0.0,
-            float(getattr(microsector, "end_time", 0.0))
-            - float(getattr(microsector, "start_time", 0.0)),
-        )
-        silent_duration = 0.0
-        silent_density = 0.0
-        silent_events = 0
-        for name, payload in events.items():
-            bucket = aggregated.setdefault(name, [])
-            for entry in payload:
-                event_payload = dict(entry)
-                event_payload.setdefault("microsector", microsector.index)
-                bucket.append(event_payload)
-        silence_entries = silence_event_payloads(events)
-        silent_events = len(silence_entries)
-        for event_payload in silence_entries:
-            duration = float(event_payload.get("duration", 0.0) or 0.0)
-            silent_duration += max(0.0, duration)
-            density_value = float(
-                event_payload.get("structural_density_mean", 0.0) or 0.0
-            )
-            silent_density += max(0.0, density_value)
-        if silent_events:
-            coverage = 0.0
-            if micro_duration > 1e-9:
-                coverage = min(1.0, silent_duration / micro_duration)
-            state_entry = latent_states.setdefault("SILENCE", {})
-            state_entry[microsector.index] = {
-                "coverage": float(coverage),
-                "duration": float(silent_duration),
-                "count": float(silent_events),
-            }
-            if silent_events > 0:
-                state_entry[microsector.index]["mean_density"] = float(
-                    silent_density / silent_events
-                )
-    return {"events": aggregated, "latent_states": latent_states}
 
 
 def orchestrate_delta_metrics(
@@ -2066,169 +1577,131 @@ def orchestrate_delta_metrics(
 ) -> Mapping[str, object]:
     """Pipeline orchestration producing aggregated ΔNFR and Si metrics."""
 
-    objectives = emission_operator(target_delta_nfr, target_sense_index)
-    reception_stage, flattened_records = _stage_reception(telemetry_segments)
-    phase_assignments, weight_lookup = _phase_context_from_microsectors(
-        microsectors
-    )
+    xp_module = jnp if _HAS_JAX else np
+    structural_component = StructuralDeltaComponent()
 
-    network_memory = _extract_network_memory(operator_state)
+    def _reception_stage(
+        segments: Sequence[Sequence[TelemetryRecord]],
+    ) -> tuple[Dict[str, object], Sequence[TelemetryRecord]]:
+        return pipeline_stage_reception(segments, reception_fn=reception_operator)
 
-    if not reception_stage["bundles"]:
-        empty_breakdown = DissonanceBreakdown(
-            value=0.0,
-            useful_magnitude=0.0,
-            parasitic_magnitude=0.0,
-            useful_ratio=0.0,
-            parasitic_ratio=0.0,
-            useful_percentage=0.0,
-            parasitic_percentage=0.0,
-            total_events=0,
-            useful_events=0,
-            parasitic_events=0,
-            useful_dissonance_ratio=0.0,
-            useful_dissonance_percentage=0.0,
-            high_yaw_acc_samples=0,
-            useful_dissonance_samples=0,
+    def _dissonance_wrapper(
+        series: Sequence[float],
+        target: float,
+        *,
+        microsectors: Sequence[SupportsMicrosector] | None = None,
+        bundles: Sequence[SupportsEPIBundle] | None = None,
+    ) -> DissonanceBreakdown:
+        return dissonance_breakdown_operator(
+            series,
+            target,
+            microsectors=microsectors,
+            bundles=bundles,
         )
-        stages = {
-            "reception": reception_stage,
-            "coherence": {
-                "raw_delta": [],
-                "raw_sense_index": [],
-                "smoothed_delta": [],
-                "smoothed_sense_index": [],
-                "bundles": [],
-                "dissonance": 0.0,
-                "dissonance_breakdown": empty_breakdown,
-                "coupling": 0.0,
-                "resonance": 0.0,
-            },
-            "nodal": {
-                "delta_by_node": {},
-                "sense_index_by_node": {},
-                "pairwise_coupling": {"delta_nfr": {}, "sense_index": {}},
-            },
-            "epi": {
-                "integrated": [],
-                "derivative": [],
-                "per_node_integrated": {},
-                "per_node_derivative": {},
-            },
-            "sense": {
-                "series": [],
-                "memory": [],
-                "average": 0.0,
-                "decay": recursion_decay,
-                "network": network_memory,
-            },
-        }
-        return {
-            "objectives": objectives,
-            "bundles": [],
-            "delta_nfr_series": [],
-            "sense_index_series": [],
-            "delta_nfr": 0.0,
-            "sense_index": 0.0,
-            "dissonance": 0.0,
-            "dissonance_breakdown": empty_breakdown,
-            "coupling": 0.0,
-            "resonance": 0.0,
-            "support_effective": 0.0,
-            "load_support_ratio": 0.0,
-            "structural_expansion_longitudinal": 0.0,
-            "structural_contraction_longitudinal": 0.0,
-            "structural_expansion_lateral": 0.0,
-            "structural_contraction_lateral": 0.0,
-            "recursive_trace": [],
-            "lap_sequence": reception_stage["lap_sequence"],
-            "microsector_variability": [],
-            "pairwise_coupling": {"delta_nfr": {}, "sense_index": {}},
-            "nodal_metrics": stages["nodal"],
-            "epi_evolution": stages["epi"],
-            "sense_memory": stages["sense"],
-            "operator_events": _aggregate_operator_events(microsectors),
-            "stages": stages,
-            "network_memory": network_memory,
-        }
 
-    coherence_stage = _stage_coherence(
-        reception_stage["bundles"],
-        objectives,
+    def _coherence_stage(
+        bundles: Sequence[SupportsEPIBundle],
+        objectives: Mapping[str, float],
+    ) -> Dict[str, object]:
+        return pipeline_stage_coherence(
+            bundles,
+            objectives,
+            coherence_window=coherence_window,
+            microsectors=microsectors,
+            load_context_matrix=load_context_matrix,
+            resolve_context_from_bundle=resolve_context_from_bundle,
+            apply_contextual_delta=apply_contextual_delta,
+            update_bundles=_update_bundles,
+            coherence_operator=coherence_operator,
+            dissonance_operator=_dissonance_wrapper,
+            coupling_operator=coupling_operator,
+            resonance_operator=resonance_operator,
+            empty_breakdown_factory=_zero_dissonance_breakdown,
+        )
+
+    def _pairwise(series_by_node: Mapping[str, Sequence[float]], pairs: Sequence[tuple[str, str]]) -> Dict[str, float]:
+        return pairwise_coupling_operator(series_by_node, pairs=pairs)
+
+    def _nodal_stage(bundles_seq: Sequence[SupportsEPIBundle]) -> Dict[str, object]:
+        return pipeline_stage_nodal(
+            bundles_seq,
+            load_context_matrix=load_context_matrix,
+            xp=xp_module,
+            structural_component=structural_component,
+            pairwise_coupling=_pairwise,
+        )
+
+    def _epi_stage(
+        records: Sequence[SupportsTelemetrySample],
+        *,
+        bundles: Sequence[SupportsEPIBundle] | None = None,
+        phase_assignments: Mapping[int, str] | None = None,
+        phase_weight_lookup: Mapping[int, Mapping[str, Mapping[str, float] | float]] | None = None,
+        global_phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
+    ) -> Dict[str, object]:
+        return pipeline_stage_epi(
+            records,
+            bundles=bundles,
+            phase_assignments=phase_assignments,
+            phase_weight_lookup=phase_weight_lookup,
+            global_phase_weights=global_phase_weights,
+            ensure_bundle=_ensure_bundle,
+            normalise_node_evolution=_normalise_node_evolution,
+        )
+
+    def _recursive_filter(series: Sequence[float], seed: float, decay: float) -> Sequence[float]:
+        return recursive_filter_operator(series, seed=seed, decay=decay)
+
+    def _sense_stage(series: Sequence[float]) -> Dict[str, object]:
+        return pipeline_stage_sense(
+            series,
+            recursion_decay=recursion_decay,
+            recursive_filter=_recursive_filter,
+        )
+
+    def _variability_stage(
+        microsectors_arg: Sequence[SupportsMicrosector] | None,
+        bundles_arg: Sequence[SupportsEPIBundle],
+        lap_indices: Sequence[int],
+        lap_metadata: Sequence[Mapping[str, object]],
+    ) -> Sequence[Mapping[str, object]]:
+        return pipeline_microsector_variability(
+            microsectors_arg,
+            bundles_arg,
+            lap_indices,
+            lap_metadata,
+            xp=xp_module,
+            has_jax=_HAS_JAX,
+            delta_integral=_delta_integral_series,
+            variance_payload=_variance_payload,
+        )
+
+    dependencies = PipelineDependencies(
+        emission_operator=emission_operator,
+        reception_stage=_reception_stage,
+        coherence_stage=_coherence_stage,
+        nodal_stage=_nodal_stage,
+        epi_stage=_epi_stage,
+        sense_stage=_sense_stage,
+        variability_stage=_variability_stage,
+        aggregate_events=pipeline_aggregate_operator_events,
+        window_metrics=pipeline_compute_window_metrics,
+        phase_context_resolver=_phase_context_from_microsectors,
+        network_memory_extractor=_extract_network_memory,
+        zero_breakdown_factory=_zero_dissonance_breakdown,
+    )
+
+    return pipeline_orchestrate_delta_metrics(
+        telemetry_segments,
+        target_delta_nfr,
+        target_sense_index,
         coherence_window=coherence_window,
+        recursion_decay=recursion_decay,
         microsectors=microsectors,
+        phase_weights=phase_weights,
+        operator_state=operator_state,
+        dependencies=dependencies,
     )
-    nodal_stage = _stage_nodal_metrics(coherence_stage["bundles"])
-    epi_stage = _stage_epi_evolution(
-        flattened_records,
-        bundles=coherence_stage["bundles"],
-        phase_assignments=phase_assignments,
-        phase_weight_lookup=weight_lookup,
-        global_phase_weights=phase_weights,
-    )
-    sense_stage = _stage_sense(
-        coherence_stage["smoothed_sense_index"], recursion_decay=recursion_decay
-    )
-    sense_stage["network"] = network_memory
-    variability = _microsector_variability(
-        microsectors,
-        coherence_stage["bundles"],
-        reception_stage["lap_indices"],
-        reception_stage["lap_sequence"],
-    )
-
-    stages = {
-        "reception": reception_stage,
-        "coherence": coherence_stage,
-        "nodal": nodal_stage,
-        "epi": epi_stage,
-        "sense": sense_stage,
-    }
-
-    window_metrics = compute_window_metrics(
-        flattened_records,
-        bundles=coherence_stage["bundles"],
-        fallback_to_chronological=True,
-        objectives=objectives,
-    )
-
-    return {
-        "objectives": objectives,
-        "bundles": coherence_stage["bundles"],
-        "delta_nfr_series": coherence_stage["smoothed_delta"],
-        "sense_index_series": coherence_stage["smoothed_sense_index"],
-        "delta_nfr": mean(coherence_stage["smoothed_delta"])
-        if coherence_stage["smoothed_delta"]
-        else 0.0,
-        "sense_index": mean(coherence_stage["smoothed_sense_index"])
-        if coherence_stage["smoothed_sense_index"]
-        else 0.0,
-        "dissonance": coherence_stage["dissonance"],
-        "dissonance_breakdown": coherence_stage["dissonance_breakdown"],
-        "coupling": coherence_stage["coupling"],
-        "resonance": coherence_stage["resonance"],
-        "coherence_index": coherence_stage["coherence_index"],
-        "coherence_index_series": coherence_stage["coherence_index_series"],
-        "raw_coherence_index": coherence_stage["raw_coherence_index"],
-        "frequency_label": coherence_stage["frequency_label"],
-        "frequency_classification": coherence_stage["frequency_classification"],
-        "support_effective": window_metrics.support_effective,
-        "load_support_ratio": window_metrics.load_support_ratio,
-        "structural_expansion_longitudinal": window_metrics.structural_expansion_longitudinal,
-        "structural_contraction_longitudinal": window_metrics.structural_contraction_longitudinal,
-        "structural_expansion_lateral": window_metrics.structural_expansion_lateral,
-        "structural_contraction_lateral": window_metrics.structural_contraction_lateral,
-        "recursive_trace": sense_stage["memory"],
-        "lap_sequence": reception_stage["lap_sequence"],
-        "microsector_variability": variability,
-        "pairwise_coupling": nodal_stage["pairwise_coupling"],
-        "nodal_metrics": nodal_stage,
-        "epi_evolution": epi_stage,
-        "sense_memory": sense_stage,
-        "operator_events": _aggregate_operator_events(microsectors),
-        "stages": stages,
-        "network_memory": network_memory,
-    }
 
 
 __all__ = [
