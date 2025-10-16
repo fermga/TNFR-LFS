@@ -76,6 +76,7 @@ from tnfr_core.operators.operator_detection import (
     normalize_structural_operator_identifier,
     silence_event_payloads,
 )
+from tnfr_core.operators.structural.coherence_il import coherence_operator_il
 from tnfr_core.operators.interfaces import (
     SupportsChassisNode,
     SupportsEPIBundle,
@@ -2234,6 +2235,7 @@ __all__ = [
     "emission_operator",
     "reception_operator",
     "coherence_operator",
+    "coherence_operator_il",
     "dissonance_operator",
     "dissonance_breakdown_operator",
     "DissonanceBreakdown",
