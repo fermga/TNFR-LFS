@@ -1120,6 +1120,19 @@ def segment_microsectors(
         )
         _invalidate_goal_cache(specs, goal_recompute_start)
 
+    gradient_prefix_sums: List[float] = [0.0]
+    gradient_prefix_counts: List[int] = [0]
+    if track_gradient_cache is not None:
+        running_sum = 0.0
+        running_count = 0
+        for gradient_value in track_gradient_cache:
+            if math.isfinite(gradient_value):
+                running_sum += float(gradient_value)
+                running_count += 1
+            gradient_prefix_sums.append(running_sum)
+            gradient_prefix_counts.append(running_count)
+    cache_length = len(track_gradient_cache) if track_gradient_cache is not None else 0
+
     for spec in specs:
         start = spec["start"]
         end = spec["end"]
@@ -1189,32 +1202,44 @@ def segment_microsectors(
             direction_changes,
         )
         phase_gradient_map: Dict[PhaseLiteral, float] = {}
-        gradient_samples: List[float] = []
         phase_gradient_totals: Dict[PhaseLiteral, float] = {}
         phase_gradient_counts: Dict[PhaseLiteral, int] = {}
         for phase in phase_boundaries:
             phase_gradient_totals[phase] = 0.0
             phase_gradient_counts[phase] = 0
+        microsector_total = 0.0
+        microsector_count = 0
         if track_gradient_cache is not None:
-            for idx in range(start, end + 1):
-                if not (0 <= idx < len(track_gradient_cache)):
+            for phase, (phase_start, phase_stop) in phase_boundaries.items():
+                clamped_start = max(phase_start, start, 0)
+                clamped_stop = min(phase_stop, end + 1, cache_length)
+                if clamped_stop <= clamped_start:
                     continue
-                gradient_value = track_gradient_cache[idx]
-                if not math.isfinite(gradient_value):
+                phase_total = (
+                    gradient_prefix_sums[clamped_stop]
+                    - gradient_prefix_sums[clamped_start]
+                )
+                phase_count = (
+                    gradient_prefix_counts[clamped_stop]
+                    - gradient_prefix_counts[clamped_start]
+                )
+                if phase_count == 0:
                     continue
-                for phase, (phase_start, phase_stop) in phase_boundaries.items():
-                    if not (phase_start <= idx < phase_stop):
-                        continue
-                    phase_gradient_totals[phase] += gradient_value
-                    phase_gradient_counts[phase] += 1
-                    gradient_samples.append(gradient_value)
+                phase_gradient_totals[phase] = phase_total
+                phase_gradient_counts[phase] = phase_count
+                microsector_total += phase_total
+                microsector_count += phase_count
         for phase, total in phase_gradient_totals.items():
             count = phase_gradient_counts[phase]
             if count > 0:
                 phase_gradient_map[phase] = float(total / count)
             else:
                 phase_gradient_map[phase] = 0.0
-        microsector_gradient = fmean(gradient_samples) if gradient_samples else 0.0
+        microsector_gradient = (
+            float(microsector_total / microsector_count)
+            if microsector_count > 0
+            else 0.0
+        )
 
         gradient_signature = _phase_gradient_signature(phase_gradient_map)
         cache_valid = bool(spec.get("goal_cache_valid"))
