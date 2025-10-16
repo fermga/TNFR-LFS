@@ -1,0 +1,212 @@
+src/tnfr_lfs/cli/parser.py
+    F 27:0 build_parser - C
+src/tnfr_lfs/cli/common.py
+    F 388:0 group_records_by_lap - C
+src/tnfr_lfs/cli/app.py
+    F 79:0 run_cli - C
+src/tnfr_lfs/cli/workflows.py
+    F 1534:0 _generate_out_reports - F
+    F 2503:0 _handle_analyze - F
+    F 640:0 build_setup_plan_payload - E
+    F 1381:0 _sense_index_map - D
+    F 2273:0 _handle_diagnose - D
+    F 1300:0 _phase_deviation_messages - D
+    F 215:0 _resolve_playbook_rules - C
+    F 3071:0 _capture_udp_samples - C
+    F 932:0 _resolve_baseline_destination - C
+    F 2776:0 _handle_suggest - C
+    F 2188:0 _handle_osd - C
+    F 270:0 _augment_session_with_playbook - C
+    F 1268:0 _phase_templates_from_config - C
+    F 2916:0 _handle_report - C
+src/tnfr_lfs/cli/pareto.py
+    F 64:0 handle - C
+src/tnfr_lfs/cli/osd.py
+    F 525:0 _render_page_a - F
+    F 1872:0 _render_page_c - F
+    M 269:4 TelemetryHUD._recompute - F
+    F 2402:0 _build_setup_plan - F
+    F 1363:0 _brake_event_meter - D
+    F 1139:0 _brake_headroom_line - D
+    F 1720:0 _lap_integral_series - C
+    M 2167:4 OSDController.run - C
+    F 1326:0 _operator_chip_line - C
+    F 1816:0 _operational_checklist_line - C
+    F 1521:0 _render_page_b - C
+    F 951:0 _coupling_alert_line - C
+    F 1653:0 _delta_density - C
+    F 1427:0 _silence_event_meter - C
+src/tnfr_lfs/cli/io.py
+    F 165:0 _load_records - C
+src/tnfr_lfs/exporters/__init__.py
+    F 129:0 markdown_exporter - F
+    F 630:0 build_coherence_map_payload - D
+    F 962:0 build_delta_bifurcation_payload - D
+    F 779:0 _iter_operator_events_for_microsector - C
+    F 486:0 lfs_set_exporter - C
+    F 392:0 lfs_notes_exporter - C
+    F 874:0 build_operator_trajectories_payload - C
+    F 1162:0 render_delta_bifurcation - C
+src/tnfr_lfs/exporters/report_extended.py
+    F 190:0 _render_pareto - C
+    F 231:0 _render_abtest - C
+src/tnfr_lfs/exporters/setup_plan.py
+    F 134:0 serialise_setup_plan - D
+src/tnfr_lfs/analysis/abtest.py
+    F 57:0 _extract_lap_values - C
+    F 150:0 ab_compare_by_lap - C
+src/tnfr_lfs/analysis/insights.py
+    F 60:0 compute_insights - C
+src/tnfr_lfs/analysis/brake_thermal.py
+    M 114:4 BrakeThermalEstimator.step - C
+src/tnfr_lfs/analysis/robustness.py
+    F 313:0 compute_session_robustness - D
+    F 58:0 _phase_sample_map - C
+    F 16:0 _lap_groups - C
+src/tnfr_lfs/plugins/config.py
+    M 367:4 PluginConfig._parse_profiles - D
+    M 294:4 PluginConfig._validate - C
+src/tnfr_lfs/plugins/template.py
+    F 38:0 render_plugins_template - C
+src/tnfr_lfs/recommender/rules.py
+    M 2153:4 PhaseDeltaDeviationRule.evaluate - F
+    M 2872:4 TyreBalanceRule.evaluate - F
+    C 2134:0 PhaseDeltaDeviationRule - E
+    M 2534:4 PhaseNodeOperatorRule.evaluate - E
+    F 2014:0 _brake_event_summary - E
+    C 2850:0 TyreBalanceRule - E
+    C 2515:0 PhaseNodeOperatorRule - C
+    M 3222:4 FootprintEfficiencyRule.evaluate - C
+    M 3850:4 RecommendationEngine.generate - C
+    M 1440:4 AeroCoherenceRule.evaluate - C
+    M 3353:4 DetuneRatioRule.evaluate - C
+    M 3579:4 UsefulDissonanceRule.evaluate - C
+    F 2100:0 _operator_trigger - C
+    M 1308:4 BrakeHeadroomRule.evaluate - C
+    F 1729:0 _apply_action_template - C
+    M 1206:4 SuspensionVelocityRule.evaluate - C
+    M 1110:4 BottomingPriorityRule.evaluate - C
+    M 1528:4 FrontWingBalanceRule.evaluate - C
+    C 3208:0 FootprintEfficiencyRule - C
+    M 3296:4 CurbComplianceRule.evaluate - C
+    M 3424:4 ShiftStabilityRule.evaluate - C
+src/tnfr_lfs/recommender/search.py
+    F 236:0 objective_score - D
+    M 776:4 SetupPlanner.plan - C
+    M 892:4 SetupPlanner._adapt_space - C
+    M 940:4 SetupPlanner._compute_sensitivities - C
+src/tnfr_lfs/telemetry/track_loader.py
+    F 64:0 _apply_scale - C
+src/tnfr_lfs/telemetry/outsim_client.py
+    M 193:4 OutSimClient.ingest - D
+src/tnfr_lfs/telemetry/outsim_udp.py
+    M 851:4 OutSimUDPClient.recv - C
+    M 1148:4 AsyncOutSimUDPClient.recv - C
+    M 650:4 _OutSimPacketProcessor.pop_ready_packet - C
+    M 586:4 _OutSimPacketProcessor.record_packet - C
+    M 467:4 OutSimPacket.from_bytes - C
+src/tnfr_lfs/telemetry/fusion.py
+    M 1149:4 TelemetryFusion._resolve_brake_temperatures - C
+    M 1043:4 TelemetryFusion._resolve_wheel_temperatures - C
+    M 1208:4 TelemetryFusion._compute_line_deviation - C
+    M 1107:4 TelemetryFusion._resolve_wheel_pressures - C
+    M 657:4 TelemetryFusion._load_brake_thermal_profiles - C
+src/tnfr_lfs/telemetry/outgauge_udp.py
+    M 830:4 OutGaugeUDPClient.recv - C
+    M 1139:4 AsyncOutGaugeUDPClient.recv - C
+    M 602:4 _OutGaugePacketProcessor.pop_ready_packet - C
+    M 528:4 _OutGaugePacketProcessor.record_packet - C
+src/tnfr_lfs/telemetry/offline/profiles.py
+    F 808:0 _serialise_record - E
+    F 586:0 _record_from_mapping - D
+    M 249:4 ProfileManager.resolve - C
+    M 177:4 ProfileRecord.update_jacobian_history - C
+    F 554:0 _merge_phase_weights - C
+    M 148:4 ProfileRecord.apply_mutation - C
+src/tnfr_lfs/telemetry/offline/raf.py
+    F 172:0 _merge_overlays - C
+    F 297:0 raf_to_telemetry_records - C
+    F 654:0 _estimate_gear - C
+src/tnfr_lfs/telemetry/offline/replay_csv_bundle.py
+    M 243:4 ReplayCSVBundleReader.to_dataframe - C
+    M 321:4 ReplayCSVBundleReader.to_records - C
+src/tnfr_lfs/visualization/sparkline.py
+    F 13:0 render_sparkline - C
+src/tnfr_core/metrics/segmentation.py
+    F 815:0 segment_microsectors - F
+    F 2827:0 _build_goals - F
+    F 2169:0 _recompute_bundles - E
+    F 2619:0 _phase_nu_f_targets - E
+    F 432:0 _accumulate_segment_metrics - D
+    F 2411:0 _compute_phase_boundaries - C
+    F 2354:0 _estimate_entropy - C
+    F 3344:0 _apply_phase_override - C
+    F 3410:0 _compute_window_occupancy - C
+    F 3491:0 detect_quiet_microsector_streaks - C
+    F 3529:0 _adjust_phase_weights_with_dominance - C
+    F 694:0 _resolve_segment_adjustments - C
+    F 3384:0 _blend_phase_weight_map - C
+src/tnfr_core/metrics/metrics.py
+    F 1198:0 compute_window_metrics - F
+    F 2869:0 compute_aero_coherence - D
+    F 813:0 _cphi_wheel_from_samples - D
+    F 3019:0 resolve_aero_mechanical_coherence - C
+    F 1104:0 _compute_bumpstop_histogram - C
+    F 962:0 _suspension_velocity_bands_from_series - C
+src/tnfr_core/metrics/spectrum.py
+    F 433:0 phase_alignment - C
+    F 86:0 _resolve_dominant_correlation - C
+    F 145:0 _dominant_frequency_goertzel - C
+src/tnfr_core/metrics/coherence_calibration.py
+    M 193:4 CoherenceCalibrationStore.save - C
+    M 242:4 CoherenceCalibrationStore._load - C
+src/tnfr_core/operators/operators.py
+    F 931:0 recursivity_operator - F
+    F 402:0 dissonance_breakdown_operator - D
+    F 232:0 evolve_epi - D
+    F 2022:0 _microsector_variability - D
+    F 1736:0 _stage_epi_evolution - D
+    F 2120:0 _aggregate_operator_events - C
+    F 1139:0 _extract_network_memory - C
+    F 1385:0 mutation_operator - C
+    F 1232:0 tyre_balance_controller - C
+    F 1664:0 _stage_nodal_metrics - C
+    F 1991:0 _microsector_cphi_values - C
+    F 763:0 _normalise_session_identifier - C
+    F 809:0 _ensure_recursivity_sessions - C
+src/tnfr_core/operators/cache_settings.py
+    M 33:4 CacheOptions.from_config - D
+src/tnfr_core/operators/operator_detection.py
+    F 1103:0 detect_ra - D
+    F 251:0 _sequence_metadata - D
+    F 939:0 detect_um - D
+    F 750:0 detect_en - C
+    F 2066:0 detect_silence - C
+    F 1679:0 detect_remesh - C
+    F 1991:0 detect_il - C
+    F 1584:0 detect_zhir - C
+    F 1261:0 detect_val - C
+    F 1386:0 detect_nul - C
+    F 1860:0 detect_al - C
+    F 435:0 detect_nav - C
+    F 1929:0 detect_oz - C
+src/tnfr_core/operators/cache.py
+    F 194:0 configure_cache - C
+src/tnfr_core/operators/structural_time.py
+    F 76:0 compute_structural_timestamps - C
+src/tnfr_core/equations/coherence.py
+    F 92:0 sense_index - C
+src/tnfr_core/equations/epi.py
+    M 255:4 NaturalFrequencyAnalyzer._compute_dynamic_multipliers_raw - C
+    M 1076:4 _RunningBaseline.add - C
+    F 927:0 _phase_weight - C
+src/tnfr_core/equations/delta_utils.py
+    F 11:0 distribute_weighted_delta - C
+src/tnfr_core/equations/utils.py
+    F 11:0 normalised_entropy - C
+src/tnfr_core/equations/contextual_delta.py
+    F 214:0 load_context_matrix - C
+    F 138:0 _parse_curve_bands - C
+
+168 blocks (classes, functions, methods) analyzed.
+Average complexity: D (21.80952380952381)
