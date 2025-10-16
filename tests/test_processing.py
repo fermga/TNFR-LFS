@@ -62,6 +62,18 @@ def test_compute_insights_matches_components(
     assert result.robustness == expected_robustness
 
 
+def test_compute_insights(synthetic_records, tmp_path) -> None:
+    manager = preloaded_profile_manager(tmp_path)
+    result = compute_insights(
+        list(synthetic_records),
+        car_model="FZR",
+        track_name="generic",
+        profile_manager=manager,
+    )
+    assert isinstance(result, InsightsResult)
+    assert result.microsectors
+
+
 def test_compute_session_robustness_vectorised_matches_scalar(
     synthetic_records, tmp_path, monkeypatch
 ) -> None:
