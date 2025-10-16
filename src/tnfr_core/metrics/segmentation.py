@@ -829,6 +829,8 @@ def segment_microsectors(
     sample_rate = estimate_sample_rate(records)
     steer_series = _extract_signal(records, "steer")
     lat_series = _extract_signal(records, "lateral_accel")
+    long_series = _extract_signal(records, "longitudinal_accel")
+    slip_series = _extract_signal(records, "slip_ratio")
     yaw_rate_cache = _precompute_yaw_rates(records)
     steer_norm = _normalise_signal(steer_series)
     yaw_norm = _normalise_signal(yaw_rate_cache)
@@ -878,7 +880,12 @@ def segment_microsectors(
         brake_temperatures = segment_summary.brake_temperatures
         brake_temperature_dispersion = segment_summary.brake_temperature_std
         phase_weight_map = _initial_phase_weight_map(
-            records, phase_samples, yaw_rate_cache
+            records,
+            phase_samples,
+            yaw_rate_cache,
+            slip_series,
+            lat_series,
+            long_series,
         )
         if phase_weight_overrides:
             phase_weight_map = _blend_phase_weight_map(
@@ -3199,7 +3206,17 @@ def _initial_phase_weight_map(
     records: Sequence[SupportsTelemetrySample],
     phase_samples: Mapping[PhaseLiteral, Iterable[int]],
     yaw_rates: Sequence[float],
+    slip_series: Sequence[float],
+    lat_series: Sequence[float],
+    long_series: Sequence[float],
 ) -> Dict[PhaseLiteral, Dict[str, float]]:
+    """Heuristically derive the baseline weighting map for each phase.
+
+    The telemetry-derived sequences (``yaw_rates``, ``slip_series``, ``lat_series``
+    and ``long_series``) are expected to be aligned with ``records`` and
+    typically share the same length. Indices outside of the available range for
+    a series are ignored during the aggregation phase.
+    """
     weights: Dict[PhaseLiteral, Dict[str, float]] = {}
 
     def _tightness(values: Sequence[float], reference: float, cap: float) -> float:
@@ -3217,13 +3234,19 @@ def _initial_phase_weight_map(
 
         record_count = len(records)
         yaw_count = len(yaw_rates)
+        slip_count = len(slip_series)
+        lat_count = len(lat_series)
+        long_count = len(long_series)
 
         for idx in tuple_indices:
-            if 0 <= idx < record_count:
-                record = records[idx]
-                slip_values.append(record.slip_ratio)
-                lat_values.append(record.lateral_accel)
-                long_values.append(record.longitudinal_accel)
+            if idx < 0 or idx >= record_count:
+                continue
+            if 0 <= idx < slip_count:
+                slip_values.append(float(slip_series[idx]))
+            if 0 <= idx < lat_count:
+                lat_values.append(float(lat_series[idx]))
+            if 0 <= idx < long_count:
+                long_values.append(float(long_series[idx]))
             if 0 <= idx < yaw_count:
                 phase_yaw_rates.append(_cached_yaw_rate(yaw_rates, idx))
 
