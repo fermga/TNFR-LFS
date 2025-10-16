@@ -50,6 +50,7 @@ from tnfr_core.operators import (
     acoplamiento_operator,
     coupling_operator,
     coherence_operator,
+    coherence_operator_il,
     dissonance_breakdown_operator,
     dissonance_operator,
     _STABILITY_COV_THRESHOLD,
@@ -177,6 +178,38 @@ def test_delta_integral_series_vectorized_matches_reference():
         expected = _delta_integral_series_reference(bundles, indices)
         result = _delta_integral_series(bundles, indices)
         assert result == pytest.approx(expected)
+
+
+def test_coherence_operator_il_preserves_mean():
+    series = [0.2, -0.1, 0.5, 1.2, -0.4, 0.3]
+
+    smoothed = coherence_operator_il(series, window=5)
+
+    assert len(smoothed) == len(series)
+    assert mean(smoothed) == pytest.approx(mean(series), rel=1e-12, abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    "window",
+    [
+        pytest.param(-1, id="negative"),
+        pytest.param(0, id="zero"),
+        pytest.param(4, id="even"),
+    ],
+)
+def test_coherence_operator_il_rejects_invalid_windows(window: int):
+    with pytest.raises(ValueError):
+        coherence_operator_il([1.0, 2.0, 3.0], window=window)
+
+
+def test_coherence_operator_il_handles_edge_cases():
+    assert coherence_operator_il([], window=5) == []
+
+    short_series = [1.0, 2.0, 3.0]
+    smoothed_short = coherence_operator_il(short_series, window=7)
+
+    assert len(smoothed_short) == len(short_series)
+    assert mean(smoothed_short) == pytest.approx(mean(short_series), rel=1e-12, abs=1e-12)
 
 
 CASES = [
