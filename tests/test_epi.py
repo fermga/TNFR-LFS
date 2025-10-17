@@ -38,7 +38,7 @@ from tnfr_core.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_core.spectrum import (
+from tnfr_core.signal.spectrum import (
     apply_window,
     cross_spectrum,
     detrend,

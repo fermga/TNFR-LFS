@@ -10,10 +10,12 @@ from typing import Literal
 import numpy as np
 
 from tnfr_core.runtime.shared import SupportsTelemetrySample
-from tnfr_core.signal import spectrum as _signal_spectrum
 from tnfr_core.signal.spectrum import (
     CrossSpectrumResult,
     PowerSpectrumResult,
+    _resolve_backend,
+    _xp_array,
+    _xp_size,
     apply_window,
     cross_spectrum,
     detrend,
@@ -39,10 +41,6 @@ __all__ = [
     "phase_to_latency_ms",
     "motor_input_correlations",
 ]
-
-_resolve_backend = _signal_spectrum._resolve_backend
-_xp_array = _signal_spectrum._xp_array
-_xp_size = _signal_spectrum._xp_size
 
 
 @dataclass(frozen=True)

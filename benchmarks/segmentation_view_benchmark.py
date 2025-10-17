@@ -23,7 +23,8 @@ _lfs_contextual_delta.ensure_context_loader()
 from tnfr_core.equations.telemetry import TelemetryRecord
 from tnfr_core.metrics.resonance import estimate_excitation_frequency
 from tnfr_core.metrics.segmentation import _SequenceSegment
-from tnfr_core.metrics.spectrum import estimate_sample_rate, phase_alignment
+from tnfr_core.metrics.spectrum import phase_alignment
+from tnfr_core.signal.spectrum import estimate_sample_rate
 
 
 def _load_records(path: Path, limit: int | None = None) -> list[TelemetryRecord]:

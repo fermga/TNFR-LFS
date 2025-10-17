@@ -1,10 +1,26 @@
 """Signal processing helpers for :mod:`tnfr_core`."""
 
-from . import spectrum as _spectrum
+from __future__ import annotations
 
-from .spectrum import *  # noqa: F401,F403
+from .spectrum import (  # noqa: F401
+    CrossSpectrumResult,
+    PowerSpectrumResult,
+    apply_window,
+    cross_spectrum,
+    detrend,
+    estimate_sample_rate,
+    hann_window,
+    power_spectrum,
+)
 
-__all__ = list(dict.fromkeys(getattr(_spectrum, "__all__", ())))
+__all__ = [
+    "CrossSpectrumResult",
+    "PowerSpectrumResult",
+    "apply_window",
+    "cross_spectrum",
+    "detrend",
+    "estimate_sample_rate",
+    "hann_window",
+    "power_spectrum",
+]
 
-
-del _spectrum

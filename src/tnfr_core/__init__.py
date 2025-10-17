@@ -41,6 +41,7 @@ __all__ = list(
             *_operators.__all__,
             *_signal.__all__,
             *_runtime.__all__,
+            *_signal.__all__,
         ]
     )
 )
@@ -76,6 +77,7 @@ _MODULE_ALIASES = {
     "runtime": _runtime,
     "runtime_shared": import_module("tnfr_core.runtime.shared"),
     "signal": _signal,
+    "signal_spectrum": import_module("tnfr_core.signal.spectrum"),
 }
 
 for alias, module in _MODULE_ALIASES.items():

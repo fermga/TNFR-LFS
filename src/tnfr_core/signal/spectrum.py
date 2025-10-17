@@ -1,13 +1,25 @@
-"""Generic spectral signal processing helpers."""
+"""Generic spectral helpers shared across TNFR components."""
 
 from __future__ import annotations
 
 import math
-from typing import Any, List, Sequence, Tuple
+from typing import Any, Sequence, Tuple
 
 import numpy as np
 
 from tnfr_core.runtime.shared import SupportsTelemetrySample, _HAS_JAX, jnp
+
+__all__ = [
+    "CrossSpectrumResult",
+    "PowerSpectrumResult",
+    "apply_window",
+    "cross_spectrum",
+    "detrend",
+    "estimate_sample_rate",
+    "hann_window",
+    "power_spectrum",
+]
+
 
 if _HAS_JAX and jnp is not None:  # pragma: no cover - exercised only with JAX
     try:  # pragma: no cover - exercised only with JAX 0.4+
@@ -23,18 +35,6 @@ if _HAS_JAX and jnp is not None:  # pragma: no cover - exercised only with JAX
             _JAX_ARRAY_TYPES = ()
 else:  # pragma: no cover - exercised when JAX is unavailable
     _JAX_ARRAY_TYPES = ()
-
-
-__all__ = [
-    "estimate_sample_rate",
-    "hann_window",
-    "apply_window",
-    "detrend",
-    "power_spectrum",
-    "cross_spectrum",
-    "PowerSpectrumResult",
-    "CrossSpectrumResult",
-]
 
 
 def _has_jax_array(value: Any) -> bool:
@@ -68,6 +68,26 @@ def _xp_size(values: Any) -> int:
             return int(shape[0])
         return 0
     return len(values)
+
+
+def estimate_sample_rate(records: Sequence[SupportsTelemetrySample]) -> float:
+    """Estimate the sampling frequency of ``records`` in Hertz."""
+
+    deltas: list[float] = []
+    previous: float | None = None
+    for record in records:
+        timestamp = float(record.timestamp)
+        if previous is not None:
+            delta = timestamp - previous
+            if delta > 1e-9 and math.isfinite(delta):
+                deltas.append(delta)
+        previous = timestamp
+    if not deltas:
+        return 0.0
+    average_delta = sum(deltas) / len(deltas)
+    if average_delta <= 0.0:
+        return 0.0
+    return 1.0 / average_delta
 
 
 def hann_window(length: int, *, xp_module: Any | None = None) -> Any:
@@ -203,7 +223,7 @@ def cross_spectrum(
         freq_np = np.asarray(frequencies, dtype=float)
         cross_np = np.asarray(cross_values, dtype=complex)
 
-        spectrum: List[Tuple[float, float, float]] = []
+        spectrum: list[tuple[float, float, float]] = []
         for frequency, value in zip(freq_np, cross_np):
             if frequency <= 1e-9:
                 continue
@@ -224,22 +244,3 @@ def cross_spectrum(
     cross_imag = xp_backend.imag(cross_values)
     return xp_backend.stack((frequencies, cross_real, cross_imag), axis=-1)
 
-
-def estimate_sample_rate(records: Sequence[SupportsTelemetrySample]) -> float:
-    """Estimate the sampling frequency of ``records`` in Hertz."""
-
-    deltas: List[float] = []
-    previous: float | None = None
-    for record in records:
-        timestamp = float(record.timestamp)
-        if previous is not None:
-            delta = timestamp - previous
-            if delta > 1e-9 and math.isfinite(delta):
-                deltas.append(delta)
-        previous = timestamp
-    if not deltas:
-        return 0.0
-    average_delta = sum(deltas) / len(deltas)
-    if average_delta <= 0.0:
-        return 0.0
-    return 1.0 / average_delta
