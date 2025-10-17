@@ -1,6 +1,12 @@
 # `tnfr_core.operators.operators` module
 High-level TNFR × LFS operators for telemetry analytics pipelines.
 
+!!! warning "Deprecation notice"
+    The function ``tnfr_core.operators.operators.evolve_epi`` now forwards to
+    :func:`tnfr_core.operators.structural.epi_evolution.evolve_epi` and will be
+    removed in a future release. Update imports to reference the structural module
+    directly to silence the deprecation warning.
+
 ## Classes
 ### `DissonanceBreakdown`
 Breakdown of dissonance events by usefulness.

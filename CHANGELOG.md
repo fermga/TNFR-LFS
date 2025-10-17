@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## Unreleased
+
+### Changed
+
+* document the structural ``evolve_epi`` entry point in the reference guides and
+  changelog to steer integrations towards the maintained module.
+
+### Deprecated
+
+* ``tnfr_core.operators.operators.evolve_epi`` now emits a deprecation warning and
+  delegates to ``tnfr_core.operators.structural.epi_evolution.evolve_epi``.
+
 ## v0.8.0 (2025-10-15)
 
 ### Feature
