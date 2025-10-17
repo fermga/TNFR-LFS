@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib import import_module
 from statistics import mean
 from typing import Callable, Dict, Mapping, Sequence
 
@@ -39,6 +38,26 @@ from tnfr_core.operators.pipeline.variability import (
     _microsector_variability as pipeline_microsector_variability,
     _phase_context_from_microsectors,
     compute_window_metrics as pipeline_compute_window_metrics,
+)
+from tnfr_core.operators.al_operator import (
+    _zero_dissonance_breakdown,
+    coherence_operator,
+    coupling_operator,
+    dissonance_breakdown_operator,
+    pairwise_coupling_operator,
+    resonance_operator,
+)
+from tnfr_core.operators.en_operator import (
+    _ensure_bundle,
+    _normalise_node_evolution,
+    _update_bundles,
+    emission_operator,
+    reception_operator,
+)
+from tnfr_core.operators.il_operator import (
+    _delta_integral_series,
+    _variance_payload,
+    recursive_filter_operator,
 )
 
 
@@ -162,7 +181,6 @@ def orchestrate_delta_metrics(
     """Coordinate the execution of the ΔNFR×Si pipeline stages."""
 
     if dependencies is None:
-        operators_module = import_module("tnfr_core.operators.operators")
         from tnfr_core.operators.pipeline.delta_workflow import (
             build_delta_metrics_dependencies,
         )
@@ -181,14 +199,14 @@ def orchestrate_delta_metrics(
             xp_module=xp_module,
             has_jax=_HAS_JAX,
             structural_component=structural_component,
-            emission_operator=operators_module.emission_operator,
-            reception_operator=operators_module.reception_operator,
-            dissonance_breakdown_operator=operators_module.dissonance_breakdown_operator,
-            coherence_operator=operators_module.coherence_operator,
-            coupling_operator=operators_module.coupling_operator,
-            resonance_operator=operators_module.resonance_operator,
-            pairwise_coupling_operator=operators_module.pairwise_coupling_operator,
-            recursive_filter_operator=operators_module.recursive_filter_operator,
+            emission_operator=emission_operator,
+            reception_operator=reception_operator,
+            dissonance_breakdown_operator=dissonance_breakdown_operator,
+            coherence_operator=coherence_operator,
+            coupling_operator=coupling_operator,
+            resonance_operator=resonance_operator,
+            pairwise_coupling_operator=pairwise_coupling_operator,
+            recursive_filter_operator=recursive_filter_operator,
             stage_reception=pipeline_stage_reception,
             stage_coherence=pipeline_stage_coherence,
             stage_nodal=pipeline_stage_nodal,
@@ -199,15 +217,15 @@ def orchestrate_delta_metrics(
             compute_window_metrics=pipeline_compute_window_metrics,
             phase_context_resolver=_phase_context_from_microsectors,
             network_memory_extractor=extract_network_memory,
-            zero_breakdown_factory=operators_module._zero_dissonance_breakdown,
+            zero_breakdown_factory=_zero_dissonance_breakdown,
             load_context_matrix=load_context_matrix,
             resolve_context_from_bundle=resolve_context_from_bundle,
             apply_contextual_delta=apply_contextual_delta,
-            update_bundles=operators_module._update_bundles,
-            ensure_bundle=operators_module._ensure_bundle,
-            normalise_node_evolution=operators_module._normalise_node_evolution,
-            delta_integral=operators_module._delta_integral_series,
-            variance_payload=operators_module._variance_payload,
+            update_bundles=_update_bundles,
+            ensure_bundle=_ensure_bundle,
+            normalise_node_evolution=_normalise_node_evolution,
+            delta_integral=_delta_integral_series,
+            variance_payload=_variance_payload,
         )
 
     return _run_pipeline(
