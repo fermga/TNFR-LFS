@@ -3,14 +3,42 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from statistics import mean
 from typing import Callable, Dict, Mapping, Sequence
 
+import numpy as np
+
+try:  # pragma: no cover - exercised when JAX is installed
+    import jax.numpy as jnp  # type: ignore[import-not-found]
+
+    _HAS_JAX = True
+except ModuleNotFoundError:  # pragma: no cover - exercised when JAX is unavailable
+    jnp = None
+    _HAS_JAX = False
+
 from tnfr_core.equations.epi import TelemetryRecord
+from tnfr_core.operators.entry.recursivity import extract_network_memory
 from tnfr_core.operators.interfaces import (
     SupportsEPIBundle,
     SupportsMicrosector,
     SupportsTelemetrySample,
+)
+from tnfr_core.operators.pipeline.coherence import _stage_coherence as pipeline_stage_coherence
+from tnfr_core.operators.pipeline.epi import _stage_epi_evolution as pipeline_stage_epi
+from tnfr_core.operators.pipeline.events import (
+    _aggregate_operator_events as pipeline_aggregate_operator_events,
+)
+from tnfr_core.operators.pipeline.nodal import (
+    StructuralDeltaComponent,
+    _stage_nodal_metrics as pipeline_stage_nodal,
+)
+from tnfr_core.operators.pipeline.reception import _stage_reception as pipeline_stage_reception
+from tnfr_core.operators.pipeline.sense import _stage_sense as pipeline_stage_sense
+from tnfr_core.operators.pipeline.variability import (
+    _microsector_variability as pipeline_microsector_variability,
+    _phase_context_from_microsectors,
+    compute_window_metrics as pipeline_compute_window_metrics,
 )
 
 
@@ -124,15 +152,87 @@ def orchestrate_delta_metrics(
     target_delta_nfr: float,
     target_sense_index: float,
     *,
-    coherence_window: int,
+    coherence_window: int = 3,
+    recursion_decay: float = 0.4,
+    microsectors: Sequence[SupportsMicrosector] | None = None,
+    phase_weights: Mapping[str, Mapping[str, float] | float] | None = None,
+    operator_state: Mapping[str, Dict[str, object]] | None = None,
+    dependencies: PipelineDependencies | None = None,
+) -> Mapping[str, object]:
+    """Coordinate the execution of the ΔNFR×Si pipeline stages."""
+
+    if dependencies is None:
+        operators_module = import_module("tnfr_core.operators.operators")
+        from tnfr_core.operators.pipeline.delta_workflow import (
+            build_delta_metrics_dependencies,
+        )
+        from tnfr_core.equations.contextual_delta import (
+            apply_contextual_delta,
+            load_context_matrix,
+            resolve_context_from_bundle,
+        )
+        xp_module = jnp if _HAS_JAX else np
+        structural_component = StructuralDeltaComponent()
+
+        dependencies = build_delta_metrics_dependencies(
+            coherence_window=coherence_window,
+            recursion_decay=recursion_decay,
+            microsectors=microsectors,
+            xp_module=xp_module,
+            has_jax=_HAS_JAX,
+            structural_component=structural_component,
+            emission_operator=operators_module.emission_operator,
+            reception_operator=operators_module.reception_operator,
+            dissonance_breakdown_operator=operators_module.dissonance_breakdown_operator,
+            coherence_operator=operators_module.coherence_operator,
+            coupling_operator=operators_module.coupling_operator,
+            resonance_operator=operators_module.resonance_operator,
+            pairwise_coupling_operator=operators_module.pairwise_coupling_operator,
+            recursive_filter_operator=operators_module.recursive_filter_operator,
+            stage_reception=pipeline_stage_reception,
+            stage_coherence=pipeline_stage_coherence,
+            stage_nodal=pipeline_stage_nodal,
+            stage_epi=pipeline_stage_epi,
+            stage_sense=pipeline_stage_sense,
+            stage_variability=pipeline_microsector_variability,
+            aggregate_events=pipeline_aggregate_operator_events,
+            compute_window_metrics=pipeline_compute_window_metrics,
+            phase_context_resolver=_phase_context_from_microsectors,
+            network_memory_extractor=extract_network_memory,
+            zero_breakdown_factory=operators_module._zero_dissonance_breakdown,
+            load_context_matrix=load_context_matrix,
+            resolve_context_from_bundle=resolve_context_from_bundle,
+            apply_contextual_delta=apply_contextual_delta,
+            update_bundles=operators_module._update_bundles,
+            ensure_bundle=operators_module._ensure_bundle,
+            normalise_node_evolution=operators_module._normalise_node_evolution,
+            delta_integral=operators_module._delta_integral_series,
+            variance_payload=operators_module._variance_payload,
+        )
+
+    return _run_pipeline(
+        telemetry_segments,
+        target_delta_nfr,
+        target_sense_index,
+        recursion_decay=recursion_decay,
+        microsectors=microsectors,
+        phase_weights=phase_weights,
+        operator_state=operator_state,
+        dependencies=dependencies,
+    )
+
+
+def _run_pipeline(
+    telemetry_segments: Sequence[Sequence[TelemetryRecord]],
+    target_delta_nfr: float,
+    target_sense_index: float,
+    *,
     recursion_decay: float,
     microsectors: Sequence[SupportsMicrosector] | None,
     phase_weights: Mapping[str, Mapping[str, float] | float] | None,
     operator_state: Mapping[str, Dict[str, object]] | None,
     dependencies: PipelineDependencies,
 ) -> Mapping[str, object]:
-    """Coordinate the execution of the ΔNFR×Si pipeline stages."""
-
     objectives = dependencies.emission_operator(target_delta_nfr, target_sense_index)
     reception_stage, flattened_records = dependencies.reception_stage(telemetry_segments)
     phase_assignments, weight_lookup = dependencies.phase_context_resolver(microsectors)

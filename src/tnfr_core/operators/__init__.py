@@ -46,11 +46,14 @@ __all__ = [
     *_exported(_structural_time),
 ]
 
-__all__ = list(dict.fromkeys(__all__))
+_PIPELINE_EXPORTS = {"PipelineDependencies", "orchestrate_delta_metrics"}
+
+__all__ = list(dict.fromkeys([*__all__, *_PIPELINE_EXPORTS]))
 
 _delayed_module_name = "operators"
 _delayed_all: list[str] | None = None
 _delayed_module: ModuleType | None = None
+_pipeline_module: ModuleType | None = None
 
 
 def _load_delayed_module() -> ModuleType:
@@ -68,6 +71,14 @@ def _load_delayed_module() -> ModuleType:
 
 
 def __getattr__(name: str) -> Any:
+    if name in _PIPELINE_EXPORTS:
+        global _pipeline_module
+        if _pipeline_module is None:
+            _pipeline_module = import_module(f"{__name__}.pipeline")
+        if hasattr(_pipeline_module, name):
+            value = getattr(_pipeline_module, name)
+            globals()[name] = value
+            return value
     module = _load_delayed_module()
     if hasattr(module, name):
         return getattr(module, name)
