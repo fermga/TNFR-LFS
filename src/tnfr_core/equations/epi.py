@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass, field, replace
-from collections.abc import Mapping as MappingABC
 from statistics import mean
 from importlib import import_module
 from typing import (
@@ -46,8 +45,9 @@ from tnfr_core.equations.epi_models import (
     TyresNode,
 )
 from tnfr_core.operators.interfaces import SupportsTelemetrySample
-from tnfr_core.equations.phases import expand_phase_alias, phase_family
+from tnfr_core.equations.phase_weights import _phase_weight
 from tnfr_core._canonical import CANONICAL_REQUESTED, import_tnfr
+from tnfr_core.operators.structural.epi_evolution import evolve_epi
 __all__ = [
     "TelemetryRecord",
     "EPIExtractor",
@@ -924,35 +924,6 @@ def delta_nfr_by_node(
     return cached_delta_nfr_map(record, lambda: _delta_nfr_by_node_uncached(record))
 
 
-def _phase_weight(
-    node: str,
-    phase: str | None,
-    phase_weights: Mapping[str, Mapping[str, float] | float] | None,
-) -> float:
-    if not phase or not phase_weights or not isinstance(phase_weights, MappingABC):
-        return 1.0
-    profile: Mapping[str, float] | float | None = None
-    for candidate in (*expand_phase_alias(phase), phase_family(phase), phase):
-        if candidate is None:
-            continue
-        profile = phase_weights.get(candidate)
-        if profile is not None:
-            break
-    if profile is None:
-        profile = phase_weights.get("__default__")
-    if profile is None:
-        return 1.0
-    if isinstance(profile, MappingABC):
-        if node in profile:
-            return float(profile[node])
-        if "__default__" in profile:
-            return float(profile["__default__"])
-        return 1.0
-    if isinstance(profile, (int, float)):
-        return float(profile)
-    return 1.0
-
-
 def _base_nu_f_map(
     record: SupportsTelemetrySample,
     *,
@@ -1542,19 +1513,9 @@ class DeltaCalculator:
             nu_f_targets=phase_target_nu_f,
         )
         previous_state = epi_value if prev_integrated_epi is None else prev_integrated_epi
-        try:
-            from tnfr_core.operators.structural.epi_evolution import evolve_epi
-        except ImportError:  # pragma: no cover - defensive fallback during circular import
-            def evolve_epi(prev_epi: float, delta_map: Mapping[str, float], dt: float, nu_map: Mapping[str, float]):
-                nodal: Dict[str, tuple[float, float]] = {}
-                derivative = 0.0
-                for node in set(delta_map) | set(nu_map):
-                    node_derivative = nu_map.get(node, 0.0) * delta_map.get(node, 0.0)
-                    nodal[node] = (node_derivative * dt, node_derivative)
-                    derivative += node_derivative
-                return prev_epi + (derivative * dt), derivative, nodal
-
-        integrated_epi, derivative, nodal_evolution = evolve_epi(previous_state, node_deltas, dt, nu_f_map)
+        integrated_epi, derivative, nodal_evolution = evolve_epi(
+            previous_state, node_deltas, dt, nu_f_map
+        )
         delta_breakdown = {
             node: compute_node_delta_nfr(node, node_deltas.get(node, 0.0), features, prefix=False)
             for node, features in feature_contributions.items()
@@ -1644,19 +1605,6 @@ class DeltaCalculator:
             w_phase=phase_weight_map,
             nu_f_targets=phase_target_nu_f,
         )
-
-        try:
-            from tnfr_core.operators.structural.epi_evolution import evolve_epi
-        except ImportError:  # pragma: no cover - defensive fallback during circular import
-
-            def evolve_epi(prev_epi, delta_map, dt, nu_map):
-                nodal: Dict[str, tuple[float, float]] = {}
-                derivative = 0.0
-                for node in set(delta_map) | set(nu_map):
-                    node_derivative = nu_map.get(node, 0.0) * delta_map.get(node, 0.0)
-                    nodal[node] = (node_derivative * dt, node_derivative)
-                    derivative += node_derivative
-                return prev_epi + (derivative * dt), derivative, nodal
 
         previous_state = bundle.epi if prev_integrated_epi is None else prev_integrated_epi
         integrated_epi, derivative, nodal_evolution = evolve_epi(
