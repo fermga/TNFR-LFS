@@ -10,15 +10,17 @@ from tnfr_core.contextual_delta import (
     load_context_matrix,
     resolve_context_from_bundle,
 )
-from tnfr_core.operators import (
+from tnfr_core.operators.al_operator import (
     coherence_operator,
     coupling_operator,
-    orchestrate_delta_metrics,
-    mutation_operator,
-    recursive_filter_operator,
-    recursivity_operator,
     resonance_operator,
 )
+from tnfr_core.operators.il_operator import (
+    mutation_operator,
+    recursive_filter_operator,
+)
+from tnfr_core.operators.entry.recursivity import recursivity_operator
+from tnfr_core.operators.pipeline import orchestrate_delta_metrics
 from tnfr_core.phases import expand_phase_alias
 
 
@@ -40,6 +42,10 @@ def test_acceptance_pipeline_monotonicity_and_coupling(
         assert len(records) == len(expected_bundles)
         return expected_bundles
 
+    monkeypatch.setattr(
+        "tnfr_core.operators.en_operator.reception_operator",
+        fake_reception,
+    )
     monkeypatch.setattr(
         "tnfr_core.operators.operators.reception_operator",
         fake_reception,

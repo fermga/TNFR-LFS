@@ -47,35 +47,44 @@ from tnfr_core.epi_models import (
 )
 from tnfr_core.phases import PHASE_SEQUENCE, expand_phase_alias
 from tnfr_core.constants import WHEEL_SUFFIXES
-from tnfr_core.operators import (
+from tnfr_core.operators.al_operator import (
     DissonanceBreakdown,
+    _zero_dissonance_breakdown,
     acoplamiento_operator,
-    coupling_operator,
     coherence_operator,
-    coherence_operator_il,
+    coupling_operator,
     dissonance_breakdown_operator,
     dissonance_operator,
+    pairwise_coupling_operator,
+    resonance_operator,
+)
+from tnfr_core.operators.en_operator import (
+    _ensure_bundle,
+    _normalise_node_evolution,
+    _update_bundles,
+    emission_operator,
+    reception_operator,
+)
+from tnfr_core.operators.il_operator import (
+    TyreBalanceControlOutput,
     _STABILITY_COV_THRESHOLD,
     _delta_integral_series,
     _variance_payload,
-    evolve_epi,
-    emission_operator,
     mutation_operator,
-    orchestrate_delta_metrics,
-    pairwise_coupling_operator,
-    reception_operator,
-    recursivity_operator,
     recursive_filter_operator,
     recursividad_operator,
-    resonance_operator,
-    TyreBalanceControlOutput,
     tyre_balance_controller,
 )
+from tnfr_core.operators.entry.recursivity import recursivity_operator
+from tnfr_core.operators.pipeline import orchestrate_delta_metrics
+from tnfr_core.operators.structural.coherence_il import coherence_operator_il
 from tnfr_core.operators.structural.epi import (
     compute_nodal_contributions,
     extract_phase_context,
     resolve_nu_targets,
 )
+from tnfr_core.operators.structural.epi_evolution import evolve_epi
+from tnfr_core.operators._shared import _HAS_JAX, jnp
 from tnfr_core.operators.pipeline.coherence import _stage_coherence as pipeline_stage_coherence
 from tnfr_core.operators.pipeline.epi import _stage_epi_evolution as pipeline_stage_epi
 from tnfr_core.operators.pipeline.events import (
@@ -97,7 +106,6 @@ from tnfr_core.operators.pipeline.variability import (
 from tnfr_core.operators.pipeline.sense import _stage_sense as pipeline_stage_sense
 from tnfr_core.operator_detection import canonical_operator_label
 from tnfr_core.interfaces import SupportsEPIBundle, SupportsMicrosector
-import tnfr_core.operators.operators as operators_module
 
 
 @dataclass
@@ -168,8 +176,8 @@ def _run_pipeline_stage_epi(
         phase_assignments=phase_assignments,
         phase_weight_lookup=phase_weight_lookup,
         global_phase_weights=global_phase_weights,
-        ensure_bundle=operators_module._ensure_bundle,
-        normalise_node_evolution=operators_module._normalise_node_evolution,
+        ensure_bundle=_ensure_bundle,
+        normalise_node_evolution=_normalise_node_evolution,
         **kwargs,
     )
 
@@ -189,12 +197,12 @@ def _run_pipeline_stage_coherence(
         load_context_matrix=load_context_matrix,
         resolve_context_from_bundle=resolve_context_from_bundle,
         apply_contextual_delta=apply_contextual_delta,
-        update_bundles=operators_module._update_bundles,
+        update_bundles=_update_bundles,
         coherence_operator=coherence_operator,
         dissonance_operator=dissonance_breakdown_operator,
         coupling_operator=coupling_operator,
         resonance_operator=resonance_operator,
-        empty_breakdown_factory=operators_module._zero_dissonance_breakdown,
+        empty_breakdown_factory=_zero_dissonance_breakdown,
     )
 
 
@@ -216,18 +224,14 @@ def _run_pipeline_stage_variability(
     lap_indices: Sequence[int],
     lap_metadata: Sequence[Mapping[str, object]],
 ) -> Sequence[Mapping[str, object]]:
-    xp_module = (
-        operators_module.jnp
-        if operators_module._HAS_JAX and operators_module.jnp is not None
-        else np
-    )
+    xp_module = jnp if _HAS_JAX and jnp is not None else np
     return pipeline_microsector_variability(
         microsectors,
         bundles,
         lap_indices,
         lap_metadata,
         xp=xp_module,
-        has_jax=operators_module._HAS_JAX,
+        has_jax=_HAS_JAX,
         delta_integral=_delta_integral_series,
         variance_payload=_variance_payload,
     )
@@ -620,14 +624,8 @@ def test_stage_epi_evolution_reuses_bundle_history_when_no_phase_overrides(monke
     def _fail(*_args: object, **_kwargs: object) -> Mapping[str, float]:
         raise AssertionError("EPI evolution should reuse existing bundle data")
 
-    monkeypatch.setattr(
-        "tnfr_core.operators.operators.delta_nfr_by_node",
-        _fail,
-    )
-    monkeypatch.setattr(
-        "tnfr_core.operators.operators.resolve_nu_f_by_node",
-        _fail,
-    )
+    monkeypatch.setattr("tnfr_core.epi.delta_nfr_by_node", _fail)
+    monkeypatch.setattr("tnfr_core.epi.resolve_nu_f_by_node", _fail)
 
     result = _run_pipeline_stage_epi(records, bundles=bundles)
 
@@ -674,7 +672,7 @@ def test_stage_epi_evolution_recomputes_when_phase_customisation_requested(monke
     )
 
     delta_calls = 0
-    original_delta = operators_module.delta_nfr_by_node
+    original_delta = delta_nfr_by_node
 
     def _spy_delta(record: TelemetryRecord) -> Mapping[str, float]:
         nonlocal delta_calls
@@ -682,21 +680,15 @@ def test_stage_epi_evolution_recomputes_when_phase_customisation_requested(monke
         return original_delta(record)
 
     nu_calls = 0
-    original_nu = operators_module.resolve_nu_f_by_node
+    original_nu = resolve_nu_f_by_node
 
     def _spy_nu(*args: object, **kwargs: object):
         nonlocal nu_calls
         nu_calls += 1
         return original_nu(*args, **kwargs)
 
-    monkeypatch.setattr(
-        "tnfr_core.operators.operators.delta_nfr_by_node",
-        _spy_delta,
-    )
-    monkeypatch.setattr(
-        "tnfr_core.operators.operators.resolve_nu_f_by_node",
-        _spy_nu,
-    )
+    monkeypatch.setattr("tnfr_core.epi.delta_nfr_by_node", _spy_delta)
+    monkeypatch.setattr("tnfr_core.epi.resolve_nu_f_by_node", _spy_nu)
     monkeypatch.setattr(
         "tnfr_core.operators.pipeline.epi.delta_nfr_by_node",
         _spy_delta,
@@ -1294,6 +1286,10 @@ def test_orchestrator_reports_microsector_variability(monkeypatch):
         return bundles
 
     _fake_reception.call_count = 0
+    monkeypatch.setattr(
+        "tnfr_core.operators.en_operator.reception_operator",
+        _fake_reception,
+    )
     monkeypatch.setattr(
         "tnfr_core.operators.operators.reception_operator",
         _fake_reception,

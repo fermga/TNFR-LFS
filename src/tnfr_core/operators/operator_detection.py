@@ -957,7 +957,7 @@ def detect_um(
         return []
 
     window = max(3, int(window))
-    from tnfr_core.operators.operators import pairwise_coupling_operator
+    from tnfr_core.operators.al_operator import pairwise_coupling_operator
 
     times = _sample_times(records)
 

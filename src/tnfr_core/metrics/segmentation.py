@@ -79,13 +79,13 @@ from tnfr_core.operators.operator_detection import (
     detect_zhir,
     silence_event_payloads,
 )
-from tnfr_core.operators.operators import (
+from tnfr_core.operators.entry.recursivity import (
     RecursivityMicroStateSnapshot,
     RecursivityOperatorResult,
     RecursivityStateRoot,
-    mutation_operator,
     recursivity_operator,
 )
+from tnfr_core.operators.il_operator import mutation_operator
 from tnfr_core.equations.phases import (
     LEGACY_PHASE_MAP,
     PHASE_SEQUENCE,
