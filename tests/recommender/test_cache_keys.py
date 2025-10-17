@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Mapping, Sequence
 
-from tnfr_core.operators.cache import LRUCache
+from tnfr_core.runtime.shared import LRUCache
 
 from tnfr_lfs.recommender.search import (
     DecisionSpace,

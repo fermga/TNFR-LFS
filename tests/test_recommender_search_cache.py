@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 import tnfr_lfs.recommender.search as search_module
-from tnfr_core.cache_settings import (
+from tnfr_core.runtime.shared import (
     CacheOptions,
     DEFAULT_RECOMMENDER_CACHE_SIZE,
     resolve_recommender_cache_size,

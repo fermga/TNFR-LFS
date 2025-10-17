@@ -8,7 +8,7 @@ from typing import Any, Dict, Mapping
 import numpy as np
 
 try:  # pragma: no cover - exercised indirectly when operators import is deferred
-    from tnfr_core.operators._shared import _HAS_JAX, jnp
+    from tnfr_core.runtime.shared import _HAS_JAX, jnp
 except ImportError:  # pragma: no cover - fallback path for circular imports
     _HAS_JAX = False
     jnp = None
@@ -30,7 +30,7 @@ def _ensure_backend() -> None:
     if _HAS_JAX and jnp is not None:
         return
     try:
-        from tnfr_core.operators._shared import _HAS_JAX as resolved_has_jax, jnp as resolved_jnp
+        from tnfr_core.runtime.shared import _HAS_JAX as resolved_has_jax, jnp as resolved_jnp
     except ImportError:  # pragma: no cover - defensive fallback
         return
     _HAS_JAX = resolved_has_jax

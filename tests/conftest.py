@@ -96,7 +96,7 @@ from tests.helpers import (
 )
 from tnfr_lfs.cli import run_cli
 
-from tnfr_core.cache_settings import CacheOptions
+from tnfr_core.runtime.shared import CacheOptions
 
 from tnfr_core.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
 from tnfr_core.epi_models import (

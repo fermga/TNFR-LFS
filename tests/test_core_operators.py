@@ -86,7 +86,7 @@ from tnfr_core.operators.structural.epi import (
 from tnfr_core.operators.structural.epi_evolution import (
     evolve_epi as structural_evolve_epi,
 )
-from tnfr_core.operators._shared import _HAS_JAX, jnp
+from tnfr_core.runtime.shared import _HAS_JAX, jnp
 from tnfr_core.operators.pipeline.coherence import _stage_coherence as pipeline_stage_coherence
 from tnfr_core.operators.pipeline.epi import _stage_epi_evolution as pipeline_stage_epi
 from tnfr_core.operators.pipeline.events import (

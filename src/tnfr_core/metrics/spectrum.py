@@ -9,8 +9,7 @@ from typing import Literal
 
 import numpy as np
 
-from tnfr_core.operators._shared import _HAS_JAX, jnp
-from tnfr_core.operators.interfaces import SupportsTelemetrySample
+from tnfr_core.runtime.shared import SupportsTelemetrySample, _HAS_JAX, jnp
 
 try:  # pragma: no cover - SciPy is optional
     from scipy.signal import goertzel as _SCIPY_GOERTZEL

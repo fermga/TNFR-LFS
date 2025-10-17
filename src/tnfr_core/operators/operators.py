@@ -24,7 +24,7 @@ from tnfr_core.operators.entry.recursivity import (
     RecursivityStateRoot,
     recursivity_operator,
 )
-from tnfr_core.operators.interfaces import (
+from tnfr_core.runtime.shared import (
     SupportsChassisNode,
     SupportsEPIBundle,
     SupportsMicrosector,

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import warnings
 from importlib import import_module
 from types import ModuleType
 from typing import Any
 
-from . import cache as _cache
-from . import cache_settings as _cache_settings
-from . import interfaces as _interfaces
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    from . import cache as _cache
+    from . import cache_settings as _cache_settings
+    from . import interfaces as _interfaces
 from . import operator_detection as _operator_detection
 from . import structural as _structural
 from . import structural_time as _structural_time

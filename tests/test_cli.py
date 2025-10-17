@@ -23,7 +23,7 @@ from tnfr_lfs.cli import run_cli
 from tnfr_lfs.cli.common import CliError
 from tnfr_lfs.telemetry.offline import ProfileManager
 from tnfr_lfs.recommender.rules import RecommendationEngine
-from tnfr_core.cache_settings import DEFAULT_DYNAMIC_CACHE_SIZE
+from tnfr_core.runtime.shared import DEFAULT_DYNAMIC_CACHE_SIZE
 from tnfr_lfs.configuration import load_project_config
 from tests.conftest import _CLI_CONFIG_CASES, write_pyproject
 from tests.helpers import (

@@ -1,5 +1,5 @@
 # `tnfr_core.operators.cache` module
-Caching helpers for ΔNFR maps and dynamic ν_f multipliers.
+Compatibility shim exposing caching helpers for ΔNFR maps and dynamic ν_f multipliers.
 
 ## Classes
 ### `LRUCache` (Generic[_K, _V])

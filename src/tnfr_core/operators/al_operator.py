@@ -16,14 +16,14 @@ from tnfr_core.equations.contextual_delta import (
 )
 from tnfr_core.equations.dissonance import compute_useful_dissonance_stats
 from tnfr_core.equations.phases import LEGACY_PHASE_MAP
-from tnfr_core.operators.interfaces import (
+from tnfr_core.runtime.shared import (
     SupportsChassisNode,
     SupportsEPIBundle,
     SupportsMicrosector,
     SupportsTyresNode,
+    _HAS_JAX,
+    jnp,
 )
-
-from ._shared import _HAS_JAX, jnp
 
 
 if _HAS_JAX:  # pragma: no cover - exercised only when JAX is installed

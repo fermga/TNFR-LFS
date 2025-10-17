@@ -12,11 +12,11 @@ from tnfr_core.equations.epi import (
     resolve_nu_f_by_node,
 )
 from tnfr_core.operators import coherence_operator
-from tnfr_core.operators.interfaces import SupportsTelemetrySample
+from tnfr_core.runtime.shared import SupportsTelemetrySample
 from tnfr_lfs.plugins import TNFRPlugin
 
 if TYPE_CHECKING:  # pragma: no cover - optional cache dependency
-    from tnfr_core.operators.cache_settings import CacheOptions
+    from tnfr_core.runtime.shared import CacheOptions
 
 
 def plugin_coherence_operator(

@@ -17,7 +17,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised when JAX is unavaila
 
 from tnfr_core.equations.epi import TelemetryRecord
 from tnfr_core.operators.entry.recursivity import extract_network_memory
-from tnfr_core.operators.interfaces import SupportsEPIBundle, SupportsMicrosector
+from tnfr_core.runtime.shared import SupportsEPIBundle, SupportsMicrosector
 import tnfr_core.operators.en_operator as en_operator_module
 from tnfr_core.operators.pipeline.coherence import (
     _stage_coherence as pipeline_stage_coherence,

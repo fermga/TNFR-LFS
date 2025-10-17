@@ -1,7 +1,7 @@
 """Detection utilities for on-track operator events.
 
 Each detection routine analyses a windowed sequence of
-:class:`~tnfr_core.operators.interfaces.SupportsTelemetrySample` objects and yields
+:class:`~tnfr_core.runtime.shared.SupportsTelemetrySample` objects and yields
 event descriptors when the observed behaviour exceeds the
 configured thresholds.  The detectors are intentionally lightweight so that
 they can be executed on every microsector without adding measurable overhead
@@ -31,7 +31,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 from tnfr_lfs.resources import data_root, pack_root
 
 from tnfr_core.config.loader import get_params, load_detection_config
-from tnfr_core.operators.interfaces import SupportsTelemetrySample
+from tnfr_core.runtime.shared import SupportsTelemetrySample
 from tnfr_core.operators.structural_time import compute_structural_timestamps
 
 __all__ = [

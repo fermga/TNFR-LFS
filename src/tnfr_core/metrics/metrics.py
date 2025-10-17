@@ -22,7 +22,7 @@ from tnfr_core.equations.contextual_delta import (
     resolve_context_from_record,
 )
 from tnfr_core.equations.dissonance import YAW_ACCELERATION_THRESHOLD, compute_useful_dissonance_stats
-from tnfr_core.operators.interfaces import (
+from tnfr_core.runtime.shared import (
     SupportsChassisNode,
     SupportsContextBundle,
     SupportsContextRecord,
@@ -31,6 +31,8 @@ from tnfr_core.operators.interfaces import (
     SupportsSuspensionNode,
     SupportsTelemetrySample,
     SupportsTyresNode,
+    _HAS_JAX,
+    jnp,
 )
 from tnfr_core.equations.phases import replicate_phase_aliases
 from tnfr_core.metrics.spectrum import (
@@ -42,7 +44,6 @@ from tnfr_core.metrics.spectrum import (
 from tnfr_core.metrics.resonance import estimate_excitation_frequency
 from tnfr_core.operators.structural_time import resolve_time_axis
 from tnfr_core.equations.utils import normalised_entropy
-from tnfr_core.operators._shared import _HAS_JAX, jnp
 
 __all__ = [
     "AeroBalanceDrift",
@@ -1212,14 +1213,14 @@ def compute_window_metrics(
     ----------
     records:
         Ordered window of telemetry samples implementing
-        :class:`~tnfr_core.operators.interfaces.SupportsTelemetrySample`. Entries
-        must also satisfy :class:`~tnfr_core.operators.interfaces.SupportsContextRecord`
+        :class:`~tnfr_core.runtime.shared.SupportsTelemetrySample`. Entries
+        must also satisfy :class:`~tnfr_core.runtime.shared.SupportsContextRecord`
         when contextual weighting is applied.
     bundles:
         Optional precomputed insight series implementing
-        :class:`~tnfr_core.operators.interfaces.SupportsEPIBundle` and matching
+        :class:`~tnfr_core.runtime.shared.SupportsEPIBundle` and matching
         ``records``. Each bundle must adhere to
-        :class:`~tnfr_core.operators.interfaces.SupportsContextBundle` so the node
+        :class:`~tnfr_core.runtime.shared.SupportsContextBundle` so the node
         metrics remain accessible to the contextual helpers.
     fallback_to_chronological:
         When ``True`` the metric computation gracefully falls back to the
@@ -2880,7 +2881,7 @@ def compute_aero_coherence(
     """Compute aero balance deltas at low and high speed.
 
     The helper inspects ΔNFR contributions attributed to μ_eff front/rear terms
-    in the :attr:`~tnfr_core.operators.interfaces.SupportsEPIBundle.delta_breakdown`
+    in the :attr:`~tnfr_core.runtime.shared.SupportsEPIBundle.delta_breakdown`
     payload.
     When the optional ``bundles`` sequence is not provided or lacks breakdown
     data the function gracefully returns a neutral :class:`AeroCoherence`

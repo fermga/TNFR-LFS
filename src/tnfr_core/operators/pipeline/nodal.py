@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, Sequence
 
 from tnfr_core.equations.contextual_delta import ContextMatrix, resolve_series_context
-from tnfr_core.operators.interfaces import (
+from tnfr_core.runtime.shared import (
     SupportsChassisNode,
     SupportsEPIBundle,
     SupportsSuspensionNode,

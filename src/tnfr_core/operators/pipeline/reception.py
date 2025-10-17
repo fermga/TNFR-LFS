@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Callable, Dict, List, Mapping, Sequence, Tuple
 
 from tnfr_core.equations.epi import TelemetryRecord
-from tnfr_core.operators.interfaces import SupportsEPIBundle
+from tnfr_core.runtime.shared import SupportsEPIBundle
 
 ReceptionOperator = Callable[[Sequence[TelemetryRecord]], Sequence[SupportsEPIBundle]]
 

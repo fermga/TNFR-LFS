@@ -14,7 +14,7 @@ from tests.helpers import (
     clone_protocol_series,
 )
 
-from tnfr_core.cache_settings import CacheOptions
+from tnfr_core.runtime.shared import CacheOptions
 from tnfr_core import cache as cache_helpers
 from tnfr_core import epi as epi_module
 from tnfr_core.epi import (

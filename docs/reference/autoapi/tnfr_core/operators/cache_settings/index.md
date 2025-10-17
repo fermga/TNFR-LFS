@@ -1,5 +1,5 @@
 # `tnfr_core.operators.cache_settings` module
-Runtime cache configuration models.
+Compatibility layer for runtime cache configuration models.
 
 ## Classes
 ### `CacheOptions`

@@ -36,7 +36,7 @@ from tnfr_core.metrics import (
 )
 from tnfr_core.operator_detection import silence_event_payloads
 from tnfr_core.operators import cache as cache_module
-from tnfr_core.operators.interfaces import SupportsTelemetrySample
+from tnfr_core.runtime.shared import SupportsTelemetrySample
 from tnfr_core.metrics import segmentation as metrics_segmentation
 from tnfr_core.segmentation import (
     Microsector,
