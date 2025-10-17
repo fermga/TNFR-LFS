@@ -526,12 +526,18 @@ def cross_spectrum(
 def _normalise(values: Sequence[float]) -> List[float]:
     if not values:
         return []
-    mean_value = sum(values) / len(values)
-    variance = sum((value - mean_value) ** 2 for value in values) / len(values)
-    if variance <= 1e-12:
+    xp_backend = _resolve_backend(None, values)
+    xp_values = xp_backend.asarray(values, dtype=float)
+    mean_value = xp_backend.mean(xp_values)
+    centred = xp_values - mean_value
+    variance = xp_backend.mean(centred * centred)
+    if float(variance) <= 1e-12:
         return [0.0 for _ in values]
-    scale = math.sqrt(variance)
-    return [(value - mean_value) / scale for value in values]
+    scale = xp_backend.sqrt(variance)
+    normalised = centred / scale
+    if hasattr(normalised, "tolist"):
+        return normalised.tolist()
+    return [float(value) for value in normalised]
 
 
 def phase_alignment(
