@@ -182,6 +182,33 @@ def test_sense_index_penalises_goal_frequency_targets():
     assert aggressive_index < neutral_index
 
 
+def test_sense_index_accepts_scalar_or_per_node_targets():
+    node_deltas = {"tyres": 3.0, "suspension": 1.5, "driver": 0.5}
+    baseline = 400.0
+    nu_f_map = {"tyres": 0.2, "suspension": 0.15, "driver": 0.05}
+
+    scalar_index = sense_index(
+        5.0,
+        node_deltas,
+        baseline,
+        nu_f_by_node=nu_f_map,
+        active_phase="entry",
+        w_phase={"entry": 1.0},
+        nu_f_targets=0.4,
+    )
+    mapping_index = sense_index(
+        5.0,
+        node_deltas,
+        baseline,
+        nu_f_by_node=nu_f_map,
+        active_phase="entry",
+        w_phase={"entry": 1.0},
+        nu_f_targets={"entry": {"__default__": 0.4}},
+    )
+
+    assert mapping_index == pytest.approx(scalar_index, rel=1e-9)
+
+
 def test_sense_index_entropy_matches_helper():
     node_deltas = {"tyres": 3.0, "suspension": 3.0}
     nu_f = {"tyres": 0.2, "suspension": 0.1}
