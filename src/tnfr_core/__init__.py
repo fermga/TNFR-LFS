@@ -20,6 +20,7 @@ _equations = import_module("tnfr_core.equations")
 _metrics = import_module("tnfr_core.metrics")
 _operators = import_module("tnfr_core.operators")
 _runtime = import_module("tnfr_core.runtime")
+_signal = import_module("tnfr_core.signal")
 
 _BASE_EXPORTS = [
     "CANONICAL_ENV_VALUE",
@@ -39,6 +40,7 @@ __all__ = list(
             *_metrics.__all__,
             *_operators.__all__,
             *_runtime.__all__,
+            *_signal.__all__,
         ]
     )
 )
@@ -48,6 +50,7 @@ equations = _equations
 metrics = _metrics
 operators = _operators
 runtime = _runtime
+signal = _signal
 
 _MODULE_ALIASES = {
     "archetypes": import_module("tnfr_core.equations.archetypes"),
@@ -72,6 +75,8 @@ _MODULE_ALIASES = {
     "interfaces": import_module("tnfr_core.operators.interfaces"),
     "runtime": _runtime,
     "runtime_shared": import_module("tnfr_core.runtime.shared"),
+    "signal": _signal,
+    "signal_spectrum": import_module("tnfr_core.signal.spectrum"),
 }
 
 for alias, module in _MODULE_ALIASES.items():

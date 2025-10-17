@@ -103,7 +103,8 @@ from tnfr_core.equations.archetypes import (
     archetype_phase_targets,
 )
 from tnfr_core.metrics.resonance import estimate_excitation_frequency
-from tnfr_core.metrics.spectrum import estimate_sample_rate, phase_alignment
+from tnfr_core.metrics.spectrum import phase_alignment
+from tnfr_core.signal.spectrum import estimate_sample_rate
 
 # Public API: core.__init__ re-exports segmentation artefacts via these names.
 __all__ = [
