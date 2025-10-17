@@ -264,7 +264,11 @@ class NaturalFrequencyAnalyzer:
         if duration < max(0.0, self.settings.min_window_seconds - 1e-6):
             return {}, 0.0
 
-        from tnfr_core.metrics.spectrum import cross_spectrum, power_spectrum, estimate_sample_rate
+        from tnfr_core.signal.spectrum import (
+            cross_spectrum,
+            estimate_sample_rate,
+            power_spectrum,
+        )
 
         sample_rate = estimate_sample_rate(history)
         if sample_rate <= 0.0:
