@@ -19,7 +19,7 @@ from tnfr_lfs.telemetry.offline import (
     read_raf,
     write_run,
 )
-from tnfr_core.equations.epi import TelemetryRecord
+from tnfr_core.equations.telemetry import TelemetryRecord
 from tnfr_lfs.cli.errors import CliError
 
 CONFIG_ENV_VAR = "TNFR_LFS_CONFIG"

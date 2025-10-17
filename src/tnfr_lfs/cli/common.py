@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
-from tnfr_core.equations.epi import TelemetryRecord
+from tnfr_core.equations.telemetry import TelemetryRecord
 from tnfr_lfs.exporters import exporters_registry
 from tnfr_lfs.telemetry.track_loader import (
     Track,

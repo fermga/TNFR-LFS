@@ -8,6 +8,7 @@ from . import delta_utils as _delta_utils
 from . import dissonance as _dissonance
 from . import epi as _epi
 from . import epi_models as _epi_models
+from . import telemetry as _telemetry
 from . import phases as _phases
 from . import utils as _utils
 
@@ -19,6 +20,7 @@ from .delta_utils import *  # noqa: F401,F403
 from .dissonance import *  # noqa: F401,F403
 from .epi import *  # noqa: F401,F403
 from .epi_models import *  # noqa: F401,F403
+from .telemetry import *  # noqa: F401,F403
 from .phases import *  # noqa: F401,F403
 from .utils import *  # noqa: F401,F403
 
@@ -38,6 +40,7 @@ __all__ = [
     *_exported(_dissonance),
     *_exported(_epi),
     *_exported(_epi_models),
+    *_exported(_telemetry),
     *_exported(_phases),
     *_exported(_utils),
 ]
@@ -52,5 +55,6 @@ del _delta_utils
 del _dissonance
 del _epi
 del _epi_models
+del _telemetry
 del _phases
 del _utils

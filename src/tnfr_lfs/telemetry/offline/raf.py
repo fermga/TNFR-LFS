@@ -16,7 +16,7 @@ import math
 import struct
 from typing import BinaryIO, Mapping, Sequence
 
-from tnfr_core.equations.epi import TelemetryRecord
+from tnfr_core.equations.telemetry import TelemetryRecord
 from .._tyre_compound import normalise_compound_label, resolve_compound_metadata
 
 _MAGIC = b"LFSRAF"
