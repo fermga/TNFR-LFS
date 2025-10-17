@@ -3,20 +3,19 @@
 from __future__ import annotations
 
 from statistics import mean
-from typing import TYPE_CHECKING, Callable, Dict, Mapping, Sequence
+from typing import Callable, Dict, Mapping, Sequence
 
 from tnfr_core.equations.contextual_delta import ContextMatrix
 from tnfr_core.runtime.shared import SupportsEPIBundle, SupportsMicrosector
-
-if TYPE_CHECKING:  # pragma: no cover - imported for typing only
-    from ..operators import DissonanceBreakdown  # pylint: disable=cyclic-import
+from tnfr_core.operators._types import DissonanceBreakdown
 
 BundleUpdater = Callable[
     [Sequence[SupportsEPIBundle], Sequence[float], Sequence[float]],
     Sequence[SupportsEPIBundle],
 ]
 CoherenceOperator = Callable[[Sequence[float], int], Sequence[float]]
-DissonanceOperator = Callable[[Sequence[float], float], "DissonanceBreakdown"]
+       
+DissonanceOperator = Callable[[Sequence[float], float], DissonanceBreakdown]
 CouplingOperator = Callable[[Sequence[float], Sequence[float]], float]
 ResonanceOperator = Callable[[Sequence[float]], float]
 ContextResolver = Callable[[ContextMatrix, SupportsEPIBundle], Mapping[str, float]]
@@ -38,7 +37,7 @@ def _stage_coherence(
     dissonance_operator: DissonanceOperator,
     coupling_operator: CouplingOperator,
     resonance_operator: ResonanceOperator,
-    empty_breakdown_factory: Callable[[], "DissonanceBreakdown"],
+    empty_breakdown_factory: Callable[[], DissonanceBreakdown],
 ) -> Dict[str, object]:
     """Return coherence metrics for ``bundles`` and ``objectives``."""
 
