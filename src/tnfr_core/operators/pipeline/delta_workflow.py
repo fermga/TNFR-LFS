@@ -10,7 +10,7 @@ from tnfr_core.operators.interfaces import (
     SupportsMicrosector,
     SupportsTelemetrySample,
 )
-from tnfr_core.operators.pipeline import PipelineDependencies
+from tnfr_core.operators.pipeline.dependencies import PipelineDependencies
 
 
 def build_delta_metrics_dependencies(

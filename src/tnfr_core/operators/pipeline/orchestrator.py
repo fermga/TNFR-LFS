@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from statistics import mean
 from typing import Callable, Dict, Mapping, Sequence
 
@@ -18,12 +17,10 @@ except ModuleNotFoundError:  # pragma: no cover - exercised when JAX is unavaila
 
 from tnfr_core.equations.epi import TelemetryRecord
 from tnfr_core.operators.entry.recursivity import extract_network_memory
-from tnfr_core.operators.interfaces import (
-    SupportsEPIBundle,
-    SupportsMicrosector,
-    SupportsTelemetrySample,
+from tnfr_core.operators.interfaces import SupportsEPIBundle, SupportsMicrosector
+from tnfr_core.operators.pipeline.coherence import (
+    _stage_coherence as pipeline_stage_coherence,
 )
-from tnfr_core.operators.pipeline.coherence import _stage_coherence as pipeline_stage_coherence
 from tnfr_core.operators.pipeline.epi import _stage_epi_evolution as pipeline_stage_epi
 from tnfr_core.operators.pipeline.events import (
     _aggregate_operator_events as pipeline_aggregate_operator_events,
@@ -32,7 +29,9 @@ from tnfr_core.operators.pipeline.nodal import (
     StructuralDeltaComponent,
     _stage_nodal_metrics as pipeline_stage_nodal,
 )
-from tnfr_core.operators.pipeline.reception import _stage_reception as pipeline_stage_reception
+from tnfr_core.operators.pipeline.reception import (
+    _stage_reception as pipeline_stage_reception,
+)
 from tnfr_core.operators.pipeline.sense import _stage_sense as pipeline_stage_sense
 from tnfr_core.operators.pipeline.variability import (
     _microsector_variability as pipeline_microsector_variability,
@@ -60,37 +59,11 @@ from tnfr_core.operators.il_operator import (
     recursive_filter_operator,
 )
 
+from tnfr_core.operators.pipeline.dependencies import PipelineDependencies
+from tnfr_core.operators.pipeline.delta_workflow import (
+    build_delta_metrics_dependencies,
+)
 
-@dataclass(frozen=True)
-class PipelineDependencies:
-    """Bundle the stage callables and helpers required by the orchestrator."""
-
-    emission_operator: Callable[[float, float], Mapping[str, float]]
-    reception_stage: Callable[
-        [Sequence[Sequence[TelemetryRecord]]],
-        tuple[Dict[str, object], Sequence[TelemetryRecord]],
-    ]
-    coherence_stage: Callable[[Sequence[SupportsEPIBundle], Mapping[str, float]], Dict[str, object]]
-    nodal_stage: Callable[[Sequence[SupportsEPIBundle]], Dict[str, object]]
-    epi_stage: Callable[[Sequence[SupportsTelemetrySample]], Dict[str, object]]
-    sense_stage: Callable[[Sequence[float]], Dict[str, object]]
-    variability_stage: Callable[
-        [
-            Sequence[SupportsMicrosector] | None,
-            Sequence[SupportsEPIBundle],
-            Sequence[int],
-            Sequence[Mapping[str, object]],
-        ],
-        Sequence[Mapping[str, object]],
-    ]
-    aggregate_events: Callable[[Sequence[SupportsMicrosector] | None], Mapping[str, object]]
-    window_metrics: Callable[..., object]
-    phase_context_resolver: Callable[
-        [Sequence[SupportsMicrosector] | None],
-        tuple[Dict[int, str], Dict[int, Mapping[str, Mapping[str, float] | float]]],
-    ]
-    network_memory_extractor: Callable[[Mapping[str, Dict[str, object]] | None], Mapping[str, object]]
-    zero_breakdown_factory: Callable[[], object]
 
 
 def _empty_pipeline_payload(
@@ -181,9 +154,6 @@ def orchestrate_delta_metrics(
     """Coordinate the execution of the ΔNFR×Si pipeline stages."""
 
     if dependencies is None:
-        from tnfr_core.operators.pipeline.delta_workflow import (
-            build_delta_metrics_dependencies,
-        )
         from tnfr_core.equations.contextual_delta import (
             apply_contextual_delta,
             load_context_matrix,
