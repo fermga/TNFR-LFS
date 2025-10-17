@@ -2938,16 +2938,10 @@ def compute_aero_coherence(
                 return float(speed_value)
         return None
 
-    bands: dict[str, dict[str, list[float] | int]] = {
-        "low": {"total": [0.0, 0.0], "lateral": [0.0, 0.0], "longitudinal": [0.0, 0.0], "samples": 0},
-        "medium": {
-            "total": [0.0, 0.0],
-            "lateral": [0.0, 0.0],
-            "longitudinal": [0.0, 0.0],
-            "samples": 0,
-        },
-        "high": {"total": [0.0, 0.0], "lateral": [0.0, 0.0], "longitudinal": [0.0, 0.0], "samples": 0},
-    }
+    axis_order = ("total", "lateral", "longitudinal")
+    front_components: list[list[float]] = []
+    rear_components: list[list[float]] = []
+    speed_samples: list[float] = []
 
     for index, bundle in enumerate(bundles):
         speed = _resolve_speed(index)
@@ -2956,39 +2950,57 @@ def compute_aero_coherence(
         components = _aero_components(getattr(bundle, "delta_breakdown", {}))
         if all(front == 0.0 and rear == 0.0 for front, rear in components.values()):
             continue
-        if speed <= low_speed_threshold:
-            target = bands["low"]
-        elif speed >= high_speed_threshold:
-            target = bands["high"]
+        speed_samples.append(speed)
+        front_components.append([components[axis][0] for axis in axis_order])
+        rear_components.append([components[axis][1] for axis in axis_order])
+
+    axis_count = len(axis_order)
+    front_array = (
+        xp.asarray(front_components, dtype=float)
+        if front_components
+        else xp.zeros((0, axis_count), dtype=float)
+    )
+    rear_array = (
+        xp.asarray(rear_components, dtype=float)
+        if rear_components
+        else xp.zeros((0, axis_count), dtype=float)
+    )
+    speed_array = xp.asarray(speed_samples if speed_samples else (), dtype=float)
+
+    low_mask = speed_array <= low_speed_threshold
+    high_mask = speed_array >= high_speed_threshold
+    medium_mask = xp.logical_and(speed_array > low_speed_threshold, speed_array < high_speed_threshold)
+
+    def _scalar_to_int(value: object) -> int:
+        scalar = value.item() if hasattr(value, "item") else value
+        return int(scalar)
+
+    def _band_from_mask(mask: object) -> AeroBandCoherence:
+        mask_bool = xp.asarray(mask, dtype=bool)
+        samples = _scalar_to_int(xp.sum(mask_bool))
+        if samples > 0:
+            mask_float = mask_bool.astype(front_array.dtype)
+            front_sum = xp.sum(front_array * mask_float[:, None], axis=0)
+            rear_sum = xp.sum(rear_array * mask_float[:, None], axis=0)
+            front_avg = front_sum / samples
+            rear_avg = rear_sum / samples
         else:
-            target = bands["medium"]
-        target["samples"] = int(target["samples"]) + 1
-        for axis, (front, rear) in components.items():
-            pair = target[axis]
-            pair[0] += front
-            pair[1] += rear
+            front_avg = xp.zeros((axis_count,), dtype=float)
+            rear_avg = xp.zeros((axis_count,), dtype=float)
 
-    def _average_band(payload: dict[str, list[float] | int]) -> AeroBandCoherence:
-        samples = int(payload["samples"])
+        front_values = np.asarray(front_avg, dtype=float)
+        rear_values = np.asarray(rear_avg, dtype=float)
 
-        def _average_pair(values: list[float]) -> tuple[float, float]:
-            if samples:
-                return values[0] / samples, values[1] / samples
-            return 0.0, 0.0
-
-        total_front, total_rear = _average_pair(payload["total"])
-        lat_front, lat_rear = _average_pair(payload["lateral"])
-        long_front, long_rear = _average_pair(payload["longitudinal"])
         return AeroBandCoherence(
-            total=AeroAxisCoherence(total_front, total_rear),
-            lateral=AeroAxisCoherence(lat_front, lat_rear),
-            longitudinal=AeroAxisCoherence(long_front, long_rear),
+            total=AeroAxisCoherence(front_values[0], rear_values[0]),
+            lateral=AeroAxisCoherence(front_values[1], rear_values[1]),
+            longitudinal=AeroAxisCoherence(front_values[2], rear_values[2]),
             samples=samples,
         )
 
-    low_band = _average_band(bands["low"])
-    medium_band = _average_band(bands["medium"])
-    high_band = _average_band(bands["high"])
+    low_band = _band_from_mask(low_mask)
+    medium_band = _band_from_mask(medium_mask)
+    high_band = _band_from_mask(high_mask)
 
     low_imbalance = low_band.total.imbalance
     medium_imbalance = medium_band.total.imbalance
