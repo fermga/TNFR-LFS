@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, List, Sequence, TextIO
 
-from tnfr_core.equations.epi import TelemetryRecord
+from tnfr_core.equations.telemetry import TelemetryRecord
 
 
 @dataclass

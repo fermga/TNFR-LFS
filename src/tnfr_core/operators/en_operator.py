@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import fields
 from typing import Any, Dict, List, Mapping, MutableMapping, Sequence, Tuple, Type, TypeVar
 
-from tnfr_core.equations.epi import EPIExtractor, TelemetryRecord
+from tnfr_core.equations.epi import EPIExtractor
+from tnfr_core.equations.telemetry import TelemetryRecord
 from tnfr_core.equations.epi_models import (
     EPIBundle,
     BrakesNode,

@@ -8,7 +8,7 @@ import time
 from dataclasses import replace
 from typing import Callable, Iterable, Sequence
 
-from tnfr_core.equations.epi import TelemetryRecord
+from tnfr_core.equations.telemetry import TelemetryRecord
 from tnfr_core.operators.operator_detection import (
     detect_en,
     detect_nul,

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence, Tuple
 
-from tnfr_core.equations.epi import TelemetryRecord, _MISSING_FLOAT
+from tnfr_core.equations.telemetry import TelemetryRecord, _MISSING_FLOAT
 
 RUNS_DIR = Path("runs")
 

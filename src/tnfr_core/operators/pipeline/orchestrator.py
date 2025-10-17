@@ -15,7 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised when JAX is unavaila
     jnp = None
     _HAS_JAX = False
 
-from tnfr_core.equations.epi import TelemetryRecord
+from tnfr_core.equations.telemetry import TelemetryRecord
 from tnfr_core.operators.entry.recursivity import extract_network_memory
 from tnfr_core.runtime.shared import SupportsEPIBundle, SupportsMicrosector
 import tnfr_core.operators.en_operator as en_operator_module
