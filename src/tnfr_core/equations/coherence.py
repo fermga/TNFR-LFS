@@ -107,19 +107,6 @@ def _phase_weight(weights: Mapping[str, float] | float, node: str) -> float:
     return float(weights)
 
 
-def _goal_frequency_factor(
-    goal_spec: Mapping[str, float] | float | None,
-    node: str,
-) -> float:
-    if goal_spec is None:
-        return 1.0
-    if isinstance(goal_spec, MappingABC):
-        target_value = _phase_weight(goal_spec, node)
-    else:
-        target_value = float(goal_spec)
-    return float(_frequency_gain(target_value))
-
-
 def sense_index(
     delta_nfr: float,
     deltas_by_node: Mapping[str, float],
@@ -187,13 +174,20 @@ def sense_index(
         else xp.asarray([], dtype=float)
     )
     natural_gain = _frequency_gain(nu_f_values)
-    goal_factors = (
-        xp.asarray([
-            _goal_frequency_factor(phase_targets, node) for node in nodes
-        ], dtype=float)
-        if nodes
-        else xp.asarray([], dtype=float)
-    )
+    if nodes and phase_targets is not None:
+        if isinstance(phase_targets, MappingABC):
+            phase_target_values = xp.asarray(
+                [_phase_weight(phase_targets, node) for node in nodes],
+                dtype=float,
+            )
+        else:
+            scalar_target = float(phase_targets)
+            phase_target_values = xp.full(len(nodes), scalar_target, dtype=float)
+        goal_factors = _frequency_gain(phase_target_values)
+    else:
+        goal_factors = (
+            xp.ones(len(nodes), dtype=float) if nodes else xp.asarray([], dtype=float)
+        )
 
     weighted_components = node_weights * goal_factors * abs_delta * natural_gain
     base_denominator = xp.asarray(1.0, dtype=float) + xp.sum(weighted_components)
