@@ -1,16 +1,488 @@
 # CHANGELOG
 
-## Unreleased
+## v0.9.0 (2025-10-17)
 
-### Changed
+### Documentation
 
-* document the structural ``evolve_epi`` entry point in the reference guides and
-  changelog to steer integrations towards the maintained module.
+* docs: update operator references for structural modules ([`1add040`](https://github.com/fermga/TNFR-LFS/commit/1add04093d5b8f9e01341039b7e711eecd190366))
 
-### Deprecated
+### Feature
 
-* ``tnfr_core.operators.operators.evolve_epi`` now emits a deprecation warning and
-  delegates to ``tnfr_core.operators.structural.epi_evolution.evolve_epi``.
+* feat: add backend-aware spectral helpers ([`a2039a3`](https://github.com/fermga/TNFR-LFS/commit/a2039a318017f4c20c0d9d6bf5e2b5b24f2fcc3f))
+
+### Refactor
+
+* refactor: deprecate operators evolve_epi alias ([`bd4d9f9`](https://github.com/fermga/TNFR-LFS/commit/bd4d9f9362a26ef07c722d44aba1f4215ce97c67))
+
+### Unknown
+
+* Merge pull request #730 from fermga/codex/add-backend-support-for-spectral-metrics
+
+Add backend-aware spectral helpers and resonance tests ([`85cf222`](https://github.com/fermga/TNFR-LFS/commit/85cf22206fb7df37b97461eed8b45ed4af21bdf5))
+
+* Merge pull request #729 from fermga/codex/refactor-metrics-to-use-vectorization
+
+Vectorise aero coherence aggregation path ([`d35eee6`](https://github.com/fermga/TNFR-LFS/commit/d35eee6fd20454b9a02a0a9878a444e8509c5b5c))
+
+* Vectorise aero coherence aggregation ([`b6764fe`](https://github.com/fermga/TNFR-LFS/commit/b6764fe9b2380b67116c63e6eba867988e623954))
+
+* Merge pull request #728 from fermga/codex/refactor-metrics.py-for-xp-compatibility
+
+Vectorise aero-mechanical coherence metrics ([`f6df03f`](https://github.com/fermga/TNFR-LFS/commit/f6df03f5c8f01ca9808662412bd1ce761889e700))
+
+* Vectorise aero-mechanical coherence metrics ([`b8d9e09`](https://github.com/fermga/TNFR-LFS/commit/b8d9e09c2e3eae6b69d65c5c32921676ac39fdf6))
+
+* Merge pull request #727 from fermga/codex/refactor-resonance.py-for-jax-compatibility
+
+Refactor resonance metrics to support xp arrays ([`58be7a8`](https://github.com/fermga/TNFR-LFS/commit/58be7a8ad330f045519a1757a7e68e9ec7d2a9a4))
+
+* Refactor resonance metrics to support xp arrays ([`c8bc992`](https://github.com/fermga/TNFR-LFS/commit/c8bc9925c5cec1fb31a9a88f5712d45cfa5e24cc))
+
+* Merge pull request #726 from fermga/codex/refactor-coherence.py-for-jax-and-numpy
+
+Refactor coherence entropy calculations for backend-aware vectorization ([`26a20f0`](https://github.com/fermga/TNFR-LFS/commit/26a20f0579d8d3efd195a410c224aec2e8c8b89c))
+
+* Refactor coherence backend selection and vectorization ([`4f4f1ac`](https://github.com/fermga/TNFR-LFS/commit/4f4f1ac75010b60de0907a2c4e2fdf984b593646))
+
+* Merge pull request #725 from fermga/codex/update-imports-and-document-migration
+
+Deprecate tnfr_core.operators.evolve_epi re-export ([`614234f`](https://github.com/fermga/TNFR-LFS/commit/614234f88540e96343a5f51fbe3d80dc9f986f93))
+
+* Merge pull request #724 from fermga/codex/refactor-operators-into-explicit-submodules
+
+Refactor telemetry operators into dedicated modules ([`3527fd7`](https://github.com/fermga/TNFR-LFS/commit/3527fd7f102c984abfe9d450c3f24ee8da2b7e72))
+
+* Refactor telemetry operators into dedicated modules ([`7ef3a41`](https://github.com/fermga/TNFR-LFS/commit/7ef3a419ecebaf12c39f27027335adfd3cc0e1e1))
+
+* Merge pull request #723 from fermga/codex/move-orchestrate_delta_metrics-to-new-module
+
+Refactor delta metrics orchestrator into pipeline module ([`48c89dc`](https://github.com/fermga/TNFR-LFS/commit/48c89dceb330fd98bb6abccdfbaa4ab0f12e67bc))
+
+* Refactor delta metrics orchestrator into pipeline module ([`62a71fd`](https://github.com/fermga/TNFR-LFS/commit/62a71fdeab2dd01f10c9b491fa750f6289da55de))
+
+* Merge pull request #722 from fermga/codex/refactor-recursivity-operator-into-new-module
+
+Refactor recursivity operator into dedicated module ([`68f3aa1`](https://github.com/fermga/TNFR-LFS/commit/68f3aa1a3706cbe0c4e3d2b825257ea676d764e8))
+
+* Refactor recursivity operator into dedicated module ([`6a9cff5`](https://github.com/fermga/TNFR-LFS/commit/6a9cff502d7a9eb967b57d175b984da82715d5e1))
+
+* Merge pull request #721 from fermga/codex/refactor-delta-metrics-orchestration
+
+Refactor delta metrics orchestration dependencies into pipeline helper ([`518ee5e`](https://github.com/fermga/TNFR-LFS/commit/518ee5e45ce82f8676575451ed8b7c841f804642))
+
+* Refactor delta metrics orchestration dependencies ([`4864843`](https://github.com/fermga/TNFR-LFS/commit/4864843a5c822405b5061adfe856ba8885195639))
+
+* Merge pull request #720 from fermga/codex/refactor-epi-evolution-and-metadata-handling
+
+Refactor structural EPI helper pipeline ([`dce4ffe`](https://github.com/fermga/TNFR-LFS/commit/dce4ffebee6649456ec1fe777b97915884f5c3a0))
+
+* Refactor structural EPI evolution helpers ([`70e908d`](https://github.com/fermga/TNFR-LFS/commit/70e908d3634ef27c0a1126b16d9f00804ac04ca4))
+
+* Merge pull request #719 from fermga/codex/create-pipeline-package-and-refactor-operators
+
+Modularize operator pipeline stages and expand tests ([`24244a2`](https://github.com/fermga/TNFR-LFS/commit/24244a2b5510c2cdc7ead73b7be60cb5ce35dd23))
+
+* Refactor operator pipeline into modular stages ([`53bd1fc`](https://github.com/fermga/TNFR-LFS/commit/53bd1fc8b80975010ae8b372c0499363cd7c63db))
+
+* Merge pull request #718 from fermga/codex/update-operators_mapping-documentation
+
+Update documentation references for structural operators ([`1977a19`](https://github.com/fermga/TNFR-LFS/commit/1977a191c57c4cc4d3a2518013ebb8aff6b0ab47))
+
+* Merge pull request #717 from fermga/codex/implementar-operador-il-y-anadir-pruebas
+
+Add structural ideal line coherence smoothing operator ([`7be1fbf`](https://github.com/fermga/TNFR-LFS/commit/7be1fbf959c8321cd9b55272afc1ef3361eadba1))
+
+* Add ideal line coherence operator and tests ([`7c58e88`](https://github.com/fermga/TNFR-LFS/commit/7c58e883d3b25c761a2c944dab2b5dfc6b77b53d))
+
+* Merge pull request #716 from fermga/codex/refactor-structural-operators-and-imports
+
+Refactor structural EPI evolution operators ([`a94ba93`](https://github.com/fermga/TNFR-LFS/commit/a94ba9387c4b59a2b81df85fe29932732c282c92))
+
+* Refactor structural EPI evolution operators ([`1a52782`](https://github.com/fermga/TNFR-LFS/commit/1a52782ed6174de81c83e0822d9f9ef36b6d7698))
+
+* Merge pull request #715 from fermga/codex/analyze-dependencies-and-complexity
+
+Add dependency and complexity analysis artifacts ([`9c4e37f`](https://github.com/fermga/TNFR-LFS/commit/9c4e37fc3e0cb201c672a248706a243b91458af5))
+
+* Add dependency and complexity analysis artifacts ([`98fcebb`](https://github.com/fermga/TNFR-LFS/commit/98fcebbc880552cf3d68c2640589bb070fccb5fb))
+
+* Merge pull request #714 from fermga/codex/update-delta-and-sense-series-calculations
+
+Optimize microsector adjustment caching ([`a4aea67`](https://github.com/fermga/TNFR-LFS/commit/a4aea67b3430797348879f1f0cdae5e7feb363db))
+
+* Optimize microsector adjustment caching ([`d61716f`](https://github.com/fermga/TNFR-LFS/commit/d61716f17f7d7935bce425407080e14d2c9aaf5a))
+
+* Merge pull request #713 from fermga/codex/update-segmentation.py-for-signal-extraction
+
+Align phase weight heuristics with precomputed signals ([`9a5a859`](https://github.com/fermga/TNFR-LFS/commit/9a5a8590c345dd1831c226cff26077a6b1b651a5))
+
+* Align phase weight heuristics with precomputed signals ([`9c23577`](https://github.com/fermga/TNFR-LFS/commit/9c23577ab1586c7491ddb095d2b1e642b36e60bc))
+
+* Merge pull request #712 from fermga/codex/refactor-hot-paths-for-optimization
+
+Optimize yaw-rate preprocessing in microsector segmentation ([`ce78759`](https://github.com/fermga/TNFR-LFS/commit/ce78759a441e9a4927267d6b73a869ddddacbd78))
+
+* Optimize yaw-rate preprocessing in microsector segmentation ([`8a5eadd`](https://github.com/fermga/TNFR-LFS/commit/8a5eaddb29a62983588cb49974e1a869445ae5ce))
+
+* Merge pull request #711 from fermga/codex/refactor-segment_microsectors-for-efficiency
+
+Optimize gradient aggregation in segment_microsectors ([`7c6f470`](https://github.com/fermga/TNFR-LFS/commit/7c6f470f9a52003842a028db21bfd52278274b5e))
+
+* Optimize gradient aggregation in segment_microsectors ([`b83539d`](https://github.com/fermga/TNFR-LFS/commit/b83539dc80f71715e5851a29856fb94e345c794c))
+
+* Merge pull request #710 from fermga/codex/update-coordinatedescentoptimizer-evaluation-method
+
+Avoid coordinate descent candidate copy ([`c3b061c`](https://github.com/fermga/TNFR-LFS/commit/c3b061ca183ad1c24fc9b530a19a8c9eefd681ca))
+
+* Avoid coordinate descent candidate copy ([`bf154be`](https://github.com/fermga/TNFR-LFS/commit/bf154be43e9a4c636c5225ed1dde65a5a6270135))
+
+* Merge pull request #709 from fermga/codex/refactor-segment_microsectors-to-optimize-bundles
+
+Simplify bundle recompute inputs in segmentation ([`09cf4d5`](https://github.com/fermga/TNFR-LFS/commit/09cf4d5ed606b75855b5a8242c18fc108a6683f2))
+
+* Simplify bundle recompute inputs ([`3479bd6`](https://github.com/fermga/TNFR-LFS/commit/3479bd6b2be0b349f74ff873a8acaebfe967fe4c))
+
+* Merge pull request #708 from fermga/codex/refactor-boundary-check-in-_build_goals
+
+Optimize multiplier bounds check ([`aa76a40`](https://github.com/fermga/TNFR-LFS/commit/aa76a401f0cd255a2cabd4e07cf506432225338b))
+
+* Optimize multiplier bounds check ([`18acc82`](https://github.com/fermga/TNFR-LFS/commit/18acc823f419663d285c6ebb0b31d64641f8eefa))
+
+* Merge pull request #707 from fermga/codex/refactorizar-_initial_phase_weight_map
+
+Optimize phase weight map index iteration ([`77e774b`](https://github.com/fermga/TNFR-LFS/commit/77e774bc2c315a045615923cf1f28751fcb2c430))
+
+* Optimize phase weight map index iteration ([`a8c7502`](https://github.com/fermga/TNFR-LFS/commit/a8c75028053e86c5eabbf7c3825bd4259936f5d9))
+
+* Merge pull request #706 from fermga/codex/update-vectorized-operations-in-robustness.py
+
+Vectorise session robustness calculations ([`ca0638e`](https://github.com/fermga/TNFR-LFS/commit/ca0638e203ed56a209582a6b5bc4bdf571684031))
+
+* Vectorise robustness summaries with NumPy ([`dd2d4df`](https://github.com/fermga/TNFR-LFS/commit/dd2d4dfcc2c58601dfeb8a8a6e29003aed4c6a48))
+
+* Merge pull request #705 from fermga/codex/add-deltacalculator-helper-and-update-tests
+
+Optimize bundle phase recomputation in segmentation ([`efd8db8`](https://github.com/fermga/TNFR-LFS/commit/efd8db81246a63c2e0365ace008b9606e8bafdd0))
+
+* Optimize phase reprojecting of EPI bundles ([`1ec08bd`](https://github.com/fermga/TNFR-LFS/commit/1ec08bde9bd41e6fb8e99ca0b0258d558e8c7e32))
+
+* Merge pull request #704 from fermga/codex/refactor-segmentation.py-for-shared-buffers
+
+Use sequence segments for goal window processing ([`104694f`](https://github.com/fermga/TNFR-LFS/commit/104694f090b4ca02d887ae34480f86ae4e512be2))
+
+* Use sequence views in goal computation ([`c0b6a94`](https://github.com/fermga/TNFR-LFS/commit/c0b6a94e46e4a229b3b16508e6cd83a5f19b0389))
+
+* Merge pull request #703 from fermga/codex/enhance-phase-weight-adjustment-logic
+
+Optimize microsector goal caching ([`9adbc14`](https://github.com/fermga/TNFR-LFS/commit/9adbc14f49de2b67320f7bca6b7af3ffb8115174))
+
+* Optimize microsector goal caching ([`93aaaeb`](https://github.com/fermga/TNFR-LFS/commit/93aaaeb6feb84077228a7eca569b710edfa188a8))
+
+* Merge pull request #702 from fermga/codex/refactor-segmentation-to-use-lazy-iteration
+
+Avoid eagerly slicing bundles when preparing fallback contexts ([`27be25a`](https://github.com/fermga/TNFR-LFS/commit/27be25ac2bda6e56a60d3386833e7627c143f7d8))
+
+* Refine fallback context resolution ([`3e5e75f`](https://github.com/fermga/TNFR-LFS/commit/3e5e75f8f1e06072274df7c76ea0b74ecef3c479))
+
+* Merge pull request #701 from fermga/codex/refactor-segment_microsectors-to-use-index-iteration
+
+Optimize microsector segmentation iteration ([`93e2bad`](https://github.com/fermga/TNFR-LFS/commit/93e2bad53a5e4dce948c56407cbb17ba60ec90b6))
+
+* Optimize segment microsector window iteration ([`1848893`](https://github.com/fermga/TNFR-LFS/commit/18488934282df16f0d44302b90bb01d3f01349ac))
+
+* Merge pull request #700 from fermga/codex/refactor-objective_score-for-efficiency
+
+Refactor objective score aggregation ([`3b2057d`](https://github.com/fermga/TNFR-LFS/commit/3b2057d5780b5257bd648c3411410259483cca82))
+
+* Refactor objective score aggregation ([`1cee516`](https://github.com/fermga/TNFR-LFS/commit/1cee516733b25cffab6cb185917e8c3320368738))
+
+* Merge pull request #699 from fermga/codex/refactorizar-_vector_key-para-usar-set
+
+Improve vector cache key handling for extra parameters ([`d349069`](https://github.com/fermga/TNFR-LFS/commit/d349069eeed6c12ffd987474eaf6b48da33cd4e8))
+
+* Improve vector key handling with extra parameters ([`86ae43d`](https://github.com/fermga/TNFR-LFS/commit/86ae43d00f9b48470d2eee04df05299914df622e))
+
+* Merge pull request #698 from fermga/codex/add-helper-for-robustness-summary-calculation-i3loud
+
+Optimize robustness coefficient aggregation ([`ef4dac8`](https://github.com/fermga/TNFR-LFS/commit/ef4dac894b67e50b0c4c5115ed8a30b5848583b4))
+
+* Optimize robustness coefficient aggregation ([`615ff11`](https://github.com/fermga/TNFR-LFS/commit/615ff11f77535fa1c3a6ecdcc322d4fe6c516d8e))
+
+* Merge pull request #697 from fermga/codex/refactorizar-_build_goals-para-optimizar-multipliers
+
+Optimize multiplier resolution in _build_goals ([`7930eb0`](https://github.com/fermga/TNFR-LFS/commit/7930eb0bbc17881cd3faed3d99fe4674fe710062))
+
+* Optimize multiplier resolution in _build_goals ([`bd8513f`](https://github.com/fermga/TNFR-LFS/commit/bd8513f60aeab8f958531f5dee9233547272787e))
+
+* Merge pull request #696 from fermga/codex/refactorizar-bucle-en-_build_goals
+
+Optimise goal aggregation loop ([`bf2debd`](https://github.com/fermga/TNFR-LFS/commit/bf2debd86df657a9f82324959fa210bd005aeabd))
+
+* Optimise goal aggregation loop ([`65c9766`](https://github.com/fermga/TNFR-LFS/commit/65c976686e78189119bdaec700714293eaf53783))
+
+* Merge pull request #695 from fermga/codex/refactor-_build_goals-for-efficient-indexing
+
+Optimize segmentation goal builder to avoid redundant allocations ([`8209fa5`](https://github.com/fermga/TNFR-LFS/commit/8209fa51cf6f0e8dd787dbbc0e7f83a18a60e5ce))
+
+* Optimize goal building to avoid per-phase copies ([`a335d5a`](https://github.com/fermga/TNFR-LFS/commit/a335d5ae23b881116bfc25a6f9d8b1cba7d1dfb4))
+
+* Merge pull request #694 from fermga/codex/optimize-context-handling-in-microsectors
+
+Cache fallback context for microsector goals ([`18d2621`](https://github.com/fermga/TNFR-LFS/commit/18d2621d6aba9349faeeb2b76f60259a1a59ad3d))
+
+* Cache microsector fallback contexts ([`6d0427d`](https://github.com/fermga/TNFR-LFS/commit/6d0427d65085cb6484ecee410db2dc74058e9600))
+
+* Merge pull request #693 from fermga/codex/optimize-min/max-calls-in-segmentation.py
+
+Optimize microsector phase boundary detection ([`66647bb`](https://github.com/fermga/TNFR-LFS/commit/66647bb80cd5664b65a463fcc1f189a091607b07))
+
+* Optimize phase boundary search loop ([`2387726`](https://github.com/fermga/TNFR-LFS/commit/238772615b240c3d426b628b00ebcb0faa16fe8a))
+
+* Merge pull request #692 from fermga/codex/modify-_compute_dynamic_multipliers_raw
+
+Avoid redundant tuple conversion when computing dynamic multipliers ([`f5e3912`](https://github.com/fermga/TNFR-LFS/commit/f5e3912c80bcbc440bb38dd56d9728cffb55123c))
+
+* Avoid redundant tuple conversion in dynamic multipliers ([`0ba5caf`](https://github.com/fermga/TNFR-LFS/commit/0ba5caf1c758b314e5a91ef3c255faa281a792aa))
+
+* Merge pull request #691 from fermga/codex/add-helper-to-extract-finite-nu_f-values
+
+Cache node ν_f distributions during segmentation ([`fa04f21`](https://github.com/fermga/TNFR-LFS/commit/fa04f218f5031b8da98d27fb12a3032cfa9fe8b8))
+
+* Cache node nu_f values during segmentation ([`9e6541e`](https://github.com/fermga/TNFR-LFS/commit/9e6541e4c14f3ec2f84c3cc2c9eb3812214f67ae))
+
+* Merge pull request #690 from fermga/codex/add-helper-for-delta_nfr-and-sense_index
+
+Precompute robustness bundle metrics ([`401049d`](https://github.com/fermga/TNFR-LFS/commit/401049d77321b12bfe43070b17d956fe3aa1643b))
+
+* Precompute robustness bundle metrics ([`3cc6a6c`](https://github.com/fermga/TNFR-LFS/commit/3cc6a6cb610474f66bbefcabb83eedea40967776))
+
+* Merge pull request #689 from fermga/codex/refactor-segmentation.py-to-use-range-slicing
+
+Optimize microsector goal slicing ([`b7190de`](https://github.com/fermga/TNFR-LFS/commit/b7190dec7418d575d9de51c594cefeb97d42206f))
+
+* Optimize goal slicing in segmentation goals ([`6d84c8e`](https://github.com/fermga/TNFR-LFS/commit/6d84c8e7541dd7971fa358eda7aa25cb24a90593))
+
+* Merge pull request #688 from fermga/codex/extend-segment_microsectors-for-track_gradient_cache
+
+Add track gradient caching to microsector segmentation ([`14e7048`](https://github.com/fermga/TNFR-LFS/commit/14e7048752687795c94fdb04035b7dea2a651aff))
+
+* Cache track gradients during segmentation ([`201499b`](https://github.com/fermga/TNFR-LFS/commit/201499bc7860cf31bd755172babbc53279de6da2))
+
+* Merge pull request #687 from fermga/codex/refactorizar-seleccion-de-nodos-en-segmentation.py
+
+Optimize dominant node selection in segmentation metrics ([`8c926d9`](https://github.com/fermga/TNFR-LFS/commit/8c926d990aa50460ec4fe36c33e1f0164c075f0b))
+
+* Optimize dominant node selection in segmentation metrics ([`6390626`](https://github.com/fermga/TNFR-LFS/commit/63906265b139c1a902751be6a6491749f7e06db5))
+
+* Merge pull request #686 from fermga/codex/refactor-segment_microsectors-for-efficiency
+
+Refactor sample context loop in segmentation ([`cc18dc6`](https://github.com/fermga/TNFR-LFS/commit/cc18dc6f1a4cf08a1ba2fdf4ae68e9460e96aa29))
+
+* Refactor sample context loop in segmentation ([`8e1f9da`](https://github.com/fermga/TNFR-LFS/commit/8e1f9da750d517b0e7446ae1f1d98d0d43c0f299))
+
+* Merge pull request #685 from fermga/codex/add-key-tracking-to-circularreorderbuffer
+
+Optimize reorder buffer key lookups ([`13b4b86`](https://github.com/fermga/TNFR-LFS/commit/13b4b86778a0c240cee02f608eeea4d3783e372c))
+
+* Optimize reorder buffer key lookups ([`026c466`](https://github.com/fermga/TNFR-LFS/commit/026c466596366b89c5151bb2b5eac8bc2b91f783))
+
+* Merge pull request #684 from fermga/codex/refactor-raf-telemetry-processing
+
+Refactor RAF wheel frame access ([`6cf1455`](https://github.com/fermga/TNFR-LFS/commit/6cf145569502aa76717376345e95c276cbfe017e))
+
+* Refactor RAF wheel frame access ([`e07036b`](https://github.com/fermga/TNFR-LFS/commit/e07036bc8af712c9ad03f5175a903e283a8fc52b))
+
+* Merge pull request #683 from fermga/codex/update-_build_goals-to-accept-sample_multipliers
+
+Use cached multipliers when building phase goals ([`c51f7a0`](https://github.com/fermga/TNFR-LFS/commit/c51f7a0a02b091013daf0b6894e6c53f95208f8f))
+
+* Use cached multipliers when building goals ([`582bd80`](https://github.com/fermga/TNFR-LFS/commit/582bd80d2d00528241d07f64eccf8bb83e3fb4eb))
+
+* Merge pull request #682 from fermga/codex/optimize-segmentation-and-phase-alignment-calculations
+
+Optimize phase alignment normalization reuse ([`636bdc8`](https://github.com/fermga/TNFR-LFS/commit/636bdc87daeb7ca90abda5748af76892fbcd1acd))
+
+* Optimize microsector phase alignment reuse ([`a6b5b0f`](https://github.com/fermga/TNFR-LFS/commit/a6b5b0fb07c6a8c4661ad2a03bc634321763a329))
+
+* Merge pull request #681 from fermga/codex/adjust-yaw_rate_cache-construction-logic
+
+Prefer recorded yaw rates in segment_microsectors ([`e509e02`](https://github.com/fermga/TNFR-LFS/commit/e509e02d6e90c0b697faba85744d58f4e0a3b00a))
+
+* Use recorded yaw rate when available ([`2a03b68`](https://github.com/fermga/TNFR-LFS/commit/2a03b6899dda168d6a085818dd1d16a9e25a1c24))
+
+* Merge pull request #680 from fermga/codex/enhance-goal-cache-invalidation-logic
+
+Ensure microsector bundle metrics refresh after goal recompute ([`b1466dc`](https://github.com/fermga/TNFR-LFS/commit/b1466dccd2ebb337b1403aa902f8e306006e77c3))
+
+* Invalidate bundle-derived caches on goal recompute ([`a551962`](https://github.com/fermga/TNFR-LFS/commit/a551962f789d3fcb7a60c0e746b51bfc88ba368b))
+
+* Merge pull request #679 from fermga/codex/remove-nested-append_numeric-function
+
+Refine robustness bundle numeric extraction ([`7b37dd4`](https://github.com/fermga/TNFR-LFS/commit/7b37dd4259836f7a784f1d9b87243d80a92a2736))
+
+* Refine robustness bundle numeric extraction ([`84c2550`](https://github.com/fermga/TNFR-LFS/commit/84c2550a9d0686e0315893aa3d8a7be293f917dd))
+
+* Merge pull request #678 from fermga/codex/update-segmentation.py-to-use-fmean
+
+Use fmean for segmentation averages ([`f5dede9`](https://github.com/fermga/TNFR-LFS/commit/f5dede99a404a85a02beac3731670d9eee26d112))
+
+* Use fmean for segmentation averages ([`b10e444`](https://github.com/fermga/TNFR-LFS/commit/b10e444305ba68db6109b3e4979480523e820e2f))
+
+* Merge pull request #677 from fermga/codex/update-_recompute_bundles-for-mutable-lists
+
+Reuse mutable bundle containers during segmentation recompute ([`641f8fd`](https://github.com/fermga/TNFR-LFS/commit/641f8fde5a8ece024e98a295fcd90c348963a026))
+
+* Optimize bundle recomputation container reuse ([`b6c92c9`](https://github.com/fermga/TNFR-LFS/commit/b6c92c9f5541ef9fcc04f5cdfea8bc90bd2f2ad2))
+
+* Merge pull request #676 from fermga/codex/refactor-segment_microsectors-to-use-lists
+
+Optimize phase assignment storage in segmentation ([`626854b`](https://github.com/fermga/TNFR-LFS/commit/626854bb9c9c6ae5ef84ad317d7e90d7f1c9f44a))
+
+* Optimize phase assignment lookups ([`e0a9aad`](https://github.com/fermga/TNFR-LFS/commit/e0a9aadd98e6bc45111fa8e7c36e9ea7e03b2305))
+
+* Merge pull request #675 from fermga/codex/refactor-node_delta_cache-to-mutable-list
+
+Improve node delta cache reuse in segmentation ([`eae832a`](https://github.com/fermga/TNFR-LFS/commit/eae832a57145fba93590170196e80c9c58249d9e))
+
+* Optimize node delta cache updates ([`2e52785`](https://github.com/fermga/TNFR-LFS/commit/2e5278571d20145cf27227e41c77d4a59bc28177))
+
+* Merge pull request #674 from fermga/codex/refactor-trace-storage-to-use-deque
+
+Use bounded deques for recursivity trace history ([`845af5a`](https://github.com/fermga/TNFR-LFS/commit/845af5a192e0cd9b3e425111cb9cb601c23f853f))
+
+* Use bounded deques for recursivity trace history ([`a53a0eb`](https://github.com/fermga/TNFR-LFS/commit/a53a0eb157e9dad574d262997aded0a254a6ba3e))
+
+* Merge pull request #673 from fermga/codex/implementar-manejo-de-baseline-en-funciones
+
+Expose baseline record from EPI extractor and pass it through segmentation ([`ceabad5`](https://github.com/fermga/TNFR-LFS/commit/ceabad5c5dc1ed29ed532014ea85a8dbe980f45c))
+
+* Expose baseline from EPI extractor and pass it to segmentation ([`34ef809`](https://github.com/fermga/TNFR-LFS/commit/34ef809349c632322e15c97e207215bc4e4ea368))
+
+* Merge pull request #672 from fermga/codex/refactor-metrics-segmentation-cache-and-helpers
+
+Refactor segmentation node delta caching to rely on bundles ([`4fef2dc`](https://github.com/fermga/TNFR-LFS/commit/4fef2dc46d87b75cef7100019348a59b62cd1596))
+
+* Refactor node delta caching to use bundle data ([`405dde5`](https://github.com/fermga/TNFR-LFS/commit/405dde5d10f5b5ebf6b6f7d2ef3fbfdb52149a0d))
+
+* Merge pull request #671 from fermga/codex/create-helper-for-index-traversal
+
+Optimize robustness metric extraction in robustness analysis ([`024c9a5`](https://github.com/fermga/TNFR-LFS/commit/024c9a526259ab53489075d56d7c2d7a7290cdb8))
+
+* Refactor robustness metric collection ([`68ef9a8`](https://github.com/fermga/TNFR-LFS/commit/68ef9a80ca0a0bf8dacf2067080ac62c304ff3dd))
+
+* Merge pull request #670 from fermga/codex/update-_estimate_entropy-signature-and-caching-logic
+
+Cache node deltas when estimating entropy ([`e123098`](https://github.com/fermga/TNFR-LFS/commit/e123098266b6419515af99e930de8333556842bc))
+
+* Cache node deltas when estimating entropy ([`4bdb42f`](https://github.com/fermga/TNFR-LFS/commit/4bdb42fe67513092e311305840cc57f661ca5b30))
+
+* Merge pull request #669 from fermga/codex/implementar-almacenamiento-y-reutilizacion-de-objetivos
+
+Cache phase target calculations for microsectors ([`3bb3c91`](https://github.com/fermga/TNFR-LFS/commit/3bb3c918e2dd9888f3487db51bfbd843bc06b145))
+
+* Cache phase target calculations for microsectors ([`2d3af6e`](https://github.com/fermga/TNFR-LFS/commit/2d3af6e8fa08e4770f477450c7136424a8a63dbf))
+
+* Merge pull request #668 from fermga/codex/refactor-phase_samples-construction-and-utilities
+
+Use lazy phase sample ranges in segmentation ([`bb6f31d`](https://github.com/fermga/TNFR-LFS/commit/bb6f31dfa3f5d83202e3970936db23f3445ad83f))
+
+* Use lazy phase sample ranges in segmentation ([`f24c454`](https://github.com/fermga/TNFR-LFS/commit/f24c454c3c1cda6edc137366bf0c7481235f32ee))
+
+* Merge pull request #667 from fermga/codex/refactorizar-segment_microsectors-y-optimizar-calculos
+
+Memoize microsector goal computations ([`a66f6c1`](https://github.com/fermga/TNFR-LFS/commit/a66f6c1c8f09f5e5840c2f016b1b7e1aec459144))
+
+* Memoize segment microsector goals ([`972d33a`](https://github.com/fermga/TNFR-LFS/commit/972d33a2048d54ad4ff326122dd0f407ba99f347))
+
+* Merge pull request #666 from fermga/codex/refactor-segment_microsectors-to-optimize-record-access
+
+Avoid redundant segmentation window slicing ([`7924284`](https://github.com/fermga/TNFR-LFS/commit/792428400c67ce5af23128f5ad27e3c3db9ebfb6))
+
+* Refine segmentation window handling ([`39f6b6b`](https://github.com/fermga/TNFR-LFS/commit/39f6b6bf49c862e087c489422ee48d62185e3119))
+
+* Merge pull request #665 from fermga/codex/refactorizar-procesamiento-de-estado-del-analizador
+
+Optimize analyzer checkpointing for segmentation recomputes ([`9fe050b`](https://github.com/fermga/TNFR-LFS/commit/9fe050b11cba86fd8fecfe5472dda705fdd7f7d6))
+
+* Refactor analyzer state snapshots and extend segmentation tests ([`ab2082f`](https://github.com/fermga/TNFR-LFS/commit/ab2082f4dd808fb6d6700b769054bac16750a487))
+
+* Merge pull request #664 from fermga/codex/refactor-segment_microsectors-for-efficiency
+
+Optimize microsector segmentation delta caching ([`23868b7`](https://github.com/fermga/TNFR-LFS/commit/23868b71b923ca6c5c4d3b96a0f55823bf8fad88))
+
+* Optimize microsector delta caching ([`8edbf36`](https://github.com/fermga/TNFR-LFS/commit/8edbf363e4fb80ee1a4e5e7d823c096d890678e9))
+
+* Merge pull request #663 from fermga/codex/enhance-bundle-recomputation-process
+
+Optimize microsector bundle recomputation caching ([`af2f2d6`](https://github.com/fermga/TNFR-LFS/commit/af2f2d6f6158acc8f4be96fa1f038fb286334d3b))
+
+* Improve segmentation bundle recompute caching ([`53d3005`](https://github.com/fermga/TNFR-LFS/commit/53d30050eca3a55832ac0996c126369fe6afaebf))
+
+* Merge pull request #662 from fermga/codex/refactor-segmentation.py-for-efficiency
+
+Ensure segmentation uses per-spec windows for metrics and detection ([`c1d587d`](https://github.com/fermga/TNFR-LFS/commit/c1d587dd7afd77397a6f7274eb6ea92582f6ed3d))
+
+* Fix segmentation window reuse and add regression test ([`a3ebcff`](https://github.com/fermga/TNFR-LFS/commit/a3ebcffbe77ac0a9be74ebc7601fe623e4e80094))
+
+* Merge pull request #661 from fermga/codex/refactorizar-segmentacion-en-metrics
+
+Optimise phase ν_f target computation ([`ea5dd05`](https://github.com/fermga/TNFR-LFS/commit/ea5dd05b13728fdbe9a4a940e3e94c9ab46d6299))
+
+* Optimise phase ν_f target computation ([`3240c8a`](https://github.com/fermga/TNFR-LFS/commit/3240c8a2ba2780855c04d15234d3437e555ee1ef))
+
+* Merge pull request #660 from fermga/codex/refactor-segment_microsectors-for-performance
+
+Optimize microsector metric aggregation ([`737e113`](https://github.com/fermga/TNFR-LFS/commit/737e11300f8761b76b91b9ac6cdfee6f4a52ae7a))
+
+* Optimize segment microsector metric accumulation ([`1c1c7cb`](https://github.com/fermga/TNFR-LFS/commit/1c1c7cb24b4d5a80e71bb7f0d0916718da27041f))
+
+* Merge pull request #659 from fermga/codex/refactor-segmentation.py-to-extract-nu_f_targets
+
+Refactor segmentation goal nu_f derivation into helper ([`22527fa`](https://github.com/fermga/TNFR-LFS/commit/22527fa56668494cab7d870984c7989badc2b9bf))
+
+* Refactor goal nu_f extraction ([`5995b6a`](https://github.com/fermga/TNFR-LFS/commit/5995b6a117c12069efad4341d628dcc8cce21ce3))
+
+* Merge pull request #658 from fermga/codex/refactor-segment_microsectors-to-optimize-calculations
+
+Cache microsector delta metrics ([`b11f721`](https://github.com/fermga/TNFR-LFS/commit/b11f7217e53e47d5b566a1e7a1d4287444feafc6))
+
+* Cache microsector delta metrics ([`3e1d8f4`](https://github.com/fermga/TNFR-LFS/commit/3e1d8f43ac09898e930beda5b1c252bbe83d0a84))
+
+* Merge pull request #657 from fermga/codex/refactorizar-_lap_groups-para-optimizacion
+
+Optimize lap grouping to reuse lap index mapping ([`a5136e2`](https://github.com/fermga/TNFR-LFS/commit/a5136e2a70ae9a617ccb1ffd91f282d2e4621edb))
+
+* Refactor lap grouping to avoid repeated scans ([`29cf5c6`](https://github.com/fermga/TNFR-LFS/commit/29cf5c6c418c63a41c8325eee1d7a4b2b8a8304b))
+
+* Merge pull request #656 from fermga/codex/refactor-segmentation-to-use-lightweight-metadata
+
+Optimize microsector context metadata usage ([`681b964`](https://github.com/fermga/TNFR-LFS/commit/681b964f415858990a5015d853653ffdda4fe70d))
+
+* Optimize microsector sample context bookkeeping ([`00f33e6`](https://github.com/fermga/TNFR-LFS/commit/00f33e6b10f43f2d4bfd579515bebeea18e4484c))
+
+* Merge pull request #655 from fermga/codex/refactor-timestamp-delta-computation
+
+Reuse timestamp deltas across NFR integrals ([`d3a8509`](https://github.com/fermga/TNFR-LFS/commit/d3a85093c044a2042d1879182e24776875451403))
+
+* Optimize delta integrals by reusing timestamp deltas ([`e4bb96d`](https://github.com/fermga/TNFR-LFS/commit/e4bb96d4857061e7bb06d3a0ce9e1e9293963980))
+
+* Merge pull request #654 from fermga/codex/create-profile-insights-script-with-cli-args
+
+Add compute_insights profiling helper ([`c3edafe`](https://github.com/fermga/TNFR-LFS/commit/c3edafe47efe070687c01b0be0b7b1a11663b57f))
+
+* Add compute_insights profiling helper ([`3dbd70a`](https://github.com/fermga/TNFR-LFS/commit/3dbd70ac3b622a675799457babd01d20a8afae31))
+
+* Merge pull request #653 from fermga/codex/refactoriza-la-construccion-de-specs
+
+Cache contextual multipliers in segment_microsectors ([`0e363bb`](https://github.com/fermga/TNFR-LFS/commit/0e363bb1dc032cd113b0f6dc6b43461c76209f3f))
+
+* Cache contextual multipliers in segmentation ([`1b50fbe`](https://github.com/fermga/TNFR-LFS/commit/1b50fbef1de1b07ff67f8a595539238e8e55200b))
+
+* Merge pull request #652 from fermga/codex/extend-_recompute_bundles-for-incremental-updates
+
+Optimize bundle recomputation in segmentation ([`913b50d`](https://github.com/fermga/TNFR-LFS/commit/913b50dc8bd999c088638a77f12da3393223aa56))
+
+* Optimize bundle recomputation in segmentation ([`a942f71`](https://github.com/fermga/TNFR-LFS/commit/a942f71d76b7ad999bb938c0dd5d0ce3a8c316b9))
 
 ## v0.8.0 (2025-10-15)
 
