@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC
-from typing import Dict, Mapping
+from typing import Any, Dict, Mapping
+
+import numpy as np
+
+try:  # pragma: no cover - exercised indirectly when operators import is deferred
+    from tnfr_core.operators._shared import _HAS_JAX, jnp
+except ImportError:  # pragma: no cover - fallback path for circular imports
+    _HAS_JAX = False
+    jnp = None
 
 from .delta_utils import distribute_weighted_delta
 from .phases import expand_phase_alias, phase_family
@@ -13,6 +21,22 @@ __all__ = ["compute_node_delta_nfr", "sense_index"]
 
 
 NodeDeltaMap = Dict[str, float]
+
+xp = jnp if _HAS_JAX and jnp is not None else np
+
+
+def _ensure_backend() -> None:
+    global _HAS_JAX, jnp, xp
+    if _HAS_JAX and jnp is not None:
+        return
+    try:
+        from tnfr_core.operators._shared import _HAS_JAX as resolved_has_jax, jnp as resolved_jnp
+    except ImportError:  # pragma: no cover - defensive fallback
+        return
+    _HAS_JAX = resolved_has_jax
+    jnp = resolved_jnp
+    if _HAS_JAX and jnp is not None:
+        xp = jnp
 
 
 def compute_node_delta_nfr(
@@ -52,7 +76,7 @@ def compute_node_delta_nfr(
     return distribution
 
 
-def _frequency_gain(nu_f: float) -> float:
+def _frequency_gain(nu_f: Any) -> Any:
     """Return the monotonic gain applied to ΔNFR magnitudes.
 
     The gain models how subsystems with higher natural frequencies modulate the
@@ -61,9 +85,16 @@ def _frequency_gain(nu_f: float) -> float:
     the sense index more aggressively than slower ones.
     """
 
-    if not nu_f or not isinstance(nu_f, (int, float)):
-        return 1.0
-    return 1.0 + max(0.0, float(nu_f))
+    _ensure_backend()
+    try:
+        values = xp.asarray(nu_f, dtype=float)
+    except (TypeError, ValueError):
+        return xp.asarray(1.0, dtype=float)
+
+    finite_mask = xp.isfinite(values)
+    safe_values = xp.where(finite_mask, values, 0.0)
+    gains = xp.asarray(1.0, dtype=float) + xp.maximum(0.0, safe_values)
+    return xp.where(finite_mask, gains, xp.asarray(1.0, dtype=float))
 
 
 def _phase_weight(weights: Mapping[str, float] | float, node: str) -> float:
@@ -86,7 +117,7 @@ def _goal_frequency_factor(
         target_value = _phase_weight(goal_spec, node)
     else:
         target_value = float(goal_spec)
-    return _frequency_gain(target_value)
+    return float(_frequency_gain(target_value))
 
 
 def sense_index(
@@ -115,6 +146,7 @@ def sense_index(
     backward compatible with previous heuristics.
     """
 
+    _ensure_backend()
     phase_weights: Mapping[str, float] | float = 1.0
     if isinstance(w_phase, MappingABC):
         phase_weights = w_phase.get("__default__", 1.0)
@@ -137,21 +169,45 @@ def sense_index(
     else:
         phase_targets = nu_f_targets
 
-    weighted_sum = 0.0
-    for node, delta_value in deltas_by_node.items():
-        node_weight = _phase_weight(phase_weights, node)
-        nu_f = nu_f_by_node.get(node, 0.0)
-        goal_factor = _goal_frequency_factor(phase_targets, node)
-        weighted_sum += node_weight * goal_factor * abs(delta_value) * _frequency_gain(nu_f)
+    nodes: tuple[str, ...] = tuple(deltas_by_node)
 
-    base_index = 1.0 / (1.0 + weighted_sum)
+    abs_delta = (
+        xp.abs(xp.asarray([deltas_by_node[node] for node in nodes], dtype=float))
+        if nodes
+        else xp.asarray([], dtype=float)
+    )
+    node_weights = (
+        xp.asarray([_phase_weight(phase_weights, node) for node in nodes], dtype=float)
+        if nodes
+        else xp.asarray([], dtype=float)
+    )
+    nu_f_values = (
+        xp.asarray([nu_f_by_node.get(node, 0.0) for node in nodes], dtype=float)
+        if nodes
+        else xp.asarray([], dtype=float)
+    )
+    natural_gain = _frequency_gain(nu_f_values)
+    goal_factors = (
+        xp.asarray([
+            _goal_frequency_factor(phase_targets, node) for node in nodes
+        ], dtype=float)
+        if nodes
+        else xp.asarray([], dtype=float)
+    )
 
-    weights_total = sum(abs(value) for value in deltas_by_node.values())
-    if weights_total == 0:
-        return max(0.0, min(1.0, base_index))
+    weighted_components = node_weights * goal_factors * abs_delta * natural_gain
+    base_denominator = xp.asarray(1.0, dtype=float) + xp.sum(weighted_components)
+    base_index = xp.asarray(1.0, dtype=float) / base_denominator
 
-    weights = [abs(value) / weights_total for value in deltas_by_node.values()]
-    penalty = entropy_lambda * normalised_entropy(weights)
+    weights_total = xp.sum(abs_delta)
+    if not nodes or float(weights_total) <= 0.0:
+        return float(xp.clip(base_index, 0.0, 1.0))
+
+    normalised_weights = abs_delta / weights_total
+    penalty = xp.asarray(
+        entropy_lambda * normalised_entropy(normalised_weights),
+        dtype=float,
+    )
     adjusted = base_index - penalty
-    return max(0.0, min(1.0, adjusted))
+    return float(xp.clip(adjusted, 0.0, 1.0))
 
