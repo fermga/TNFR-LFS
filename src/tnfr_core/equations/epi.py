@@ -48,7 +48,7 @@ from tnfr_core.equations.epi_models import (
 from tnfr_core.equations.phase_weights import _phase_weight
 from tnfr_core.equations.telemetry import TelemetryRecord, _MISSING_FLOAT
 from tnfr_core._canonical import CANONICAL_REQUESTED, import_tnfr
-from tnfr_core.operators.structural.epi_evolution import evolve_epi
+from tnfr_core.equations.epi_evolution import evolve_epi
 __all__ = [
     "TelemetryRecord",
     "EPIExtractor",

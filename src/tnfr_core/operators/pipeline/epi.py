@@ -10,7 +10,7 @@ from tnfr_core.equations.epi import (
     delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
-from tnfr_core.operators.structural.epi_evolution import evolve_epi
+from tnfr_core.equations.epi_evolution import evolve_epi
 from tnfr_core.runtime.shared import SupportsEPIBundle, SupportsTelemetrySample
 
 EnsureBundle = Callable[[SupportsEPIBundle], SupportsEPIBundle]
