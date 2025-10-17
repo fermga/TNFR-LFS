@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping as MappingABC
 from typing import Any, Dict, Mapping
 
-from tnfr_core.equations.epi import _phase_weight
+from tnfr_core.equations.phase_weights import _phase_weight
 
 from .metadata import NON_NODAL_METADATA_KEYS, PhaseContext
 

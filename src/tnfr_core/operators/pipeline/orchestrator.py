@@ -18,6 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised when JAX is unavaila
 from tnfr_core.equations.epi import TelemetryRecord
 from tnfr_core.operators.entry.recursivity import extract_network_memory
 from tnfr_core.operators.interfaces import SupportsEPIBundle, SupportsMicrosector
+import tnfr_core.operators.en_operator as en_operator_module
 from tnfr_core.operators.pipeline.coherence import (
     _stage_coherence as pipeline_stage_coherence,
 )
@@ -51,7 +52,6 @@ from tnfr_core.operators.en_operator import (
     _normalise_node_evolution,
     _update_bundles,
     emission_operator,
-    reception_operator,
 )
 from tnfr_core.operators.il_operator import (
     _delta_integral_series,
@@ -170,7 +170,7 @@ def orchestrate_delta_metrics(
             has_jax=_HAS_JAX,
             structural_component=structural_component,
             emission_operator=emission_operator,
-            reception_operator=reception_operator,
+            reception_operator=en_operator_module.reception_operator,
             dissonance_breakdown_operator=dissonance_breakdown_operator,
             coherence_operator=coherence_operator,
             coupling_operator=coupling_operator,
