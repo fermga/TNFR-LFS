@@ -430,12 +430,16 @@ def _fourier_components(
     return frequencies[1:], fft_values[1:]
 
 
+PowerSpectrumResult = Sequence[Tuple[float, float]] | Any
+CrossSpectrumResult = Sequence[Tuple[float, float, float]] | Any
+
+
 def power_spectrum(
     samples: Sequence[float],
     sample_rate: float,
     *,
     xp_module: Any | None = None,
-) -> List[Tuple[float, float]]:
+) -> PowerSpectrumResult:
     """Return the single-sided power spectrum of ``samples`` using ``xp_module``."""
 
     xp_backend = _resolve_backend(xp_module, samples)
@@ -445,13 +449,23 @@ def power_spectrum(
     sample_values = _xp_array(samples, xp_backend, dtype=float)
     length = _xp_size(sample_values)
     if length == 0 or _xp_size(frequencies) == 0:
-        return []
+        if xp_module is None:
+            return []
+        return xp_backend.asarray([], dtype=float).reshape(0, 2)
 
     magnitudes = xp_backend.abs(fft_values)
     energy = xp_backend.square(magnitudes) / float(length)
-    freq_np = np.asarray(frequencies, dtype=float)
-    energy_np = np.asarray(energy, dtype=float)
-    return list(zip(freq_np.tolist(), energy_np.tolist()))
+
+    if xp_module is None:
+        freq_np = np.asarray(frequencies, dtype=float)
+        energy_np = np.asarray(energy, dtype=float)
+        return list(zip(freq_np.tolist(), energy_np.tolist()))
+
+    frequencies = xp_backend.asarray(frequencies, dtype=float)
+    energy = xp_backend.asarray(energy, dtype=float)
+    if _xp_size(frequencies) == 0:
+        return xp_backend.asarray([], dtype=float).reshape(0, 2)
+    return xp_backend.stack((frequencies, energy), axis=-1)
 
 
 def cross_spectrum(
@@ -460,7 +474,7 @@ def cross_spectrum(
     sample_rate: float,
     *,
     xp_module: Any | None = None,
-) -> List[Tuple[float, float, float]]:
+) -> CrossSpectrumResult:
     """Return the cross-spectrum between ``input_series`` and ``response_series`` using ``xp_module``."""
 
     xp_backend = _resolve_backend(xp_module, input_series, response_series)
@@ -468,7 +482,9 @@ def cross_spectrum(
     response_values = _xp_array(response_series, xp_backend, dtype=float)
     length = min(_xp_size(input_values), _xp_size(response_values))
     if length < 2 or sample_rate <= 0.0:
-        return []
+        if xp_module is None:
+            return []
+        return xp_backend.asarray([], dtype=float).reshape(0, 3)
 
     input_values = detrend(input_values, xp_module=xp_backend)[-length:]
     response_values = detrend(response_values, xp_module=xp_backend)[-length:]
@@ -481,15 +497,30 @@ def cross_spectrum(
     cross_values = input_fft * xp_backend.conj(response_fft)
     frequencies = xp_backend.fft.rfftfreq(length, d=1.0 / sample_rate)
 
-    freq_np = np.asarray(frequencies, dtype=float)
-    cross_np = np.asarray(cross_values, dtype=complex)
+    if xp_module is None:
+        freq_np = np.asarray(frequencies, dtype=float)
+        cross_np = np.asarray(cross_values, dtype=complex)
 
-    spectrum: List[Tuple[float, float, float]] = []
-    for frequency, value in zip(freq_np, cross_np):
-        if frequency <= 1e-9:
-            continue
-        spectrum.append((float(frequency), float(value.real), float(value.imag)))
-    return spectrum
+        spectrum: List[Tuple[float, float, float]] = []
+        for frequency, value in zip(freq_np, cross_np):
+            if frequency <= 1e-9:
+                continue
+            spectrum.append((float(frequency), float(value.real), float(value.imag)))
+        return spectrum
+
+    frequencies = xp_backend.asarray(frequencies, dtype=float)
+    cross_values = xp_backend.asarray(cross_values, dtype=complex)
+
+    valid_mask = frequencies > 1e-9
+    if xp_backend.any(valid_mask):
+        frequencies = frequencies[valid_mask]
+        cross_values = cross_values[valid_mask]
+    else:
+        return xp_backend.asarray([], dtype=float).reshape(0, 3)
+
+    cross_real = xp_backend.real(cross_values)
+    cross_imag = xp_backend.imag(cross_values)
+    return xp_backend.stack((frequencies, cross_real, cross_imag), axis=-1)
 
 
 def _normalise(values: Sequence[float]) -> List[float]:

@@ -115,17 +115,36 @@ def estimate_excitation_frequency(
     if excitation_length < 2:
         return 0.0
     spectrum = power_spectrum(excitation, sample_rate, xp_module=xp)
-    if not spectrum:
+    if hasattr(spectrum, "shape") and getattr(spectrum, "size", 0) == 0:
         return 0.0
-    frequency, energy = max(spectrum, key=lambda item: item[1])
+    if not hasattr(spectrum, "shape"):
+        spectrum = xp.asarray(list(spectrum), dtype=float)
+    if getattr(spectrum, "size", 0) == 0:
+        return 0.0
+    energies = spectrum[:, 1]
+    max_index = int(xp.argmax(energies))
+    frequency = float(spectrum[max_index, 0])
+    energy = float(energies[max_index])
     if energy <= 0.0:
         return 0.0
     return float(frequency)
+
+
 def _extract_peaks(
     spectrum: Iterable[tuple[float, float]],
     max_peaks: int = 3,
 ) -> List[ModalPeak]:
-    spectrum_array = xp.asarray(list(spectrum), dtype=float)
+    if hasattr(spectrum, "shape") and not isinstance(spectrum, (list, tuple)):
+        spectrum_array = spectrum
+    else:
+        spectrum_list = list(spectrum)
+        if not spectrum_list:
+            return []
+        spectrum_array = xp.asarray(spectrum_list, dtype=float)
+
+    dtype = getattr(spectrum_array, "dtype", None)
+    if dtype is not None and np.dtype(dtype) != np.dtype(float):
+        spectrum_array = spectrum_array.astype(float)
     if max_peaks <= 0 or spectrum_array.size == 0:
         return []
 
