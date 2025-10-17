@@ -1543,7 +1543,7 @@ class DeltaCalculator:
         )
         previous_state = epi_value if prev_integrated_epi is None else prev_integrated_epi
         try:
-            from tnfr_core.operators.operators import evolve_epi
+            from tnfr_core.operators.structural.epi_evolution import evolve_epi
         except ImportError:  # pragma: no cover - defensive fallback during circular import
             def evolve_epi(prev_epi: float, delta_map: Mapping[str, float], dt: float, nu_map: Mapping[str, float]):
                 nodal: Dict[str, tuple[float, float]] = {}
@@ -1646,7 +1646,7 @@ class DeltaCalculator:
         )
 
         try:
-            from tnfr_core.operators.operators import evolve_epi
+            from tnfr_core.operators.structural.epi_evolution import evolve_epi
         except ImportError:  # pragma: no cover - defensive fallback during circular import
 
             def evolve_epi(prev_epi, delta_map, dt, nu_map):
