@@ -1,6 +1,7 @@
 """Equation solvers and analytic primitives for :mod:`tnfr_core`."""
 
 from . import archetypes as _archetypes
+from . import baseline as _baseline
 from . import coherence as _coherence
 from . import constants as _constants
 from . import contextual_delta as _contextual_delta
@@ -14,6 +15,7 @@ from . import phases as _phases
 from . import utils as _utils
 
 from .archetypes import *  # noqa: F401,F403
+from .baseline import *  # noqa: F401,F403
 from .coherence import *  # noqa: F401,F403
 from .constants import *  # noqa: F401,F403
 from .contextual_delta import *  # noqa: F401,F403
@@ -35,6 +37,7 @@ def _exported(module: object) -> list[str]:
 
 __all__ = [
     *_exported(_archetypes),
+    *_exported(_baseline),
     *_exported(_coherence),
     *_exported(_constants),
     *_exported(_contextual_delta),
@@ -51,6 +54,7 @@ __all__ = [
 __all__ = list(dict.fromkeys(__all__))
 
 del _archetypes
+del _baseline
 del _coherence
 del _constants
 del _contextual_delta

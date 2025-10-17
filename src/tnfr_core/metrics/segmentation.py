@@ -36,12 +36,14 @@ from typing import (
     cast,
 )
 
-from tnfr_core.equations.epi import (
+from tnfr_core.equations.baseline import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
+    delta_nfr_by_node,
+)
+from tnfr_core.equations.epi import (
     NaturalFrequencyAnalyzer,
     NaturalFrequencySnapshot,
-    delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
 from tnfr_core.equations.epi_models import EPIBundle

@@ -12,7 +12,7 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
     import tomli as tomllib  # type: ignore
 
-from tnfr_core.equations.epi import DeltaCalculator
+from tnfr_core.equations.baseline import DeltaCalculator
 from tnfr_core.equations.telemetry import TelemetryRecord
 
 TelemetryBaselineValue: TypeAlias = float | int | str | None

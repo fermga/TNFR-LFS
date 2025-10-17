@@ -20,7 +20,8 @@ import tnfr_lfs.analysis.contextual_delta as _lfs_contextual_delta
 _lfs_contextual_delta.ensure_context_loader()
 
 from tnfr_core.equations.contextual_delta import load_context_matrix, resolve_series_context
-from tnfr_core.equations.epi import DeltaCalculator, EPIExtractor, TelemetryRecord
+from tnfr_core.equations.baseline import DeltaCalculator
+from tnfr_core.equations.epi import EPIExtractor, TelemetryRecord
 from tnfr_core.metrics import segmentation as metrics_segmentation
 from tnfr_core.segmentation import segment_microsectors
 
