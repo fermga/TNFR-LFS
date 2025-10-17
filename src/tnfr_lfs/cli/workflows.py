@@ -52,7 +52,7 @@ from tnfr_core.equations.constants import (
 )
 from tnfr_core.equations.epi import EPIExtractor, TelemetryRecord, NU_F_NODE_DEFAULTS
 from tnfr_core.metrics.metrics import compute_aero_coherence, resolve_aero_mechanical_coherence
-from tnfr_core.operators.operators import orchestrate_delta_metrics
+from tnfr_core.operators import orchestrate_delta_metrics
 from tnfr_core.equations.phases import replicate_phase_aliases
 from tnfr_core.metrics.resonance import analyse_modal_resonance
 from tnfr_core.metrics.segmentation import (
