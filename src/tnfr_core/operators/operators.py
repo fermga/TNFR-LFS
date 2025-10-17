@@ -7,10 +7,10 @@ from importlib import import_module
 from typing import Dict, Mapping, Sequence
 
 from tnfr_core._canonical import CANONICAL_REQUESTED, import_tnfr
+from tnfr_core.equations.baseline import delta_nfr_by_node
 from tnfr_core.equations.epi import (
     NaturalFrequencyAnalyzer,
     TelemetryRecord,
-    delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
 from tnfr_core.operators.entry.recursivity import (

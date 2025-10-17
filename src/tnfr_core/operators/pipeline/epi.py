@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Callable, Dict, Mapping, Sequence
 
+from tnfr_core.equations.baseline import delta_nfr_by_node
 from tnfr_core.equations.epi import (
     NaturalFrequencyAnalyzer,
     TelemetryRecord,
-    delta_nfr_by_node,
     resolve_nu_f_by_node,
 )
 from tnfr_core.equations.epi_evolution import evolve_epi

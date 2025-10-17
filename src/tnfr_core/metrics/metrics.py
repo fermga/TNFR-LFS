@@ -12,7 +12,7 @@ from typing import Iterable, Iterator, Mapping, Sequence, Tuple
 
 import numpy as np
 
-import tnfr_core.equations.epi as _epi
+import tnfr_core.equations.baseline as _baseline
 
 from tnfr_core.equations.contextual_delta import (
     ContextMatrix,
@@ -74,7 +74,7 @@ __all__ = [
 ]
 
 
-delta_nfr_by_node = _epi.delta_nfr_by_node
+delta_nfr_by_node = _baseline.delta_nfr_by_node
 
 
 _BUMPSTOP_DEPTH_BINS: tuple[float, ...] = (0.25, 0.5, 0.75, 1.0)
@@ -388,7 +388,7 @@ def _aggregate_node_delta(
     for index in iterator:
         if not 0 <= index < len(records):
             continue
-        distribution = _epi.delta_nfr_by_node(records[index])
+        distribution = _baseline.delta_nfr_by_node(records[index])
         for node, contribution in distribution.items():
             try:
                 magnitude = abs(float(contribution))
