@@ -54,11 +54,19 @@ AxisSeries = Dict[str, Sequence[float]]
 
 
 def _extract_axis_series(records: Sequence[SupportsTelemetrySample]) -> AxisSeries:
-    return {
-        "yaw": xp.asarray([float(record.yaw) for record in records], dtype=float),
-        "roll": xp.asarray([float(record.roll) for record in records], dtype=float),
-        "pitch": xp.asarray([float(record.pitch) for record in records], dtype=float),
-    }
+    if not records:
+        empty = xp.asarray([], dtype=float)
+        return {"yaw": empty, "roll": empty, "pitch": empty}
+
+    matrix = xp.asarray(
+        [
+            [float(record.yaw), float(record.roll), float(record.pitch)]
+            for record in records
+        ],
+        dtype=float,
+    )
+    yaw, roll, pitch = matrix.T
+    return {"yaw": yaw, "roll": roll, "pitch": pitch}
 
 
 def _normalise(values: Sequence[float]) -> Sequence[float]:
