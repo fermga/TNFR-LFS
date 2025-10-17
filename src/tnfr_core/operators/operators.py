@@ -43,8 +43,8 @@ from tnfr_core.operators.pipeline import (
     orchestrate_delta_metrics as pipeline_orchestrate_delta_metrics,
 )
 
+from ._types import DissonanceBreakdown
 from .al_operator import (
-    DissonanceBreakdown,
     _batch_coupling,
     _prepare_series_pair,
     _zero_dissonance_breakdown,
