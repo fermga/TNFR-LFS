@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence
 
-from tnfr_core.operators.interfaces import SupportsTelemetrySample
+import numpy as np
+
 from tnfr_core.metrics.spectrum import detrend, estimate_sample_rate, power_spectrum
+from tnfr_core.operators._shared import _HAS_JAX, jnp
+from tnfr_core.operators.interfaces import SupportsTelemetrySample
+
+xp = jnp if _HAS_JAX else np
 
 __all__ = ["ModalPeak", "ModalAnalysis", "analyse_modal_resonance"]
 
@@ -32,30 +36,30 @@ class ModalAnalysis:
     rho: float
 
 
-AxisSeries = Dict[str, List[float]]
+AxisSeries = Dict[str, Sequence[float]]
 
 
 def _extract_axis_series(records: Sequence[SupportsTelemetrySample]) -> AxisSeries:
-    series: AxisSeries = {"yaw": [], "roll": [], "pitch": []}
-    for record in records:
-        series["yaw"].append(float(record.yaw))
-        series["roll"].append(float(record.roll))
-        series["pitch"].append(float(record.pitch))
-    return series
+    return {
+        "yaw": xp.asarray([float(record.yaw) for record in records], dtype=float),
+        "roll": xp.asarray([float(record.roll) for record in records], dtype=float),
+        "pitch": xp.asarray([float(record.pitch) for record in records], dtype=float),
+    }
 
 
-def _normalise(values: Sequence[float]) -> List[float]:
-    detrended = detrend(values)
-    if not detrended:
-        return []
-    variance = sum(value * value for value in detrended) / len(detrended)
-    if variance <= 1e-12:
-        return [0.0] * len(detrended)
-    scale = math.sqrt(variance)
-    return [value / scale for value in detrended]
+def _normalise(values: Sequence[float]) -> Sequence[float]:
+    detrended_sequence = detrend(np.asarray(values, dtype=float))
+    detrended = xp.asarray(detrended_sequence, dtype=float)
+    if getattr(detrended, "size", len(detrended)) == 0:
+        return detrended
+    variance = xp.mean(detrended ** 2)
+    if float(variance) <= 1e-12:
+        return xp.zeros_like(detrended)
+    scale = xp.sqrt(variance)
+    return detrended / scale
 
 
-def _excitation_series(records: Sequence[SupportsTelemetrySample]) -> List[float]:
+def _excitation_series(records: Sequence[SupportsTelemetrySample]) -> Sequence[float]:
     steer = _normalise([float(record.steer) for record in records])
     front = _normalise(
         [float(record.suspension_velocity_front) for record in records]
@@ -65,15 +69,21 @@ def _excitation_series(records: Sequence[SupportsTelemetrySample]) -> List[float
     )
     length = max(len(steer), len(front), len(rear))
     if length == 0:
-        return []
-    series: List[float] = []
-    for index in range(length):
-        steer_value = steer[index] if index < len(steer) else 0.0
-        front_value = front[index] if index < len(front) else 0.0
-        rear_value = rear[index] if index < len(rear) else 0.0
-        combined = 0.5 * steer_value + 0.25 * front_value + 0.25 * rear_value
-        series.append(combined)
-    return series
+        return xp.asarray([], dtype=float)
+
+    def _pad(values: Sequence[float]) -> Sequence[float]:
+        pad_width = length - len(values)
+        if pad_width <= 0:
+            return xp.asarray(values, dtype=float)
+        return xp.pad(xp.asarray(values, dtype=float), (0, pad_width), mode="constant")
+
+    steer_aligned = _pad(steer)
+    front_aligned = _pad(front)
+    rear_aligned = _pad(rear)
+
+    combined = xp.stack([steer_aligned, front_aligned, rear_aligned], axis=0)
+    weights = xp.asarray([0.5, 0.25, 0.25], dtype=float)
+    return weights @ combined
 
 
 def estimate_excitation_frequency(
@@ -137,8 +147,9 @@ def analyse_modal_resonance(
     nu_exc = estimate_excitation_frequency(records, sample_rate)
     analysis: Dict[str, ModalAnalysis] = {}
     for axis, values in axis_series.items():
-        detrended = detrend(values)
-        total_energy = sum(value * value for value in detrended)
+        detrended_sequence = detrend(np.asarray(values, dtype=float))
+        detrended = xp.asarray(detrended_sequence, dtype=float)
+        total_energy = float(xp.sum(detrended ** 2))
         spectrum = power_spectrum(detrended, sample_rate)
         peaks = _extract_peaks(spectrum, max_peaks=max_peaks)
         dominant_frequency = peaks[0].frequency if peaks else 0.0
