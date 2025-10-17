@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 import pytest
 
 from tests.helpers import build_resonance_record
 
 from tnfr_core.resonance import analyse_modal_resonance
+from tnfr_core.metrics import resonance as resonance_module
 
 
 @pytest.mark.parametrize(
@@ -76,7 +79,6 @@ def test_estimate_excitation_frequency_uses_backend(monkeypatch: pytest.MonkeyPa
             )
         )
 
-    from tnfr_core.metrics import resonance as resonance_module
     from tnfr_core.metrics import spectrum as spectrum_module
 
     captured: dict[str, object] = {}
@@ -92,3 +94,71 @@ def test_estimate_excitation_frequency_uses_backend(monkeypatch: pytest.MonkeyPa
 
     assert dominant > 0.0
     assert captured.get("xp_module") is resonance_module.xp
+
+
+def test_extract_peaks_classification_is_preserved() -> None:
+    spectrum = [
+        (0.8, 20.0),
+        (3.2, 12.0),
+        (7.5, 15.0),
+        (1.5, 5.0),
+    ]
+
+    peaks = resonance_module._extract_peaks(spectrum, max_peaks=3)
+
+    assert [peak.classification for peak in peaks] == [
+        "useful",
+        "parasitic",
+        "useful",
+    ]
+    assert [pytest.approx(peak.energy) for peak in peaks] == [
+        pytest.approx(20.0),
+        pytest.approx(15.0),
+        pytest.approx(12.0),
+    ]
+
+    reduced_energy_spectrum = [
+        (0.8, 20.0),
+        (3.2, 9.5),
+        (1.5, 5.0),
+    ]
+
+    reduced_peaks = resonance_module._extract_peaks(reduced_energy_spectrum, max_peaks=3)
+
+    assert [peak.classification for peak in reduced_peaks] == [
+        "useful",
+        "parasitic",
+        "parasitic",
+    ]
+
+
+def test_extract_peaks_large_input_uses_partition(monkeypatch: pytest.MonkeyPatch) -> None:
+    xp_backend = resonance_module.xp
+    original_argpartition = xp_backend.argpartition
+    call_counter = {"count": 0}
+
+    def _tracking_argpartition(values, kth, *args, **kwargs):
+        call_counter["count"] += 1
+        return original_argpartition(values, kth, *args, **kwargs)
+
+    monkeypatch.setattr(xp_backend, "argpartition", _tracking_argpartition)
+
+    total_points = 16_384
+    frequencies = np.linspace(0.1, 250.0, total_points)
+    energies = np.linspace(1.0, float(total_points), total_points)
+    spectrum = list(zip(frequencies.tolist(), energies.tolist()))
+
+    peaks = resonance_module._extract_peaks(spectrum, max_peaks=5)
+
+    assert call_counter["count"] >= 1
+
+    expected_indices = np.argsort(energies)[-5:][::-1]
+    expected_frequencies = frequencies[expected_indices]
+    expected_energies = energies[expected_indices]
+
+    assert [pytest.approx(peak.frequency) for peak in peaks] == [
+        pytest.approx(value) for value in expected_frequencies
+    ]
+    assert [pytest.approx(peak.energy) for peak in peaks] == [
+        pytest.approx(value) for value in expected_energies
+    ]
