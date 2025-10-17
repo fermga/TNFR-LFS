@@ -39,6 +39,7 @@ __all__ = list(
             *_equations.__all__,
             *_metrics.__all__,
             *_operators.__all__,
+            *_signal.__all__,
             *_runtime.__all__,
             *_signal.__all__,
         ]
@@ -91,13 +92,13 @@ __all__ = list(dict.fromkeys(__all__ + list(_MODULE_ALIASES.keys())))
 
 
 def __getattr__(name: str) -> Any:
-    for module in (_equations, _metrics, _operators, _runtime):
+    for module in (_equations, _metrics, _operators, _signal, _runtime):
         if hasattr(module, name):
             return getattr(module, name)
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 def __dir__() -> list[str]:
-    names = {"equations", "metrics", "operators", *__all__}
+    names = {"equations", "metrics", "operators", "signal", *__all__}
     names.update(key for key in globals() if not key.startswith("_"))
     return sorted(names)
