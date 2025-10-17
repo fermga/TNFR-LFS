@@ -125,20 +125,55 @@ def _extract_peaks(
     spectrum: Iterable[tuple[float, float]],
     max_peaks: int = 3,
 ) -> List[ModalPeak]:
-    peaks = sorted(spectrum, key=lambda item: item[1], reverse=True)[:max_peaks]
-    if not peaks:
+    spectrum_array = xp.asarray(list(spectrum), dtype=float)
+    if max_peaks <= 0 or spectrum_array.size == 0:
         return []
-    dominant_energy = peaks[0][1]
-    results: List[ModalPeak] = []
-    for idx, (frequency, energy) in enumerate(peaks):
-        if dominant_energy <= 0.0:
-            classification = "parasitic"
-        elif idx == 0 and 0.05 <= frequency <= 5.0:
-            classification = "useful"
-        elif 0.05 <= frequency <= 5.0 and energy >= dominant_energy * 0.5:
-            classification = "useful"
+
+    frequencies = spectrum_array[:, 0]
+    energies = spectrum_array[:, 1]
+    count = int(frequencies.shape[0])
+    if count == 0:
+        return []
+
+    num_peaks = min(max_peaks, count)
+
+    if num_peaks == count:
+        candidate_indices = xp.arange(count)
+    else:
+        if hasattr(xp, "argpartition"):
+            partition = xp.argpartition(-energies, num_peaks - 1)
+            candidate_indices = partition[:num_peaks]
         else:
-            classification = "parasitic"
+            candidate_indices = xp.argsort(-energies)[:num_peaks]
+
+    candidate_indices = xp.asarray(candidate_indices)
+    candidate_energies = xp.take(energies, candidate_indices)
+    ordered_positions = xp.argsort(-candidate_energies)
+    sorted_indices = xp.take(candidate_indices, ordered_positions)
+
+    top_frequencies = xp.take(frequencies, sorted_indices)[:num_peaks]
+    top_energies = xp.take(energies, sorted_indices)[:num_peaks]
+
+    dominant_energy = float(top_energies[0]) if num_peaks else 0.0
+
+    freq_band_mask = xp.logical_and(top_frequencies >= 0.05, top_frequencies <= 5.0)
+    first_peak_mask = xp.arange(num_peaks) == 0
+    energy_ratio_mask = xp.logical_and(
+        top_energies >= dominant_energy * 0.5, freq_band_mask
+    )
+    useful_mask = xp.logical_or(
+        xp.logical_and(freq_band_mask, first_peak_mask), energy_ratio_mask
+    )
+    if dominant_energy <= 0.0:
+        useful_mask = xp.zeros_like(useful_mask, dtype=bool)
+
+    frequencies_np = np.asarray(top_frequencies, dtype=float)
+    energies_np = np.asarray(top_energies, dtype=float)
+    useful_np = np.asarray(useful_mask, dtype=bool)
+
+    results: List[ModalPeak] = []
+    for frequency, energy, useful in zip(frequencies_np, energies_np, useful_np):
+        classification = "useful" if bool(useful) else "parasitic"
         results.append(
             ModalPeak(
                 frequency=float(frequency),
