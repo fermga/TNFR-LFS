@@ -355,11 +355,11 @@ def pairwise_coupling_operator(
 def resonance_operator(series: Sequence[float]) -> float:
     """Compute the root-mean-square (RMS) resonance of a series."""
 
-    numpy_series = np.asarray(series, dtype=float).ravel()
-    if numpy_series.size == 0:
-        return 0.0
     xp = xp_module
-    array = xp.asarray(numpy_series, dtype=xp.float64)
+    array = xp.asarray(series, dtype=xp.float64)
+    array = xp.ravel(array)
+    if xp.size(array) == 0:
+        return 0.0
     rms = xp.sqrt(xp.mean(array ** 2))
     return float(rms)
 
