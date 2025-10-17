@@ -63,8 +63,11 @@ from tnfr_core.metrics.metrics import (
     compute_window_metrics,
     phase_synchrony_index,
 )
-from tnfr_core.operators.operator_detection import (
+from tnfr_core.operators.operator_labels import (
     canonical_operator_label,
+    silence_event_payloads,
+)
+from tnfr_core.operators.operator_detection import (
     detect_al,
     detect_en,
     detect_il,
@@ -77,7 +80,6 @@ from tnfr_core.operators.operator_detection import (
     detect_um,
     detect_val,
     detect_zhir,
-    silence_event_payloads,
 )
 from tnfr_core.operators.entry.recursivity import (
     RecursivityMicroStateSnapshot,

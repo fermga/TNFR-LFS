@@ -41,7 +41,7 @@ from tnfr_core.equations.constants import (
 )
 from tnfr_core.equations.epi_models import EPIBundle
 from tnfr_core.operators.il_operator import TyreBalanceControlOutput, tyre_balance_controller
-from tnfr_core.operators.operator_detection import canonical_operator_label, silence_event_payloads
+from tnfr_core.operators.operator_labels import canonical_operator_label, silence_event_payloads
 from tnfr_core.equations.phases import LEGACY_PHASE_MAP, expand_phase_alias, phase_family
 from tnfr_lfs.math.conversions import _safe_float
 

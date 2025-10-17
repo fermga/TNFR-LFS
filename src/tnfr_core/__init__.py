@@ -65,6 +65,7 @@ _MODULE_ALIASES = {
     "segmentation": import_module("tnfr_core.metrics.segmentation"),
     "spectrum": import_module("tnfr_core.metrics.spectrum"),
     "operator_detection": import_module("tnfr_core.operators.operator_detection"),
+    "operator_labels": import_module("tnfr_core.operators.operator_labels"),
     "cache": import_module("tnfr_core.operators.cache"),
     "cache_settings": import_module("tnfr_core.operators.cache_settings"),
     "structural_time": import_module("tnfr_core.operators.structural_time"),
