@@ -20,6 +20,7 @@ _equations = import_module("tnfr_core.equations")
 _metrics = import_module("tnfr_core.metrics")
 _operators = import_module("tnfr_core.operators")
 _runtime = import_module("tnfr_core.runtime")
+_signal = import_module("tnfr_core.signal")
 
 _BASE_EXPORTS = [
     "CANONICAL_ENV_VALUE",
@@ -38,6 +39,7 @@ __all__ = list(
             *_equations.__all__,
             *_metrics.__all__,
             *_operators.__all__,
+            *_signal.__all__,
             *_runtime.__all__,
         ]
     )
@@ -48,6 +50,7 @@ equations = _equations
 metrics = _metrics
 operators = _operators
 runtime = _runtime
+signal = _signal
 
 _MODULE_ALIASES = {
     "archetypes": import_module("tnfr_core.equations.archetypes"),
@@ -72,6 +75,7 @@ _MODULE_ALIASES = {
     "interfaces": import_module("tnfr_core.operators.interfaces"),
     "runtime": _runtime,
     "runtime_shared": import_module("tnfr_core.runtime.shared"),
+    "signal": _signal,
 }
 
 for alias, module in _MODULE_ALIASES.items():
@@ -86,13 +90,13 @@ __all__ = list(dict.fromkeys(__all__ + list(_MODULE_ALIASES.keys())))
 
 
 def __getattr__(name: str) -> Any:
-    for module in (_equations, _metrics, _operators, _runtime):
+    for module in (_equations, _metrics, _operators, _signal, _runtime):
         if hasattr(module, name):
             return getattr(module, name)
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 def __dir__() -> list[str]:
-    names = {"equations", "metrics", "operators", *__all__}
+    names = {"equations", "metrics", "operators", "signal", *__all__}
     names.update(key for key in globals() if not key.startswith("_"))
     return sorted(names)
