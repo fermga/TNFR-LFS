@@ -7,13 +7,27 @@ from typing import Dict, Iterable, List, Sequence
 
 import numpy as np
 
-from tnfr_core.metrics.spectrum import detrend, estimate_sample_rate, power_spectrum
+from tnfr_core.metrics.spectrum import (
+    detrend,
+    estimate_sample_rate,
+    power_spectrum,
+)
 from tnfr_core.operators._shared import _HAS_JAX, jnp
 from tnfr_core.operators.interfaces import SupportsTelemetrySample
 
-xp = jnp if _HAS_JAX else np
+xp = jnp if _HAS_JAX and jnp is not None else np
 
 __all__ = ["ModalPeak", "ModalAnalysis", "analyse_modal_resonance"]
+
+
+def _xp_length(values: Sequence[float]) -> int:
+    size = getattr(values, "size", None)
+    if size is not None:
+        return int(size)
+    shape = getattr(values, "shape", ())
+    if shape:
+        return int(shape[0])
+    return len(values)
 
 
 @dataclass(frozen=True)
@@ -48,9 +62,8 @@ def _extract_axis_series(records: Sequence[SupportsTelemetrySample]) -> AxisSeri
 
 
 def _normalise(values: Sequence[float]) -> Sequence[float]:
-    detrended_sequence = detrend(np.asarray(values, dtype=float))
-    detrended = xp.asarray(detrended_sequence, dtype=float)
-    if getattr(detrended, "size", len(detrended)) == 0:
+    detrended = detrend(xp.asarray(values, dtype=float), xp_module=xp)
+    if _xp_length(detrended) == 0:
         return detrended
     variance = xp.mean(detrended ** 2)
     if float(variance) <= 1e-12:
@@ -67,12 +80,12 @@ def _excitation_series(records: Sequence[SupportsTelemetrySample]) -> Sequence[f
     rear = _normalise(
         [float(record.suspension_velocity_rear) for record in records]
     )
-    length = max(len(steer), len(front), len(rear))
+    length = max(_xp_length(steer), _xp_length(front), _xp_length(rear))
     if length == 0:
         return xp.asarray([], dtype=float)
 
     def _pad(values: Sequence[float]) -> Sequence[float]:
-        pad_width = length - len(values)
+        pad_width = length - _xp_length(values)
         if pad_width <= 0:
             return xp.asarray(values, dtype=float)
         return xp.pad(xp.asarray(values, dtype=float), (0, pad_width), mode="constant")
@@ -98,9 +111,10 @@ def estimate_excitation_frequency(
     if sample_rate <= 0.0:
         return 0.0
     excitation = _excitation_series(records)
-    if len(excitation) < 2:
+    excitation_length = _xp_length(excitation)
+    if excitation_length < 2:
         return 0.0
-    spectrum = power_spectrum(excitation, sample_rate)
+    spectrum = power_spectrum(excitation, sample_rate, xp_module=xp)
     if not spectrum:
         return 0.0
     frequency, energy = max(spectrum, key=lambda item: item[1])
@@ -147,10 +161,9 @@ def analyse_modal_resonance(
     nu_exc = estimate_excitation_frequency(records, sample_rate)
     analysis: Dict[str, ModalAnalysis] = {}
     for axis, values in axis_series.items():
-        detrended_sequence = detrend(np.asarray(values, dtype=float))
-        detrended = xp.asarray(detrended_sequence, dtype=float)
+        detrended = detrend(xp.asarray(values, dtype=float), xp_module=xp)
         total_energy = float(xp.sum(detrended ** 2))
-        spectrum = power_spectrum(detrended, sample_rate)
+        spectrum = power_spectrum(detrended, sample_rate, xp_module=xp)
         peaks = _extract_peaks(spectrum, max_peaks=max_peaks)
         dominant_frequency = peaks[0].frequency if peaks else 0.0
         rho = nu_exc / dominant_frequency if dominant_frequency > 1e-9 else 0.0
