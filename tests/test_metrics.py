@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Callable, Mapping
+from collections.abc import Mapping as MappingABC
+from typing import Callable, Mapping, Sequence
 
 import pytest
 
 from tnfr_core.metrics import (
     AeroBalanceDrift,
+    AeroBandCoherence,
     AeroCoherence,
     BrakeHeadroom,
     BumpstopHistogram,
     CPHIReport,
     CPHIThresholds,
+    AeroAxisCoherence,
     LockingWindowScore,
     SlideCatchBudget,
     SuspensionVelocityBands,
@@ -1319,6 +1322,227 @@ def test_compute_aero_coherence_splits_bins() -> None:
     assert aero.medium_speed.longitudinal.rear == pytest.approx(0.05)
     assert "medium speed bias" in aero.guidance
 
+
+def _legacy_compute_aero_coherence(
+    records: Sequence[TelemetryRecord],
+    bundles: Sequence[SimpleNamespace],
+    *,
+    low_speed_threshold: float,
+    high_speed_threshold: float,
+    imbalance_tolerance: float = 0.08,
+) -> AeroCoherence:
+    axis_keys = {
+        "total": (
+            {"mu_eff_front", "mu_eff_front_lateral", "mu_eff_front_longitudinal"},
+            {"mu_eff_rear", "mu_eff_rear_lateral", "mu_eff_rear_longitudinal"},
+        ),
+        "lateral": ({"mu_eff_front_lateral"}, {"mu_eff_rear_lateral"}),
+        "longitudinal": (
+            {"mu_eff_front_longitudinal"},
+            {"mu_eff_rear_longitudinal"},
+        ),
+    }
+
+    def _aero_components(
+        breakdown: Mapping[str, Mapping[str, float]] | None,
+    ) -> dict[str, tuple[float, float]]:
+        totals = {axis: [0.0, 0.0] for axis in axis_keys}
+        if not breakdown:
+            return {axis: (0.0, 0.0) for axis in axis_keys}
+        for features in breakdown.values():
+            if not isinstance(features, MappingABC):
+                continue
+            for key, value in features.items():
+                try:
+                    contribution = float(value)
+                except (TypeError, ValueError):
+                    continue
+                for axis, (front_keys, rear_keys) in axis_keys.items():
+                    if key in front_keys:
+                        totals[axis][0] += contribution
+                    if key in rear_keys:
+                        totals[axis][1] += contribution
+        return {axis: (front, rear) for axis, (front, rear) in totals.items()}
+
+    def _resolve_speed(index: int) -> float | None:
+        if 0 <= index < len(records):
+            candidate = getattr(records[index], "speed", None)
+            if isinstance(candidate, (int, float)):
+                return float(candidate)
+        bundle = bundles[index]
+        transmission = getattr(bundle, "transmission", None)
+        if transmission is not None:
+            speed_value = getattr(transmission, "speed", None)
+            if isinstance(speed_value, (int, float)):
+                return float(speed_value)
+        return None
+
+    bands: dict[str, dict[str, list[float] | int]] = {
+        "low": {"total": [0.0, 0.0], "lateral": [0.0, 0.0], "longitudinal": [0.0, 0.0], "samples": 0},
+        "medium": {
+            "total": [0.0, 0.0],
+            "lateral": [0.0, 0.0],
+            "longitudinal": [0.0, 0.0],
+            "samples": 0,
+        },
+        "high": {"total": [0.0, 0.0], "lateral": [0.0, 0.0], "longitudinal": [0.0, 0.0], "samples": 0},
+    }
+
+    for index, bundle in enumerate(bundles):
+        speed = _resolve_speed(index)
+        if speed is None:
+            continue
+        components = _aero_components(getattr(bundle, "delta_breakdown", {}))
+        if all(front == 0.0 and rear == 0.0 for front, rear in components.values()):
+            continue
+        if speed <= low_speed_threshold:
+            target = bands["low"]
+        elif speed >= high_speed_threshold:
+            target = bands["high"]
+        else:
+            target = bands["medium"]
+        target["samples"] = int(target["samples"]) + 1
+        for axis, (front, rear) in components.items():
+            pair = target[axis]
+            pair[0] += front
+            pair[1] += rear
+
+    def _average_band(payload: Mapping[str, list[float] | int]) -> AeroBandCoherence:
+        samples = int(payload["samples"])
+
+        def _average_pair(values: list[float]) -> tuple[float, float]:
+            if samples:
+                return values[0] / samples, values[1] / samples
+            return 0.0, 0.0
+
+        total_front, total_rear = _average_pair(payload["total"])
+        lat_front, lat_rear = _average_pair(payload["lateral"])
+        long_front, long_rear = _average_pair(payload["longitudinal"])
+        return AeroBandCoherence(
+            total=AeroAxisCoherence(total_front, total_rear),
+            lateral=AeroAxisCoherence(lat_front, lat_rear),
+            longitudinal=AeroAxisCoherence(long_front, long_rear),
+            samples=samples,
+        )
+
+    low_band = _average_band(bands["low"])
+    medium_band = _average_band(bands["medium"])
+    high_band = _average_band(bands["high"])
+
+    low_imbalance = low_band.total.imbalance
+    medium_imbalance = medium_band.total.imbalance
+    high_imbalance = high_band.total.imbalance
+
+    if high_band.samples == 0:
+        guidance = "No aero data"
+    elif abs(high_imbalance) <= imbalance_tolerance:
+        guidance = "High speed aero balance is neutral"
+    elif high_imbalance > 0.0:
+        guidance = "High speed → add rear wing"
+    else:
+        guidance = "High speed → trim rear wing / add front wing"
+
+    if low_band.samples and abs(low_imbalance) > imbalance_tolerance:
+        direction = "rear" if low_imbalance > 0.0 else "front"
+        guidance += f" · low speed bias {direction}"
+    if medium_band.samples and abs(medium_imbalance) > imbalance_tolerance:
+        direction = "rear" if medium_imbalance > 0.0 else "front"
+        guidance += f" · medium speed bias {direction}"
+
+    return AeroCoherence(
+        low_speed=low_band,
+        medium_speed=medium_band,
+        high_speed=high_band,
+        guidance=guidance,
+    )
+
+
+def test_compute_aero_coherence_matches_legacy_loop() -> None:
+    low_threshold = 33.0
+    high_threshold = 55.0
+    imbalance_tolerance = 0.08
+
+    records = [
+        replace(build_telemetry_record(0.0, 100.0, si=0.79), speed=28.0),
+        replace(build_telemetry_record(1.0, 101.0, si=0.8), speed=36.0),
+        replace(build_telemetry_record(2.0, 102.0, si=0.82), speed=45.0),
+        replace(build_telemetry_record(3.0, 103.0, si=0.81), speed=62.0),
+        replace(build_telemetry_record(4.0, 104.0, si=0.83), speed=None),
+        replace(build_telemetry_record(5.0, 105.0, si=0.78), speed=50.0),
+    ]
+
+    bundles = [
+        SimpleNamespace(
+            delta_breakdown={"tyres": {"mu_eff_front": 0.6, "mu_eff_rear": 0.3}},
+            transmission=SimpleNamespace(speed=28.0),
+        ),
+        SimpleNamespace(
+            delta_breakdown={
+                "tyres": {
+                    "mu_eff_front_lateral": 0.4,
+                    "mu_eff_front_longitudinal": 0.15,
+                    "mu_eff_rear_lateral": 0.2,
+                    "mu_eff_rear_longitudinal": 0.1,
+                }
+            },
+            transmission=SimpleNamespace(speed=36.0),
+        ),
+        SimpleNamespace(
+            delta_breakdown={
+                "tyres": {
+                    "mu_eff_front_lateral": 0.1,
+                    "mu_eff_front_longitudinal": 0.05,
+                    "mu_eff_rear_lateral": 0.12,
+                    "mu_eff_rear_longitudinal": 0.08,
+                }
+            },
+            transmission=SimpleNamespace(speed=45.0),
+        ),
+        SimpleNamespace(
+            delta_breakdown={"tyres": {"mu_eff_front": 0.25, "mu_eff_rear": 0.55}},
+            transmission=SimpleNamespace(speed=62.0),
+        ),
+        SimpleNamespace(
+            delta_breakdown={
+                "tyres": {
+                    "mu_eff_front_lateral": 0.5,
+                    "mu_eff_rear_lateral": 0.15,
+                }
+            },
+            transmission=SimpleNamespace(speed=70.0),
+        ),
+        SimpleNamespace(
+            delta_breakdown={"tyres": {"mu_eff_front": 0.0, "mu_eff_rear": 0.0}},
+            transmission=SimpleNamespace(speed=50.0),
+        ),
+    ]
+
+    expected = _legacy_compute_aero_coherence(
+        records,
+        bundles,
+        low_speed_threshold=low_threshold,
+        high_speed_threshold=high_threshold,
+        imbalance_tolerance=imbalance_tolerance,
+    )
+    actual = compute_aero_coherence(
+        records,
+        bundles,
+        low_speed_threshold=low_threshold,
+        high_speed_threshold=high_threshold,
+        imbalance_tolerance=imbalance_tolerance,
+    )
+
+    assert actual.guidance == expected.guidance
+
+    for band_name in ("low_speed", "medium_speed", "high_speed"):
+        actual_band = getattr(actual, band_name)
+        expected_band = getattr(expected, band_name)
+        assert actual_band.samples == expected_band.samples
+        for axis_name in ("total", "lateral", "longitudinal"):
+            actual_axis = getattr(actual_band, axis_name)
+            expected_axis = getattr(expected_band, axis_name)
+            assert actual_axis.front == pytest.approx(expected_axis.front)
+            assert actual_axis.rear == pytest.approx(expected_axis.rear)
 
 def test_aero_mechanical_coherence_blends_components() -> None:
     records = [
