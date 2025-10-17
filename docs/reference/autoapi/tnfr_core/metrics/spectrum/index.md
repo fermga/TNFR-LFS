@@ -17,16 +17,16 @@ installed (``"auto"``/``"goertzel"``). ``candidate_frequencies`` constrains
 the Goertzel search to custom bins when provided.
 - `estimate_sample_rate(records: Sequence[SupportsTelemetrySample]) -> float`
   - Estimate the sampling frequency of ``records`` in Hertz.
-- `hann_window(length: int) -> List[float]`
-  - Return a Hann window matching ``length`` samples.
-- `apply_window(samples: Sequence[float], window: Sequence[float]) -> Sequence[float] | np.ndarray`
-  - Multiply ``samples`` by ``window`` element wise.
-- `detrend(values: Sequence[float]) -> Sequence[float] | np.ndarray`
-  - Remove the arithmetic mean from ``values``.
-- `power_spectrum(samples: Sequence[float], sample_rate: float) -> List[Tuple[float, float]]`
-  - Return the single-sided power spectrum of ``samples``.
-- `cross_spectrum(input_series: Sequence[float], response_series: Sequence[float], sample_rate: float) -> List[Tuple[float, float, float]]`
-  - Return the cross-spectrum between ``input_series`` and ``response_series``.
+- `hann_window(length: int, *, xp_module: Any | None = None) -> Any`
+  - Return a Hann window matching ``length`` samples, evaluating with ``xp_module`` when provided.
+- `apply_window(samples: Sequence[float], window: Sequence[float], *, xp_module: Any | None = None) -> Any`
+  - Multiply ``samples`` by ``window`` element wise using the selected array backend.
+- `detrend(values: Sequence[float], *, xp_module: Any | None = None) -> Any`
+  - Remove the arithmetic mean from ``values`` without forcing a NumPy materialisation.
+- `power_spectrum(samples: Sequence[float], sample_rate: float, *, xp_module: Any | None = None) -> List[Tuple[float, float]]`
+  - Return the single-sided power spectrum of ``samples`` for the chosen backend.
+- `cross_spectrum(input_series: Sequence[float], response_series: Sequence[float], sample_rate: float, *, xp_module: Any | None = None) -> List[Tuple[float, float, float]]`
+  - Return the cross-spectrum between ``input_series`` and ``response_series`` while honouring the active backend.
 - `phase_alignment(records: Sequence[SupportsTelemetrySample], *, steer_series: Iterable[float] | None = None, response_series: Iterable[float] | None = None, dominant_strategy: Literal['auto', 'fft', 'goertzel'] = 'auto', candidate_frequencies: Sequence[float] | None = None) -> Tuple[float, float, float]`
   - Estimate the dominant frequency and phase lag between steer and response.
 

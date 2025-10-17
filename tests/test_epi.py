@@ -178,13 +178,18 @@ def test_power_spectrum_identifies_peak_frequency():
     signal = np.sin(2.0 * math.pi * dominant_frequency * time)
 
     spectrum = power_spectrum(signal, sample_rate)
+    spectrum_backend = power_spectrum(signal, sample_rate, xp_module=np)
 
     assert spectrum
     frequencies = np.array([entry[0] for entry in spectrum], dtype=float)
     energy = np.array([entry[1] for entry in spectrum], dtype=float)
+    backend_freq = np.array([entry[0] for entry in spectrum_backend], dtype=float)
+    backend_energy = np.array([entry[1] for entry in spectrum_backend], dtype=float)
     peak_frequency = float(frequencies[np.argmax(energy)])
 
     assert math.isclose(peak_frequency, dominant_frequency, rel_tol=1e-2, abs_tol=1e-2)
+    assert np.allclose(frequencies, backend_freq)
+    assert np.allclose(energy, backend_energy)
 
 
 def _legacy_cross_spectrum(

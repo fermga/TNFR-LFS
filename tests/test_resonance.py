@@ -56,3 +56,39 @@ def test_resonance_identifies_modal_peaks(
         assert any(peak.classification == "parasitic" for peak in pitch_peaks[1:])
 
     assert analysis["yaw"].sample_rate == pytest.approx(sample_rate, rel=0.05)
+
+
+def test_estimate_excitation_frequency_uses_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    sample_rate = 25.0
+    dt = 1.0 / sample_rate
+    frequency = 1.5
+    records = []
+    for index in range(256):
+        t = index * dt
+        steer = math.sin(2.0 * math.pi * frequency * t)
+        suspension = 0.5 * math.sin(2.0 * math.pi * frequency * t + math.pi / 4.0)
+        records.append(
+            build_resonance_record(
+                t,
+                steer=steer,
+                suspension_velocity_front=suspension,
+                suspension_velocity_rear=suspension,
+            )
+        )
+
+    from tnfr_core.metrics import resonance as resonance_module
+    from tnfr_core.metrics import spectrum as spectrum_module
+
+    captured: dict[str, object] = {}
+    real_power_spectrum = spectrum_module.power_spectrum
+
+    def _tracking_power_spectrum(values, rate, *, xp_module=None):
+        captured["xp_module"] = xp_module
+        return real_power_spectrum(values, rate, xp_module=xp_module)
+
+    monkeypatch.setattr(resonance_module, "power_spectrum", _tracking_power_spectrum)
+
+    dominant = resonance_module.estimate_excitation_frequency(records, sample_rate)
+
+    assert dominant > 0.0
+    assert captured.get("xp_module") is resonance_module.xp
