@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from statistics import mean, pvariance, pstdev
 from typing import Iterable, Iterator, Mapping, Sequence, Tuple
 
+import numpy as np
+
 import tnfr_core.equations.epi as _epi
 
 from tnfr_core.equations.contextual_delta import (
@@ -40,6 +42,7 @@ from tnfr_core.metrics.spectrum import (
 from tnfr_core.metrics.resonance import estimate_excitation_frequency
 from tnfr_core.operators.structural_time import resolve_time_axis
 from tnfr_core.equations.utils import normalised_entropy
+from tnfr_core.operators._shared import _HAS_JAX, jnp
 
 __all__ = [
     "AeroBalanceDrift",
@@ -3016,6 +3019,9 @@ def compute_aero_coherence(
     )
 
 
+xp = jnp if _HAS_JAX and jnp is not None else np
+
+
 def resolve_aero_mechanical_coherence(
     coherence_index: float,
     aero: AeroCoherence,
@@ -3035,35 +3041,50 @@ def resolve_aero_mechanical_coherence(
     if coherence <= 0.0 or not math.isfinite(coherence):
         return 0.0
 
-    suspension_samples = [abs(float(value)) for value in suspension_deltas or ()]
-    tyre_samples = [abs(float(value)) for value in tyre_deltas or ()]
-    suspension_average = mean(suspension_samples) if suspension_samples else 0.0
-    tyre_average = mean(tyre_samples) if tyre_samples else 0.0
-
-    total_samples = max(
-        0,
-        int(aero.high_speed_samples)
-        + int(aero.medium_speed_samples)
-        + int(aero.low_speed_samples),
+    suspension_array = xp.asarray(
+        suspension_deltas if suspension_deltas is not None else (), dtype=float
     )
-    if total_samples > 0:
-        high_weight = float(aero.high_speed_samples) / total_samples
-        medium_weight = float(aero.medium_speed_samples) / total_samples
-        low_weight = float(aero.low_speed_samples) / total_samples
+    tyre_array = xp.asarray(tyre_deltas if tyre_deltas is not None else (), dtype=float)
+
+    suspension_average = (
+        float(xp.mean(xp.abs(suspension_array))) if suspension_array.size else 0.0
+    )
+    tyre_average = float(xp.mean(xp.abs(tyre_array))) if tyre_array.size else 0.0
+
+    sample_counts = xp.asarray(
+        (
+            float(aero.high_speed_samples),
+            float(aero.medium_speed_samples),
+            float(aero.low_speed_samples),
+        ),
+        dtype=float,
+    )
+    sample_total = float(xp.sum(sample_counts))
+    total_samples = int(sample_total)
+    if sample_total > 0.0:
+        weights = sample_counts / sample_total
     else:
-        high_weight = medium_weight = low_weight = 1.0 / 3.0
+        weights = xp.asarray((1.0 / 3.0,) * 3, dtype=float)
 
-    aero_magnitude = (
-        (abs(float(aero.high_speed_front)) + abs(float(aero.high_speed_rear)))
-        * 0.5
-        * high_weight
-        + (abs(float(aero.medium_speed_front)) + abs(float(aero.medium_speed_rear)))
-        * 0.5
-        * medium_weight
-        + (abs(float(aero.low_speed_front)) + abs(float(aero.low_speed_rear)))
-        * 0.5
-        * low_weight
+    front_values = xp.asarray(
+        (
+            float(aero.high_speed_front),
+            float(aero.medium_speed_front),
+            float(aero.low_speed_front),
+        ),
+        dtype=float,
     )
+    rear_values = xp.asarray(
+        (
+            float(aero.high_speed_rear),
+            float(aero.medium_speed_rear),
+            float(aero.low_speed_rear),
+        ),
+        dtype=float,
+    )
+    magnitude_pairs = xp.abs(xp.stack((front_values, rear_values), axis=-1))
+    per_band_magnitude = xp.mean(magnitude_pairs, axis=-1)
+    aero_magnitude = float(xp.average(per_band_magnitude, weights=weights))
 
     mechanical_ratio_target = max(0.0, min(1.0, float(target_mechanical_ratio)))
     mechanical_component = suspension_average
@@ -3088,11 +3109,17 @@ def resolve_aero_mechanical_coherence(
         coverage_factor = 1.0 if support_total > 0.0 else 0.0
 
     imbalance_target = max(0.05, abs(float(target_aero_imbalance)))
-    weighted_imbalance = (
-        abs(float(aero.high_speed_imbalance)) * high_weight
-        + abs(float(aero.medium_speed_imbalance)) * medium_weight
-        + abs(float(aero.low_speed_imbalance)) * low_weight
+    imbalance_values = xp.abs(
+        xp.asarray(
+            (
+                float(aero.high_speed_imbalance),
+                float(aero.medium_speed_imbalance),
+                float(aero.low_speed_imbalance),
+            ),
+            dtype=float,
+        )
     )
+    weighted_imbalance = float(xp.average(imbalance_values, weights=weights))
     aero_factor = max(0.0, 1.0 - min(1.0, weighted_imbalance / imbalance_target))
     if total_samples == 0:
         aero_factor *= 0.5
@@ -3100,24 +3127,32 @@ def resolve_aero_mechanical_coherence(
     def _body_factor(profile: Sequence[tuple[float, int]] | None) -> float | None:
         if not profile:
             return None
-        total_weight = 0
-        weighted_rake = 0.0
+        magnitudes: list[float] = []
+        counts: list[float] = []
         for rake_mean, samples in profile:
             count = int(samples)
             if count <= 0:
                 continue
-            rake_value = float(rake_mean)
+            try:
+                rake_value = float(rake_mean)
+            except (TypeError, ValueError):
+                continue
             if not math.isfinite(rake_value):
                 continue
-            total_weight += count
-            weighted_rake += abs(rake_value) * count
-        if total_weight <= 0:
+            magnitudes.append(abs(rake_value))
+            counts.append(count)
+        if not counts:
             return None
+        counts_array = xp.asarray(counts, dtype=float)
+        total_weight = float(xp.sum(counts_array))
+        if total_weight <= 0.0:
+            return None
+        magnitudes_array = xp.asarray(magnitudes, dtype=float)
         tolerance = math.radians(2.5)
         if tolerance <= 1e-9:
             return None
-        average_rake = weighted_rake / total_weight
-        ratio = average_rake / tolerance
+        weighted_rake = float(xp.average(magnitudes_array, weights=counts_array))
+        ratio = weighted_rake / tolerance
         return max(0.0, 1.0 - min(1.0, ratio))
 
     def _steering_factor(
@@ -3132,16 +3167,22 @@ def resolve_aero_mechanical_coherence(
         if not math.isfinite(value):
             return None
         tolerance = 0.25
-        magnitude = abs(value)
+        magnitude = float(xp.abs(xp.asarray(value, dtype=float)))
         ratio = magnitude / tolerance if tolerance > 1e-9 else 0.0
         factor = max(0.0, 1.0 - min(1.0, ratio))
-        sample_count = int(samples or 0)
+        sample_value = 0.0
+        if samples is not None:
+            try:
+                sample_value = float(samples)
+            except (TypeError, ValueError):
+                sample_value = 0.0
+        sample_count = int(float(xp.asarray(sample_value, dtype=float)))
         if sample_count <= 0:
             return factor * 0.5
         return factor
 
     def _aero_velocity_factor(bands: AeroCoherence) -> float | None:
-        contributions: list[tuple[float, int]] = []
+        entries: list[tuple[float, float, float]] = []
         for band in (
             bands.low_speed,
             bands.medium_speed,
@@ -3150,25 +3191,29 @@ def resolve_aero_mechanical_coherence(
             count = int(getattr(band, "samples", 0))
             if count <= 0:
                 continue
-            front = abs(float(getattr(band.total, "front", 0.0)))
-            rear = abs(float(getattr(band.total, "rear", 0.0)))
-            total = front + rear
+            front_value = float(getattr(band.total, "front", 0.0))
+            rear_value = float(getattr(band.total, "rear", 0.0))
+            if not math.isfinite(front_value) or not math.isfinite(rear_value):
+                continue
+            front_abs = abs(front_value)
+            rear_abs = abs(rear_value)
+            total = front_abs + rear_abs
             if total <= 1e-9:
                 continue
-            balance = 1.0 - min(1.0, abs(front - rear) / total)
-            contributions.append((balance, count))
-        if not contributions:
+            entries.append((count, front_abs, rear_abs))
+        if not entries:
             return None
-        total_weight = sum(weight for _, weight in contributions)
-        if total_weight <= 0:
+        counts = xp.asarray([entry[0] for entry in entries], dtype=float)
+        total_weight = float(xp.sum(counts))
+        if total_weight <= 0.0:
             return None
-        weighted = sum(balance * weight for balance, weight in contributions)
-        result = weighted / total_weight
-        if result < 0.0:
-            return 0.0
-        if result > 1.0:
-            return 1.0
-        return result
+        front = xp.asarray([entry[1] for entry in entries], dtype=float)
+        rear = xp.asarray([entry[2] for entry in entries], dtype=float)
+        totals = front + rear
+        imbalance_ratio = xp.minimum(1.0, xp.abs(front - rear) / totals)
+        balance = 1.0 - imbalance_ratio
+        weighted = xp.average(balance, weights=counts)
+        return float(xp.clip(weighted, 0.0, 1.0))
 
     body_factor = _body_factor(rake_velocity_profile)
     steering_factor = _steering_factor(
@@ -3183,7 +3228,7 @@ def resolve_aero_mechanical_coherence(
     if not components:
         return 0.0
     composite = sum(components) / len(components)
-    return max(0.0, min(1.0, coherence * composite))
+    return float(max(0.0, min(1.0, coherence * composite)))
 
 
 def _segment_gradients(
