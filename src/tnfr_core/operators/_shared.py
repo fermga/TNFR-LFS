@@ -1,26 +1,18 @@
-"""Shared helpers for operator modules."""
+"""Compatibility shim for runtime shared utilities."""
 
 from __future__ import annotations
 
-from importlib.util import find_spec
+import warnings
 
+from tnfr_core.runtime.shared import _HAS_JAX, is_module_available, jnp
 
-def is_module_available(module_name: str) -> bool:
-    """Return ``True`` when ``module_name`` can be imported."""
-
-    try:
-        return find_spec(module_name) is not None
-    except ModuleNotFoundError:
-        return False
-
-
-_HAS_JAX = is_module_available("jax.numpy")
-
-if _HAS_JAX:  # pragma: no cover - exercised only when JAX is installed
-    import jax.numpy as jnp  # type: ignore[import-not-found]
-else:  # pragma: no cover - exercised when JAX is unavailable
-    jnp = None
-
+warnings.warn(
+    (
+        "'tnfr_core.operators._shared' is deprecated and will be removed in a future "
+        "release; import from 'tnfr_core.runtime.shared' instead."
+    ),
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 __all__ = ["_HAS_JAX", "jnp", "is_module_available"]
-

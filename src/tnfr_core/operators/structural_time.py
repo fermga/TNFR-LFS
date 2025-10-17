@@ -7,7 +7,7 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
-from tnfr_core.operators.interfaces import SupportsTelemetrySample
+from tnfr_core.runtime.shared import SupportsTelemetrySample
 
 __all__ = ["compute_structural_timestamps", "resolve_time_axis"]
 

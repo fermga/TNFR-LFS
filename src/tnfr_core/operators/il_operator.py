@@ -12,7 +12,7 @@ import numpy as np
 from tnfr_core.equations.archetypes import ARCHETYPE_MEDIUM
 from tnfr_core.equations.constants import WHEEL_SUFFIXES
 
-from ._shared import _HAS_JAX, jnp
+from tnfr_core.runtime.shared import _HAS_JAX, jnp
 
 
 def mutation_operator(

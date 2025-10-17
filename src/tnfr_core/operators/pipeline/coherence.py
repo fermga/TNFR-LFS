@@ -6,7 +6,7 @@ from statistics import mean
 from typing import TYPE_CHECKING, Callable, Dict, Mapping, Sequence
 
 from tnfr_core.equations.contextual_delta import ContextMatrix
-from tnfr_core.operators.interfaces import SupportsEPIBundle, SupportsMicrosector
+from tnfr_core.runtime.shared import SupportsEPIBundle, SupportsMicrosector
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
     from ..operators import DissonanceBreakdown  # pylint: disable=cyclic-import

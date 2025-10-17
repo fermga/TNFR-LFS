@@ -16,7 +16,7 @@ from tnfr_core.equations.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_core.operators.interfaces import SupportsEPIBundle
+from tnfr_core.runtime.shared import SupportsEPIBundle
 
 
 NodeType = TypeVar("NodeType")

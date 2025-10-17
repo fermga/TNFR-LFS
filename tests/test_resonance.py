@@ -11,7 +11,7 @@ from tests.helpers import build_resonance_record
 from tnfr_core.resonance import analyse_modal_resonance
 from tnfr_core.metrics import resonance as resonance_module
 from tnfr_core.metrics.spectrum import power_spectrum
-from tnfr_core.operators._shared import _HAS_JAX, jnp
+from tnfr_core.runtime.shared import _HAS_JAX, jnp
 
 
 @pytest.mark.parametrize(

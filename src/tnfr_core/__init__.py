@@ -19,6 +19,7 @@ from tnfr_core._canonical import (
 _equations = import_module("tnfr_core.equations")
 _metrics = import_module("tnfr_core.metrics")
 _operators = import_module("tnfr_core.operators")
+_runtime = import_module("tnfr_core.runtime")
 
 _BASE_EXPORTS = [
     "CANONICAL_ENV_VALUE",
@@ -31,13 +32,22 @@ _BASE_EXPORTS = [
 ]
 
 __all__ = list(
-    dict.fromkeys([*_BASE_EXPORTS, *_equations.__all__, *_metrics.__all__, *_operators.__all__])
+    dict.fromkeys(
+        [
+            *_BASE_EXPORTS,
+            *_equations.__all__,
+            *_metrics.__all__,
+            *_operators.__all__,
+            *_runtime.__all__,
+        ]
+    )
 )
 
 # Public handles to the structured namespaces.
 equations = _equations
 metrics = _metrics
 operators = _operators
+runtime = _runtime
 
 _MODULE_ALIASES = {
     "archetypes": import_module("tnfr_core.equations.archetypes"),
@@ -59,6 +69,8 @@ _MODULE_ALIASES = {
     "cache_settings": import_module("tnfr_core.operators.cache_settings"),
     "structural_time": import_module("tnfr_core.operators.structural_time"),
     "interfaces": import_module("tnfr_core.operators.interfaces"),
+    "runtime": _runtime,
+    "runtime_shared": import_module("tnfr_core.runtime.shared"),
 }
 
 for alias, module in _MODULE_ALIASES.items():
@@ -73,7 +85,7 @@ __all__ = list(dict.fromkeys(__all__ + list(_MODULE_ALIASES.keys())))
 
 
 def __getattr__(name: str) -> Any:
-    for module in (_equations, _metrics, _operators):
+    for module in (_equations, _metrics, _operators, _runtime):
         if hasattr(module, name):
             return getattr(module, name)
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

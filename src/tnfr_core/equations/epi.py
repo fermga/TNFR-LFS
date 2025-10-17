@@ -22,10 +22,11 @@ from typing import (
 import numpy as np
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
-    from tnfr_core.operators.cache_settings import CacheOptions
     from tnfr_core.metrics.coherence_calibration import CoherenceCalibrationStore
 
-from tnfr_core.operators.cache import (
+from tnfr_core.runtime.shared import (
+    CacheOptions,
+    SupportsTelemetrySample,
     cached_delta_nfr_map,
     cached_dynamic_multipliers,
     invalidate_dynamic_record,
@@ -44,7 +45,6 @@ from tnfr_core.equations.epi_models import (
     TransmissionNode,
     TyresNode,
 )
-from tnfr_core.operators.interfaces import SupportsTelemetrySample
 from tnfr_core.equations.phase_weights import _phase_weight
 from tnfr_core._canonical import CANONICAL_REQUESTED, import_tnfr
 from tnfr_core.operators.structural.epi_evolution import evolve_epi

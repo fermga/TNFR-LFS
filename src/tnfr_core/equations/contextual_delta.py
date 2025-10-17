@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections.abc import Callable, Iterable, Mapping
 
-from tnfr_core.operators.interfaces import SupportsContextBundle, SupportsContextRecord
+from tnfr_core.runtime.shared import SupportsContextBundle, SupportsContextRecord
 
 __all__ = [
     "ContextFactors",

@@ -6,7 +6,7 @@ import math
 from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
 
 from tnfr_core.metrics.metrics import compute_window_metrics as _compute_window_metrics
-from tnfr_core.operators.interfaces import SupportsEPIBundle, SupportsMicrosector
+from tnfr_core.runtime.shared import SupportsEPIBundle, SupportsMicrosector
 
 VariancePayload = Callable[[Sequence[float]], Mapping[str, float]]
 DeltaIntegral = Callable[..., Sequence[float]]
@@ -152,6 +152,7 @@ def _microsector_variability(
                             )
                         )
                     ),
+                    "phase_synchrony": synchrony_stats,
                 }
             if lap_payload:
                 entry["laps"] = lap_payload

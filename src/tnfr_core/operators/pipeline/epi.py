@@ -11,7 +11,7 @@ from tnfr_core.equations.epi import (
     resolve_nu_f_by_node,
 )
 from tnfr_core.operators.structural.epi_evolution import evolve_epi
-from tnfr_core.operators.interfaces import SupportsEPIBundle, SupportsTelemetrySample
+from tnfr_core.runtime.shared import SupportsEPIBundle, SupportsTelemetrySample
 
 EnsureBundle = Callable[[SupportsEPIBundle], SupportsEPIBundle]
 NormaliseNodeEvolution = Callable[[Mapping[str, tuple[float, float]] | None], Dict[str, tuple[float, float]]]

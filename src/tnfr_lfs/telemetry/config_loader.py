@@ -15,7 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 from tnfr_lfs.resources import data_root
-from tnfr_core.operators.cache_settings import CacheOptions
+from tnfr_core.runtime.shared import CacheOptions
 from tnfr_lfs.common.immutables import _freeze_dict, _freeze_value
 
 

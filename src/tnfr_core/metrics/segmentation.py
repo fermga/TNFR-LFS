@@ -1,7 +1,7 @@
 """Microsector segmentation utilities.
 
 This module analyses the stream of telemetry samples together with the
-corresponding :class:`~tnfr_core.operators.interfaces.SupportsEPIBundle` instances to
+corresponding :class:`~tnfr_core.runtime.shared.SupportsEPIBundle` instances to
 derive microsectors and their tactical goals.  The segmentation is
 performed using three simple heuristics inspired by motorsport
 engineering practice:
@@ -53,7 +53,7 @@ from tnfr_core.equations.contextual_delta import (
     resolve_microsector_context,
     resolve_series_context,
 )
-from tnfr_core.operators.interfaces import (
+from tnfr_core.runtime.shared import (
     SupportsContextBundle,
     SupportsContextRecord,
     SupportsEPIBundle,
@@ -828,13 +828,13 @@ def segment_microsectors(
     ----------
     records:
         Telemetry samples in chronological order. Each instance must implement
-        :class:`~tnfr_core.operators.interfaces.SupportsTelemetrySample` and satisfy
-        :class:`~tnfr_core.operators.interfaces.SupportsContextRecord` so the
+        :class:`~tnfr_core.runtime.shared.SupportsTelemetrySample` and satisfy
+        :class:`~tnfr_core.runtime.shared.SupportsContextRecord` so the
         contextual weighting heuristics can access the required signals.
     bundles:
-        Computed :class:`~tnfr_core.operators.interfaces.SupportsEPIBundle` entries for
+        Computed :class:`~tnfr_core.runtime.shared.SupportsEPIBundle` entries for
         the same timestamps as ``records``. Every bundle must also implement the
-        :class:`~tnfr_core.operators.interfaces.SupportsContextBundle` contract.
+        :class:`~tnfr_core.runtime.shared.SupportsContextBundle` contract.
     baseline:
         Optional baseline sample obtained during EPI extraction. When omitted the
         function derives a baseline from ``records`` before computing the

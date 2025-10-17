@@ -18,8 +18,11 @@ from types import MappingProxyType
 from statistics import fmean
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence
 
-from tnfr_core.operators.cache import LRUCache
-from tnfr_core.operators.cache_settings import CacheOptions, resolve_recommender_cache_size
+from tnfr_core.runtime.shared import (
+    CacheOptions,
+    LRUCache,
+    resolve_recommender_cache_size,
+)
 from tnfr_core.equations.dissonance import compute_useful_dissonance_stats
 from tnfr_core.equations.epi_models import EPIBundle
 from tnfr_core.metrics.segmentation import Microsector

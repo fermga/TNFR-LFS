@@ -28,7 +28,7 @@ class ShimExportExpectation:
 
 
 def _verify_cache_settings(module: ModuleType) -> None:
-    from tnfr_core.operators.cache_settings import CacheOptions as core_cache_options
+    from tnfr_core.runtime.shared import CacheOptions as core_cache_options
 
     assert module.CacheOptions is core_cache_options
 
@@ -44,7 +44,7 @@ _SHIM_EXPORT_EXPECTATIONS = (
         module_name="tnfr_lfs.cache_settings",
         warning_pattern=(
             "'tnfr_lfs.cache_settings' is deprecated and will be removed in a future release. "
-            "Please import from 'tnfr_core.operators.cache_settings' instead."
+            "Please import from 'tnfr_core.runtime.shared' instead."
         ),
         verifier=_verify_cache_settings,
     ),

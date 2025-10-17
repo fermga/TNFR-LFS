@@ -12,8 +12,7 @@ from tnfr_core.metrics.spectrum import (
     estimate_sample_rate,
     power_spectrum,
 )
-from tnfr_core.operators._shared import _HAS_JAX, jnp
-from tnfr_core.operators.interfaces import SupportsTelemetrySample
+from tnfr_core.runtime.shared import SupportsTelemetrySample, _HAS_JAX, jnp
 
 xp = jnp if _HAS_JAX and jnp is not None else np
 

@@ -16,7 +16,7 @@ from tnfr_core.cache import (
     clear_dynamic_cache,
     configure_cache_from_options,
 )
-from tnfr_core.cache_settings import CacheOptions
+from tnfr_core.runtime.shared import CacheOptions
 from tnfr_core.epi import (
     DEFAULT_PHASE_WEIGHTS,
     DeltaCalculator,
