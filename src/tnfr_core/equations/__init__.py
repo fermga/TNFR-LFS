@@ -7,6 +7,7 @@ from . import contextual_delta as _contextual_delta
 from . import delta_utils as _delta_utils
 from . import dissonance as _dissonance
 from . import epi as _epi
+from . import epi_evolution as _epi_evolution
 from . import epi_models as _epi_models
 from . import telemetry as _telemetry
 from . import phases as _phases
@@ -19,6 +20,7 @@ from .contextual_delta import *  # noqa: F401,F403
 from .delta_utils import *  # noqa: F401,F403
 from .dissonance import *  # noqa: F401,F403
 from .epi import *  # noqa: F401,F403
+from .epi_evolution import *  # noqa: F401,F403
 from .epi_models import *  # noqa: F401,F403
 from .telemetry import *  # noqa: F401,F403
 from .phases import *  # noqa: F401,F403
@@ -39,6 +41,7 @@ __all__ = [
     *_exported(_delta_utils),
     *_exported(_dissonance),
     *_exported(_epi),
+    *_exported(_epi_evolution),
     *_exported(_epi_models),
     *_exported(_telemetry),
     *_exported(_phases),
@@ -54,6 +57,7 @@ del _contextual_delta
 del _delta_utils
 del _dissonance
 del _epi
+del _epi_evolution
 del _epi_models
 del _telemetry
 del _phases

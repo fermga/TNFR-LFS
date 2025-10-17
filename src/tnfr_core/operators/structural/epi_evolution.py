@@ -1,72 +1,27 @@
-"""Structural evolution utilities for EPI computations."""
+"""Compatibility re-exports for EPI evolution helpers."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping
-
-from tnfr_core.operators.structural.epi import (
-    compute_nodal_contributions,
-    extract_phase_context,
-    resolve_nu_targets,
-)
-
-
-class NodalEvolution(dict[str, tuple[float, float]]):
-    """Dictionary mapping nodes to ``(integral, derivative)`` tuples with metadata."""
-
-    metadata: Dict[str, Any]
-
-    def __init__(self) -> None:  # noqa: D401 - short custom initialiser
-        super().__init__()
-        self.metadata = {}
-
-
-def evolve_epi(
-    prev_epi: float,
-    delta_map: Mapping[str, float],
-    dt: float,
-    nu_f_by_node: Mapping[str, float],
-) -> tuple[float, float, Dict[str, tuple[float, float]]]:
-    """Integrate the Event Performance Index using explicit Euler steps.
-
-    The integrator returns the global derivative/integral together with a per-node
-    breakdown.  The nodal contribution dictionary maps the node name to a
-    ``(integral, derivative)`` tuple representing the instantaneous change produced
-    during ``dt``.  When contextual metadata is supplied in ``delta_map`` the
-    returned mapping exposes it through the ``metadata`` attribute so that advanced
-    consumers can inspect phase effects without affecting the tuple contract
-    consumed elsewhere.
-    """
-
-    if dt < 0.0:
-        raise ValueError("dt must be non-negative")
-
-    nodal_evolution: NodalEvolution = NodalEvolution()
-
-    phase_context = extract_phase_context(delta_map)
-    nu_targets = resolve_nu_targets(delta_map)
-    contributions, theta_effects, derivative = compute_nodal_contributions(
-        delta_map,
-        nu_f_by_node,
-        nu_targets,
-        phase_context,
-        dt,
-    )
-
-    for node, values in contributions.items():
-        nodal_evolution[node] = values
-
-    if theta_effects:
-        nodal_evolution.metadata["theta_effect"] = theta_effects
-    if phase_context.identifier is not None:
-        nodal_evolution.metadata["theta"] = phase_context.identifier
-    if phase_context.weights is not None:
-        nodal_evolution.metadata["w_phase"] = dict(phase_context.weights)
-    if nu_targets is not None:
-        nodal_evolution.metadata["nu_f_objectives"] = dict(nu_targets)
-
-    new_epi = prev_epi + (derivative * dt)
-    return new_epi, derivative, nodal_evolution
-
+from typing import TYPE_CHECKING, Any
 
 __all__ = ["NodalEvolution", "evolve_epi"]
+
+
+if TYPE_CHECKING:  # pragma: no cover - used for type checking only
+    from tnfr_core.equations.epi_evolution import NodalEvolution as _NodalEvolution
+    from tnfr_core.equations.epi_evolution import evolve_epi as _evolve_epi
+
+
+def __getattr__(name: str) -> Any:  # pragma: no cover - simple proxy
+    if name in __all__:
+        from tnfr_core.equations.epi_evolution import NodalEvolution, evolve_epi
+
+        namespace = {"NodalEvolution": NodalEvolution, "evolve_epi": evolve_epi}
+        value = namespace[name]
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:  # pragma: no cover - reflection helper
+    return sorted({*globals(), *__all__})

@@ -37,8 +37,8 @@ from tnfr_core.operators.operator_detection import (
     silence_event_payloads,
 )
 from tnfr_core.operators.structural.coherence_il import coherence_operator_il
-from tnfr_core.operators.structural.epi_evolution import NodalEvolution
-from tnfr_core.operators.structural import epi_evolution as _epi_evolution
+from tnfr_core.equations.epi_evolution import NodalEvolution
+from tnfr_core.equations import epi_evolution as _epi_evolution
 from tnfr_core.operators.pipeline import (
     orchestrate_delta_metrics as pipeline_orchestrate_delta_metrics,
 )
