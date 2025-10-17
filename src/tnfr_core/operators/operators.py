@@ -37,7 +37,8 @@ from tnfr_core.operators.operator_detection import (
     silence_event_payloads,
 )
 from tnfr_core.operators.structural.coherence_il import coherence_operator_il
-from tnfr_core.operators.structural.epi_evolution import NodalEvolution, evolve_epi
+from tnfr_core.operators.structural.epi_evolution import NodalEvolution
+from tnfr_core.operators.structural import epi_evolution as _epi_evolution
 from tnfr_core.operators.pipeline import (
     orchestrate_delta_metrics as pipeline_orchestrate_delta_metrics,
 )
@@ -105,6 +106,24 @@ def orchestrate_delta_metrics(
         phase_weights=phase_weights,
         operator_state=operator_state,
     )
+
+
+EPI_EVOLUTION_DEPRECATION = (
+    "'tnfr_core.operators.operators.evolve_epi' is deprecated; import "
+    "'tnfr_core.operators.structural.epi_evolution.evolve_epi' instead."
+)
+
+
+def evolve_epi(
+    prev_epi: float,
+    delta_map: Mapping[str, float],
+    dt: float,
+    nu_f_by_node: Mapping[str, float],
+):
+    """Compatibility wrapper around :func:`structural.epi_evolution.evolve_epi`."""
+
+    warnings.warn(EPI_EVOLUTION_DEPRECATION, DeprecationWarning, stacklevel=2)
+    return _epi_evolution.evolve_epi(prev_epi, delta_map, dt, nu_f_by_node)
 
 
 __all__ = [

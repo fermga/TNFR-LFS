@@ -1,6 +1,11 @@
 # `tnfr_core.operators.structural.epi_evolution` module
 Structural evolution utilities for EPI computations.
 
+!!! tip "Preferred entry point"
+    Import :func:`evolve_epi` from this module (``tnfr_core.operators.structural.epi_evolution``)
+    instead of ``tnfr_core.operators.operators``. The structural module hosts the
+    maintained implementation and avoids deprecation warnings.
+
 ## Classes
 ### `NodalEvolution` (dict[str, tuple[float, float]])
 Dictionary mapping nodes to ``(integral, derivative)`` tuples with metadata.

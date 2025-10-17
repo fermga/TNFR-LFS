@@ -83,7 +83,9 @@ from tnfr_core.operators.structural.epi import (
     extract_phase_context,
     resolve_nu_targets,
 )
-from tnfr_core.operators.structural.epi_evolution import evolve_epi
+from tnfr_core.operators.structural.epi_evolution import (
+    evolve_epi as structural_evolve_epi,
+)
 from tnfr_core.operators._shared import _HAS_JAX, jnp
 from tnfr_core.operators.pipeline.coherence import _stage_coherence as pipeline_stage_coherence
 from tnfr_core.operators.pipeline.epi import _stage_epi_evolution as pipeline_stage_epi
@@ -958,7 +960,7 @@ def test_evolve_epi_runs_euler_step():
         deltas, nu_map, nu_targets, phase_context, 0.1
     )
 
-    new_epi, derivative, nodal = evolve_epi(prev, deltas, 0.1, nu_map)
+    new_epi, derivative, nodal = structural_evolve_epi(prev, deltas, 0.1, nu_map)
 
     assert derivative == pytest.approx(expected_derivative, rel=1e-9)
     assert new_epi == pytest.approx(prev + expected_derivative * 0.1, rel=1e-9)
@@ -992,7 +994,7 @@ def test_evolve_epi_applies_phase_metadata():
         deltas, nu_map, nu_targets, phase_context, 0.1
     )
 
-    new_epi, derivative, nodal = evolve_epi(prev, deltas, 0.1, nu_map)
+    new_epi, derivative, nodal = structural_evolve_epi(prev, deltas, 0.1, nu_map)
 
     assert derivative == pytest.approx(expected_derivative, rel=1e-9)
     assert new_epi == pytest.approx(expected_derivative * 0.1, rel=1e-9)
