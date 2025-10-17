@@ -183,8 +183,8 @@ def test_power_spectrum_identifies_peak_frequency():
     assert spectrum
     frequencies = np.array([entry[0] for entry in spectrum], dtype=float)
     energy = np.array([entry[1] for entry in spectrum], dtype=float)
-    backend_freq = np.array([entry[0] for entry in spectrum_backend], dtype=float)
-    backend_energy = np.array([entry[1] for entry in spectrum_backend], dtype=float)
+    backend_freq = spectrum_backend[:, 0]
+    backend_energy = spectrum_backend[:, 1]
     peak_frequency = float(frequencies[np.argmax(energy)])
 
     assert math.isclose(peak_frequency, dominant_frequency, rel_tol=1e-2, abs_tol=1e-2)

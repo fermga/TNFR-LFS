@@ -10,6 +10,8 @@ from tests.helpers import build_resonance_record
 
 from tnfr_core.resonance import analyse_modal_resonance
 from tnfr_core.metrics import resonance as resonance_module
+from tnfr_core.metrics.spectrum import power_spectrum
+from tnfr_core.operators._shared import _HAS_JAX, jnp
 
 
 @pytest.mark.parametrize(
@@ -162,3 +164,127 @@ def test_extract_peaks_large_input_uses_partition(monkeypatch: pytest.MonkeyPatc
     assert [pytest.approx(peak.energy) for peak in peaks] == [
         pytest.approx(value) for value in expected_energies
     ]
+
+
+@pytest.mark.parametrize(
+    "xp_module",
+    [
+        pytest.param(np, id="numpy"),
+        pytest.param(
+            jnp,
+            id="jax",
+            marks=pytest.mark.skipif(not _HAS_JAX or jnp is None, reason="JAX unavailable"),
+        ),
+    ],
+)
+def test_resonance_pipeline_preserves_backend_results(
+    xp_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sample_rate = 40.0
+    dt = 1.0 / sample_rate
+    samples = 256
+
+    def _build_records() -> list:
+        records = []
+        for index in range(samples):
+            t = index * dt
+            yaw = math.sin(2.0 * math.pi * 1.25 * t)
+            roll = 0.5 * math.sin(2.0 * math.pi * 2.0 * t)
+            pitch = 0.75 * math.sin(2.0 * math.pi * 0.5 * t)
+            steer = 0.3 * math.sin(2.0 * math.pi * 1.5 * t)
+            suspension = 0.2 * math.sin(2.0 * math.pi * 1.5 * t + math.pi / 6.0)
+            records.append(
+                build_resonance_record(
+                    t,
+                    yaw=yaw,
+                    roll=roll,
+                    pitch=pitch,
+                    steer=steer,
+                    suspension_velocity_front=suspension,
+                    suspension_velocity_rear=suspension,
+                )
+            )
+        return records
+
+    records = _build_records()
+
+    def _run_with_backend(module):
+        patcher = pytest.MonkeyPatch()
+        patcher.setattr(resonance_module, "xp", module)
+        try:
+            analysis = resonance_module.analyse_modal_resonance(records)
+            excitation = resonance_module.estimate_excitation_frequency(records, sample_rate)
+        finally:
+            patcher.undo()
+        return analysis, excitation
+
+    baseline_analysis, baseline_excitation = _run_with_backend(np)
+    analysis, excitation = _run_with_backend(xp_module)
+
+    assert excitation == pytest.approx(baseline_excitation, rel=1e-6, abs=1e-6)
+    assert analysis.keys() == baseline_analysis.keys()
+    for axis in analysis:
+        candidate = analysis[axis]
+        reference = baseline_analysis[axis]
+        assert candidate.sample_rate == pytest.approx(reference.sample_rate, rel=1e-6)
+        assert candidate.total_energy == pytest.approx(reference.total_energy, rel=1e-6)
+        assert candidate.nu_exc == pytest.approx(reference.nu_exc, rel=1e-6)
+        assert candidate.rho == pytest.approx(reference.rho, rel=1e-6)
+        assert len(candidate.peaks) == len(reference.peaks)
+        for cand_peak, ref_peak in zip(candidate.peaks, reference.peaks):
+            assert cand_peak.frequency == pytest.approx(ref_peak.frequency, rel=1e-6)
+            assert cand_peak.energy == pytest.approx(ref_peak.energy, rel=1e-6)
+            assert cand_peak.classification == ref_peak.classification
+
+    backend_type = type(xp_module.asarray([], dtype=float))
+    time = np.arange(samples, dtype=float) / sample_rate
+    signal = np.sin(2.0 * math.pi * 2.5 * time)
+    backend_signal = xp_module.asarray(signal, dtype=float)
+
+    backend_patcher = pytest.MonkeyPatch()
+    backend_patcher.setattr(resonance_module, "xp", xp_module)
+    try:
+        backend_spectrum = resonance_module.power_spectrum(
+            backend_signal, sample_rate, xp_module=xp_module
+        )
+        assert hasattr(backend_spectrum, "shape")
+        assert backend_spectrum.shape[1] == 2
+        assert isinstance(backend_spectrum, backend_type)
+        assert not isinstance(backend_spectrum, list)
+
+        backend_peaks = resonance_module._extract_peaks(backend_spectrum, max_peaks=2)
+    finally:
+        backend_patcher.undo()
+
+    baseline_peaks = resonance_module._extract_peaks(
+        power_spectrum(signal, sample_rate), max_peaks=2
+    )
+    assert [peak.classification for peak in backend_peaks] == [
+        peak.classification for peak in baseline_peaks
+    ]
+    assert [pytest.approx(peak.frequency) for peak in backend_peaks] == [
+        pytest.approx(peak.frequency) for peak in baseline_peaks
+    ]
+
+
+def test_extract_peaks_avoids_backend_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(resonance_module, "xp", np)
+    spectrum = np.column_stack(
+        (
+            np.linspace(0.1, 3.0, 8, dtype=float),
+            np.linspace(10.0, 2.0, 8, dtype=float),
+        )
+    )
+
+    original_asarray = np.asarray
+
+    def _guard(values, *args, **kwargs):
+        if values is spectrum:
+            raise AssertionError("unexpected conversion of backend spectrum")
+        return original_asarray(values, *args, **kwargs)
+
+    monkeypatch.setattr(np, "asarray", _guard)
+
+    peaks = resonance_module._extract_peaks(spectrum, max_peaks=3)
+
+    assert len(peaks) == 3
