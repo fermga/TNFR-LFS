@@ -52,7 +52,7 @@ from tnfr_core.metrics.metrics import (
     compute_window_metrics,
 )
 from tnfr_core.operators import orchestrate_delta_metrics
-from tnfr_core.operators.operator_detection import canonical_operator_label, silence_event_payloads
+from tnfr_core.operators.operator_labels import canonical_operator_label, silence_event_payloads
 from tnfr_core.equations.phases import PHASE_SEQUENCE, phase_family
 from tnfr_core.metrics.resonance import ModalAnalysis, ModalPeak, analyse_modal_resonance
 from tnfr_core.metrics.segmentation import (

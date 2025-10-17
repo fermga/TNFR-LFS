@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import inspect
 import math
-import warnings
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import dataclass
 from functools import lru_cache, wraps
@@ -32,6 +31,12 @@ from tnfr_lfs.resources import data_root, pack_root
 
 from tnfr_core.config.loader import get_params, load_detection_config
 from tnfr_core.runtime.shared import SupportsTelemetrySample
+from tnfr_core.operators.operator_labels import (
+    STRUCTURAL_OPERATOR_LABELS,
+    canonical_operator_label,
+    normalize_structural_operator_identifier,
+    silence_event_payloads,
+)
 from tnfr_core.operators.structural_time import compute_structural_timestamps
 
 __all__ = [
@@ -54,133 +59,6 @@ __all__ = [
     "detect_zhir",
     "detect_remesh",
 ]
-
-
-STRUCTURAL_OPERATOR_LABELS: Mapping[str, str] = {
-    "AL": "Support",
-    "EN": "Reception",
-    "IL": "Coherence",
-    "OZ": "Dissonance",
-    "UM": "Coupling",
-    "RA": "Propagation",
-    "SILENCE": "Structural silence",
-    "VAL": "Amplification",
-    "NUL": "Contraction",
-    "THOL": "Auto-organisation",
-    "ZHIR": "Transformation",
-    "NAV": "Transition",
-    "REMESH": "Remeshing",
-}
-
-_STRUCTURAL_IDENTIFIER_ALIASES: Mapping[str, str] = {
-    "A'L": "AL",
-    "A\u2019L": "AL",
-    "E'N": "EN",
-    "E\u2019N": "EN",
-    "I'L": "IL",
-    "I\u2019L": "IL",
-    "O'Z": "OZ",
-    "O\u2019Z": "OZ",
-    "U'M": "UM",
-    "U\u2019M": "UM",
-    "R'A": "RA",
-    "R\u2019A": "RA",
-    "SH'A": "SILENCE",
-    "SH\u2019A": "SILENCE",
-    "SHA": "SILENCE",
-    "VA'L": "VAL",
-    "VA\u2019L": "VAL",
-    "NU'L": "NUL",
-    "NU\u2019L": "NUL",
-    "T'HOL": "THOL",
-    "T\u2019HOL": "THOL",
-    "AUTOORGANISATION": "THOL",
-    "AUTO ORGANISATION": "THOL",
-    "AUTO-ORGANISATION": "THOL",
-    "AUTOORGANIZATION": "THOL",
-    "AUTO ORGANIZATION": "THOL",
-    "AUTO-ORGANIZATION": "THOL",
-    "AUTOORGANIZACION": "THOL",
-    "AUTO ORGANIZACION": "THOL",
-    "AUTO-ORGANIZACION": "THOL",
-    "AUTOORGANIZACIÓN": "THOL",
-    "AUTO ORGANIZACIÓN": "THOL",
-    "AUTO-ORGANIZACIÓN": "THOL",
-    "Z'HIR": "ZHIR",
-    "Z\u2019HIR": "ZHIR",
-    "NA'V": "NAV",
-    "NA\u2019V": "NAV",
-    "NAV": "NAV",
-    "TRANSITION": "NAV",
-    "TRANSICION": "NAV",
-    "TRANSICIÓN": "NAV",
-    "REMESH": "REMESH",
-    "RE'MESH": "REMESH",
-    "RE\u2019MESH": "REMESH",
-}
-
-try:
-    if isinstance(STRUCTURAL_OPERATOR_LABELS, Mapping):
-        labels = dict(STRUCTURAL_OPERATOR_LABELS)
-        labels.setdefault("NAV", "Transition")
-        labels.setdefault("THOL", "Auto-organisation")
-        STRUCTURAL_OPERATOR_LABELS = labels
-    else:
-        STRUCTURAL_OPERATOR_LABELS = tuple(  # type: ignore[assignment]
-            sorted(set(STRUCTURAL_OPERATOR_LABELS) | {"NAV", "THOL"})
-        )
-except Exception:
-    pass
-
-_DEPRECATED_STRUCTURAL_IDENTIFIER_ALIASES: Mapping[str, str] = {
-    "SILENCIO": "SILENCE",
-}
-
-
-def normalize_structural_operator_identifier(identifier: str) -> str:
-    """Return the canonical structural identifier for ``identifier``."""
-
-    if not isinstance(identifier, str):
-        return str(identifier)
-    key = identifier.upper()
-    if key in _DEPRECATED_STRUCTURAL_IDENTIFIER_ALIASES:
-        warnings.warn(
-            "The 'SILENCIO' structural identifier is deprecated; use 'SILENCE' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        key = _DEPRECATED_STRUCTURAL_IDENTIFIER_ALIASES[key]
-    return _STRUCTURAL_IDENTIFIER_ALIASES.get(key, key)
-
-
-def canonical_operator_label(identifier: str) -> str:
-    """Return the canonical structural label for an operator identifier."""
-
-    if not isinstance(identifier, str):
-        return str(identifier)
-    key = normalize_structural_operator_identifier(identifier)
-    return STRUCTURAL_OPERATOR_LABELS.get(key, identifier)
-
-
-def silence_event_payloads(
-    events: Mapping[str, Sequence[Mapping[str, object]] | None] | None,
-) -> Tuple[Mapping[str, object], ...]:
-    """Return all silence payloads, accepting case-insensitive identifiers."""
-
-    if not events:
-        return ()
-
-    collected: List[Mapping[str, object]] = []
-    for name, payload in events.items():
-        if normalize_structural_operator_identifier(name) != "SILENCE":
-            continue
-        if not payload:
-            continue
-        if isinstance(payload, SequenceABC) and not isinstance(payload, Mapping):
-            collected.extend(payload)  # type: ignore[list-item]
-        else:
-            collected.append(payload)  # type: ignore[arg-type]
-    return tuple(collected)
 
 
 Number = float

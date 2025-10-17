@@ -32,7 +32,7 @@ from tnfr_core.runtime.shared import (
     SupportsTelemetrySample,
     SupportsTyresNode,
 )
-from tnfr_core.operators.operator_detection import (
+from tnfr_core.operators.operator_labels import (
     normalize_structural_operator_identifier,
     silence_event_payloads,
 )

@@ -6,7 +6,7 @@ from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from typing import Dict, List, Mapping, Sequence, Tuple
 
 from tnfr_core.runtime.shared import SupportsMicrosector
-from tnfr_core.operators.operator_detection import (
+from tnfr_core.operators.operator_labels import (
     normalize_structural_operator_identifier,
     silence_event_payloads,
 )
