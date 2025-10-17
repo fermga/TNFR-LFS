@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, TYPE_CHECKING
+from typing import Any, Dict, Mapping
 
-if TYPE_CHECKING:  # pragma: no cover - import for typing only
-    from tnfr_core.operators.structural.epi import (
-        compute_nodal_contributions,
-        extract_phase_context,
-        resolve_nu_targets,
-    )
+from tnfr_core.equations._structural_epi import (
+    compute_nodal_contributions,
+    extract_phase_context,
+    resolve_nu_targets,
+)
 
 
 class NodalEvolution(dict[str, tuple[float, float]]):
@@ -35,11 +34,9 @@ def evolve_epi(
 
     nodal_evolution: NodalEvolution = NodalEvolution()
 
-    from tnfr_core.operators.structural import epi as structural_epi
-
-    phase_context = structural_epi.extract_phase_context(delta_map)
-    nu_targets = structural_epi.resolve_nu_targets(delta_map)
-    contributions, theta_effects, derivative = structural_epi.compute_nodal_contributions(
+    phase_context = extract_phase_context(delta_map)
+    nu_targets = resolve_nu_targets(delta_map)
+    contributions, theta_effects, derivative = compute_nodal_contributions(
         delta_map,
         nu_f_by_node,
         nu_targets,
