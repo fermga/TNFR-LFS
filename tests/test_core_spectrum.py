@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tnfr_core import spectrum
+from tests.helpers.telemetry import build_telemetry_record
 
 
 def _sine_wave(
@@ -158,3 +159,56 @@ def test_phase_alignment_accepts_pre_normalised_series(
     assert frequency == pytest.approx(baseline_freq, rel=1e-6, abs=1e-6)
     assert lag == pytest.approx(baseline_lag, rel=1e-6, abs=1e-6)
     assert alignment == pytest.approx(baseline_alignment, rel=1e-6, abs=1e-6)
+
+
+def test_phase_alignment_vectorises_response_alignment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        build_telemetry_record(
+            timestamp=float(index) * 0.1,
+            steer=0.0,
+            yaw_rate=0.0,
+            lateral_accel=0.0,
+        )
+        for index in range(5)
+    ]
+    steer_norm = [1.0, 2.0, 3.0, 4.0, 5.0]
+    yaw_norm = [10.0, 20.0, 30.0]
+    lat_norm = [1.0, 2.0, 3.0, 4.0]
+
+    captured: dict[str, list[float]] = {}
+
+    def fake_resolve(
+        control: Sequence[float],
+        response: Sequence[float],
+        sample_rate: float,
+        **kwargs: object,
+    ) -> spectrum.PhaseCorrelation:
+        captured["control"] = list(control)
+        captured["response"] = list(response)
+        return spectrum.PhaseCorrelation(
+            frequency=1.0,
+            phase=0.0,
+            alignment=1.0,
+            latency_ms=0.0,
+            magnitude=1.0,
+        )
+
+    monkeypatch.setattr(spectrum, "_resolve_dominant_correlation", fake_resolve)
+
+    frequency, phase, alignment = spectrum.phase_alignment(
+        records,
+        sample_rate=10.0,
+        steer_norm=steer_norm,
+        yaw_norm=yaw_norm,
+        lat_norm=lat_norm,
+    )
+
+    assert frequency == pytest.approx(1.0)
+    assert phase == pytest.approx(0.0)
+    assert alignment == pytest.approx(1.0)
+
+    assert captured["control"] == pytest.approx(steer_norm)
+    expected_response = [5.5, 11.0, 16.5, 2.0, 0.0]
+    assert captured["response"] == pytest.approx(expected_response)

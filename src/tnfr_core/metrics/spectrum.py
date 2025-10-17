@@ -594,18 +594,49 @@ def phase_alignment(
             lat_values = [float(record.lateral_accel) for record in records]
             yaw_components = _normalise(yaw_values)
             lat_components = _normalise(lat_values)
-        combined_length = max(
-            len(steer_values), len(yaw_components), len(lat_components)
+
+        xp_backend = _resolve_backend(
+            None, steer_values, yaw_components, lat_components
         )
-        combined_response = []
-        for idx in range(combined_length):
-            yaw_component = (
-                yaw_components[idx] if idx < len(yaw_components) else 0.0
-            )
-            lat_component = (
-                lat_components[idx] if idx < len(lat_components) else 0.0
-            )
-            combined_response.append((yaw_component + lat_component) * 0.5)
+        steer_array = _xp_array(steer_values, xp_backend, dtype=float)
+        yaw_array = _xp_array(yaw_components, xp_backend, dtype=float)
+        lat_array = _xp_array(lat_components, xp_backend, dtype=float)
+
+        combined_length = max(
+            _xp_size(steer_array),
+            _xp_size(yaw_array),
+            _xp_size(lat_array),
+        )
+
+        if combined_length == 0:
+            combined_array = xp_backend.asarray([], dtype=float)
+        else:
+            if _xp_size(yaw_array) < combined_length:
+                yaw_array = xp_backend.pad(
+                    yaw_array,
+                    ((0, combined_length - _xp_size(yaw_array)),),
+                )
+            if _xp_size(lat_array) < combined_length:
+                lat_array = xp_backend.pad(
+                    lat_array,
+                    ((0, combined_length - _xp_size(lat_array)),),
+                )
+            if _xp_size(yaw_array) > combined_length:
+                yaw_array = yaw_array[:combined_length]
+            if _xp_size(lat_array) > combined_length:
+                lat_array = lat_array[:combined_length]
+            combined_array = (yaw_array + lat_array) * 0.5
+
+        combined_response = (
+            combined_array.tolist()
+            if hasattr(combined_array, "tolist")
+            else [float(value) for value in combined_array]
+        )
+        steer_values = (
+            steer_array.tolist()
+            if hasattr(steer_array, "tolist")
+            else [float(value) for value in steer_array]
+        )
     else:
         combined_response = list(response_series)
 
