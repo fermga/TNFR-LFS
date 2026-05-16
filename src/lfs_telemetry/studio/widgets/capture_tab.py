@@ -1,0 +1,300 @@
+"""Capture tab — start / stop the bundled ``lfs-telemetry capture``
+subprocess from inside Studio.
+
+Records every completed lap to a separate CSV (including the out-lap
+from pit/grid exit to the first start/finish crossing as ``_lap00.csv``)
+and stops only when the user clicks Stop.  No warm-up trickery, no lap
+count cap: press Start, drive, press Stop — every full lap is on disk.
+
+The lap-in-progress when Stop is pressed is intentionally discarded
+(it has no end line crossing, so no canonical lap-time can be derived).
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
+from ...app.capture_runner import CaptureRunner
+from ..signals import SignalBus
+from ..theme import MUTED_COLOR
+
+_LAP_DONE_RE = re.compile(r"flying lap (\d+)")
+_OUT_LAP_RE = re.compile(r"out-lap complete")
+_ARMED_RE = re.compile(r"\[capture\] armed:")
+_WAITING_RE = re.compile(r"Waiting for car to start moving")
+_INSIM_WAIT_RE = re.compile(r"\[insim\] waiting for LFS")
+_INSIM_READY_RE = re.compile(r"InSim ready\.|\[capture\] tracking PLID")
+
+
+def _led_qss(color: str) -> str:
+    """Stylesheet for a 14 px circular LED of ``color``."""
+    return (
+        "QLabel { "
+        f"background-color: {color}; "
+        "border-radius: 7px; "
+        "min-width: 14px; max-width: 14px; "
+        "min-height: 14px; max-height: 14px; "
+        "border: 1px solid #1c1f24; "
+        "}"
+    )
+
+
+class CaptureTab(QWidget):
+    """Form + log + start/stop for a managed UDP capture subprocess."""
+
+    def __init__(
+        self,
+        workspace: Path,
+        signals: SignalBus,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._workspace = Path(workspace)
+        self._signals = signals
+        self._runner = CaptureRunner()
+        # Public alias so the Live tab can locate live.json without
+        # poking at private state.
+        self.runner = self._runner
+        self._was_running = False
+        self._completed_laps = 0
+        self._out_lap_done = False
+
+        # ----- Form ----------------------------------------------------
+        self._stem = QLineEdit("stint", self)
+
+        self._insim_host = QLineEdit("127.0.0.1", self)
+        self._insim_port = QSpinBox(self)
+        self._insim_port.setRange(1, 65535)
+        self._insim_port.setValue(29999)
+
+        self._outsim_port = QSpinBox(self)
+        self._outsim_port.setRange(1, 65535)
+        self._outsim_port.setValue(30000)
+
+        self._outgauge_port = QSpinBox(self)
+        self._outgauge_port.setRange(1, 65535)
+        self._outgauge_port.setValue(30001)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.addRow("Filename stem:", self._stem)
+        form.addRow("InSim host:", self._insim_host)
+        form.addRow("InSim port:", self._insim_port)
+        form.addRow("OutSim port:", self._outsim_port)
+        form.addRow("OutGauge port:", self._outgauge_port)
+
+        form_box = QGroupBox("Capture", self)
+        form_box.setLayout(form)
+
+        # ----- Buttons + status ---------------------------------------
+        self._btn_start = QPushButton("Start", self)
+        self._btn_stop = QPushButton("Stop", self)
+        self._btn_stop.setEnabled(False)
+        self._btn_start.clicked.connect(self._on_start)
+        self._btn_stop.clicked.connect(self._on_stop)
+
+        # LFS connection LED.
+        self._led = QLabel(self)
+        self._led.setStyleSheet(_led_qss("#5a5f66"))  # grey = idle
+        self._led.setToolTip("LFS InSim status: idle")
+        self._led_label = QLabel("LFS", self)
+        self._led_label.setStyleSheet(f"color: {MUTED_COLOR};")
+
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(self._btn_start)
+        btn_row.addWidget(self._btn_stop)
+        btn_row.addStretch(1)
+        btn_row.addWidget(self._led)
+        btn_row.addWidget(self._led_label)
+
+        self._status = QLabel("Idle.", self)
+        self._status.setStyleSheet(f"color: {MUTED_COLOR};")
+
+        self._lap_counter = QLabel("Laps recorded: 0", self)
+
+        self._workspace_label = QLabel(
+            f"Workspace: {self._workspace}", self,
+        )
+        self._workspace_label.setStyleSheet(f"color: {MUTED_COLOR};")
+        self._workspace_label.setWordWrap(True)
+
+        # ----- Log ----------------------------------------------------
+        self._log = QPlainTextEdit(self)
+        self._log.setReadOnly(True)
+        self._log.setMaximumBlockCount(2000)
+        self._log.setStyleSheet(
+            "QPlainTextEdit { background-color: #0f1418; "
+            "color: #cfd6dc; font-family: Consolas, monospace; }"
+        )
+
+        info = QLabel(
+            "Records LFS UDP telemetry. You can press Start at any time "
+            "(menu, pre-race countdown, pit, or already on track): the "
+            "capture waits for LFS InSim to come up and only begins "
+            "recording when the car actually starts moving. Every "
+            "completed lap (out-lap included) is saved when you press Stop. "
+            "Enable InSim in LFS first: <code>/insim 29999</code>.", self,
+        )
+        info.setStyleSheet(f"color: {MUTED_COLOR};")
+        info.setWordWrap(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+        layout.addWidget(info)
+        layout.addWidget(self._workspace_label)
+        layout.addWidget(form_box)
+        layout.addLayout(btn_row)
+        layout.addWidget(self._status)
+        layout.addWidget(self._lap_counter)
+        layout.addWidget(QLabel("Log:", self))
+        layout.addWidget(self._log, 1)
+
+        # Workspace updates from the rest of the app.
+        signals.workspace_changed.connect(self._on_workspace_changed)
+
+        # Polling timer.
+        self._timer = QTimer(self)
+        self._timer.setInterval(500)
+        self._timer.timeout.connect(self._poll)
+        self._timer.start()
+
+    # ------------------------------------------------------------------
+
+    def _on_workspace_changed(self, ws: Path) -> None:
+        self._workspace = Path(ws)
+        self._workspace_label.setText(f"Workspace: {self._workspace}")
+
+    def _on_start(self) -> None:
+        if self._runner.running:
+            self._status.setText("Already running.")
+            return
+        try:
+            msg = self._runner.start(
+                workspace=self._workspace,
+                stem=self._stem.text() or "stint",
+                seconds=0.0,
+                laps=0,
+                warmup_laps=0,
+                per_lap=True,
+                include_out_lap=True,
+                insim_host=self._insim_host.text() or "127.0.0.1",
+                insim_port=int(self._insim_port.value()),
+                outsim_port=int(self._outsim_port.value()),
+                outgauge_port=int(self._outgauge_port.value()),
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._status.setText(f"Start failed: {exc}")
+            return
+        self._status.setText(msg)
+        self._log.clear()
+        self._completed_laps = 0
+        self._out_lap_done = False
+        self._lap_counter.setText("Laps recorded: 0")
+        self._btn_start.setEnabled(False)
+        self._btn_stop.setEnabled(True)
+        self._was_running = True
+
+    def _on_stop(self) -> None:
+        msg = self._runner.stop()
+        self._status.setText(msg)
+
+    def _update_lap_counter_from_log(self, lines: list[str]) -> None:
+        """Parse the runner log to keep a live count of saved laps."""
+        max_flying = 0
+        out_done = False
+        for ln in lines:
+            m = _LAP_DONE_RE.search(ln)
+            if m:
+                try:
+                    n = int(m.group(1))
+                    if n > max_flying:
+                        max_flying = n
+                except ValueError:
+                    pass
+            elif _OUT_LAP_RE.search(ln):
+                out_done = True
+        self._completed_laps = max_flying
+        self._out_lap_done = out_done
+        out_tag = " (+ out-lap)" if out_done else ""
+        self._lap_counter.setText(
+            f"Laps recorded: {max_flying}{out_tag}"
+        )
+
+    def _poll(self) -> None:
+        st = self._runner.status()
+        log_lines = list(st["log"])
+        text = "\n".join(log_lines)
+        if text != self._log.toPlainText():
+            self._log.setPlainText(text)
+            sb = self._log.verticalScrollBar()
+            sb.setValue(sb.maximum())
+        self._update_lap_counter_from_log(log_lines)
+        running = bool(st["running"])
+        out = st.get("output") or ""
+        out_name = Path(out).name if out else ""
+        # Determine sub-state from log tail.
+        sub_state = ""
+        armed = any(_ARMED_RE.search(ln) for ln in log_lines)
+        insim_ready = any(_INSIM_READY_RE.search(ln) for ln in log_lines)
+        tail = log_lines[-30:]
+        insim_waiting = any(_INSIM_WAIT_RE.search(ln) for ln in tail)
+        if running and not armed:
+            if insim_waiting:
+                sub_state = " — waiting for LFS InSim"
+            elif any(_WAITING_RE.search(ln) for ln in tail):
+                sub_state = " — waiting for car to move"
+        # LED color logic:
+        #   not running                -> grey
+        #   running, InSim not yet up  -> red
+        #   running, InSim up          -> green
+        if not running:
+            led_color = "#5a5f66"
+            led_tip = "LFS InSim status: idle"
+        elif insim_waiting and not insim_ready:
+            led_color = "#d04848"
+            led_tip = "LFS InSim status: waiting for connection"
+        else:
+            led_color = "#3fbf5a"
+            led_tip = "LFS InSim status: connected"
+        self._led.setStyleSheet(_led_qss(led_color))
+        self._led.setToolTip(led_tip)
+        self._led_label.setText(
+            "LFS" if not running else ("LFS ●" if insim_ready else "LFS")
+        )
+        if running:
+            self._status.setText(
+                f"● Recording → {out_name}{sub_state}"
+            )
+            self._btn_start.setEnabled(False)
+            self._btn_stop.setEnabled(True)
+        else:
+            code = st.get("exit_code")
+            if code is None and not out:
+                self._status.setText("Idle.")
+            else:
+                self._status.setText(
+                    f"■ Finished (code={code}) → {out_name}"
+                )
+            self._btn_start.setEnabled(True)
+            self._btn_stop.setEnabled(False)
+        if self._was_running and not running:
+            self._was_running = False
+
+
+__all__ = ["CaptureTab"]

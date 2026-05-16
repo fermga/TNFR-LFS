@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lfs-race-engineer"
+version = "0.2.0"
+description = "Live-for-Speed real-time telemetry capture and Studio race-engineer overlay."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "LFS Race Engineer contributors" }]
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+]
+studio = [
+    "PySide6>=6.7",
+    "pyqtgraph>=0.13",
+]
+build = [
+    "pyinstaller>=6.6",
+]
+
+[project.scripts]
+lfs-telemetry = "lfs_telemetry.cli:main"
+lfs-race-engineer = "lfs_telemetry.studio.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_mode = "auto"
+markers = [
+    "asyncio: mark test as an asyncio coroutine (handled by pytest-asyncio)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

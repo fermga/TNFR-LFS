@@ -1,0 +1,15 @@
+{
+  "_comment": "User-editable car spec registry. Loaded by car_spec_for() if present. Keys are LFS short car names (3-6 chars). Use this to add mod cars or override official defaults. Fields not provided fall back to CarSpec defaults.",
+  "_schema": {
+    "mass_kg": "kerb + driver, in kg",
+    "wheelbase_m": "front-to-rear axle distance, in m",
+    "track_front_m": "front track width, in m",
+    "track_rear_m": "rear track width, in m",
+    "cg_height_m": "centre of gravity height above ground, in m",
+    "weight_dist_front": "static front-axle weight fraction, 0..1",
+    "driven": "RWD | FWD | AWD",
+    "mu_lat": "peak lateral tyre coefficient (~0.95 road, ~1.4 slicks+wing)",
+    "mu_long": "peak longitudinal tyre coefficient"
+  },
+  "cars": {}
+}
