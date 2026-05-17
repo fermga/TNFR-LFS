@@ -24,7 +24,7 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPen
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ...telemetry import LapTelemetry
 from ...telemetry.track_map import TrackMap
@@ -72,6 +72,28 @@ class TrackMapDock(QWidget):
         self._dot.hide()
         self._plot.addItem(self._dot)
 
+        self._legend = QLabel(self)
+        self._legend.setTextFormat(Qt.TextFormat.RichText)
+        self._legend.setWordWrap(True)
+        self._legend.setStyleSheet(
+            "QLabel {"
+            " background-color: rgba(15, 15, 18, 185);"
+            " border: 1px solid rgba(120,120,130,150);"
+            " border-radius: 6px;"
+            " color: #cfd6dc;"
+            " padding: 5px 7px;"
+            " font-size: 11px;"
+            "}"
+        )
+        self._legend.setText(
+            "<b>Legend</b> · "
+            "<span style='color:#6ab0ff'>●</span> cursor · "
+            "<span style='color:#ffffff'>╌╌</span> ideal line · "
+            "<span style='color:#ffd166'>···</span> KNW AI line · "
+            "<span style='color:#ff5d6c'>●</span> apex/slowest decile · "
+            "lap traces: selected-lap colors"
+        )
+
         # Per-lap polyline items, keyed by capture path.
         self._lines: Dict[Path, pg.PlotDataItem] = {}
 
@@ -89,6 +111,7 @@ class TrackMapDock(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(self._plot)
+        layout.addWidget(self._legend)
 
         signals.laps_selected.connect(self._on_laps_selected)
         signals.cursor_moved.connect(self._on_cursor_moved)

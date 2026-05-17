@@ -169,6 +169,16 @@ class StintTelemetry:
             if col in df:
                 out[f"friction_use_slope_per_lap_{c}"] = _slope(df["lap_index"], df[col])
 
+        # Per-wheel grip index trend (100 = high grip headroom,
+        # 0 = low grip headroom / saturated tyre behavior).
+        for c in WHEEL_ORDER:
+            col = f"grip_idx_{c}"
+            if col in df:
+                out[f"grip_idx_mean_{c}"] = float(df[col].mean())
+                out[f"grip_idx_slope_per_lap_{c}"] = _slope(
+                    df["lap_index"], df[col]
+                )
+
         # Aid usage trend (TC/ABS fraction per lap).
         for col in ("tc_active_fraction", "abs_active_fraction"):
             if col in df:
@@ -490,6 +500,60 @@ def _lap_metrics(idx: int, lap: LapTelemetry) -> dict[str, Any]:
             if arr.size:
                 row[f"friction_use_p95_{c}"] = float(np.percentile(arr, 95))
                 row[f"friction_use_max_{c}"] = float(arr.max())
+
+    # Per-wheel slip summaries + grip index (0..100, high=better).
+    for c in WHEEL_ORDER:
+        slip_ratio_col = f"wheel_{c}_slip_ratio"
+        slip_frac_col = f"wheel_{c}_slip_fraction"
+        tan_slip_col = f"wheel_{c}_tan_slip_angle"
+        temp_end = row.get(f"tyre_temp_end_c_{c}")
+        fric_p95 = row.get(f"friction_use_p95_{c}")
+
+        slip_ratio_p95 = np.nan
+        if slip_ratio_col in raw and len(raw):
+            arr = np.abs(pd.to_numeric(raw[slip_ratio_col], errors="coerce"))
+            arr = arr.dropna()
+            if not arr.empty:
+                slip_ratio_p95 = float(np.percentile(arr.to_numpy(), 95))
+                row[f"slip_ratio_p95_{c}"] = slip_ratio_p95
+
+        slip_frac_p95 = np.nan
+        if slip_frac_col in raw and len(raw):
+            arr = np.abs(pd.to_numeric(raw[slip_frac_col], errors="coerce"))
+            arr = arr.dropna()
+            if not arr.empty:
+                slip_frac_p95 = float(np.percentile(arr.to_numpy(), 95))
+                row[f"slip_fraction_p95_{c}"] = slip_frac_p95
+
+        tan_slip_p95 = np.nan
+        if tan_slip_col in raw and len(raw):
+            arr = np.abs(pd.to_numeric(raw[tan_slip_col], errors="coerce"))
+            arr = arr.dropna()
+            if not arr.empty:
+                tan_slip_p95 = float(np.percentile(arr.to_numpy(), 95))
+                row[f"tan_slip_p95_{c}"] = tan_slip_p95
+
+        # Grip proxy from multiple tyre stress indicators.
+        risk_terms: list[float] = []
+        if isinstance(fric_p95, (int, float)) and np.isfinite(fric_p95):
+            risk_terms.append(min(1.0, max(0.0, (float(fric_p95) - 0.78) / 0.25)))
+        if np.isfinite(slip_ratio_p95):
+            risk_terms.append(min(1.0, max(0.0, (float(slip_ratio_p95) - 0.08) / 0.14)))
+        if np.isfinite(slip_frac_p95):
+            risk_terms.append(min(1.0, max(0.0, (float(slip_frac_p95) - 0.10) / 0.25)))
+        if np.isfinite(tan_slip_p95):
+            risk_terms.append(min(1.0, max(0.0, (float(tan_slip_p95) - 0.07) / 0.12)))
+        if isinstance(temp_end, (int, float)) and np.isfinite(float(temp_end)):
+            risk_terms.append(min(1.0, max(0.0, (float(temp_end) - 102.0) / 28.0)))
+
+        if risk_terms:
+            # weighted mean (front-load tyre-dynamics terms over temp).
+            if len(risk_terms) >= 5:
+                w = np.array([0.30, 0.24, 0.20, 0.16, 0.10], dtype=float)
+                risk = float(np.average(np.array(risk_terms[:5]), weights=w))
+            else:
+                risk = float(np.mean(risk_terms))
+            row[f"grip_idx_{c}"] = max(0.0, min(100.0, (1.0 - risk) * 100.0))
 
     # Per-wheel tyre temperature: mean over the lap + end-of-lap value.
     # Source channel is OutSim's per-wheel air temperature (`wheel_{c}_air_temp_c`).

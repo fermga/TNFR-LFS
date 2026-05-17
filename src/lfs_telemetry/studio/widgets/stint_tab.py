@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
+import pandas as pd
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPen
@@ -107,16 +108,21 @@ class StintTab(QWidget):
             self._gfx,
             tr("Friction use p95 (circle saturation)"), "", row=4,
         )
+        self._p_grip = _styled_plot(
+            self._gfx,
+            tr("Grip index (per wheel)"), "%", row=5,
+        )
         self._p_damper = _styled_plot(
             self._gfx, tr("Damper work \u2014 RMS shaft speed"),
-            "mm/s", row=5,
+            "mm/s", row=6,
         )
         # Link x-axes so zoom/pan stays in sync per lap index.
         for p in (self._p_fuel, self._p_tyre, self._p_susp,
-                  self._p_friction, self._p_damper):
+                  self._p_friction, self._p_grip, self._p_damper):
             p.setXLink(self._p_times)
         for p in (self._p_times, self._p_fuel, self._p_tyre,
-                  self._p_susp, self._p_friction, self._p_damper):
+                  self._p_susp, self._p_friction, self._p_grip,
+                  self._p_damper):
             p.setMinimumHeight(140)
 
         # Items recreated each refresh; tracked so we can clear them.
@@ -163,7 +169,8 @@ class StintTab(QWidget):
 
     def _all_plots(self) -> List[pg.PlotItem]:
         return [self._p_times, self._p_fuel, self._p_tyre,
-                self._p_susp, self._p_friction, self._p_damper]
+                self._p_susp, self._p_friction, self._p_grip,
+                self._p_damper]
 
     def _clear_plots(self) -> None:
         for it in self._dyn_items:
@@ -292,11 +299,34 @@ class StintTab(QWidget):
             if line3 else ""
         )
 
+        # Line 4 — grip index summary per wheel and degradation slope.
+        line4: List[str] = []
+        for c in _UI_WHEEL_ORDER:
+            g_col = f"grip_idx_{c}"
+            if g_col not in df.columns:
+                continue
+            arr = pd.to_numeric(df[g_col], errors="coerce").dropna()
+            if arr.empty:
+                continue
+            mean_g = float(arr.mean())
+            slope_key = f"grip_idx_slope_per_lap_{c}"
+            slope = trends.get(slope_key)
+            if isinstance(slope, (int, float)) and np.isfinite(float(slope)):
+                slope_txt = f"{float(slope):+.2f}/lap"
+            else:
+                slope_txt = "--"
+            line4.append(f"{c} {mean_g:5.1f}% ({slope_txt})")
+        grip_summary = (
+            "grip avg / trend:  " + "   ".join(line4)
+            if line4 else ""
+        )
+
         html = "<br/>".join(
             seg for seg in (
                 "  •  ".join(line1),
                 "  •  ".join(line2) if line2 else "",
                 tyre_trend,
+                grip_summary,
             ) if seg
         )
         self._summary.setText(html)
@@ -307,6 +337,7 @@ class StintTab(QWidget):
         self._render_tyre_temps(df)
         self._render_suspension(df)
         self._render_friction(df)
+        self._render_grip(df)
         self._render_dampers(df, ordered)
 
     # ------------------------------------------------------------------
@@ -536,6 +567,40 @@ class StintTab(QWidget):
                 name=c,
             )
             self._dyn_items.append(curve)
+        plot.getViewBox().autoRange()
+
+    def _render_grip(self, df) -> None:
+        """Per-wheel grip index (100 high grip, 0 low grip)."""
+        x = self._x_axis(df)
+        plot = self._p_grip
+        plot.addLegend(offset=(8, 4), labelTextColor=TEXT_COLOR)
+        any_data = False
+        for c in _UI_WHEEL_ORDER:
+            col = f"grip_idx_{c}"
+            if col not in df.columns:
+                continue
+            y = pd.to_numeric(df[col], errors="coerce").to_numpy(dtype=float)
+            if not np.isfinite(y).any():
+                continue
+            any_data = True
+            color = _WHEEL_COLORS[c]
+            curve = plot.plot(
+                x, y,
+                pen=pg.mkPen(color, width=2),
+                symbol="o", symbolSize=5,
+                symbolBrush=color, symbolPen=None,
+                name=c,
+            )
+            self._dyn_items.append(curve)
+        if any_data:
+            # Typical "healthy" grip guide.
+            ref_pen = QPen(pg.mkColor(MUTED_COLOR))
+            ref_pen.setStyle(Qt.PenStyle.DashLine)
+            ref_pen.setCosmetic(True)
+            ref = pg.InfiniteLine(pos=70.0, angle=0, pen=ref_pen,
+                                  movable=False)
+            plot.addItem(ref)
+            self._dyn_items.append(ref)
         plot.getViewBox().autoRange()
 
 

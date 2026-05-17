@@ -38,19 +38,47 @@ class ChannelInfo:
         self,
         *,
         translate: Callable[[str], str] | None = None,
+        language: str | None = None,
     ) -> str:
         """Rich HTML tooltip combining label, units, description and
         interpretation guidance. Safe to feed directly into Qt's
         ``ToolTipRole`` (Qt auto-detects HTML by the leading ``<``).
         """
         tr = translate or (lambda s: s)
+        lang = (language or "en").lower()
+
         label = tr(self.label)
+        if lang == "es" and label == self.label:
+            label = _LABEL_ES_FALLBACK.get(self.label, self.label)
         units_value = tr(self.units)
         group = tr(self.group)
-        description = tr(self.description) if self.description else ""
-        interpretation = (
-            tr(self.interpretation) if self.interpretation else ""
+        if lang == "es" and group == self.group:
+            group = _GROUP_ES_FALLBACK.get(self.group, self.group)
+
+        description_text = self.description
+        if lang == "es" and description_text:
+            description_text = _DESCRIPTION_ES_FALLBACK.get(
+                description_text,
+                description_text,
+            )
+        description = tr(description_text) if description_text else ""
+
+        interpretation_text = self.interpretation
+        if lang == "es":
+            interpretation_text = _interpretation_for_lang(
+                self.column,
+                self.group,
+                language="es",
+            )
+        interpretation = tr(interpretation_text) if interpretation_text else ""
+
+        engineer_focus, driver_focus = _focus_notes_for(
+            self.column,
+            self.group,
+            language=lang,
         )
+        engineer_header = tr("Engineer focus")
+        driver_header = tr("Driver focus")
         how_to_read = tr("How to read it")
 
         units = f" [{units_value}]" if units_value else ""
@@ -66,7 +94,267 @@ class ChannelInfo:
                 f"<u>{how_to_read}</u>: {interpretation}"
                 "</div>"
             )
+        if engineer_focus:
+            parts.append(
+                "<div style='margin-top:4px;'>"
+                f"<u>{engineer_header}</u>: {engineer_focus}"
+                "</div>"
+            )
+        if driver_focus:
+            parts.append(
+                "<div style='margin-top:4px;'>"
+                f"<u>{driver_header}</u>: {driver_focus}"
+                "</div>"
+            )
         return "<div style='max-width:380px;'>" + "<br>".join(parts) + "</div>"
+
+
+_GROUP_ES_FALLBACK: dict[str, str] = {
+    "Driver": "Piloto",
+    "Vehicle": "Vehículo",
+    "Engine": "Motor",
+    "Chassis": "Chasis",
+    "Suspension": "Suspensión",
+    "Tyre": "Neumáticos",
+    "Derived": "Derivados",
+    "Track": "Circuito",
+    "Aids": "Ayudas",
+    "Context": "Contexto",
+}
+
+
+_LABEL_ES_FALLBACK: dict[str, str] = {
+    "Speed": "Velocidad",
+    "Throttle": "Acelerador",
+    "Brake": "Freno",
+    "Steer (raw)": "Dirección (bruta)",
+    "Steer Torque": "Par de dirección",
+    "Long. accel": "Acel. long.",
+    "Lat. accel": "Acel. lat.",
+    "Yaw rate": "Tasa de guiñada",
+    "Understeer idx": "Índice de subviraje",
+    "Brake bias front": "Reparto de frenada delante",
+    "Fuel": "Combustible",
+}
+
+
+_DESCRIPTION_ES_FALLBACK: dict[str, str] = {
+    "Wheel-derived speed": "Velocidad derivada de ruedas",
+    "Engine speed": "Régimen del motor",
+    "Throttle pedal (0..1)": "Pedal de acelerador (0..1)",
+    "Brake pedal (0..1)": "Pedal de freno (0..1)",
+    "Steering wheel angle": "Ángulo del volante",
+    "FFB steering torque": "Par de dirección FFB",
+    "+forward, -brake": "+adelante, -frenada",
+    "+right": "+derecha",
+    "Fuel level (0..1)": "Nivel de combustible (0..1)",
+}
+
+
+_INTERP_BY_COLUMN_ES: dict[str, str] = {
+    "speed_ms": (
+        "Velocidad longitudinal del coche. Compárala en entrada,"
+        " ápice y salida para detectar dónde ganas o pierdes tiempo."
+    ),
+    "throttle": (
+        "Posición del acelerador (0..1). Una rampa suave al salir"
+        " de curva suele indicar buena tracción y control."
+    ),
+    "brake": (
+        "Presión de freno (0..1). Busca un pico inicial fuerte y"
+        " una liberación progresiva hacia el giro (trail braking)."
+    ),
+    "input_steer": (
+        "Ángulo de volante. Trazas limpias y sin serrucho suelen"
+        " indicar un coche estable y una conducción precisa."
+    ),
+    "steer_torque_nm": (
+        "Par de dirección (FFB). Si se aplana o satura, puedes estar"
+        " perdiendo información del tren delantero."
+    ),
+    "accel_x": (
+        "Aceleración longitudinal. Negativa al frenar, positiva al"
+        " acelerar. Útil para comparar eficacia de frenada y salida."
+    ),
+    "accel_y": (
+        "Aceleración lateral. El pico absoluto en curva refleja el"
+        " agarre lateral realmente usado."
+    ),
+    "ang_vel_z": (
+        "Tasa de guiñada. Relaciona cuánto rota el coche con lo que"
+        " pides con el volante en cada fase de la curva."
+    ),
+    "yaw_rate_rads": (
+        "Guiñada medida del chasis. Compárala con la teórica para"
+        " diagnosticar subviraje/sobreviraje."
+    ),
+    "understeer_index": (
+        "Índice de balance: positivo=subviraje, negativo=sobreviraje."
+        " Mira en qué fase de curva aparece el pico."
+    ),
+    "brake_bias_front_real": (
+        "Reparto real de frenada delante. Si se va demasiado delante,"
+        " tenderás a bloquear delante; demasiado atrás, inestabilidad."
+    ),
+    "fuel": (
+        "Nivel de combustible (0..1). La pendiente de la curva sirve"
+        " para estimar consumo por vuelta y ventana de parada."
+    ),
+}
+
+
+_FOCUS_BY_COLUMN_EN: dict[str, tuple[str, str]] = {
+    "speed_ms": (
+        "Engineer: compare minimum-speed and corner-exit speed by lap"
+        " and sector to separate line losses from power losses.",
+        "Driver: focus on carrying entry speed without delaying"
+        " throttle pickup at the apex.",
+    ),
+    "throttle": (
+        "Engineer: quantify throttle smoothness and time-at-full-"
+        "throttle; spikes often correlate with traction instability.",
+        "Driver: build one clean throttle ramp at exit instead of"
+        " repeated stabs.",
+    ),
+    "brake": (
+        "Engineer: check initial bite, release rate, and consistency"
+        " across laps to tune bias and pedal map.",
+        "Driver: brake hard early, then bleed pressure smoothly into"
+        " turn-in to keep front grip.",
+    ),
+    "input_steer": (
+        "Engineer: steering oscillations indicate instability or"
+        " over-sensitive front axle setup.",
+        "Driver: reduce micro-corrections; one decisive arc is usually"
+        " faster than multiple small fixes.",
+    ),
+    "steer_torque_nm": (
+        "Engineer: monitor clipping/saturation to preserve FFB"
+        " information quality.",
+        "Driver: if steering goes numb at apex, reduce steering angle"
+        " demand and re-balance entry.",
+    ),
+    "accel_x": (
+        "Engineer: compare peak decel and brake-release timing for"
+        " braking performance benchmarking.",
+        "Driver: maximize straight-line decel, then release progressively"
+        " as steering is added.",
+    ),
+    "accel_y": (
+        "Engineer: use peak lateral-g by corner to identify where grip"
+        " is under-used.",
+        "Driver: aim to reach consistent lateral-g peaks without"
+        " scrubbing mid-corner speed.",
+    ),
+    "understeer_index": (
+        "Engineer: map peaks by corner phase to decide whether changes"
+        " belong to front geometry, rear support, or diff.",
+        "Driver: positive peaks suggest waiting for rotation; negative"
+        " peaks ask for calmer throttle/steer timing.",
+    ),
+    "brake_bias_front_real": (
+        "Engineer: track bias drift under load to validate setup and"
+        " ABS behavior.",
+        "Driver: if rear gets nervous on entry, move a touch forward;"
+        " if front locks first, move rearward.",
+    ),
+}
+
+
+_FOCUS_BY_COLUMN_ES: dict[str, tuple[str, str]] = {
+    "speed_ms": (
+        "Ingeniero: compara velocidad mínima y de salida por vuelta y"
+        " sector para separar pérdidas por trazada y por potencia.",
+        "Piloto: prioriza conservar velocidad de entrada sin retrasar"
+        " la apertura de gas en el ápice.",
+    ),
+    "throttle": (
+        "Ingeniero: mide suavidad de gas y tiempo a fondo; picos suelen"
+        " correlacionar con falta de tracción.",
+        "Piloto: construye una rampa limpia de gas en salida, evita"
+        " golpecitos repetidos.",
+    ),
+    "brake": (
+        "Ingeniero: revisa mordida inicial, velocidad de liberación y"
+        " consistencia para ajustar reparto y mapa de freno.",
+        "Piloto: frena fuerte al inicio y suelta de forma progresiva"
+        " al empezar el giro.",
+    ),
+    "input_steer": (
+        "Ingeniero: oscilaciones de dirección apuntan a inestabilidad"
+        " o exceso de sensibilidad del tren delantero.",
+        "Piloto: reduce microcorrecciones; un arco claro suele ser más"
+        " rápido que varias correcciones pequeñas.",
+    ),
+    "steer_torque_nm": (
+        "Ingeniero: vigila saturación/clipping para mantener calidad de"
+        " información en el FFB.",
+        "Piloto: si el volante se queda 'muerto' en ápice, pide menos"
+        " ángulo y reequilibra la entrada.",
+    ),
+    "accel_x": (
+        "Ingeniero: compara pico de deceleración y timing de liberación"
+        " de freno para evaluar rendimiento de frenada.",
+        "Piloto: maximiza frenada en recta y libera progresivamente al"
+        " añadir dirección.",
+    ),
+    "accel_y": (
+        "Ingeniero: usa pico de g lateral por curva para detectar dónde"
+        " no se está explotando el agarre.",
+        "Piloto: busca picos de g lateral repetibles sin arrastrar"
+        " velocidad en mitad de curva.",
+    ),
+    "understeer_index": (
+        "Ingeniero: localiza picos por fase de curva para decidir si"
+        " tocar geometría delantera, apoyo trasero o diferencial.",
+        "Piloto: picos positivos piden esperar rotación; negativos"
+        " piden suavizar gas/dirección.",
+    ),
+    "brake_bias_front_real": (
+        "Ingeniero: sigue la deriva del reparto bajo carga para validar"
+        " setup y actuación del ABS.",
+        "Piloto: si el eje trasero se mueve en entrada, adelanta un"
+        " poco; si bloquea delante, atrasa.",
+    ),
+}
+
+
+def _interpretation_for_lang(
+    column: str,
+    group: str,
+    *,
+    language: str,
+) -> str:
+    if language != "es":
+        return _interpretation_for(column, group)
+    if column in _INTERP_BY_COLUMN_ES:
+        return _INTERP_BY_COLUMN_ES[column]
+    return _GROUP_ES_FALLBACK.get(group, _interpretation_for(column, group))
+
+
+def _focus_notes_for(
+    column: str,
+    group: str,
+    *,
+    language: str,
+) -> tuple[str, str]:
+    if language == "es":
+        if column in _FOCUS_BY_COLUMN_ES:
+            return _FOCUS_BY_COLUMN_ES[column]
+        return (
+            "Ingeniero: usa este canal para comparar consistencia por"
+            " vuelta/sector y validar cambios de setup.",
+            "Piloto: observa tendencia y repetibilidad; una señal más"
+            " estable suele traducirse en más ritmo.",
+        )
+    if column in _FOCUS_BY_COLUMN_EN:
+        return _FOCUS_BY_COLUMN_EN[column]
+    return (
+        "Engineer: use this channel to compare consistency by lap and"
+        " sector, and to validate setup changes.",
+        "Driver: track trend and repeatability; a cleaner, steadier"
+        " trace usually means more pace.",
+    )
 
 
 # (column, label, units, group, description)

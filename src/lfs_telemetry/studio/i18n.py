@@ -289,6 +289,8 @@ _ES: dict[str, str] = {
         "Carga vertical m\u00e1xima (suspensi\u00f3n)",
     "Friction use p95 (circle saturation)":
         "Uso de fricci\u00f3n p95 (saturaci\u00f3n del c\u00edrculo)",
+    "Grip index (per wheel)":
+        "\u00cdndice de agarre (por rueda)",
     "Damper work \u2014 RMS shaft speed":
         "Trabajo de amortiguadores \u2014 velocidad RMS del v\u00e1stago",
     "Stint build failed: {error}":
@@ -367,6 +369,10 @@ _ES: dict[str, str] = {
         "G-metro (c\u00edrculo de fricci\u00f3n)",
     "Delta bar vs personal best":
         "Barra de delta vs mejor personal",
+    "Session info (dynamic)":
+        "Informaci\u00f3n de sesi\u00f3n (din\u00e1mica)",
+    "Grip (per wheel)":
+        "Agarre (por rueda)",
     "Gap to driver ahead": "Diferencia con el coche de delante",
     "Gap to driver behind": "Diferencia con el coche de detr\u00e1s",
     "Gear (big digit)": "Marcha (d\u00edgito grande)",
@@ -381,6 +387,10 @@ _ES: dict[str, str] = {
     "RPM": "RPM",
     "G-meter full scale:": "Escala completa del g-metro:",
     "G-meter": "G-metro",
+    "Session overlay compact": "Overlay de sesión compacto",
+    "Show condensed session info in the session overlay module.":
+        "Muestra información de sesión condensada en el módulo"
+        " de overlay de sesión.",
     "Start a capture, then tick the modules you want. "
     "Each window is frameless, stays on top, and remembers "
     "its last position and opacity.":
@@ -481,10 +491,21 @@ _ES: dict[str, str] = {
     "Speed": "Velocidad",
     "Gear": "Marcha",
     "Timing": "Cron\u00f3metros",
+    "Race classification": "Clasificación de carrera",
+    "Qualifying leaderboard": "Tabla de clasificación",
+    "Session leaderboard": "Tabla de sesión",
+    "No classification data yet.":
+        "Aún no hay datos de clasificación.",
+    "Pos": "Pos",
+    "Driver": "Piloto",
+    "Last": "Última",
+    "Best": "Mejor",
     "Gaps to rivals": "Huecos a rivales",
     "Fuel / Drive": "Combustible / Conducci\u00f3n",
     "Waiting for capture\u2026": "Esperando captura\u2026",
     "weather {value}": "tiempo {value}",
+    "practice": "entrenamiento",
+    "qualifying": "clasificaci\u00f3n",
     "race": "carrera",
     "idle": "inactivo",
     "ARMED": "ARMADO",
@@ -509,6 +530,8 @@ _ES: dict[str, str] = {
     "What it is &amp; how to read it":
         "Qu\u00e9 es y c\u00f3mo leerlo",
     "How to read it": "C\u00f3mo leerlo",
+    "Engineer focus": "Enfoque de ingeniero",
+    "Driver focus": "Enfoque de piloto",
     "Lat. accel": "Acel. lat.",
     "+right": "+derecha",
     "Lateral acceleration (m/s\u00b2, +left). Its absolute peak in a "

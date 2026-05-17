@@ -23,7 +23,7 @@ from .telemetry.node_delta import NodeDeltaTracker
 from .telemetry.predict import SplitPredictor
 from .telemetry.replay import write_csv_replay
 from .telemetry.lap_slicer import reslice_csv, write_per_lap_files
-from .telemetry.protocol.packets import OSO_ALL
+from .telemetry.protocol.packets import OSO_ALL, WHEEL_ORDER
 from .telemetry.car_calibration import CarSpecStore, RestCalibrator
 
 
@@ -720,6 +720,9 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                             accel_lon_v = float(ay)
                         max_slip_v: float | None = None
                         max_slip_ratio_v: float | None = None
+                        tyres_live: list[
+                            dict[str, float | str | bool | None]
+                        ] = []
                         os2 = getattr(sample, "outsim2", None)
                         if os2 is not None and os2.wheels:
                             max_slip_v = max(
@@ -728,6 +731,20 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                             max_slip_ratio_v = max(
                                 abs(w.slip_ratio) for w in os2.wheels
                             )
+                            tyres_live = [
+                                {
+                                    "corner": corner,
+                                    "temp_c": float(w.air_temp_c),
+                                    "slip_frac": float(w.slip_fraction),
+                                    "slip_ratio": float(w.slip_ratio),
+                                    "load_n": float(w.vertical_load_n),
+                                    "tan_slip": float(w.tan_slip_angle),
+                                    "fx_n": float(w.x_force_n),
+                                    "fy_n": float(w.y_force_n),
+                                    "touching": bool(w.touching),
+                                }
+                                for corner, w in zip(WHEEL_ORDER, os2.wheels)
+                            ]
                             # Prefer extended OutSim's clutch/handbrake
                             # over OutGauge-only when both available.
                         clutch_v = (
@@ -766,6 +783,7 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                                 last_sample_accel_lon_ms2=accel_lon_v,
                                 last_sample_max_slip=max_slip_v,
                                 last_sample_max_slip_ratio=max_slip_ratio_v,
+                                last_sample_tyres=tyres_live,
                                 monotonic_ts=now_loop,
                                 delta_to_best_ms=node_delta_value,
                                 predicted_lap_ms=predicted_lap_value,

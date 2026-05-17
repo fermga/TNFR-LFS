@@ -31,7 +31,7 @@ from PySide6.QtWidgets import QSizePolicy, QSplitter, QVBoxLayout, QWidget
 from ...telemetry import LapTelemetry, channel_info
 from ...telemetry.comparison import LapComparison
 from ...telemetry.sectors import insim_split_distances_m, sector_times_s
-from ..i18n import tr
+from ..i18n import current_language, tr
 from ..theme import CURSOR_COLOR, GRID_COLOR, MUTED_COLOR, TEXT_COLOR, trace_color
 from .lap_arrays import LapArrayCache
 
@@ -212,7 +212,12 @@ class MultiChannelChart(QWidget):
                 continue
             info = channel_info(col)
             row = _Row(col, info.units, self)
-            row.plot.setToolTip(info.tooltip_html(translate=tr))
+            row.plot.setToolTip(
+                info.tooltip_html(
+                    translate=tr,
+                    language=current_language(),
+                )
+            )
             self._rows[col] = row
             self._splitter.insertWidget(position, row.plot)
             self._wire_cursor(row)

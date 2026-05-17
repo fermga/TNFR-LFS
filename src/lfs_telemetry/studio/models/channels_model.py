@@ -20,7 +20,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 
 from ...telemetry import ChannelInfo, channels_by_group
-from ..i18n import tr
+from ..i18n import current_language, tr
 
 
 # Display order matches the Dash viewer for muscle memory continuity.
@@ -112,6 +112,7 @@ class ChannelTreeModel(QStandardItemModel):
     # ------------------------------------------------------------------
 
     def _populate(self, groups: dict[str, list[ChannelInfo]]) -> None:
+        lang = current_language()
         ordered = [g for g in _GROUP_ORDER if g in groups] + [
             g for g in sorted(groups) if g not in _GROUP_ORDER
         ]
@@ -129,7 +130,7 @@ class ChannelTreeModel(QStandardItemModel):
                 name = QStandardItem(tr(info.label))
                 name.setEditable(False)
                 name.setData(info.column, self.ColumnRole)
-                name.setData(info.tooltip_html(translate=tr),
+                name.setData(info.tooltip_html(translate=tr, language=lang),
                              Qt.ItemDataRole.ToolTipRole)
                 name.setCheckable(True)
                 name.setCheckState(Qt.CheckState.Unchecked)
@@ -139,7 +140,7 @@ class ChannelTreeModel(QStandardItemModel):
                 name.setFlags(Qt.ItemFlag.NoItemFlags)
                 units = QStandardItem(tr(info.units))
                 units.setEditable(False)
-                units.setData(info.tooltip_html(translate=tr),
+                units.setData(info.tooltip_html(translate=tr, language=lang),
                               Qt.ItemDataRole.ToolTipRole)
                 units.setFlags(Qt.ItemFlag.NoItemFlags)
                 group_item.appendRow([name, units])

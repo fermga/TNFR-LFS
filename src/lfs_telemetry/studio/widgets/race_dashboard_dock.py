@@ -153,6 +153,19 @@ class RaceDashboardDock(QWidget):
         self._w_speed = _BigValue(tr("Speed"), self, size_pt=20)
         self._w_gear = _BigValue(tr("Gear"), self, size_pt=28)
 
+        self._standings_table = QLabel(self)
+        self._standings_table.setTextFormat(Qt.TextFormat.PlainText)
+        self._standings_table.setWordWrap(False)
+        self._standings_table.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        )
+        self._standings_table.setStyleSheet(
+            f"color:{TEXT_COLOR};"
+            "font-family: Consolas, 'Courier New', monospace;"
+            "font-size: 10pt;"
+            "padding: 4px 6px;"
+        )
+
         # Group: timing
         timing = QGroupBox(tr("Timing"), self)
         gt = QGridLayout(timing)
@@ -183,6 +196,12 @@ class RaceDashboardDock(QWidget):
         gf.addWidget(self._w_speed, 1, 0)
         gf.addWidget(self._w_gear, 1, 1)
 
+        standings = QGroupBox(tr("Race classification"), self)
+        self._standings_group = standings
+        gs = QVBoxLayout(standings)
+        gs.setContentsMargins(4, 4, 4, 4)
+        gs.addWidget(self._standings_table)
+
         # Context strip (track, weather, race status, capture state)
         self._context = QLabel(tr("Waiting for capture\u2026"), self)
         self._context.setWordWrap(True)
@@ -199,6 +218,7 @@ class RaceDashboardDock(QWidget):
         lay.addWidget(timing)
         lay.addWidget(gaps)
         lay.addWidget(fuel)
+        lay.addWidget(standings)
         lay.addStretch(1)
 
         # ----- Wiring --------------------------------------------------
@@ -245,6 +265,45 @@ class RaceDashboardDock(QWidget):
             self._w_fuel_laps, self._w_speed, self._w_gear,
         ):
             w.set_value("—", _NEUTRAL)
+        self._standings_table.setText(tr("No classification data yet."))
+
+    def _set_standings(self, snap: dict[str, Any]) -> None:
+        mode = str(snap.get("session_mode") or "practice")
+        if mode == "race":
+            self._standings_group.setTitle(tr("Race classification"))
+        elif mode == "qualifying":
+            self._standings_group.setTitle(tr("Qualifying leaderboard"))
+        else:
+            self._standings_group.setTitle(tr("Session leaderboard"))
+
+        standings = snap.get("standings")
+        if not isinstance(standings, list) or not standings:
+            self._standings_table.setText(tr("No classification data yet."))
+            return
+        head = "{pos:>3} {drv:<14} {lap:>3} {lst:>10} {bst:>10}".format(
+            pos=tr("Pos"),
+            drv=tr("Driver"),
+            lap=tr("Lap"),
+            lst=tr("Last"),
+            bst=tr("Best"),
+        )
+        lines: list[str] = [head]
+        max_rows = 10
+        for row in standings[:max_rows]:
+            try:
+                pos = int(row.get("pos", 0))
+                name = str(row.get("name") or "?")
+                lap = int(row.get("lap", 0))
+                last = _fmt_lap_ms(row.get("last_lap_ms"))
+                best = _fmt_lap_ms(row.get("best_lap_ms"))
+                mark = ">" if bool(row.get("view")) else " "
+                lines.append(
+                    f"{mark}{pos:>2} {name[:14]:<14} {lap:>3}"
+                    f" {last:>10} {best:>10}"
+                )
+            except (TypeError, ValueError):
+                continue
+        self._standings_table.setText("\n".join(lines))
 
     # ------------------------------------------------------------------
     # Snapshot handler
@@ -252,39 +311,29 @@ class RaceDashboardDock(QWidget):
 
     @staticmethod
     def _gap_to_nearest(
-        cars: list[dict[str, Any]],
-        view_plid: int | None,
+        snap: dict[str, Any],
         *,
         ahead: bool,
     ) -> float | None:
-        """Return the smallest positive gap (m) to a rival in front
-        or behind the camera car, derived from per-car ``progress_m``
-        values when present.
+        """Return nearest rival gap in metres from the published
+        traffic snapshot.
+
+        ``live_publisher`` already computes robust ahead/behind gaps
+        from race-position and spatial fallbacks. Reusing those values
+        keeps the dock coherent with the capture-side telemetry logic.
         """
-        if view_plid is None or not cars:
-            return None
-        own_prog: float | None = None
-        for c in cars:
-            if int(c.get("plid", -1)) == view_plid:
-                own_prog = c.get("progress_m")
-                break
-        if own_prog is None:
-            return None
-        best: float | None = None
-        for c in cars:
-            if int(c.get("plid", -1)) == view_plid:
-                continue
-            p = c.get("progress_m")
-            if p is None:
-                continue
-            diff = float(p) - float(own_prog)
-            if ahead and diff > 0 and (best is None or diff < best):
-                best = diff
-            elif (not ahead) and diff < 0 and (
-                best is None or -diff < best
-            ):
-                best = -diff
-        return best
+        traffic = snap.get("traffic")
+        if isinstance(traffic, dict):
+            key = "ahead_gap_m" if ahead else "behind_gap_m"
+            raw = traffic.get(key)
+            if raw is not None:
+                try:
+                    value = float(raw)
+                except (TypeError, ValueError):
+                    value = None
+                if value is not None and value >= 0.0:
+                    return value
+        return None
 
     def _on_snapshot(self, snap: dict[str, Any]) -> None:
         if not snap:
@@ -298,6 +347,8 @@ class RaceDashboardDock(QWidget):
         armed = bool(snap.get("armed"))
         samples = int(snap.get("samples") or 0)
         bits: list[str] = [f"<b>{track}</b>"]
+        mode = str(snap.get("session_mode") or "practice")
+        bits.append(tr(mode))
         if weather:
             bits.append(tr("weather {value}").format(value=weather))
         if in_progress is True:
@@ -324,14 +375,19 @@ class RaceDashboardDock(QWidget):
         pos = snap.get("view_position")
         cars = snap.get("cars") or []
         n_cars = len(cars) if cars else 0
-        if pos:
+        traffic = snap.get("traffic")
+        if isinstance(traffic, dict):
+            n_from_traffic = traffic.get("num_cars")
+            if isinstance(n_from_traffic, int) and n_from_traffic > 0:
+                n_cars = n_from_traffic
+        if pos is not None:
             tag = f"P{int(pos)}" if n_cars == 0 else f"P{int(pos)}/{n_cars}"
             colour = _GOOD if int(pos) == 1 else _NEUTRAL
             self._w_position.set_value(tag, colour)
         else:
             self._w_position.set_value("—", _NEUTRAL)
         lap = snap.get("view_lap")
-        self._w_lap.set_value(str(int(lap)) if lap else "—")
+        self._w_lap.set_value(str(int(lap)) if lap is not None else "—")
 
         # ----- Timing -------------------------------------------------
         self._w_current.set_value(_fmt_lap_ms(snap.get("current_lap_ms")))
@@ -352,11 +408,13 @@ class RaceDashboardDock(QWidget):
         self._w_delta.set_value(delta_txt, delta_col)
 
         # ----- Gaps ---------------------------------------------------
-        view_plid = snap.get("view_plid")
-        gap_a = self._gap_to_nearest(cars, view_plid, ahead=True)
-        gap_b = self._gap_to_nearest(cars, view_plid, ahead=False)
+        gap_a = self._gap_to_nearest(snap, ahead=True)
+        gap_b = self._gap_to_nearest(snap, ahead=False)
         self._w_gap_ahead.set_value(_fmt_gap_m(gap_a))
         self._w_gap_behind.set_value(_fmt_gap_m(gap_b))
+
+        # ----- Classification -----------------------------------------
+        self._set_standings(snap)
 
         # ----- Fuel / drive -------------------------------------------
         fpct = snap.get("view_fuel_pct")

@@ -21,6 +21,7 @@ import json
 import logging
 import math
 import os
+import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,87 @@ from .protocol.packets import CompCar
 from .traffic import _build_snapshot
 
 _LOG = logging.getLogger(__name__)
+_LFS_COLOR_RE = re.compile(r"\^[0-9]")
+
+
+def _strip_lfs_color_codes(text: str) -> str:
+    cleaned = _LFS_COLOR_RE.sub("", text or "")
+    return cleaned.strip()
+
+
+def _player_name_for(ctx: RaceContext, plid: int) -> str:
+    p = ctx.players.get(plid)
+    if p is None:
+        return f"PLID {plid}"
+    name = _strip_lfs_color_codes(p.player_name)
+    return name or f"PLID {plid}"
+
+
+def _build_standings(
+    ctx: RaceContext,
+    cars: Iterable[CompCar],
+    *,
+    view_plid: int | None,
+    session_mode: str,
+) -> list[dict[str, Any]]:
+    cars_list = list(cars)
+    if session_mode == "race":
+        ordered = sorted(
+            cars_list,
+            key=lambda c: (
+                c.position if c.position > 0 else 10_000,
+                c.player_id,
+            ),
+        )
+    else:
+        # Practice/qualifying: leaderboard by best lap.
+        # If a driver has no best yet, push down and use latest lap,
+        # then race position as a final stable tie-breaker.
+        def _best_for(c: CompCar) -> int:
+            laps = ctx.lap_times_ms.get(c.player_id, [])
+            return min(laps) if laps else 10**9
+
+        def _last_for(c: CompCar) -> int:
+            return int(ctx.last_lap_ms.get(c.player_id) or 10**9)
+
+        ordered = sorted(
+            cars_list,
+            key=lambda c: (
+                _best_for(c),
+                _last_for(c),
+                c.position if c.position > 0 else 10_000,
+                c.player_id,
+            ),
+        )
+    out: list[dict[str, Any]] = []
+    for c in ordered:
+        laps = ctx.lap_times_ms.get(c.player_id, [])
+        best = min(laps) if laps else None
+        out.append(
+            {
+                "pos": int(c.position),
+                "plid": int(c.player_id),
+                "name": _player_name_for(ctx, int(c.player_id)),
+                "lap": int(c.lap),
+                "last_lap_ms": ctx.last_lap_ms.get(c.player_id),
+                "best_lap_ms": int(best) if best is not None else None,
+                "speed_kmh": round(float(c.speed_ms) * 3.6, 1),
+                "rank_mode": session_mode,
+                "view": (view_plid is not None and c.player_id == view_plid),
+            }
+        )
+    return out
+
+
+def _session_mode(ctx: RaceContext) -> str:
+    # LFS InSim convention:
+    # race_in_progress: 0=none, 1=race, 2=qualifying.
+    rip = int(ctx.race_in_progress or 0)
+    if rip == 1:
+        return "race"
+    if rip == 2:
+        return "qualifying"
+    return "practice"
 
 
 @dataclass(slots=True)
@@ -118,6 +200,7 @@ def build_snapshot(
     last_sample_accel_lon_ms2: float | None = None,
     last_sample_max_slip: float | None = None,
     last_sample_max_slip_ratio: float | None = None,
+    last_sample_tyres: list[dict[str, Any]] | None = None,
     monotonic_ts: float = 0.0,
     delta_to_best_ms: int | None = None,
     predicted_lap_ms: int | None = None,
@@ -147,6 +230,7 @@ def build_snapshot(
         "view_accel_lon_ms2": None,
         "view_max_slip": None,
         "view_max_slip_ratio": None,
+        "tyres": [],
         "view_x_m": None,
         "view_y_m": None,
         "view_heading_rad": None,
@@ -172,7 +256,9 @@ def build_snapshot(
         "track": None,
         "weather": None,
         "race_in_progress": None,
+        "session_mode": "practice",
         "traffic": None,
+        "standings": [],
         "cars": [],
         "cars_world": [],
     }
@@ -203,11 +289,53 @@ def build_snapshot(
         snap["view_max_slip_ratio"] = round(
             float(last_sample_max_slip_ratio), 3
         )
+    if last_sample_tyres:
+        tyres: list[dict[str, Any]] = []
+        for row in last_sample_tyres:
+            try:
+                tyres.append(
+                    {
+                        "corner": str(row.get("corner") or "?"),
+                        "temp_c": (
+                            round(float(row.get("temp_c")), 1)
+                            if row.get("temp_c") is not None else None
+                        ),
+                        "slip_frac": (
+                            round(float(row.get("slip_frac")), 3)
+                            if row.get("slip_frac") is not None else None
+                        ),
+                        "slip_ratio": (
+                            round(float(row.get("slip_ratio")), 3)
+                            if row.get("slip_ratio") is not None else None
+                        ),
+                        "load_n": (
+                            round(float(row.get("load_n")), 1)
+                            if row.get("load_n") is not None else None
+                        ),
+                        "tan_slip": (
+                            round(float(row.get("tan_slip")), 4)
+                            if row.get("tan_slip") is not None else None
+                        ),
+                        "fx_n": (
+                            round(float(row.get("fx_n")), 1)
+                            if row.get("fx_n") is not None else None
+                        ),
+                        "fy_n": (
+                            round(float(row.get("fy_n")), 1)
+                            if row.get("fy_n") is not None else None
+                        ),
+                        "touching": bool(row.get("touching", False)),
+                    }
+                )
+            except (TypeError, ValueError):
+                continue
+        snap["tyres"] = tyres
     if ctx is None:
         return snap
     snap["track"] = ctx.track
     snap["weather"] = ctx.weather
     snap["race_in_progress"] = ctx.race_in_progress
+    snap["session_mode"] = _session_mode(ctx)
     plid = ctx.view_player_id
     if plid is not None:
         snap["view_plid"] = int(plid)
@@ -236,9 +364,17 @@ def build_snapshot(
     if delta_to_best_ms is not None:
         snap["delta_vs_best_ms"] = int(delta_to_best_ms)
     mci = ctx.last_mci
+    if mci is not None and mci.cars:
+        snap["standings"] = _build_standings(
+            ctx,
+            mci.cars,
+            view_plid=plid,
+            session_mode=str(snap["session_mode"]),
+        )
     if mci is not None and mci.cars and plid is not None:
         view: CompCar | None = next(
-            (c for c in mci.cars if c.player_id == plid), None
+            (c for c in mci.cars if c.player_id == plid),
+            None,
         )
         if view is not None:
             snap["view_position"] = int(view.position)

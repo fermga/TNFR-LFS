@@ -41,7 +41,9 @@ from .live_modules import (
     GearWindow,
     RadarWindow,
     RpmWindow,
+    SessionInfoWindow,
     SpeedWindow,
+    TyreRiskWindow,
 )
 
 
@@ -65,6 +67,10 @@ _MODULES: list[tuple[str, str, _ModuleFactory]] = [
     # Headline timing
     ("delta", "Delta bar vs personal best",
      _factory(DeltaBarWindow)),
+    ("session_info", "Session info (dynamic)",
+     _factory(SessionInfoWindow)),
+    ("grip", "Grip (per wheel)",
+     _factory(TyreRiskWindow)),
     # Gaps
     ("gap_ahead", "Gap to driver ahead",
      _factory(GapAheadWindow)),
@@ -227,9 +233,20 @@ class LiveTab(QWidget):
         self._g_full_scale.setSuffix(" g")
         self._g_full_scale.setValue(2.0)
 
+        self._session_compact = QCheckBox(tr("Session overlay compact"), self)
+        self._session_compact.setToolTip(
+            tr("Show condensed session info in the session overlay module."),
+        )
+        compact_raw = settings.value("overlay/session_info/compact", False)
+        compact_on = str(compact_raw).strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        self._session_compact.setChecked(compact_on)
+
         misc_form = QFormLayout()
         misc_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         misc_form.addRow(tr("G-meter full scale:"), self._g_full_scale)
+        misc_form.addRow("", self._session_compact)
         misc_box = QGroupBox(tr("G-meter"), self)
         misc_box.setLayout(misc_form)
 
@@ -263,6 +280,7 @@ class LiveTab(QWidget):
         self._delta_scale.valueChanged.connect(self._apply_delta_config)
         self._rpm_redline.valueChanged.connect(self._apply_rpm_config)
         self._g_full_scale.valueChanged.connect(self._apply_g_config)
+        self._session_compact.toggled.connect(self._apply_session_overlay_mode)
 
         # Poll for capture lifecycle / live.json path.
         self._timer = QTimer(self)
@@ -322,6 +340,8 @@ class LiveTab(QWidget):
             w.set_rpm_redline(self._rpm_redline.value())
         elif mid == "gmeter" and isinstance(w, GMeterWindow):
             w.set_full_scale_g(self._g_full_scale.value())
+        elif mid == "session_info" and isinstance(w, SessionInfoWindow):
+            w.set_compact_mode(self._session_compact.isChecked())
 
     # ------------------------------------------------------------------
     # Config propagation
@@ -351,6 +371,12 @@ class LiveTab(QWidget):
         w = self._widgets.get("gmeter")
         if isinstance(w, GMeterWindow):
             w.set_full_scale_g(self._g_full_scale.value())
+
+    def _apply_session_overlay_mode(self, on: bool) -> None:
+        QSettings(ORG, APP).setValue("overlay/session_info/compact", bool(on))
+        w = self._widgets.get("session_info")
+        if isinstance(w, SessionInfoWindow):
+            w.set_compact_mode(bool(on))
 
     def _apply_module_opacity(self, mid: str, pct: int) -> None:
         w = self._widgets.get(mid)
