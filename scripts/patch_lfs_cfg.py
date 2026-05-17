@@ -16,14 +16,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from lfs_telemetry.lfs_config import find_default_lfs_dir, patch_cfg
+from lfs_telemetry.lfs_config import patch_cfg
+from lfs_telemetry.lfs_paths import autodetect_lfs_dir
 
 
 def main() -> int:
     if len(sys.argv) >= 2:
         lfs_dir = Path(sys.argv[1])
     else:
-        guess = find_default_lfs_dir()
+        guess = autodetect_lfs_dir()
         if guess is None:
             print(
                 "Could not auto-detect LFS. "

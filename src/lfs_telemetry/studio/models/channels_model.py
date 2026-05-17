@@ -25,7 +25,7 @@ from ...telemetry import ChannelInfo, channels_by_group
 # Display order matches the Dash viewer for muscle memory continuity.
 _GROUP_ORDER: tuple[str, ...] = (
     "Driver", "Engine", "Vehicle", "Chassis",
-    "Suspension", "Tyre", "Derived", "Aids", "Lap", "Other",
+    "Suspension", "Tyre", "Derived", "Aids", "Other",
 )
 
 
@@ -81,8 +81,12 @@ class ChannelTreeModel(QStandardItemModel):
         wanted = set(columns)
         for group_row in range(self.rowCount()):
             group_item = self.item(group_row, 0)
+            if group_item is None:
+                continue
             for ch_row in range(group_item.rowCount()):
                 name_item = group_item.child(ch_row, 0)
+                if name_item is None:
+                    continue
                 column = name_item.data(self.ColumnRole)
                 if column in wanted and column in self._available_columns:
                     name_item.setCheckState(Qt.CheckState.Checked)
@@ -92,8 +96,12 @@ class ChannelTreeModel(QStandardItemModel):
         out: list[str] = []
         for group_row in range(self.rowCount()):
             group_item = self.item(group_row, 0)
+            if group_item is None:
+                continue
             for ch_row in range(group_item.rowCount()):
                 name_item = group_item.child(ch_row, 0)
+                if name_item is None:
+                    continue
                 if name_item.checkState() == Qt.CheckState.Checked:
                     out.append(name_item.data(self.ColumnRole))
         return out

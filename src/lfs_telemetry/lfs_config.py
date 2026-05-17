@@ -13,6 +13,11 @@ from pathlib import Path
 
 # Required LFS cfg.txt key/value pairs (LFS keys are case-sensitive,
 # space-separated). Values are the strings as they must appear on disk.
+#
+# NOTE: InSim has no cfg.txt key in LFS — it is started at runtime
+# with ``/insim <port>`` in the LFS console or by launching with
+# ``LFS.exe /insim=29999``. Writing an ``InSim Port`` entry makes LFS
+# show a red "unknown setting" warning at the top of the screen.
 REQUIRED_SETTINGS: dict[str, str] = {
     "OutSim Mode":     "2",      # 2 = OutSimPack2 extended packets
     "OutSim Opts":     "1ff",    # full extended payload
@@ -25,18 +30,12 @@ REQUIRED_SETTINGS: dict[str, str] = {
     "OutGauge IP":     "127.0.0.1",
     "OutGauge Port":   "30001",
     "OutGauge ID":     "0",
-    "InSim Port":      "29999",
 }
 
-# Candidate install folders we probe when the user has not chosen one yet.
-_DEFAULT_LFS_CANDIDATES: tuple[Path, ...] = (
-    Path(r"C:\LFS"),
-    Path(r"C:\Program Files\LFS"),
-    Path(r"C:\Program Files (x86)\LFS"),
-    Path(r"D:\LFS"),
-    Path(r"D:\Games\LFS"),
-    Path(r"C:\Games\LFS"),
-)
+# Candidate install folders are owned by :mod:`lfs_paths`
+# (``lfs_paths._STATIC_CANDIDATES``). This module keeps only the
+# cfg.txt patching logic and a couple of GUI-independent path
+# helpers — it deliberately does not duplicate discovery logic.
 
 
 @dataclass(slots=True)
@@ -62,26 +61,64 @@ class PatchResult:
         return "\n".join(lines)
 
 
-def find_default_lfs_dir() -> Path | None:
-    """Return the first plausible LFS install folder, or ``None``.
-
-    A folder qualifies if it exists and contains either ``LFS.exe`` or
-    ``cfg.txt``.
-    """
-    for cand in _DEFAULT_LFS_CANDIDATES:
-        if _looks_like_lfs_dir(cand):
-            return cand
-    return None
-
-
 def is_valid_lfs_dir(path: Path) -> bool:
-    """True if *path* looks like an LFS install (has LFS.exe or cfg.txt)."""
+    """True if *path* looks like an LFS install (has LFS.exe or cfg.txt).
+
+    GUI-independent primitive. Application code should call
+    :func:`lfs_telemetry.lfs_paths.is_valid_lfs_dir` instead — it
+    accepts ``None`` and is the public entry point.
+    """
     return _looks_like_lfs_dir(path)
 
 
 def cfg_path_for(lfs_dir: Path) -> Path:
     """Return the cfg.txt path inside *lfs_dir*."""
     return Path(lfs_dir) / "cfg.txt"
+
+
+def lfs_data_dir(lfs_dir: Path) -> Path:
+    """Return the ``<lfs_dir>/data`` folder where LFS writes exports."""
+    return Path(lfs_dir) / "data"
+
+
+def lfs_setups_dir(lfs_dir: Path, car_key: str | None = None) -> Path:
+    """Return ``<lfs_dir>/data/setups[/<CAR>]``.
+
+    When ``car_key`` is provided the per-car subfolder is returned;
+    otherwise the root setups folder is returned. The path may not
+    exist on disk yet — this is purely a path helper used to seed
+    the default location of a file-picker dialog.
+    """
+    root = lfs_data_dir(lfs_dir) / "setups"
+    if car_key:
+        return root / car_key.upper()
+    return root
+
+
+def find_lfs_car_info_bins(lfs_dir: Path) -> list[Path]:
+    """Return every ``*_CAR_info.bin`` file found under ``<lfs_dir>/data``.
+
+    LFS Programmer Mode writes these exports there. Returns an empty
+    list if the data folder does not exist or contains no exports.
+    """
+    data = lfs_data_dir(lfs_dir)
+    if not data.is_dir():
+        return []
+    # Be permissive about case (LFS uses ``FBM_CAR_info.bin``, mods may
+    # use any case). Sort for deterministic output.
+    found: list[Path] = []
+    seen: set[str] = set()
+    for p in data.iterdir():
+        if not p.is_file():
+            continue
+        if p.name.lower().endswith("_car_info.bin"):
+            key = p.name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(p)
+    found.sort(key=lambda q: q.name.lower())
+    return found
 
 
 def manual_instructions() -> str:
@@ -95,6 +132,40 @@ def manual_instructions() -> str:
         blocks.append(f"{key} {value}")
         last_prefix = prefix
     return "\n".join(blocks)
+
+
+def preview_cfg_patch(lfs_dir: Path) -> dict[str, tuple[str | None, str]]:
+    """Return a dry-run preview of what :func:`patch_cfg` would change.
+
+    The mapping is keyed by setting name and the value is
+    ``(current_value, target_value)``:
+
+    * ``current_value is None`` \u2192 key is missing and would be **added**
+    * ``current_value == target_value`` \u2192 key is **already correct**
+    * otherwise the key would be **updated** in place
+
+    Raises :class:`FileNotFoundError` if cfg.txt does not exist.
+    """
+    cfg = cfg_path_for(lfs_dir)
+    if not cfg.exists():
+        raise FileNotFoundError(
+            f"{cfg} does not exist. Launch LFS once to generate "
+            "cfg.txt, then quit and try again.",
+        )
+    text = cfg.read_text(encoding="latin-1")
+    current: dict[str, str] = {}
+    for line in text.splitlines():
+        for key in REQUIRED_SETTINGS:
+            if key in current:
+                continue
+            if line == key:
+                current[key] = ""
+            elif line.startswith(key + " "):
+                current[key] = line[len(key) + 1:]
+    return {
+        key: (current.get(key), target)
+        for key, target in REQUIRED_SETTINGS.items()
+    }
 
 
 def patch_cfg(lfs_dir: Path) -> PatchResult:
@@ -174,11 +245,14 @@ def _looks_like_lfs_dir(path: Path) -> bool:
 __all__ = [
     "REQUIRED_SETTINGS",
     "PatchResult",
-    "find_default_lfs_dir",
-    "is_valid_lfs_dir",
     "cfg_path_for",
+    "find_lfs_car_info_bins",
+    "is_valid_lfs_dir",
+    "lfs_data_dir",
+    "lfs_setups_dir",
     "manual_instructions",
     "patch_cfg",
+    "preview_cfg_patch",
 ]
 
 
@@ -186,11 +260,13 @@ __all__ = [
 if __name__ == "__main__":  # pragma: no cover - small CLI helper
     import sys
 
+    from .lfs_paths import autodetect_lfs_dir
+
     target: Path
     if len(sys.argv) >= 2:
         target = Path(sys.argv[1])
     else:
-        guess = find_default_lfs_dir()
+        guess = autodetect_lfs_dir()
         if guess is None:
             print(
                 "Usage: python -m lfs_telemetry.lfs_config "

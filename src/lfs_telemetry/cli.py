@@ -1,9 +1,11 @@
 """Command-line interface for lfs-telemetry.
 
 Subcommands:
-    capture     Listen to LFS UDP and write a CSV stint capture.
-    calibrate   Auto-measure car mass + weight distribution from rest.
-    reslice     Re-slice an aggregate capture CSV into per-lap CSVs.
+    capture          Listen to LFS UDP and write a CSV stint capture.
+    calibrate        Auto-measure car mass + weight distribution from rest.
+    reslice          Re-slice an aggregate capture CSV into per-lap CSVs.
+    advise           Run the TNFR Setup Advisor on a captured stint.
+    compare-stints   Compare two stints (before / after a setup change).
 """
 
 from __future__ import annotations
@@ -159,6 +161,79 @@ def main(argv: list[str] | None = None) -> int:
                        help="minimum negative jump in current_lap_dist_m to "
                             "count as a line crossing (default 100 m)")
 
+    p_adv = sub.add_parser(
+        "advise",
+        help="run the TNFR Setup Advisor on a captured stint and write a "
+             "JSON / Markdown report.")
+    p_adv.add_argument(
+        "--car", required=True,
+        help="LFS car short name used to resolve <CAR>_CAR_info.bin if "
+             "--baseline is not given (e.g. FBM, FOX, BF1).")
+    p_adv.add_argument(
+        "--track", required=True,
+        help="LFS track short code (e.g. BL1, AS3, KY2R). Used to seed "
+             "the per-track network and the stint signature.")
+    p_adv.add_argument(
+        "--laps", nargs="+", type=Path, required=True,
+        metavar="LAP_CSV",
+        help="2+ per-lap CSV files (at least 5 consecutive valid laps "
+             "are required for an actual proposal).")
+    p_adv.add_argument(
+        "--baseline", type=Path, default=None,
+        help="explicit path to <CAR>_CAR_info.bin. If omitted, the "
+             "standard asset search path is used (assets/source/cars/).")
+    p_adv.add_argument(
+        "--seed", type=int, default=20260516,
+        help="deterministic seed for the network builders (default "
+             "20260516).")
+    p_adv.add_argument(
+        "--output", type=Path, default=None,
+        help="output base path (without extension). The literal token "
+             "'<timestamp>' is replaced with YYYYMMDD-HHMMSS. If "
+             "omitted, the report is written to stdout.")
+    p_adv.add_argument(
+        "--format", choices=("json", "md", "both"), default="both",
+        help="report format(s) to emit (default: both).")
+
+    p_cmp = sub.add_parser(
+        "compare-stints",
+        help="compare two captured stints (typically before/after a setup "
+             "change) and write a JSON / Markdown diff report.")
+    p_cmp.add_argument(
+        "--car", required=True,
+        help="LFS car short name used to resolve <CAR>_CAR_info.bin if "
+             "no --baseline-* override is given.")
+    p_cmp.add_argument(
+        "--track", required=True,
+        help="LFS track short code (e.g. BL1, AS3, KY2R).")
+    p_cmp.add_argument(
+        "--before", nargs="+", type=Path, required=True,
+        metavar="LAP_CSV",
+        help="per-lap CSVs for the BEFORE stint.")
+    p_cmp.add_argument(
+        "--after", nargs="+", type=Path, required=True,
+        metavar="LAP_CSV",
+        help="per-lap CSVs for the AFTER stint.")
+    p_cmp.add_argument(
+        "--baseline-before", type=Path, default=None,
+        help="explicit <CAR>_CAR_info.bin captured at the time of the "
+             "BEFORE stint.")
+    p_cmp.add_argument(
+        "--baseline-after", type=Path, default=None,
+        help="explicit <CAR>_CAR_info.bin captured at the time of the "
+             "AFTER stint.")
+    p_cmp.add_argument(
+        "--seed", type=int, default=20260516,
+        help="deterministic seed for the network builders (default "
+             "20260516).")
+    p_cmp.add_argument(
+        "--output", type=Path, default=None,
+        help="output base path (without extension). '<timestamp>' is "
+             "replaced with YYYYMMDD-HHMMSS. If omitted, stdout.")
+    p_cmp.add_argument(
+        "--format", choices=("json", "md", "both"), default="both",
+        help="report format(s) to emit (default: both).")
+
     args = parser.parse_args(argv)
 
     # On Windows, the Studio's Capture tab stops the child by sending
@@ -186,6 +261,10 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_cmd_calibrate(args))
     if args.cmd == "reslice":
         return _cmd_reslice(args)
+    if args.cmd == "advise":
+        return _cmd_advise(args)
+    if args.cmd == "compare-stints":
+        return _cmd_compare_stints(args)
     parser.error(f"unknown command: {args.cmd}")
     return 2
 
@@ -341,6 +420,14 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
             # Live snapshot publisher state (only used when --live-file).
             last_live_publish_t: float = 0.0
             last_lap_seen_at: float | None = None
+            # LFS-internal lap-start clock (OutGauge.time_ms at the moment
+            # IS_LAP arrived). Preferred over monotonic wall-clock because
+            # OutGauge ticks at 50 Hz with the LFS engine's own timer, so
+            # the per-tick elapsed (used to feed node_delta_tracker and
+            # split_predictor) is free of InSim network jitter and asyncio
+            # scheduling latency. Mirrors Detect&Monitor's approach (which
+            # also requires OutGauge alongside InSim for delta features).
+            lap_start_og_time_ms: int | None = None
             node_delta_tracker = NodeDeltaTracker()
             split_predictor = SplitPredictor(n_splits=3)
             fuel_tracker = FuelTracker(window=3)
@@ -446,6 +533,7 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                             flying_lap_start_idx = len(samples) - 1
                         flying_lap_started = False
                         last_lap_seen_at = None
+                        lap_start_og_time_ms = None
                         node_delta_tracker.reset_lap()
                         split_predictor.reset_lap()
                         last_seen_split_idx = 0
@@ -454,6 +542,11 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                         # the FIRST of the next lap). Snapshot index excludes it.
                         last_lap_count = cur_lap
                         last_lap_seen_at = asyncio.get_running_loop().time()
+                        og_at_lap = sample.outgauge
+                        lap_start_og_time_ms = (
+                            int(og_at_lap.time_ms)
+                            if og_at_lap is not None else None
+                        )
                         lap_ms = (rc.last_lap_ms.get(target_plid)
                                   if target_plid is not None else None)
                         # Promote the lap we just finished into the per-node
@@ -525,11 +618,25 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                         if (
                             rc_live is not None
                             and rc_live.view_player_id is not None
-                            and last_lap_seen_at is not None
                         ):
-                            cur_lap_ms = int(
-                                (now_loop - last_lap_seen_at) * 1000.0
-                            )
+                            og_for_clock = sample.outgauge
+                            if (
+                                lap_start_og_time_ms is not None
+                                and og_for_clock is not None
+                            ):
+                                # LFS-anchored: subtract OutGauge timestamps
+                                # (uint32 ms wrap handled implicitly within
+                                # one lap — wrap period is ~49 days).
+                                cur_lap_ms = int(
+                                    og_for_clock.time_ms
+                                    - lap_start_og_time_ms
+                                ) & 0xFFFFFFFF
+                            elif last_lap_seen_at is not None:
+                                # Fallback when OutGauge isn't available
+                                # (e.g. user didn't configure cfg.txt).
+                                cur_lap_ms = int(
+                                    (now_loop - last_lap_seen_at) * 1000.0
+                                )
                         # Per-node continuous delta vs PB.
                         node_delta_value: int | None = None
                         ghost_node_value: int | None = None
@@ -853,6 +960,218 @@ async def _cmd_calibrate(args: argparse.Namespace) -> int:
         print("[calibrate] stopped by user", file=sys.stderr)
         return 1
     return 1
+
+
+# ---------------------------------------------------------------------------
+# advise
+# ---------------------------------------------------------------------------
+
+
+def _cmd_advise(args: argparse.Namespace) -> int:
+    """Run the TNFR Setup Advisor on a captured stint.
+
+    Mirrors the Studio's Setup → Advisor tab so the CLI and the UI
+    emit byte-identical JSON / Markdown reports for the same stint.
+    """
+    from .telemetry import LapTelemetry
+    from .telemetry.car_info_bin import CarInfoBin, parse_car_info_bin
+    from .telemetry.observables import load_car_info_bin_for
+    from .tnfr_racing.advisor import SetupAdvisor
+    from .tnfr_racing.serialize import result_to_json, result_to_markdown
+
+    # --- 1. Load laps -------------------------------------------------
+    lap_paths: list[Path] = [Path(p) for p in args.laps]
+    missing = [p for p in lap_paths if not p.is_file()]
+    if missing:
+        for p in missing:
+            print(f"[advise] missing lap CSV: {p}", file=sys.stderr)
+        return 2
+    try:
+        laps = [LapTelemetry.from_csv(p, car=args.car) for p in lap_paths]
+    except (OSError, ValueError) as exc:
+        print(f"[advise] failed to load laps: {exc}", file=sys.stderr)
+        return 1
+
+    # --- 2. Resolve baseline -----------------------------------------
+    baseline: CarInfoBin | None
+    if args.baseline is not None:
+        if not args.baseline.is_file():
+            print(f"[advise] baseline file not found: {args.baseline}",
+                  file=sys.stderr)
+            return 2
+        try:
+            baseline = parse_car_info_bin(args.baseline)
+        except (OSError, ValueError) as exc:
+            print(f"[advise] failed to parse baseline {args.baseline}: "
+                  f"{exc}", file=sys.stderr)
+            return 1
+    else:
+        baseline = load_car_info_bin_for(args.car)
+        if baseline is None:
+            print(f"[advise] no <{args.car}>_CAR_info.bin found on the "
+                  f"asset search path. Pass --baseline explicitly or set "
+                  f"LFS_TELEMETRY_CAR_INFO_DIR.", file=sys.stderr)
+            return 2
+
+    # --- 3. Run advisor ----------------------------------------------
+    advisor = SetupAdvisor(seed=int(args.seed))
+    try:
+        result = advisor.advise(laps, baseline, laps[0].car, args.track)
+    except Exception as exc:  # noqa: BLE001 - surface as exit code
+        print(f"[advise] advisor failed: {exc!r}", file=sys.stderr)
+        return 1
+
+    json_text = result_to_json(result)
+    md_text = result_to_markdown(
+        result,
+        car_key=args.car.upper(),
+        track_code=args.track.upper(),
+        n_laps=len(laps),
+        baseline=baseline,
+    )
+
+    # --- 4. Emit ------------------------------------------------------
+    if args.output is None:
+        if args.format in ("md", "both"):
+            sys.stdout.write(md_text)
+            if args.format == "both":
+                sys.stdout.write("\n")
+        if args.format in ("json", "both"):
+            sys.stdout.write(json_text)
+            sys.stdout.write("\n")
+    else:
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        base_str = str(args.output).replace("<timestamp>", ts)
+        base = Path(base_str)
+        # Strip any caller-supplied extension so --format controls output.
+        if base.suffix.lower() in (".json", ".md", ".markdown"):
+            base = base.with_suffix("")
+        base.parent.mkdir(parents=True, exist_ok=True)
+        written: list[Path] = []
+        if args.format in ("json", "both"):
+            p_json = base.with_suffix(".json")
+            p_json.write_text(json_text, encoding="utf-8")
+            written.append(p_json)
+        if args.format in ("md", "both"):
+            p_md = base.with_suffix(".md")
+            p_md.write_text(md_text, encoding="utf-8")
+            written.append(p_md)
+        for p in written:
+            print(f"[advise] wrote {p}")
+
+    # Exit code 0 even on a refusal: the user got a structured report.
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# compare-stints (Phase 9.A)
+# ---------------------------------------------------------------------------
+
+
+def _cmd_compare_stints(args: argparse.Namespace) -> int:
+    """Compare two captured stints (before/after a setup change)."""
+    from .telemetry import LapTelemetry
+    from .telemetry.car_info_bin import CarInfoBin, parse_car_info_bin
+    from .telemetry.observables import load_car_info_bin_for
+    from .tnfr_racing.multi_stint import compare_stints
+    from .tnfr_racing.serialize import (
+        comparison_to_json, comparison_to_markdown,
+    )
+
+    def _load(paths: list[Path], label: str) -> list[LapTelemetry] | int:
+        missing = [p for p in paths if not p.is_file()]
+        if missing:
+            for p in missing:
+                print(f"[compare] missing {label} lap CSV: {p}",
+                      file=sys.stderr)
+            return 2
+        try:
+            return [LapTelemetry.from_csv(p, car=args.car) for p in paths]
+        except (OSError, ValueError) as exc:
+            print(f"[compare] failed to load {label} laps: {exc}",
+                  file=sys.stderr)
+            return 1
+
+    before_laps = _load([Path(p) for p in args.before], "before")
+    if isinstance(before_laps, int):
+        return before_laps
+    after_laps = _load([Path(p) for p in args.after], "after")
+    if isinstance(after_laps, int):
+        return after_laps
+
+    def _resolve_baseline(path: Path | None) -> CarInfoBin | int:
+        if path is not None:
+            if not path.is_file():
+                print(f"[compare] baseline file not found: {path}",
+                      file=sys.stderr)
+                return 2
+            try:
+                return parse_car_info_bin(path)
+            except (OSError, ValueError) as exc:
+                print(f"[compare] failed to parse baseline {path}: {exc}",
+                      file=sys.stderr)
+                return 1
+        b = load_car_info_bin_for(args.car)
+        if b is None:
+            print(f"[compare] no <{args.car}>_CAR_info.bin found. Pass "
+                  f"--baseline-before / --baseline-after explicitly.",
+                  file=sys.stderr)
+            return 2
+        return b
+
+    bl_before = _resolve_baseline(args.baseline_before)
+    if isinstance(bl_before, int):
+        return bl_before
+    bl_after = _resolve_baseline(args.baseline_after)
+    if isinstance(bl_after, int):
+        return bl_after
+
+    try:
+        cmp = compare_stints(
+            before_laps=before_laps,
+            after_laps=after_laps,
+            baseline_before=bl_before,
+            baseline_after=bl_after,
+            car=before_laps[0].car,
+            track_code=args.track,
+            seed=int(args.seed),
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"[compare] comparison failed: {exc!r}", file=sys.stderr)
+        return 1
+
+    json_text = comparison_to_json(cmp)
+    md_text = comparison_to_markdown(
+        cmp, car_key=args.car.upper(), track_code=args.track.upper(),
+    )
+
+    if args.output is None:
+        if args.format in ("md", "both"):
+            sys.stdout.write(md_text)
+            if args.format == "both":
+                sys.stdout.write("\n")
+        if args.format in ("json", "both"):
+            sys.stdout.write(json_text)
+            sys.stdout.write("\n")
+    else:
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        base_str = str(args.output).replace("<timestamp>", ts)
+        base = Path(base_str)
+        if base.suffix.lower() in (".json", ".md", ".markdown"):
+            base = base.with_suffix("")
+        base.parent.mkdir(parents=True, exist_ok=True)
+        written: list[Path] = []
+        if args.format in ("json", "both"):
+            p_json = base.with_suffix(".json")
+            p_json.write_text(json_text, encoding="utf-8")
+            written.append(p_json)
+        if args.format in ("md", "both"):
+            p_md = base.with_suffix(".md")
+            p_md.write_text(md_text, encoding="utf-8")
+            written.append(p_md)
+        for p in written:
+            print(f"[compare] wrote {p}")
+    return 0
 
 
 if __name__ == "__main__":

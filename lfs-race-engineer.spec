@@ -38,6 +38,12 @@ datas: list[tuple[str, str]] = []
 # Pull every Studio + telemetry submodule so dynamic imports survive.
 hiddenimports += collect_submodules("lfs_telemetry")
 
+# The TNFR Setup Advisor pulls modules from the external `tnfr` package
+# under runtime (operator factories, dynamics helpers). `collect_submodules`
+# guarantees the frozen build keeps every submodule even if the static
+# importer of `lfs_telemetry.tnfr_racing.*` only references a subset.
+hiddenimports += collect_submodules("tnfr")
+
 # pyqtgraph occasionally needs runtime templates that hooks miss.
 hiddenimports += collect_submodules("pyqtgraph")
 
@@ -65,6 +71,14 @@ def _bundle_dir(folder: str, pattern: str = "*") -> list[tuple[str, str]]:
 datas += _bundle_dir("config", "*.json")
 datas += _bundle_dir("racing_lines", "*.csv")
 datas += _bundle_dir("tracks", "*.csv")
+# Mod-car footprint database (seeded from Detect&Monitor) — keeps the
+# radar usable for opponents driving LFS mods.
+datas += _bundle_dir("assets/source/mods", "*.json")
+# Stock CAR_info.bin exports the user has dropped under
+# assets/source/cars/. The directory may be empty at build time; the
+# Studio "Import CAR_info.bin…" button writes new exports there at
+# runtime when launched from a writable working directory.
+datas += _bundle_dir("assets/source/cars", "*.bin")
 # Track overview .pngs are nice-to-have; uncomment to ship.
 # datas += _bundle_dir("tracks", "*.png")
 
@@ -121,6 +135,13 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=str(ROOT / "assets" / "icon.ico") if (ROOT / "assets" / "icon.ico").exists() else None,
+    # PyInstaller >=6 defaults to nesting every collected file under
+    # ``_internal/``; the Studio runtime (``_asset_search_dirs``) and the
+    # Inno Setup script in ``installer/lfs-race-engineer.iss`` both
+    # expect ``config/``, ``racing_lines/`` and ``tracks/`` sitting
+    # side-by-side with the .exe. ``contents_directory='.'`` restores
+    # the pre-6 flat layout so both paths keep resolving.
+    contents_directory=".",
 )
 
 coll = COLLECT(

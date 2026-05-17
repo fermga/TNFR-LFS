@@ -15,7 +15,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "workspace", nargs="?", default="captures",
-        help="Workspace folder containing capture .csv files (default: ./captures).",
+        help=(
+            "Workspace folder containing capture .csv files "
+            "(default: ./captures)."
+        ),
     )
     return parser.parse_args(argv)
 

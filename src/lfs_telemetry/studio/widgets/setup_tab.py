@@ -1,16 +1,23 @@
 """Setup tab — full car setup for the first selected lap.
 
-Subscribes to ``laps_selected`` on the shared :class:`SignalBus`, takes
-the first selected lap's ``summary["car"]`` short-name, locates the
-matching ``<car>_CAR_info.bin`` export via
+The public widget exported here is :class:`SetupTab`, a thin container
+that mounts a :class:`QTabWidget` with two sub-tabs:
+
+* **Baseline** — :class:`SetupBaselineTab`, the historical HTML report
+  parsed from ``<car>_CAR_info.bin`` (unchanged behaviour).
+* **Advisor (experimental)** — :class:`SetupAdvisorTab`, the
+  TNFR-grounded setup recommender (Phase 6 of the Setup Advisor
+  initiative — see ``docs/TNFR_SETUP_ADVISOR.md`` §9).
+
+``SetupBaselineTab`` subscribes to ``laps_selected`` on the shared
+:class:`SignalBus`, takes the first selected lap's ``summary["car"]``
+short-name, locates the matching ``<car>_CAR_info.bin`` export via
 :func:`telemetry.observables.load_car_info_bin_for`, and renders the
 parsed :class:`telemetry.car_info_bin.CarInfoBin` as a structured
-HTML report (read-only ``QTextEdit``).
-
-The report groups data by domain (Chassis & weight distribution,
-Engine, Drivetrain, Brakes, Tyres + suspension per wheel, Fuel tank)
-so a race engineer can scan the snapshot the same way as in the LFS
-in-game F11 setup screen.
+HTML report (read-only ``QTextEdit``). The report groups data by
+domain (Chassis & weight distribution, Engine, Drivetrain, Brakes,
+Tyres + suspension per wheel, Fuel tank) so a race engineer can scan
+the snapshot the same way as in the LFS in-game F11 setup screen.
 """
 
 from __future__ import annotations
@@ -19,11 +26,24 @@ import math
 from pathlib import Path
 from typing import List
 
-from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QHBoxLayout,
+    QMessageBox,
+    QPushButton,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ...telemetry import LapTelemetry
 from ...telemetry.car_info_bin import CarInfoBin
-from ...telemetry.observables import load_car_info_bin_for
+from ...telemetry.observables import (
+    import_car_info_bin,
+    load_car_info_bin_for,
+    user_car_info_bin_dir,
+)
 from ..models import LapLoader
 from ..signals import SignalBus
 from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR, WHEEL_ORDER_UI
@@ -57,7 +77,7 @@ def _rim_inches(radius_m: float) -> float:
     return radius_m * 2.0 * _M_TO_INCH
 
 
-class SetupTab(QWidget):
+class SetupBaselineTab(QWidget):
     """HTML report of the full setup parsed from CAR_info.bin."""
 
     def __init__(
@@ -81,12 +101,93 @@ class SetupTab(QWidget):
         )
         self._view.setHtml(self._empty_html())
 
+        # Toolbar: "Import CAR_info.bin\u2026" file picker. This is the
+        # one-click escape hatch for the most common support request
+        # ("setup tab errors out for FBM / stock car X"): the user
+        # exports the .bin from LFS once via the Programmer mode and
+        # drops it in here; we copy it into the writable search dir,
+        # clear the per-key cache, and re-render immediately.
+        self._import_btn = QPushButton("Import CAR_info.bin\u2026", self)
+        self._import_btn.setToolTip(
+            "Pick a *_CAR_info.bin export and copy it into the\n"
+            f"app's search path ({user_car_info_bin_dir()})."
+        )
+        self._import_btn.clicked.connect(self._on_import_clicked)
+        self._import_lfs_btn = QPushButton("Import from LFS folder…", self)
+        self._import_lfs_btn.setToolTip(
+            "Scan your LFS install's data/ folder for every\n"
+            "<car>_CAR_info.bin export and copy them all at once."
+        )
+        self._import_lfs_btn.clicked.connect(self._on_import_lfs_clicked)
+        self._gen_lfs_btn = QPushButton("Generate CAR_info.bin (LFS)…", self)
+        self._gen_lfs_btn.setToolTip(
+            "Launch LFS.exe in Programmer Mode so you can save\n"
+            "<car>_CAR_info.bin from the in-game menu."
+        )
+        self._gen_lfs_btn.clicked.connect(self._on_gen_lfs_clicked)
+        toolbar = QHBoxLayout()
+        toolbar.addStretch(1)
+        toolbar.addWidget(self._gen_lfs_btn)
+        toolbar.addWidget(self._import_lfs_btn)
+        toolbar.addWidget(self._import_btn)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(toolbar)
         layout.addWidget(self._view)
 
         signals.laps_selected.connect(self._on_laps_selected)
         loader.lap_loaded.connect(self._on_lap_loaded)
+
+    # ------------------------------------------------------------------
+    # Import workflow
+    # ------------------------------------------------------------------
+
+    def _on_import_clicked(self) -> None:
+        car_hint = self._current_car_key()
+        title = (
+            f"Locate {car_hint}_CAR_info.bin\u2026" if car_hint
+            else "Locate *_CAR_info.bin\u2026"
+        )
+        chosen, _ = QFileDialog.getOpenFileName(
+            self, title, str(Path.home()),
+            "LFS CAR info (*_CAR_info.bin *.bin);;All files (*.*)",
+        )
+        if not chosen:
+            return
+        try:
+            dst, _info = import_car_info_bin(
+                Path(chosen),
+                target_key=car_hint or None,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface UI-level error
+            QMessageBox.critical(
+                self, "Import failed",
+                f"Could not import {chosen}:\n\n"
+                f"{type(exc).__name__}: {exc}",
+            )
+            return
+        QMessageBox.information(
+            self, "Imported",
+            f"Saved to:\n{dst}\n\n"
+            "The setup will now refresh.",
+        )
+        self._refresh()
+
+    def _on_import_lfs_clicked(self) -> None:
+        from ._lfs_bin_import import import_bins_from_lfs_folder
+        if import_bins_from_lfs_folder(self) > 0:
+            self._refresh()
+
+    def _on_gen_lfs_clicked(self) -> None:
+        from ._lfs_bin_import import launch_lfs_programmer_mode
+        launch_lfs_programmer_mode(self)
+
+    def _current_car_key(self) -> str:
+        lap = self._first_lap
+        if lap is None or not lap.summary:
+            return ""
+        return str(lap.summary.get("car") or "").upper().strip()
 
     # ------------------------------------------------------------------
     # Slots
@@ -140,12 +241,26 @@ class SetupTab(QWidget):
             return
         info = load_car_info_bin_for(car_key)
         if info is None:
+            search_dir = user_car_info_bin_dir()
             self._view.setHtml(
-                f"<p style='color:{MUTED_COLOR};'>"
-                f"No <code>{car_key}_CAR_info.bin</code> export found in"
-                f" the search path. Place the file under"
-                f" <code>assets/source/cars/</code> or set"
-                f" <code>$LFS_TELEMETRY_CAR_INFO_DIR</code>."
+                f"<h3 style='margin:0 0 6px 0;'>Setup data not"
+                f" available for {car_key}</h3>"
+                f"<p>The full setup view needs the"
+                f" <code>{car_key}_CAR_info.bin</code> file that LFS"
+                f" exports from its garage. Two ways to provide it:</p>"
+                f"<ol>"
+                f"<li>Press <b>Import CAR_info.bin\u2026</b> above and"
+                f" pick the file you exported from LFS.</li>"
+                f"<li>Or copy it manually to"
+                f" <code>{search_dir}</code> and reselect the lap.</li>"
+                f"</ol>"
+                f"<p style='color:{MUTED_COLOR};margin-top:10px;'>"
+                f"To export from LFS: open the car in the garage, run"
+                f" LFS in Programmer mode (<code>LFS.exe /prog</code>)"
+                f" and use <b>Save CAR_info.bin</b>; the file appears"
+                f" under <code>LFS/data/</code>. Advanced users can also"
+                f" set <code>$LFS_TELEMETRY_CAR_INFO_DIR</code> to a"
+                f" shared folder."
                 f"</p>"
             )
             return
@@ -604,4 +719,40 @@ class SetupTab(QWidget):
         )
 
 
-__all__ = ["SetupTab"]
+class SetupTab(QWidget):
+    """Container tab: hosts ``Baseline`` and ``Advisor`` sub-tabs.
+
+    The class deliberately holds *no* business logic — the heavy lifting
+    lives in :class:`SetupBaselineTab` (parsed ``CAR_info.bin`` view) and
+    :class:`SetupAdvisorTab` (TNFR-grounded recommender). This keeps the
+    refactor surgical: existing call-sites that import :class:`SetupTab`
+    keep working bit-for-bit.
+    """
+
+    def __init__(
+        self,
+        loader: LapLoader,
+        signals: SignalBus,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        # Lazy imports: both widgets pull in heavier dependencies the
+        # baseline tab does not need (advisor → tnfr engine; editor →
+        # the setup-overrides apply path).
+        from .setup_advisor_tab import SetupAdvisorTab
+        from .setup_editor_tab import SetupEditorTab
+
+        tabs = QTabWidget(self)
+        self._baseline = SetupBaselineTab(loader, signals)
+        self._editor = SetupEditorTab(loader, signals)
+        self._advisor = SetupAdvisorTab(loader, signals)
+        tabs.addTab(self._baseline, "Baseline")
+        tabs.addTab(self._editor, "Garage editor")
+        tabs.addTab(self._advisor, "Advisor (experimental)")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(tabs)
+
+
+__all__ = ["SetupTab", "SetupBaselineTab"]

@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSettings, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -34,6 +34,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QWidget
 
+from ...lfs_paths import QSETTINGS_APP as APP, QSETTINGS_ORG as ORG
 from .live_data_source import LiveDataSource
 from .racing_line_loader import RacingLine
 from ._format import (
@@ -84,6 +85,8 @@ def proximity_color(
 class _LiveModuleWindow(QWidget):
     """Common chrome + drag/resize behaviour for every overlay module."""
 
+    MODULE_ID: str = ""
+
     def __init__(
         self,
         source: LiveDataSource,
@@ -105,17 +108,69 @@ class _LiveModuleWindow(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setWindowOpacity(opacity)
         self.setMinimumSize(MIN_W, MIN_H)
         self.resize(*size)
         self.setWindowTitle(title)
 
+        # Restore previously-saved geometry + opacity (per module id).
+        restored_opacity = self._load_opacity(opacity)
+        self.setWindowOpacity(restored_opacity)
+        self._restore_geometry()
+
         source.snapshot_changed.connect(self._on_snapshot)
+
+    # ----- Persistence -------------------------------------------------
+
+    def _settings(self) -> QSettings:
+        return QSettings(ORG, APP)
+
+    def _settings_key(self, suffix: str) -> str:
+        mid = self.MODULE_ID or self.__class__.__name__
+        return f"overlay/{mid}/{suffix}"
+
+    def _load_opacity(self, default: float) -> float:
+        if not self.MODULE_ID:
+            return default
+        raw = self._settings().value(self._settings_key("opacity"), None)
+        if raw is None:
+            return default
+        try:
+            return max(0.1, min(1.0, float(raw)))
+        except (TypeError, ValueError):
+            return default
+
+    def _save_opacity(self) -> None:
+        if not self.MODULE_ID:
+            return
+        self._settings().setValue(
+            self._settings_key("opacity"), self.windowOpacity(),
+        )
+
+    def _restore_geometry(self) -> None:
+        if not self.MODULE_ID:
+            return
+        geo = self._settings().value(self._settings_key("geometry"))
+        if geo is not None:
+            try:
+                self.restoreGeometry(geo)
+            except (TypeError, ValueError):
+                pass
+
+    def _save_geometry(self) -> None:
+        if not self.MODULE_ID:
+            return
+        self._settings().setValue(
+            self._settings_key("geometry"), self.saveGeometry(),
+        )
 
     # ----- API ---------------------------------------------------------
 
     def set_opacity_pct(self, pct: int) -> None:
         self.setWindowOpacity(max(0.1, min(1.0, pct / 100.0)))
+        self._save_opacity()
+
+    def current_opacity_pct(self) -> int:
+        return int(round(self.windowOpacity() * 100))
 
     def reset_size(self) -> None:
         self.resize(*self._default_size)
@@ -162,9 +217,22 @@ class _LiveModuleWindow(QWidget):
                 self.unsetCursor()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._drag_offset is not None or self._resizing:
+            self._save_geometry()
         self._drag_offset = None
         self._resizing = False
         self.unsetCursor()
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        # Persist the final spot so re-enabling brings the module back
+        # to where the user last left it.
+        self._save_geometry()
+        super().closeEvent(event)
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        if self.isVisible() or self.geometry().isValid():
+            self._save_geometry()
+        super().hideEvent(event)
 
     # ----- Data hook ---------------------------------------------------
 
@@ -255,62 +323,8 @@ class PositionWindow(_LabeledValueWindow):
         return f"P{pos}" if pos else "--"
 
 
-class LastLapWindow(_LabeledValueWindow):
-    LABEL = "LAST"
-    DEFAULT_SIZE = (190, 80)
-
-    def _value_text(self) -> str:
-        return _fmt_clock(self._snap.get("last_lap_ms"))
-
-
-class BestLapWindow(_LabeledValueWindow):
-    LABEL = "BEST"
-    DEFAULT_SIZE = (190, 80)
-
-    def _value_text(self) -> str:
-        return _fmt_clock(self._snap.get("best_lap_ms"))
-
-    def _value_color(self) -> QColor:
-        if self._snap.get("best_lap_ms"):
-            return QColor(120, 230, 140)
-        return QColor(180, 180, 190)
-
-
-class CurrentLapWindow(_LabeledValueWindow):
-    LABEL = "CURRENT"
-    DEFAULT_SIZE = (190, 80)
-
-    def _value_text(self) -> str:
-        return _fmt_clock(self._snap.get("current_lap_ms"))
-
-
-class PredictedLapWindow(_LabeledValueWindow):
-    LABEL = "PRED"
-    DEFAULT_SIZE = (190, 80)
-
-    def _value_text(self) -> str:
-        return _fmt_clock(self._snap.get("predicted_lap_ms"))
-
-    def _value_color(self) -> QColor:
-        pred = self._snap.get("predicted_lap_ms")
-        best = self._snap.get("best_lap_ms")
-        if pred is None or best is None:
-            return QColor(220, 220, 230)
-        return QColor(120, 230, 140) if pred < best else QColor(255, 140, 140)
-
-
-class SpbWindow(_LabeledValueWindow):
-    LABEL = "SPB"
-    DEFAULT_SIZE = (190, 80)
-
-    def _value_text(self) -> str:
-        return _fmt_clock(self._snap.get("spb_ms"))
-
-    def _value_color(self) -> QColor:
-        return QColor(180, 220, 255)
-
-
 class FuelPctWindow(_LabeledValueWindow):
+    MODULE_ID = "fuel_pct"
     LABEL = "FUEL"
     DEFAULT_SIZE = (140, 80)
 
@@ -330,6 +344,7 @@ class FuelPctWindow(_LabeledValueWindow):
 
 
 class FuelLapsRemainingWindow(_LabeledValueWindow):
+    MODULE_ID = "fuel_laps"
     LABEL = "LAPS LEFT"
     DEFAULT_SIZE = (170, 80)
 
@@ -349,6 +364,7 @@ class FuelLapsRemainingWindow(_LabeledValueWindow):
 
 
 class SpeedWindow(_LabeledValueWindow):
+    MODULE_ID = "speed"
     LABEL = "SPEED"
     DEFAULT_SIZE = (160, 80)
 
@@ -358,6 +374,7 @@ class SpeedWindow(_LabeledValueWindow):
 
 
 class GearWindow(_LiveModuleWindow):
+    MODULE_ID = "gear"
     """Big gear digit (no label)."""
 
     def __init__(
@@ -391,6 +408,7 @@ class GearWindow(_LiveModuleWindow):
 
 
 class RpmWindow(_LiveModuleWindow):
+    MODULE_ID = "rpm"
     """Horizontal RPM bar + numeric readout."""
 
     def __init__(
@@ -573,11 +591,13 @@ class _GapWindow(_LiveModuleWindow):
 
 
 class GapAheadWindow(_GapWindow):
+    MODULE_ID = "gap_ahead"
     DIRECTION = "ahead"
     LABEL = "AHEAD"
 
 
 class GapBehindWindow(_GapWindow):
+    MODULE_ID = "gap_behind"
     DIRECTION = "behind"
     LABEL = "BEHIND"
 
@@ -588,6 +608,7 @@ class GapBehindWindow(_GapWindow):
 
 
 class FlagsWindow(_LiveModuleWindow):
+    MODULE_ID = "flags"
     """Big BLUE/YELLOW flag indicator."""
 
     def __init__(
@@ -666,6 +687,7 @@ class TcAbsWindow(_LiveModuleWindow):
 
 
 class GMeterWindow(_LiveModuleWindow):
+    MODULE_ID = "gmeter"
     """Lateral/longitudinal G dot inside a friction circle."""
 
     def __init__(
@@ -921,6 +943,7 @@ class MiniMapWindow(_LiveModuleWindow):
 
 
 class RadarWindow(_LiveModuleWindow):
+    MODULE_ID = "radar"
     """Top-down proximity radar (helicorsa visual + D&M detection)."""
 
     def __init__(
@@ -1071,7 +1094,17 @@ class RadarWindow(_LiveModuleWindow):
 
 
 class DeltaBarWindow(_LiveModuleWindow):
-    """Horizontal oscillating bar: green (gaining) <-> red (losing)."""
+    MODULE_ID = "delta"
+    """Horizontal oscillating bar: green (gaining) <-> red (losing).
+
+    The raw ``delta_vs_best_ms`` jitters in the millisecond range, which
+    is distracting. We low-pass it with an EMA and display tenths only
+    so the readout communicates *trend* (are you improving?) instead of
+    fake millisecond precision.
+    """
+
+    # 10 Hz source → alpha 0.25 ≈ 400 ms time constant.
+    _DELTA_ALPHA = 0.25
 
     def __init__(
         self,
@@ -1085,10 +1118,27 @@ class DeltaBarWindow(_LiveModuleWindow):
             title="LFS Live - delta", opacity=opacity,
         )
         self._full_scale_ms = max(100, int(full_scale_ms))
+        self._delta_smoothed: float | None = None
 
     def set_full_scale_ms(self, ms: int) -> None:
         self._full_scale_ms = max(100, int(ms))
         self.update()
+
+    def _on_snapshot(self, snap: dict[str, Any]) -> None:
+        raw = snap.get("delta_vs_best_ms")
+        if raw is None:
+            # Reset so we don't carry a stale trend across laps/sessions.
+            self._delta_smoothed = None
+        else:
+            x = float(raw)
+            if self._delta_smoothed is None:
+                self._delta_smoothed = x
+            else:
+                a = self._DELTA_ALPHA
+                self._delta_smoothed = (
+                    self._delta_smoothed + a * (x - self._delta_smoothed)
+                )
+        super()._on_snapshot(snap)
 
     def paintEvent(self, event) -> None:  # noqa: N802
         p = QPainter(self)
@@ -1102,19 +1152,19 @@ class DeltaBarWindow(_LiveModuleWindow):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(40, 40, 50))
         p.drawRoundedRect(rect, 4, 4)
-        delta = self._snap.get("delta_vs_best_ms")
+        delta = self._delta_smoothed
         p.setFont(QFont(
             "Consolas", self._scale_pt(14), QFont.Weight.Bold,
         ))
         if delta is None:
             p.setPen(QPen(QColor(180, 180, 190)))
-            value_text = "--.---"
+            value_text = "--.-"
         elif delta < 0:
             p.setPen(QPen(QColor(120, 230, 140)))
-            value_text = _fmt_delta(delta)
+            value_text = f"{delta / 1000.0:+.1f}"
         else:
             p.setPen(QPen(QColor(255, 120, 120)))
-            value_text = _fmt_delta(delta)
+            value_text = f"{delta / 1000.0:+.1f}"
         p.drawText(
             QRectF(margin, 6, self.width() - 2 * margin,
                    self.height() - bar_h - 16),
@@ -1148,10 +1198,8 @@ class DeltaBarWindow(_LiveModuleWindow):
 
 
 __all__ = [
-    "BestLapWindow",
     "BrakeWindow",
     "ClutchWindow",
-    "CurrentLapWindow",
     "DeltaBarWindow",
     "FlagsWindow",
     "FuelLapsRemainingWindow",
@@ -1161,13 +1209,10 @@ __all__ = [
     "GapBehindWindow",
     "GapCompassWindow",
     "GearWindow",
-    "LastLapWindow",
     "MiniMapWindow",
     "PositionWindow",
-    "PredictedLapWindow",
     "RadarWindow",
     "RpmWindow",
-    "SpbWindow",
     "SpeedWindow",
     "TcAbsWindow",
     "ThrottleWindow",

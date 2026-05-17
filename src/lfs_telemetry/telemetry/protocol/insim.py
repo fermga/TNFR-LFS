@@ -94,11 +94,9 @@ from .packets import (
     InSimTakeOverCar,
     InSimVersion,
     InSimVoteAction,
-    TINY_MAL,
     TINY_NCN,
     TINY_NONE,
     TINY_NPL,
-    TINY_SLC,
     TINY_SST,
     build_isi_packet,
     build_msl_packet,
@@ -561,11 +559,16 @@ class InSimClient:
         # Ask LFS to send IS_STA (current state: track, weather, race) and
         # IS_NPL for every existing player. Without these requests we'd only
         # see context updates after the next state change in LFS.
-        self._writer.write(build_tiny_packet(TINY_SST))
-        self._writer.write(build_tiny_packet(TINY_NCN))
-        self._writer.write(build_tiny_packet(TINY_NPL))
-        self._writer.write(build_tiny_packet(TINY_SLC))
-        self._writer.write(build_tiny_packet(TINY_MAL))
+        #
+        # LFS prints "InSim : TINY_xxx with no ReqI" in red top-right when
+        # an info request arrives with ReqI=0, so every TINY below uses
+        # ReqI=1. TINY_SLC and TINY_MAL are skipped on purpose: they are
+        # only meaningful when connected to a multiplayer host as admin,
+        # and LFS prints another red warning ("only for multiplayer
+        # hosts") if we send them from a singleplayer / non-admin session.
+        self._writer.write(build_tiny_packet(TINY_SST, req_i=1))
+        self._writer.write(build_tiny_packet(TINY_NCN, req_i=1))
+        self._writer.write(build_tiny_packet(TINY_NPL, req_i=1))
         await self._writer.drain()
         loop = asyncio.get_running_loop()
         self._tasks = [
@@ -710,7 +713,7 @@ class InSimClient:
         try:
             while True:
                 await asyncio.sleep(_STATE_REFRESH_INTERVAL_S)
-                self._writer.write(build_tiny_packet(TINY_SST))
+                self._writer.write(build_tiny_packet(TINY_SST, req_i=1))
                 await self._writer.drain()
         except asyncio.CancelledError:
             raise

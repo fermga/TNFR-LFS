@@ -14,12 +14,12 @@ from PySide6.QtWidgets import QTabWidget, QWidget
 
 from ..models import LapLoader
 from ..signals import SignalBus
+from ..i18n import tr
 from .capture_tab import CaptureTab
 from .charts_dock import ChartsDock
 from .dampers_tab import DampersTab
 from .live_tab import LiveTab
 from .sectors_tab import SectorsTab
-from .setup_tab import SetupTab
 from .stint_tab import StintTab
 
 
@@ -38,16 +38,14 @@ class CenterTabs(QTabWidget):
         self.stint = StintTab(loader, signals, self)
         self.sectors = SectorsTab(loader, signals, self)
         self.dampers = DampersTab(loader, signals, self)
-        self.setup = SetupTab(loader, signals, self)
         self.capture = CaptureTab(workspace, signals, self)
         self.live = LiveTab(self.capture.runner, signals, self)
-        self.addTab(self.charts, "Channels")
-        self.addTab(self.stint, "Stint")
-        self.addTab(self.sectors, "Sectors")
-        self.addTab(self.dampers, "Dampers")
-        self.addTab(self.setup, "Setup")
-        self.addTab(self.capture, "Capture")
-        self.addTab(self.live, "Live")
+        self.addTab(self.charts, tr("Telemetry"))
+        self.addTab(self.dampers, tr("Dampers"))
+        self.addTab(self.sectors, tr("Sectors"))
+        self.addTab(self.stint, tr("Stint"))
+        self.addTab(self.capture, tr("Capture"))
+        self.addTab(self.live, tr("Overlay"))
         self.setDocumentMode(True)
         self.setMovable(False)
 

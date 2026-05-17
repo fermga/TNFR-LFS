@@ -35,6 +35,7 @@ from ...telemetry import LapTelemetry
 from ...telemetry.sectors import insim_split_distances_m, lap_sectors
 from ..models import LapLoader
 from ..signals import SignalBus
+from ..i18n import tr
 from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR
 from ._format import format_finite
 
@@ -65,7 +66,7 @@ class SectorsTab(QWidget):
         self._requested: List[Path] = []
         self._loaded: Dict[Path, LapTelemetry] = {}
 
-        self._summary = QLabel("No laps selected.", self)
+        self._summary = QLabel(tr("No laps selected."), self)
         self._summary.setWordWrap(True)
         self._summary.setStyleSheet(
             f"color:{MUTED_COLOR}; padding:4px 6px;"
@@ -78,10 +79,10 @@ class SectorsTab(QWidget):
         self._gfx.ci.layout.setContentsMargins(2, 2, 2, 2)
 
         self._plot: pg.PlotItem = self._gfx.addPlot(row=0, col=0)
-        self._plot.setTitle("Sector times", color=TEXT_COLOR, size="9pt")
+        self._plot.setTitle(tr("Sector times"), color=TEXT_COLOR, size="9pt")
         self._plot.showGrid(x=False, y=True, alpha=0.12)
         self._plot.getAxis("left").setLabel("s", color=TEXT_COLOR)
-        self._plot.getAxis("bottom").setLabel("Lap #", color=TEXT_COLOR)
+        self._plot.getAxis("bottom").setLabel(tr("Lap #"), color=TEXT_COLOR)
         self._plot.getAxis("left").setTextPen(TEXT_COLOR)
         self._plot.getAxis("bottom").setTextPen(TEXT_COLOR)
         self._plot.setMinimumHeight(220)
@@ -141,7 +142,7 @@ class SectorsTab(QWidget):
             self._plot.legend = None
 
     def _reset(self) -> None:
-        self._summary.setText("No laps selected.")
+        self._summary.setText(tr("No laps selected."))
         self._clear_plot()
 
     def _shared_boundaries(
@@ -165,7 +166,9 @@ class SectorsTab(QWidget):
         ]
         if not ordered:
             self._summary.setText(
-                f"Loading {len(self._requested)} lap(s)…"
+                tr("Loading {n} lap(s)\u2026").format(
+                    n=len(self._requested),
+                ),
             )
             return
 
@@ -188,7 +191,7 @@ class SectorsTab(QWidget):
 
         if not per_lap_sectors:
             self._summary.setText(
-                "Sectors unavailable (no usable distance/time data)."
+                tr("Sectors unavailable (no usable distance/time data)."),
             )
             self._clear_plot()
             return
@@ -207,14 +210,23 @@ class SectorsTab(QWidget):
         best_per_sec = np.nanmin(times, axis=0)
         theo_best = float(np.nansum(best_per_sec))
 
-        src = "InSim splits" if boundaries else f"uniform ×{n_secs}"
+        src = (
+            tr("InSim splits") if boundaries
+            else tr("uniform \u00d7{n}").format(n=n_secs)
+        )
 
         # Header.
         head_lines: list[str] = []
         head_lines.append(
-            f"<b>{len(per_lap_sectors)}</b> lap(s) ·"
-            f" <b>{n_secs}</b> sectors ({src}) ·"
-            f" theoretical best <b>{_fmt_s(theo_best)} s</b>"
+            tr(
+                "<b>{n}</b> lap(s) \u00b7 <b>{secs}</b> sectors ({src}) "
+                "\u00b7 theoretical best <b>{best} s</b>",
+            ).format(
+                n=len(per_lap_sectors),
+                secs=n_secs,
+                src=src,
+                best=_fmt_s(theo_best),
+            )
         )
         for li, (lap_idx, secs) in enumerate(
             zip(lap_indices, per_lap_sectors)

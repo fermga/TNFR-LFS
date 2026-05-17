@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from ...app.capture_runner import CaptureRunner
 from ..signals import SignalBus
+from ..i18n import tr
 from ..theme import MUTED_COLOR
 
 _LAP_DONE_RE = re.compile(r"flying lap (\d+)")
@@ -81,6 +82,13 @@ class CaptureTab(QWidget):
         self._insim_port = QSpinBox(self)
         self._insim_port.setRange(1, 65535)
         self._insim_port.setValue(29999)
+        self._insim_port.setToolTip(
+            tr(
+                "TCP port LFS uses for InSim. Enable it inside LFS at "
+                "runtime with  /insim 29999  in the console (or launch "
+                "LFS.exe with /insim=29999). InSim has no cfg.txt entry.",
+            )
+        )
 
         self._outsim_port = QSpinBox(self)
         self._outsim_port.setRange(1, 65535)
@@ -92,18 +100,18 @@ class CaptureTab(QWidget):
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("Filename stem:", self._stem)
-        form.addRow("InSim host:", self._insim_host)
-        form.addRow("InSim port:", self._insim_port)
-        form.addRow("OutSim port:", self._outsim_port)
-        form.addRow("OutGauge port:", self._outgauge_port)
+        form.addRow(tr("Filename stem:"), self._stem)
+        form.addRow(tr("InSim host:"), self._insim_host)
+        form.addRow(tr("InSim port:"), self._insim_port)
+        form.addRow(tr("OutSim port:"), self._outsim_port)
+        form.addRow(tr("OutGauge port:"), self._outgauge_port)
 
-        form_box = QGroupBox("Capture", self)
+        form_box = QGroupBox(tr("Capture"), self)
         form_box.setLayout(form)
 
         # ----- Buttons + status ---------------------------------------
-        self._btn_start = QPushButton("Start", self)
-        self._btn_stop = QPushButton("Stop", self)
+        self._btn_start = QPushButton(tr("Start"), self)
+        self._btn_stop = QPushButton(tr("Stop"), self)
         self._btn_stop.setEnabled(False)
         self._btn_start.clicked.connect(self._on_start)
         self._btn_stop.clicked.connect(self._on_stop)
@@ -111,7 +119,7 @@ class CaptureTab(QWidget):
         # LFS connection LED.
         self._led = QLabel(self)
         self._led.setStyleSheet(_led_qss("#5a5f66"))  # grey = idle
-        self._led.setToolTip("LFS InSim status: idle")
+        self._led.setToolTip(tr("LFS InSim status: idle"))
         self._led_label = QLabel("LFS", self)
         self._led_label.setStyleSheet(f"color: {MUTED_COLOR};")
 
@@ -122,13 +130,13 @@ class CaptureTab(QWidget):
         btn_row.addWidget(self._led)
         btn_row.addWidget(self._led_label)
 
-        self._status = QLabel("Idle.", self)
+        self._status = QLabel(tr("Idle."), self)
         self._status.setStyleSheet(f"color: {MUTED_COLOR};")
 
-        self._lap_counter = QLabel("Laps recorded: 0", self)
+        self._lap_counter = QLabel(tr("Laps recorded: 0"), self)
 
         self._workspace_label = QLabel(
-            f"Workspace: {self._workspace}", self,
+            tr("Workspace: {path}").format(path=self._workspace), self,
         )
         self._workspace_label.setStyleSheet(f"color: {MUTED_COLOR};")
         self._workspace_label.setWordWrap(True)
@@ -143,12 +151,16 @@ class CaptureTab(QWidget):
         )
 
         info = QLabel(
-            "Records LFS UDP telemetry. You can press Start at any time "
-            "(menu, pre-race countdown, pit, or already on track): the "
-            "capture waits for LFS InSim to come up and only begins "
-            "recording when the car actually starts moving. Every "
-            "completed lap (out-lap included) is saved when you press Stop. "
-            "Enable InSim in LFS first: <code>/insim 29999</code>.", self,
+            tr(
+                "Records LFS UDP telemetry. You can press Start at any "
+                "time (menu, pre-race countdown, pit, or already on "
+                "track): the capture waits for LFS InSim to come up and "
+                "only begins recording when the car actually starts "
+                "moving. Every completed lap (out-lap included) is saved "
+                "when you press Stop. Enable InSim in LFS first: "
+                "<code>/insim 29999</code>.",
+            ),
+            self,
         )
         info.setStyleSheet(f"color: {MUTED_COLOR};")
         info.setWordWrap(True)
@@ -162,7 +174,7 @@ class CaptureTab(QWidget):
         layout.addLayout(btn_row)
         layout.addWidget(self._status)
         layout.addWidget(self._lap_counter)
-        layout.addWidget(QLabel("Log:", self))
+        layout.addWidget(QLabel(tr("Log:"), self))
         layout.addWidget(self._log, 1)
 
         # Workspace updates from the rest of the app.
@@ -178,11 +190,13 @@ class CaptureTab(QWidget):
 
     def _on_workspace_changed(self, ws: Path) -> None:
         self._workspace = Path(ws)
-        self._workspace_label.setText(f"Workspace: {self._workspace}")
+        self._workspace_label.setText(
+            tr("Workspace: {path}").format(path=self._workspace),
+        )
 
     def _on_start(self) -> None:
         if self._runner.running:
-            self._status.setText("Already running.")
+            self._status.setText(tr("Already running."))
             return
         try:
             msg = self._runner.start(
@@ -192,20 +206,22 @@ class CaptureTab(QWidget):
                 laps=0,
                 warmup_laps=0,
                 per_lap=True,
-                include_out_lap=True,
+                include_out_lap=False,
                 insim_host=self._insim_host.text() or "127.0.0.1",
                 insim_port=int(self._insim_port.value()),
                 outsim_port=int(self._outsim_port.value()),
                 outgauge_port=int(self._outgauge_port.value()),
             )
         except Exception as exc:  # noqa: BLE001
-            self._status.setText(f"Start failed: {exc}")
+            self._status.setText(
+                tr("Start failed: {error}").format(error=exc),
+            )
             return
         self._status.setText(msg)
         self._log.clear()
         self._completed_laps = 0
         self._out_lap_done = False
-        self._lap_counter.setText("Laps recorded: 0")
+        self._lap_counter.setText(tr("Laps recorded: 0"))
         self._btn_start.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._was_running = True
@@ -231,9 +247,11 @@ class CaptureTab(QWidget):
                 out_done = True
         self._completed_laps = max_flying
         self._out_lap_done = out_done
-        out_tag = " (+ out-lap)" if out_done else ""
+        out_tag = tr(" (+ out-lap)") if out_done else ""
         self._lap_counter.setText(
-            f"Laps recorded: {max_flying}{out_tag}"
+            tr("Laps recorded: {n}{out_tag}").format(
+                n=max_flying, out_tag=out_tag,
+            ),
         )
 
     def _poll(self) -> None:
@@ -256,22 +274,22 @@ class CaptureTab(QWidget):
         insim_waiting = any(_INSIM_WAIT_RE.search(ln) for ln in tail)
         if running and not armed:
             if insim_waiting:
-                sub_state = " — waiting for LFS InSim"
+                sub_state = tr(" \u2014 waiting for LFS InSim")
             elif any(_WAITING_RE.search(ln) for ln in tail):
-                sub_state = " — waiting for car to move"
+                sub_state = tr(" \u2014 waiting for car to move")
         # LED color logic:
         #   not running                -> grey
         #   running, InSim not yet up  -> red
         #   running, InSim up          -> green
         if not running:
             led_color = "#5a5f66"
-            led_tip = "LFS InSim status: idle"
+            led_tip = tr("LFS InSim status: idle")
         elif insim_waiting and not insim_ready:
             led_color = "#d04848"
-            led_tip = "LFS InSim status: waiting for connection"
+            led_tip = tr("LFS InSim status: waiting for connection")
         else:
             led_color = "#3fbf5a"
-            led_tip = "LFS InSim status: connected"
+            led_tip = tr("LFS InSim status: connected")
         self._led.setStyleSheet(_led_qss(led_color))
         self._led.setToolTip(led_tip)
         self._led_label.setText(
@@ -279,17 +297,21 @@ class CaptureTab(QWidget):
         )
         if running:
             self._status.setText(
-                f"● Recording → {out_name}{sub_state}"
+                tr("\u25cf Recording \u2192 {file}{state}").format(
+                    file=out_name, state=sub_state,
+                ),
             )
             self._btn_start.setEnabled(False)
             self._btn_stop.setEnabled(True)
         else:
             code = st.get("exit_code")
             if code is None and not out:
-                self._status.setText("Idle.")
+                self._status.setText(tr("Idle."))
             else:
                 self._status.setText(
-                    f"■ Finished (code={code}) → {out_name}"
+                    tr(
+                        "\u25a0 Finished (code={code}) \u2192 {file}",
+                    ).format(code=code, file=out_name),
                 )
             self._btn_start.setEnabled(True)
             self._btn_stop.setEnabled(False)

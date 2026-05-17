@@ -15,7 +15,11 @@ These tests are skipped by default. To enable them:
          OutGauge IP 127.0.0.1
          OutGauge Port 30001
 
-         InSim Port 29999
+     Then enable InSim at runtime (no cfg.txt key exists for this)::
+
+         /insim 29999
+
+     or launch LFS with ``LFS.exe /insim=29999``.
 
   2. Enter a session (single player or join an InSim host with admin).
   3. Run::

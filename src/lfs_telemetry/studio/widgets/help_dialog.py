@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...telemetry import channels_by_group
+from ..i18n import LANG_SPANISH, current_language, tr
 
 
 _GROUP_ORDER: tuple[str, ...] = (
@@ -113,7 +114,14 @@ _HOW_TO_READ = """
       well-filled low-speed lobes and brief, capped high-speed
       tails; if one wheel never fills the HS bin it is over-damped,
       if it only fills HS it is under-damped.</li>
-  <li><b>Race dashboard</b>: in live sessions you see real-time
+  <li><b>Capture tab</b>: starts and stops the live telemetry
+      pipeline (UDP for OutSim/OutGauge, TCP for InSim) and writes
+      one CSV per lap into your workspace.</li>
+  <li><b>Overlay tab</b>: enables individual in-game overlay windows
+      (delta bar, radar, g-meter, gear, RPM, speed, fuel, gaps,
+      flags). Each one is a frameless, always-on-top widget you can
+      drag and resize on top of LFS.</li>
+  <li><b>Race dashboard</b> dock: in live sessions you see real-time
       splits, projected lap, nearby traffic and fuel autonomy.</li>
 </ul>
 
@@ -163,744 +171,186 @@ _HOW_TO_READ = """
   <li><b>InSim</b> — session events (lap times, splits, race
       control, chat).</li>
 </ul>
-<p>Use <i>Tools → Configure LFS…</i> to write the matching entries
-into <code>cfg.txt</code> automatically.</p>
+<p>The required entries in <code>cfg.txt</code> are
+<code>OutSim Mode 2 / Opts 1ff / Delay 1 / IP 127.0.0.1 / Port 30000</code>
+and <code>OutGauge Mode 1 / Delay 1 / IP 127.0.0.1 / Port 30001</code>.
+InSim is started at runtime inside LFS with <code>/insim 29999</code>
+(or <code>LFS.exe /insim=29999</code>).</p>
 """
 
 
-# ----------------------------------------------------------------------
-# Setup tab ↔ telemetry channels mapping
-# ----------------------------------------------------------------------
-# Each entry describes one slider/parameter from the LFS garage Setup
-# screen (sourced from the official LFS wiki — Basic Setup Guide,
-# Advanced Setup Guide and Technical Reference) and lists the
-# telemetry channels in Studio that reveal whether that setting is
-# right or wrong, with a short note on *what* to look for.
+_GROUP_INTRO_ES: dict[str, str] = {
+    "Driver": (
+        "Lo que est\u00e1 haciendo el piloto con los mandos. Estas "
+        "trazas (acelerador, freno, embrague, freno de mano, "
+        "direcci\u00f3n, par de FFB) provienen directamente del "
+        "stream UDP OutGauge de LFS y dan la lectura m\u00e1s "
+        "directa del estilo de conducci\u00f3n. Comparar dos "
+        "vueltas s\u00f3lo por los canales del piloto suele "
+        "explicar la mayor parte del delta de tiempo."
+    ),
+    "Vehicle": (
+        "Estado b\u00e1sico del coche: velocidad, posici\u00f3n y "
+        "cron\u00f3metros. Superponer la velocidad de dos vueltas "
+        "muestra exactamente d\u00f3nde ganas o pierdes tiempo; "
+        "integrar la diferencia de velocidad da el \u0394t "
+        "acumulado que el gr\u00e1fico ya dibuja al activar "
+        "\u2018\u0394t vs ref\u2019."
+    ),
+    "Engine": (
+        "Canales del grupo motriz \u2014 RPM, marcha, combustible, "
+        "temperaturas de motor/aceite, presi\u00f3n de turbo. \u00datiles "
+        "para auditar puntos de cambio, vigilar margen t\u00e9rmico y "
+        "presupuestar combustible."
+    ),
+    "Chassis": (
+        "Din\u00e1mica de chasis OutSim: aceleraci\u00f3n en 3 ejes "
+        "(m/s\u00b2), velocidad angular en 3 ejes (rad/s) y "
+        "actitud Euler. De aqu\u00ed se leen subviraje/sobreviraje, "
+        "transferencia de peso y estabilidad de la plataforma."
+    ),
+    "Suspension": (
+        "Estado de la suspensi\u00f3n por rueda: recorrido, carga "
+        "vertical, velocidad de amortiguador, c\u00e1ida din\u00e1mica "
+        "y \u00e1ngulo de la rueda dirigida. La pesta\u00f1a "
+        "Amortiguadores resume histogramas HS/LS (umbral est\u00e1ndar "
+        "~50 mm/s que separa movimientos de chasis de los impactos)."
+    ),
+    "Tyre": (
+        "Canales por rueda \u2014 slip ratio, \u00e1ngulo de deriva, "
+        "fuerzas longitudinal/lateral, temperatura de hinchado, huella "
+        "de contacto. La elipse de fricci\u00f3n |F|/(\u03bc\u00b7Fz) "
+        "los une: un neum\u00e1tico saturado no puede dar m\u00e1s "
+        "lateral sin perder longitudinal, y viceversa."
+    ),
+    "Derived": (
+        "Magnitudes que Studio calcula a partir de los canales "
+        "OutSim/OutGauge: \u00edndice de subviraje, transferencias "
+        "longitudinal/lateral, reparto real de frenada, uso de "
+        "fricci\u00f3n, suavidad de direcci\u00f3n\u2026 Suelen ser "
+        "los gr\u00e1ficos m\u00e1s diagn\u00f3sticos."
+    ),
+    "Track": (
+        "Geometr\u00eda est\u00e1tica de la trazada muestreada en el "
+        "nodo actual \u2014 curvatura, radio, pendiente, ancho y el "
+        "desplazamiento lateral del coche dentro del corredor. Permite "
+        "interpretar el resto de canales en su contexto f\u00edsico "
+        "(p. ej. g lateral alta donde el radio es peque\u00f1o)."
+    ),
+    "Aids": (
+        "Bitfield ShowLights de OutGauge \u2014 estado de TC, ABS, "
+        "limitador de pit, luz de cambio, intermitentes y testigos. "
+        "Activaciones frecuentes de TC/ABS indican que pides m\u00e1s "
+        "agarre longitudinal del que pueden dar los neum\u00e1ticos."
+    ),
+    "Lap": (
+        "Distancias e \u00edndices relativos a la vuelta usados para "
+        "alinear trazas entre m\u00faltiples vueltas."
+    ),
+    "Context": (
+        "Contexto de sesi\u00f3n: coche, circuito, tiempo, viento. "
+        "Se usa como metadatos para filtrar y comparar capturas."
+    ),
+}
 
-_SetupParam = tuple[
-    str,             # parameter name (matches LFS garage label)
-    str,             # what it does (plain language)
-    tuple[tuple[str, str], ...],  # (channel_id, why it matters)
-    str,             # tuning shortcut / how to read the trace
-]
 
-_SETUP_GROUPS: tuple[tuple[str, str, tuple[_SetupParam, ...]], ...] = (
-    (
-        "Brakes",
-        "LFS exposes two adjustments: <b>Maximum brake torque per "
-        "wheel</b> (Nm) and <b>Brake balance</b> (front/rear bias, "
-        "5–95%). Goal per the Advanced Setup Guide: the wheel at the "
-        "grippiest braking point of the lap should be just shy of "
-        "locking; balance compensates for engine braking on the "
-        "driven axle (RWD = slightly forward, FWD = slightly "
-        "rearward).",
-        (
-            (
-                "Max brake torque per wheel (Nm)",
-                "Peak clamping torque when the pedal is at 1.0. Too "
-                "high and any wheel will lock; too low and you cannot "
-                "reach the friction limit at the grippiest braking "
-                "zone.",
-                (
-                    ("brake",
-                     "The pedal trace shows what you commanded; "
-                     "verify you really are reaching ~1.0 at the "
-                     "hardest braking zone."),
-                    ("fl_slip_fraction / fr_slip_fraction / "
-                     "rl_slip_fraction / rr_slip_fraction",
-                     "Slip fraction near 1.0 (or pegged) with brake "
-                     "applied = that wheel is locking. Reduce Max "
-                     "torque or back off the pedal."),
-                    ("fl_slip_ratio … rr_slip_ratio",
-                     "Under braking they go negative; |slip_ratio| "
-                     "much beyond 0.15 means past the longitudinal "
-                     "peak — tyre sliding more than gripping."),
-                    ("fl_long_force_n … rr_long_force_n",
-                     "Per-wheel braking force. If one wheel's |Fx| "
-                     "saturates well before the others, that wheel is "
-                     "locking first."),
-                    ("aid_abs_active",
-                     "OutGauge ShowLights ABS bit. Constant flicker "
-                     "= you are commanding more brake than the tyre "
-                     "can hold; the ABS is doing the work for you."),
-                    ("accel_x",
-                     "Peak deceleration plateau. A clean braking "
-                     "event should sit near the tyre limit "
-                     "(1.0–1.5 g road, 2.0+ g slicks) flat-topped, "
-                     "not spiky."),
-                ),
-                "Look at the four <code>*_slip_fraction</code> "
-                "traces during the hardest stop of the lap: the "
-                "best Max-torque is the one where they all peak "
-                "together just below 1.0.",
-            ),
-            (
-                "Brake balance (% front)",
-                "Splits total clamping between front and rear. "
-                "Wiki: front-locking → reduce % front; rear-locking "
-                "→ increase % front. Account for engine braking on "
-                "the driven axle.",
-                (
-                    ("brake_bias_real_pct",
-                     "Derived effective front bias including engine "
-                     "braking. Compare against the slider you set; "
-                     "the gap is the engine-braking contribution."),
-                    ("fl_slip_fraction & fr_slip_fraction vs "
-                     "rl_slip_fraction & rr_slip_fraction",
-                     "Whichever axle saturates first is the one with "
-                     "too much bias. Wiki Example 1 = front locks "
-                     "first; Example 2 = rear locks first."),
-                    ("fl_long_force_n + fr_long_force_n vs "
-                     "rl_long_force_n + rr_long_force_n",
-                     "Axle Fx sum ratio at peak braking should match "
-                     "your intended bias once weight transfer is in."),
-                    ("transfer_long_n_real",
-                     "Longitudinal weight transfer "
-                     "(≈ m·a_x·h_cg/wheelbase). Tells you how much "
-                     "load has already moved forward and how much "
-                     "the rear axle can still hold."),
-                    ("understeer_index",
-                     "Big +ve spike when you stand on the brakes = "
-                     "front locked / pushing; big −ve = rear stepping "
-                     "out. Trail-braking should show only a small "
-                     "−ve excursion."),
-                ),
-                "Trail-brake into a medium corner: if "
-                "<code>understeer_index</code> goes deeply negative "
-                "and the rears reach <code>slip_fraction</code> ≈ 1 "
-                "first → move bias forward.",
-            ),
-        ),
-    ),
-    (
-        "Suspension — Springs (Stiffness)",
-        "Wiki: tune by <i>spring frequency</i>, not absolute N/m. "
-        "Sensible window ≈ 1.7–3.0 Hz for road/GT cars, 4–8 Hz for "
-        "downforce cars. Higher rear frequency (RWD) or higher front "
-        "(FWD) by 0.15–0.25 Hz biases the car towards understeer/"
-        "oversteer respectively.",
-        (
-            (
-                "Spring stiffness (front / rear, N/mm)",
-                "Stiffer spring = less travel under the same load, "
-                "less body roll, less mechanical grip over bumps; "
-                "softer = more grip on smooth tracks but more "
-                "platform movement.",
-                (
-                    ("fl_susp_deflect_m … rr_susp_deflect_m",
-                     "Static and peak compression. If a corner uses "
-                     "<25% of the available travel the spring may be "
-                     "too stiff; if it bottoms out frequently it is "
-                     "too soft or ride height too low."),
-                    ("fl_susp_speed_mps … rr_susp_speed_mps",
-                     "Spring rate sets the natural frequency together "
-                     "with damping. Persistent oscillation after a "
-                     "kerb = underdamped or wrong spring."),
-                    ("fl_vertical_load_n … rr_vertical_load_n",
-                     "Load reaching the contact patch. With a stiffer "
-                     "spring, transients are sharper (faster rise/"
-                     "fall) — useful to confirm the change took "
-                     "effect."),
-                    ("roll_rad / pitch_rad",
-                     "Chassis attitude. Stiffer springs reduce both "
-                     "the steady-state roll in long corners and the "
-                     "pitch dive under braking."),
-                    ("understeer_index",
-                     "Persistent bias confirms the front/rear "
-                     "frequency split chose the intended direction."),
-                ),
-                "Open the <b>Dampers tab</b> alongside the deflection "
-                "traces: if the bell curve of suspension velocity is "
-                "centred far from 0 mm/s the springs are not in their "
-                "linear range — usually too stiff for the surface.",
-            ),
-        ),
-    ),
-    (
-        "Suspension — Bump & Rebound Damping",
-        "Wiki: bump damping resists compression, rebound resists "
-        "extension. Bump controls the <i>unsprung</i> mass (wheel), "
-        "rebound controls the <i>sprung</i> mass (chassis). Aim ≈ "
-        "0.8× critical damping on rebound, 0.5–0.75× rebound on "
-        "bump. Use the HS/LS split: low-speed → driver inputs and "
-        "weight transfer; high-speed → kerbs and bumps. The "
-        "industry cross-over sits near ~50 mm/s.",
-        (
-            (
-                "Bump (compression) damping",
-                "Resists the wheel moving up into the body. Too "
-                "high = wheel skips over bumps, lost grip; too low "
-                "= wheel slams into the bump stops.",
-                (
-                    ("fl_susp_speed_mps … rr_susp_speed_mps",
-                     "Positive velocity histogram is the bump side. "
-                     "Healthy LS lobe up to ~50 mm/s; HS tail short "
-                     "and capped. A massive HS tail = under-damped "
-                     "bump; no HS tail at all = over-damped."),
-                    ("fl_susp_deflect_m … rr_susp_deflect_m",
-                     "Watch for double bumps / chatter after a kerb. "
-                     "Long oscillation = too soft; instant jolt that "
-                     "doesn't move = too hard."),
-                    ("fl_vertical_load_n … rr_vertical_load_n",
-                     "Vertical load that survives the bump tells you "
-                     "if the contact patch is being preserved."),
-                    ("fl_touching … rr_touching",
-                     "If a wheel briefly leaves the road over kerbs, "
-                     "bump damping is likely too stiff."),
-                ),
-                "Race a lap then open the Dampers tab. The bump "
-                "histogram you want looks like a peaked Gaussian "
-                "centred near 0 with a small skew toward positive HS.",
-            ),
-            (
-                "Rebound (extension) damping",
-                "Resists the wheel moving down away from the body. "
-                "Too high = wheel can't return to road after a "
-                "compression (jacks down, loses grip on the inside "
-                "wheel); too low = floaty chassis, slow transient "
-                "response.",
-                (
-                    ("fl_susp_speed_mps … rr_susp_speed_mps",
-                     "Negative velocity side (extension). Should "
-                     "settle quickly after a corner exit; long "
-                     "negative tail = under-damped rebound."),
-                    ("pitch_rad",
-                     "Dive on entry, squat on exit. Excess rebound "
-                     "on the lifting axle keeps the platform skewed "
-                     "for too long."),
-                    ("roll_rad",
-                     "After an apex, roll should release smoothly; "
-                     "ringing = rebound too soft."),
-                    ("fl_vertical_load_n … rr_vertical_load_n",
-                     "Inside wheel on a long corner. If load decays "
-                     "to near 0 and stays there, the inside wheel is "
-                     "being jacked down by excessive rebound."),
-                    ("understeer_index",
-                     "Transient damping primarily tunes corner "
-                     "entry/exit balance — read US/OS spikes at "
-                     "those instants."),
-                ),
-                "Basic Setup Guide quick-reference: <i>entry "
-                "understeer → soften front compression + soften rear "
-                "rebound; exit oversteer → soften rear compression + "
-                "soften front rebound.</i>",
-            ),
-        ),
-    ),
-    (
-        "Suspension — Anti-Roll Bars",
-        "Wiki: ARB reduces body roll without making the spring "
-        "stiffer; downside is that one-wheel bumps transfer to the "
-        "other side, hurting mechanical grip. Use ARB <i>balance</i> "
-        "to fine-tune US/OS once springs are set neutral. Don't let "
-        "the ARB:spring roll-stiffness ratio exceed ≈ 1.0.",
-        (
-            (
-                "Front / Rear ARB stiffness",
-                "Stiffer front ARB → more understeer in steady-state "
-                "corners; stiffer rear ARB → more oversteer.",
-                (
-                    ("roll_rad",
-                     "Peak steady roll in a long corner — main "
-                     "indicator of overall ARB+spring stiffness."),
-                    ("roll_rate_rads",
-                     "Roll velocity at turn-in. Stiffer ARBs raise "
-                     "roll rate, snapping the chassis to attitude "
-                     "faster — too snappy and the car becomes "
-                     "nervous."),
-                    ("fl_vertical_load_n vs fr_vertical_load_n / "
-                     "rl_vertical_load_n vs rr_vertical_load_n",
-                     "Lateral load split between left/right on the "
-                     "same axle. A stiffer ARB on an axle steals "
-                     "load from the inside wheel and transfers it "
-                     "to the outside wheel, reducing that axle's "
-                     "grip first."),
-                    ("transfer_lat_n_real",
-                     "Lateral load transfer ≈ m·a_y·h_cg/track. "
-                     "ARB redistributes the per-axle share of that "
-                     "total."),
-                    ("understeer_index",
-                     "Mid-corner sign tells you whether the current "
-                     "ARB balance leans US (+) or OS (−)."),
-                    ("friction_use_fl … friction_use_rr",
-                     "|F|/(μ·Fz) per corner. The wheel that "
-                     "saturates first in a sustained corner is on "
-                     "the axle that needs the ARB softened."),
-                ),
-                "Mid-corner US → soften front ARB or stiffen rear; "
-                "mid-corner OS → the opposite. Confirm with the "
-                "load-difference traces.",
-            ),
-        ),
-    ),
-    (
-        "Suspension — Ride Height",
-        "Wiki: lowest practical ride height = lowest CG = less load "
-        "transfer = more grip, but you mustn't run out of travel "
-        "or bottom out. Tune <i>last</i>, once springs and dampers "
-        "are set.",
-        (
-            (
-                "Front / Rear ride height reduction (mm)",
-                "Distance from chassis reference to ground at rest. "
-                "Affects CG height, mechanical/aero balance and "
-                "available bump travel.",
-                (
-                    ("fl_susp_deflect_m … rr_susp_deflect_m",
-                     "Look for instances at 0 travel left = bottoming "
-                     "out. The Advanced Guide accepts the suspension "
-                     "<i>just</i> bottoming once or twice per lap if "
-                     "handling isn't upset."),
-                    ("transfer_long_n_real / transfer_lat_n_real",
-                     "Both scale with h_cg. Lower the car and these "
-                     "magnitudes drop directly."),
-                    ("pitch_rad",
-                     "Static pitch (squat/rake). The Wiki recommends "
-                     "a small static dive to compensate acceleration "
-                     "squat (note: LFS does not yet model the aero "
-                     "effect of pitch)."),
-                    ("accel_z",
-                     "Big negative spikes = bumpstop hits / kerb "
-                     "strikes. Raise ride height or stiffen bump "
-                     "damping if these are causing handling issues."),
-                ),
-                "Run the lap, view <code>*_susp_deflect_m</code> on "
-                "distance axis: lower the car in 2–3 mm steps until "
-                "you see the deflection traces using the upper "
-                "~85–95% of available travel without persistent "
-                "bottoming.",
-            ),
-        ),
-    ),
-    (
-        "Steering — Maximum Lock",
-        "Wiki: range 9°–36°. Lower lock = less sensitive, more "
-        "precise, harder to catch oversteer. Higher lock = easier "
-        "to catch slides but twitchy on centre.",
-        (
-            (
-                "Maximum steering lock (°)",
-                "How far the front wheels move at full controller "
-                "input.",
-                (
-                    ("steering_input",
-                     "Normalised −1..+1 input from OutGauge. With "
-                     "high lock you'll see small numeric values doing "
-                     "lots of work."),
-                    ("steer_rate_rads",
-                     "Hand-speed at the wheel. Higher lock = lower "
-                     "rate needed for the same angle on track."),
-                    ("steer_reversal_rate_hz",
-                     "Reversals/s. If you constantly saw on centre, "
-                     "lock is probably too high for your input "
-                     "device."),
-                    ("fl_steer_rad / fr_steer_rad",
-                     "Actual front-wheel angles. With Ackermann "
-                     "(<100% Parallel Steer) inner and outer wheels "
-                     "differ."),
-                ),
-                "Compare <code>steer_rate_rads</code> across laps: "
-                "lower lock should produce smoother peak rates and "
-                "fewer reversals.",
-            ),
-        ),
-    ),
-    (
-        "Steering — Caster (race cars)",
-        "Wiki: caster is shown for all cars but only adjustable on "
-        "race cars (inclination is fixed by geometry). Caster adds "
-        "negative camber to the steered wheel <i>linearly</i> with "
-        "lock; helps the outside front stay flat in a turn but "
-        "needs heavier steering.",
-        (
-            (
-                "Caster angle (°)",
-                "Tilt of the kingpin axis viewed from the side. More "
-                "caster → more self-centring, more dynamic camber, "
-                "more straight-line stability.",
-                (
-                    ("fl_lean_rel_road_rad / fr_lean_rel_road_rad",
-                     "Live camber relative to road during cornering. "
-                     "More caster = more negative camber on the "
-                     "outside front in long corners."),
-                    ("fl_air_temp_c / fr_air_temp_c (inner/middle/"
-                     "outer in F9 view)",
-                     "Camber correctness shows up as even left-to-"
-                     "right tyre-band temperatures. Studio surfaces "
-                     "the inflation-air temp; correlate with the F9 "
-                     "tyre-bar wear screen recommended in the Wiki."),
-                    ("fl_y_force_n / fr_y_force_n",
-                     "Lateral force per front wheel: extra caster "
-                     "helps the outside wheel produce more Fy in a "
-                     "sustained corner."),
-                    ("ffb_torque",
-                     "Steering-rack torque feedback. More caster "
-                     "literally makes the wheel heavier — verify by "
-                     "the bigger plateau on the trace."),
-                    ("understeer_index",
-                     "Quick-reference (Wiki): entry US → more caster; "
-                     "entry OS → less caster."),
-                ),
-                "Push entry US: try +1 caster. Watch "
-                "<code>fl/fr_lean_rel_road_rad</code> for the right "
-                "−2° to −4° band at peak lateral g.",
-            ),
-        ),
-    ),
-    (
-        "Steering — Parallel Steer (Ackermann)",
-        "Wiki: 100% = wheels stay parallel; 0% = full Ackermann (inner "
-        "wheel takes more lock than outer). True Ackermann reduces "
-        "tyre scrub at low-speed corners; race cars usually run high "
-        "% with static front toe-out instead.",
-        (
-            (
-                "Parallel Steer (%)",
-                "How much extra angle the inside wheel takes versus "
-                "the outside as lock is applied.",
-                (
-                    ("fl_steer_rad vs fr_steer_rad",
-                     "Direct read of the dynamic toe applied. The "
-                     "difference grows as 100% → 0%."),
-                    ("fl_tan_slip_angle / fr_tan_slip_angle",
-                     "Inner vs outer front slip angles. With correct "
-                     "Ackermann they should converge on a similar "
-                     "magnitude around the apex."),
-                    ("fl_air_temp_c / fr_air_temp_c",
-                     "Wrong Ackermann shows as uneven front-tyre "
-                     "temperatures, especially in slow corners."),
-                ),
-                "Tight hairpins exaggerate Ackermann effects: compare "
-                "the two front <code>tan_slip_angle</code> traces "
-                "through the slowest corner of the lap.",
-            ),
-        ),
-    ),
-    (
-        "Wheels — Toe",
-        "Wiki: front toe-out (negative toe-in) helps turn-in but "
-        "makes straights nervous; front toe-in stabilises. Rear toe-"
-        "in stabilises RWD against power-on oversteer; rear toe-out "
-        "is used on FWD to provoke rotation. All toe increases tyre "
-        "drag and heat.",
-        (
-            (
-                "Front toe-in (°)",
-                "Wheel pre-angle (closer at front = toe-in, closer "
-                "at back = toe-out).",
-                (
-                    ("fl_tan_slip_angle / fr_tan_slip_angle",
-                     "Static toe shows up as a non-zero baseline "
-                     "even in a straight line."),
-                    ("fl_air_temp_c / fr_air_temp_c",
-                     "Excess toe heats and wears the front tyres."),
-                    ("steer_reversal_rate_hz",
-                     "Toe-out on the front raises straight-line "
-                     "nervousness → more micro-corrections."),
-                    ("understeer_index",
-                     "Less front toe-out (or some toe-in) damps "
-                     "entry oversteer; more toe-out attacks entry "
-                     "understeer."),
-                ),
-                "Tail-wagging on the straight → add toe-in 0.1° at a "
-                "time; lazy turn-in → toe-out 0.1°.",
-            ),
-            (
-                "Rear toe-in (°)",
-                "Same definition at the rear. Even small changes "
-                "(0.3°) move the car a lot.",
-                (
-                    ("rl_tan_slip_angle / rr_tan_slip_angle",
-                     "Rear slip-angle baseline and how it evolves "
-                     "on throttle exit."),
-                    ("understeer_index",
-                     "Wiki: more rear toe-in → more resistance to "
-                     "(power) oversteer. Less or toe-out → more "
-                     "rotation, useful on FWD."),
-                    ("rl_air_temp_c / rr_air_temp_c",
-                     "Excess rear toe heats and wears the rears, "
-                     "especially over a stint."),
-                    ("yaw_rate_rads",
-                     "Rear toe-in tames yaw transients; toe-out "
-                     "amplifies them at corner exit."),
-                ),
-                "RWD with power-on snap → +0.1° rear toe-in. FWD "
-                "stubborn understeer mid-corner → −0.1°.",
-            ),
-        ),
-    ),
-    (
-        "Wheels — Camber",
-        "Wiki: aim for a flat contact patch under peak lateral g — "
-        "use the F9 in-game tyre-bar view as the primary truth, but "
-        "the telemetry channels give you a real-time live read.",
-        (
-            (
-                "Static camber (°)",
-                "Wheel tilt at rest. Negative camber compensates "
-                "body-roll-induced positive camber on the outside "
-                "wheel during cornering.",
-                (
-                    ("fl_lean_rel_road_rad … rr_lean_rel_road_rad",
-                     "Live camber vs road. Target ≈ −0.5° to −1.5° "
-                     "on the loaded outside wheel at peak lateral g."),
-                    ("fl_air_temp_c … rr_air_temp_c",
-                     "Across the band: <i>inner hotter than outer</i>"
-                     " = too much negative camber; <i>outer hotter "
-                     "than inner</i> = not enough."),
-                    ("fl_vertical_load_n … rr_vertical_load_n",
-                     "Loaded wheel is where camber matters most; "
-                     "correlate live camber with peak load."),
-                    ("fl_x_force_n … rr_x_force_n",
-                     "Too much camber reduces braking grip "
-                     "noticeably — watch peak |Fx| at the heaviest "
-                     "stop."),
-                ),
-                "Open the relevant <code>*_lean_rel_road_rad</code> "
-                "and <code>*_air_temp_c</code> traces at the apex "
-                "of a long corner — same logic as the Basic Setup "
-                "Guide tyre-temperature table.",
-            ),
-        ),
-    ),
-    (
-        "Tyres — Type / Compound",
-        "Wiki: road cars choose between Normal and Super; race cars "
-        "between R1 (softest) and R4 (hardest). Optimum is the "
-        "compound that holds <i>working temperature</i> through the "
-        "stint without overheating.",
-        (
-            (
-                "Tyre compound",
-                "Trade-off between peak grip and durability / "
-                "temperature window.",
-                (
-                    ("fl_air_temp_c … rr_air_temp_c",
-                     "Inflation-air temperature. Sustained reds = too "
-                     "soft for the workload; permanent blues = too "
-                     "hard or pressures too high."),
-                    ("tyre_work_w_fl … tyre_work_w_rr",
-                     "Power being dissipated as heat in the contact "
-                     "patch. Big disparity between a corner and the "
-                     "average = that tyre is on the edge for this "
-                     "compound."),
-                    ("friction_use_fl … friction_use_rr",
-                     "If a softer compound saturates everywhere = "
-                     "you're at the grip limit; if a harder one "
-                     "never saturates = unused grip = potential lap "
-                     "time."),
-                    ("fl_slip_fraction … rr_slip_fraction",
-                     "Persistent values above ≈ 0.5 say the tyre is "
-                     "sliding more than gripping → wrong compound or "
-                     "wrong pressures."),
-                ),
-                "Run a representative stint, then check that all "
-                "four <code>*_air_temp_c</code> traces sit in the "
-                "green band for most of each lap.",
-            ),
-        ),
-    ),
-    (
-        "Tyres — Pressure",
-        "Wiki: lower pressure = bigger contact patch and more "
-        "absolute grip, but more rolling resistance, more heat and "
-        "more wear. Higher pressure = sharper response, cooler "
-        "running, less ultimate grip. Slight over-inflation is safer "
-        "than slight under-inflation.",
-        (
-            (
-                "Tyre pressure (bar / psi)",
-                "Cold inflation pressure.",
-                (
-                    ("fl_air_temp_c … rr_air_temp_c",
-                     "Pressure is the main lever for the steady-state "
-                     "temperature; lower it 0.05 bar to add a few °C."),
-                    ("fl_lean_rel_road_rad … rr_lean_rel_road_rad",
-                     "Together with the F9 tyre-bar wear pattern: "
-                     "centre hotter = over-inflated; edges hotter = "
-                     "under-inflated."),
-                    ("fl_vertical_load_n … rr_vertical_load_n",
-                     "Combined with pressure, sets the contact-patch "
-                     "size. A sharp load transient with high pressure "
-                     "shows up as a quicker rise."),
-                    ("steer_rate_rads",
-                     "Higher pressure = sharper response → smaller "
-                     "rates needed for the same line change."),
-                ),
-                "Adjust pressure one step at a time; verify with the "
-                "<code>*_air_temp_c</code> stint trend before changing "
-                "anything else.",
-            ),
-        ),
-    ),
-    (
-        "Final drive — Gear ratios",
-        "Wiki: top gear set so you hit max-power RPM at end of the "
-        "longest straight; first gear set as tall as possible "
-        "without bogging; ratios spaced so RPM drop reduces with "
-        "each upshift.",
-        (
-            (
-                "Final drive ratio + Individual gear ratios",
-                "Translates engine RPM into wheel torque and top "
-                "speed.",
-                (
-                    ("rpm",
-                     "Trace shape across a straight tells you whether "
-                     "top gear is right. Hitting limiter mid-straight "
-                     "= too short; never reaching peak power = too "
-                     "tall."),
-                    ("gear",
-                     "Detect short-shifts, mis-shifts and how often "
-                     "you sit on a given gear."),
-                    ("speed_ms / speed_kmh",
-                     "Combined with RPM gives the actual gear curve. "
-                     "Plot speed vs RPM coloured by gear."),
-                    ("throttle",
-                     "If throttle saturates at 1.0 between two gears "
-                     "but speed barely climbs, that gear is too tall."),
-                    ("accel_x",
-                     "Acceleration steps at each upshift should "
-                     "decrease smoothly. A flat-spot after a shift = "
-                     "RPM falling below the torque peak."),
-                ),
-                "On a long straight: <code>rpm</code> should reach "
-                "max-power RPM at the braking point in top gear; "
-                "<code>accel_x</code> after each shift should never "
-                "drop below the previous gear's exit value.",
-            ),
-        ),
-    ),
-    (
-        "Final drive — Differential type",
-        "Wiki: open diff and locked diff are rarely used. Clutch-pack "
-        "LSD (Salisbury) and viscous LSD are the racing choices. "
-        "Clutch-pack adds <i>power</i> + <i>coast</i> + <i>preload</i>"
-        " sliders; viscous adds a single viscosity slider.",
-        (
-            (
-                "Diff type (open / locked / viscous / clutch-pack)",
-                "How torque is allocated between the two wheels on the "
-                "driven axle when their speeds differ.",
-                (
-                    ("rl_ang_vel_rads vs rr_ang_vel_rads "
-                     "(or fl/fr on FWD)",
-                     "Wheel-speed difference is the direct read on the "
-                     "diff: open = big gap on a corner, locked = ~0, "
-                     "LSD = small controlled gap."),
-                    ("rl_slip_ratio vs rr_slip_ratio",
-                     "Driven wheel slip ratios. Open diff = inside "
-                     "wheel will pull massive slip on throttle; LSD "
-                     "splits it."),
-                    ("rl_long_force_n vs rr_long_force_n",
-                     "Torque actually transmitted. Confirms whether "
-                     "the slipping wheel is also the one with low Fx."),
-                    ("understeer_index",
-                     "On RWD a tight diff = more power oversteer; on "
-                     "FWD a tight power side = more turn-in."),
-                ),
-                "Plot left-vs-right wheel speed on the driven axle "
-                "exiting a hairpin: zero gap = locked behaviour, huge "
-                "gap = open / loose LSD.",
-            ),
-            (
-                "Diff slip limits — Power lock / Coast lock / Preload",
-                "Clutch-pack: power lock = how much it locks under "
-                "throttle, coast lock = under engine braking / lift-"
-                "off, preload = baseline lock at zero torque.",
-                (
-                    ("rl_ang_vel_rads vs rr_ang_vel_rads",
-                     "Power lock too low → outside wheel laggy on "
-                     "exit. Coast lock too high → rear hops or locks "
-                     "on entry."),
-                    ("rl_slip_ratio vs rr_slip_ratio",
-                     "Inside-wheel slip on throttle = power lock "
-                     "insufficient."),
-                    ("yaw_rate_rads / understeer_index",
-                     "On RWD: high power lock = more exit OS, high "
-                     "coast lock = stabilises entry but kills "
-                     "rotation. Wiki: oversteer on the brakes → add "
-                     "preload; understeer on initial squeeze → remove "
-                     "preload."),
-                    ("brake",
-                     "Use it together with coast lock: study what "
-                     "happens between brake release and throttle-on."),
-                ),
-                "On a long throttle-on exit, compare driven-axle "
-                "slip ratios: if the inside is far higher → increase "
-                "<i>power lock</i>.",
-            ),
-        ),
-    ),
-    (
-        "Final drive — Front Torque Bias (AWD only)",
-        "Wiki: % of engine torque sent to the front wheels on AWD. "
-        "Lower % = more rear-biased / oversteer-prone; higher % = "
-        "more front-biased / understeer-prone.",
-        (
-            (
-                "Front torque bias (%)",
-                "Static torque split front:rear.",
-                (
-                    ("fl_long_force_n + fr_long_force_n vs "
-                     "rl_long_force_n + rr_long_force_n",
-                     "Axle Fx sum on throttle reveals the realised "
-                     "split; compare with the slider."),
-                    ("fl_slip_ratio + fr_slip_ratio vs rl_slip_ratio "
-                     "+ rr_slip_ratio",
-                     "If only one axle saturates on throttle the bias "
-                     "is wrong for the available grip."),
-                    ("understeer_index",
-                     "On throttle: more front bias = more power "
-                     "understeer; less = more power oversteer."),
-                    ("fl_air_temp_c + fr_air_temp_c vs rl_air_temp_c "
-                     "+ rr_air_temp_c",
-                     "Wiki: a balanced AWD setup tends to equalise "
-                     "tyre temperatures between axles."),
-                ),
-                "Long uphill exit: if the rears overheat and the "
-                "fronts stay cool → move 5% more torque forward.",
-            ),
-        ),
-    ),
-    (
-        "Downforce — Wing angles",
-        "Wiki: higher wing = more grip and more drag. Aero balance "
-        "should roughly match weight distribution to stay neutral "
-        "with speed. Front-bias understeers at high speed; rear-bias "
-        "oversteers.",
-        (
-            (
-                "Front / Rear wing angle (°)",
-                "Aerodynamic downforce per axle.",
-                (
-                    ("speed_ms / speed_kmh",
-                     "Top speed gain/loss is the most visible "
-                     "consequence of changing wing."),
-                    ("fl_vertical_load_n + fr_vertical_load_n vs "
-                     "rl_vertical_load_n + rr_vertical_load_n",
-                     "At high speed, increased load above the static "
-                     "weight is the actual downforce being generated."),
-                    ("fl_susp_deflect_m … rr_susp_deflect_m",
-                     "Rise of static compression with speed = "
-                     "downforce settling the platform. Make sure you "
-                     "don't run out of travel on the fastest part of "
-                     "the lap."),
-                    ("understeer_index",
-                     "Compute it at high speed only — if it shifts +ve "
-                     "vs low-speed corners → too much rear wing; if "
-                     "−ve → too much front."),
-                    ("accel_x",
-                     "Peak braking deceleration grows with speed in "
-                     "downforce cars — that's your aero working."),
-                ),
-                "Take a high-speed corner and a slow corner. If the "
-                "fast corner is much more understeery than the slow "
-                "one → reduce rear wing (or add front).",
-            ),
-        ),
-    ),
-)
+_HOW_TO_READ_ES = """
+<h2>C\u00f3mo leer Studio</h2>
+<ul>
+  <li><b>Pasa el rat\u00f3n por cualquier canal</b> del \u00e1rbol de
+      la derecha, o por cualquier gr\u00e1fico, para ver un tooltip
+      con qu\u00e9 mide y c\u00f3mo interpretarlo.</li>
+  <li><b>Eje X</b>: distancia (recomendado para comparar vueltas) o
+      tiempo (mejor para inspeccionar transitorios individuales).</li>
+  <li><b>\u0394t vs ref</b>: con dos o m\u00e1s vueltas y eje X en
+      distancia, la primera fila muestra el delta de tiempo
+      acumulado contra la vuelta de referencia. Sube = pierdes
+      tiempo; baja = ganas.</li>
+  <li><b>Preajustes C\u00edrculo de fricci\u00f3n / Transferencia de
+      carga</b>: selecciones de canales de un clic para las vistas
+      diagn\u00f3sticas m\u00e1s habituales.</li>
+  <li><b>Pesta\u00f1a Sectores</b>: divide la vuelta en sectores,
+      marcando tu mejor sector personal y el mejor te\u00f3rico.</li>
+  <li><b>Pesta\u00f1a Amortiguadores</b>: histograma de velocidad de
+      amortiguador alta/baja (cruce cerca de ~50 mm/s). Un coche
+      equilibrado tiene l\u00f3bulos de baja velocidad bien rellenos
+      y colas cortas en alta velocidad; si una rueda nunca llena la
+      zona HS est\u00e1 sobre-amortiguada, si s\u00f3lo llena HS
+      est\u00e1 infra-amortiguada.</li>
+  <li><b>Pesta\u00f1a Captura</b>: arranca y detiene la canalizaci\u00f3n
+      de telemetr\u00eda en vivo (UDP para OutSim/OutGauge, TCP para
+      InSim) y escribe un CSV por vuelta en tu espacio de trabajo.</li>
+  <li><b>Pesta\u00f1a Overlay</b>: habilita ventanas individuales de
+      overlay en juego (barra de delta, radar, g-metro, marcha, RPM,
+      velocidad, combustible, huecos, banderas). Cada una es un
+      widget sin bordes siempre encima que puedes arrastrar y
+      redimensionar sobre LFS.</li>
+  <li>Dock <b>Panel de carrera</b>: en sesiones en vivo ves los
+      parciales en tiempo real, la vuelta proyectada, el tr\u00e1fico
+      cercano y la autonom\u00eda de combustible.</li>
+</ul>
+
+<h2>Atajos de lectura (conducci\u00f3n y f\u00edsica)</h2>
+<ul>
+  <li><b>Acelerador y freno</b> deber\u00edan \u2018darse la mano\u2019
+      en entrada/salida de curva \u2014 freno liberado cuando el
+      acelerador empieza a subir. Aplicaciones largas simult\u00e1neas
+      son trail-braking deliberado o un error. Entradas en escal\u00f3n
+      que rebotan en 1.0 sugieren pedaleo agresivo que los
+      neum\u00e1ticos pueden no absorber.</li>
+  <li><b>Direcci\u00f3n</b>: trazas suaves de un solo arco = entrada
+      bien juzgada. Un patr\u00f3n en sierra de peque\u00f1as
+      inversiones es sobre-correcci\u00f3n o un chasis nervioso
+      (steer_reversal_rate_hz lo cuantifica).</li>
+  <li><b>Diagrama g\u2013g</b>: dibuja accel_x vs accel_y. Un coche
+      que usa toda la elipse de fricci\u00f3n rellena el c\u00edrculo;
+      los cuadrantes vac\u00edos muestran d\u00f3nde queda agarre sin
+      usar (t\u00edpicamente en transiciones de freno-a-curva).</li>
+  <li><b>understeer_index</b>: +ve = el tren delantero se va de largo
+      (delanteros saturados), \u2212ve = el tren trasero gira m\u00e1s
+      de lo que pide la direcci\u00f3n (sobreviraje). D\u00f3nde
+      aparecen los picos importa: picos en <i>entrada</i> suelen
+      venir de geometr\u00eda delantera blanda o neum\u00e1ticos
+      delanteros fr\u00edos; picos en <i>salida</i>, de demasiada
+      potencia demasiado pronto o un diferencial suelto.</li>
+  <li><b>friction_use_*</b> cerca de 1.0 en una sola rueda = la
+      huella de contacto est\u00e1 saturada. Si s\u00f3lo una rueda
+      lo hace mientras las dem\u00e1s se quedan atr\u00e1s, el
+      reparto de carga est\u00e1 mal (barras estabilizadoras,
+      presiones, alineaci\u00f3n, altura).</li>
+  <li><b>Objetivos de slip</b>: el agarre longitudinal m\u00e1ximo
+      vive en slip_ratio |0,10\u20130,15|; el lateral m\u00e1ximo
+      cerca de un \u00e1ngulo de deriva de 6\u20138\u00b0 (tan
+      \u2248 0,10\u20130,14). Pasado eso, el neum\u00e1tico desliza
+      m\u00e1s de lo que agarra.</li>
+  <li><b>Transferencia de peso</b>: transfer_long \u2248
+      m\u00b7a_x\u00b7h_cg/batalla, transfer_lat \u2248
+      m\u00b7a_y\u00b7h_cg/v\u00eda. Ambas escalan con la altura del
+      CG \u2014 bajar la altura es la forma m\u00e1s barata de
+      reducir la transferencia.</li>
+</ul>
+
+<h2>De d\u00f3nde vienen los datos</h2>
+<p>LFS expone tres streams de telemetr\u00eda que Studio escucha:</p>
+<ul>
+  <li><b>OutSim</b> \u2014 IMU del chasis a alta frecuencia
+      (posici\u00f3n, velocidad, aceleraci\u00f3n en 3 ejes en
+      m/s\u00b2, velocidad angular en 3 ejes en rad/s, \u00e1ngulos
+      Euler, info por rueda con slip ratio, \u00e1ngulo de deriva,
+      fuerzas, contacto y recorrido de suspensi\u00f3n).</li>
+  <li><b>OutGauge</b> \u2014 estado del salpicadero (RPM, velocidad,
+      marcha, acelerador, freno, embrague, freno de mano,
+      direcci\u00f3n, combustible, temperaturas de motor/aceite,
+      turbo, bitfield show-lights).</li>
+  <li><b>InSim</b> \u2014 eventos de sesi\u00f3n (tiempos de vuelta,
+      parciales, direcci\u00f3n de carrera, chat).</li>
+</ul>
+<p>Las entradas necesarias en <code>cfg.txt</code> son
+<code>OutSim Mode 2 / Opts 1ff / Delay 1 / IP 127.0.0.1 / Port 30000</code>
+y <code>OutGauge Mode 1 / Delay 1 / IP 127.0.0.1 / Port 30001</code>.
+InSim se arranca en tiempo de ejecuci\u00f3n dentro de LFS con
+<code>/insim 29999</code> (o <code>LFS.exe /insim=29999</code>).</p>
+"""
 
 
 class HelpDialog(QDialog):
@@ -908,7 +358,7 @@ class HelpDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Channel & telemetry guide")
+        self.setWindowTitle(tr("Channel & telemetry guide"))
         self.resize(960, 720)
 
         browser = QTextBrowser(self)
@@ -942,28 +392,40 @@ class HelpDialog(QDialog):
 
     def _build_html(self) -> str:
         groups = channels_by_group()
+        is_es = current_language() == LANG_SPANISH
+        intros = _GROUP_INTRO_ES if is_es else _GROUP_INTRO
+        how_to = _HOW_TO_READ_ES if is_es else _HOW_TO_READ
         parts: list[str] = [
-            "<h1>Channel &amp; telemetry guide</h1>",
-            "<p>This panel explains, in plain language, what every "
-            "channel measures and how to read it. No telemetry "
-            "background required: general driving and car knowledge "
-            "is enough.</p>",
-            _HOW_TO_READ,
-            self._build_setup_html(),
-            "<h2>Channels by group</h2>",
+            "<h1>{title}</h1>".format(
+                title=tr("Channel &amp; telemetry guide"),
+            ),
+            "<p>{p}</p>".format(
+                p=tr(
+                    "This panel explains, in plain language, how to "
+                    "read every plot and what each channel measures. "
+                    "No telemetry background required.",
+                ),
+            ),
+            how_to,
+            "<h2>{h}</h2>".format(h=tr("Channels by group")),
         ]
         ordered = [g for g in _GROUP_ORDER if g in groups] + [
             g for g in sorted(groups) if g not in _GROUP_ORDER
         ]
         for group in ordered:
-            intro = _GROUP_INTRO.get(group, "")
-            parts.append(f"<h3>{group}</h3>")
+            intro = intros.get(group, "")
+            parts.append(f"<h3>{tr(group)}</h3>")
             if intro:
                 parts.append(f"<p>{intro}</p>")
             parts.append(
                 "<table width='100%'>"
-                "<tr><th width='22%'>Channel</th><th width='10%'>Unit</th>"
-                "<th>What it is &amp; how to read it</th></tr>"
+                "<tr><th width='22%'>{ch}</th>"
+                "<th width='10%'>{un}</th>"
+                "<th>{hw}</th></tr>".format(
+                    ch=tr("Channel"),
+                    un=tr("Unit"),
+                    hw=tr("What it is &amp; how to read it"),
+                )
             )
             for info in groups[group]:
                 desc = info.description or ""
@@ -980,46 +442,6 @@ class HelpDialog(QDialog):
                     f"<code>{info.column}</code></td>"
                     f"<td>{units}</td>"
                     f"<td>{cell_html}</td></tr>"
-                )
-            parts.append("</table>")
-        return "\n".join(parts)
-
-    # ------------------------------------------------------------------
-    # Setup tab mapping
-    # ------------------------------------------------------------------
-
-    def _build_setup_html(self) -> str:
-        parts: list[str] = [
-            "<h2>Setup tab \u2194 telemetry channels</h2>",
-            "<p>One row per slider in the LFS garage Setup screen, "
-            "with the channels you should look at to know whether "
-            "the change worked. Background condensed from the "
-            "official LFS wiki "
-            "(<i>Basic Setup Guide</i>, <i>Advanced Setup Guide</i>"
-            ", <i>Technical Reference</i>).</p>",
-        ]
-        for group_name, intro, params in _SETUP_GROUPS:
-            parts.append(f"<h3>{group_name}</h3>")
-            if intro:
-                parts.append(f"<p>{intro}</p>")
-            parts.append(
-                "<table width='100%'>"
-                "<tr><th width='22%'>Setup parameter</th>"
-                "<th width='32%'>Channels that show the effect</th>"
-                "<th>What to read &amp; tuning shortcut</th></tr>"
-            )
-            for name, what, channels, shortcut in params:
-                ch_rows: list[str] = []
-                for ch_id, why in channels:
-                    ch_rows.append(
-                        f"<b><code>{ch_id}</code></b> &mdash; {why}"
-                    )
-                ch_html = "<br>".join(ch_rows)
-                parts.append(
-                    f"<tr><td><b>{name}</b><br>"
-                    f"<i>{what}</i></td>"
-                    f"<td>{ch_html}</td>"
-                    f"<td>{shortcut}</td></tr>"
                 )
             parts.append("</table>")
         return "\n".join(parts)

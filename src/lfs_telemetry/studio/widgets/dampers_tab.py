@@ -41,6 +41,7 @@ from ...telemetry.damper_histogram import (
 )
 from ..models import LapLoader
 from ..signals import SignalBus
+from ..i18n import tr
 from ..theme import (
     MUTED_COLOR,
     PANEL_COLOR,
@@ -64,9 +65,13 @@ class _WheelHistogramPlot(QWidget):
         self._plot.setMenuEnabled(False)
         self._plot.hideButtons()
         self._plot.setMouseEnabled(x=False, y=False)
-        self._plot.setTitle(f"Damper velocity {corner}",
-                            color=TEXT_COLOR, size="9pt")
-        self._plot.getAxis("left").setLabel("samples", color=MUTED_COLOR)
+        self._plot.setTitle(
+            tr("Damper velocity {corner}").format(corner=corner),
+            color=TEXT_COLOR, size="9pt",
+        )
+        self._plot.getAxis("left").setLabel(
+            tr("samples"), color=MUTED_COLOR,
+        )
         self._plot.getAxis("bottom").setLabel("m/s", color=MUTED_COLOR)
         for ax in ("left", "bottom"):
             self._plot.getAxis(ax).setTextPen(MUTED_COLOR)
@@ -109,7 +114,7 @@ class _WheelHistogramPlot(QWidget):
             self._compare_curve = None
 
         if hist.bins.size == 0:
-            self._summary.setText("<i>no data</i>")
+            self._summary.setText(tr("<i>no data</i>"))
             return
 
         width = hist.bin_width_mps * 0.9
@@ -220,7 +225,7 @@ class DampersTab(QWidget):
 
         # Toolbar: low-speed boundary spinbox.
         toolbar = QToolBar(self)
-        toolbar.addWidget(QLabel("Low-speed boundary: "))
+        toolbar.addWidget(QLabel(tr("Low-speed boundary: ")))
         self._lo_spin = QDoubleSpinBox(self)
         self._lo_spin.setSuffix(" mm/s")
         self._lo_spin.setDecimals(0)
@@ -230,7 +235,7 @@ class DampersTab(QWidget):
         self._lo_spin.valueChanged.connect(self._on_lo_changed)
         toolbar.addWidget(self._lo_spin)
         toolbar.addSeparator()
-        self._caption = QLabel("No lap loaded.", self)
+        self._caption = QLabel(tr("No lap loaded."), self)
         self._caption.setStyleSheet(f"color:{MUTED_COLOR};")
         toolbar.addWidget(self._caption)
 
@@ -266,13 +271,15 @@ class DampersTab(QWidget):
             p: lap for p, lap in self._loaded.items() if p in keep
         }
         if not paths:
-            self._caption.setText("No lap loaded.")
+            self._caption.setText(tr("No lap loaded."))
             self._clear_tiles()
             return
         # Request the first two laps (A and optional B for compare).
         for path in paths[:2]:
             if path not in self._loaded:
-                self._caption.setText(f"Loading {path.name}…")
+                self._caption.setText(
+                    tr("Loading {name}\u2026").format(name=path.name),
+                )
                 self._loader.request(path)
         if paths[0] in self._loaded:
             self._refresh()
@@ -344,16 +351,21 @@ class DampersTab(QWidget):
             self._tiles[corner].set_histogram(hist, compare=compare_hist)
         if missing:
             self._caption.setText(
-                f"{first.name} — missing damper data for: "
-                f"{', '.join(missing)}"
+                tr("{name} \u2014 missing damper data for: {wheels}").format(
+                    name=first.name, wheels=", ".join(missing),
+                ),
             )
         else:
-            base = (
-                f"{first.name} — low-speed ±"
-                f"{self._low_speed_mps * 1000:.0f} mm/s"
+            base = tr(
+                "{name} \u2014 low-speed \u00b1{boundary:.0f} mm/s",
+            ).format(
+                name=first.name,
+                boundary=self._low_speed_mps * 1000,
             )
             if compare_lap is not None and compare_path is not None:
-                base += f"  │  compare B: {compare_path.name}"
+                base += tr("  \u2502  compare B: {name}").format(
+                    name=compare_path.name,
+                )
             self._caption.setText(base)
 
 

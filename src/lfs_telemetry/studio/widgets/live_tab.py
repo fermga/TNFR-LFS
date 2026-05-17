@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
@@ -26,13 +26,11 @@ from PySide6.QtWidgets import (
 )
 
 from ...app.capture_runner import CaptureRunner
+from ...lfs_paths import QSETTINGS_APP as APP, QSETTINGS_ORG as ORG
 from ..signals import SignalBus
+from ..i18n import tr
 from .live_data_source import LiveDataSource
 from .live_modules import (
-    BestLapWindow,
-    BrakeWindow,
-    ClutchWindow,
-    CurrentLapWindow,
     DeltaBarWindow,
     FlagsWindow,
     FuelLapsRemainingWindow,
@@ -41,14 +39,9 @@ from .live_modules import (
     GapAheadWindow,
     GapBehindWindow,
     GearWindow,
-    LastLapWindow,
-    PositionWindow,
-    PredictedLapWindow,
     RadarWindow,
     RpmWindow,
-    SpbWindow,
     SpeedWindow,
-    ThrottleWindow,
 )
 
 
@@ -72,18 +65,6 @@ _MODULES: list[tuple[str, str, _ModuleFactory]] = [
     # Headline timing
     ("delta", "Delta bar vs personal best",
      _factory(DeltaBarWindow)),
-    ("position", "Position (P3)",
-     _factory(PositionWindow)),
-    ("current", "Current lap time",
-     _factory(CurrentLapWindow)),
-    ("last", "Last lap time",
-     _factory(LastLapWindow)),
-    ("best", "Best lap time",
-     _factory(BestLapWindow)),
-    ("predicted", "Predicted lap (live projection)",
-     _factory(PredictedLapWindow)),
-    ("spb", "SPB (sum of personal best splits)",
-     _factory(SpbWindow)),
     # Gaps
     ("gap_ahead", "Gap to driver ahead",
      _factory(GapAheadWindow)),
@@ -96,13 +77,6 @@ _MODULES: list[tuple[str, str, _ModuleFactory]] = [
      _factory(RpmWindow)),
     ("speed", "Speed (km/h)",
      _factory(SpeedWindow)),
-    # Pedals
-    ("throttle", "Throttle pedal",
-     _factory(ThrottleWindow)),
-    ("brake", "Brake pedal",
-     _factory(BrakeWindow)),
-    ("clutch", "Clutch pedal",
-     _factory(ClutchWindow)),
     # Fuel
     ("fuel_pct", "Fuel %",
      _factory(FuelPctWindow)),
@@ -134,22 +108,54 @@ class LiveTab(QWidget):
             mid: None for mid, _label, _f in _MODULES
         }
         self._checkboxes: dict[str, QCheckBox] = {}
+        self._opacity_spins: dict[str, QSpinBox] = {}
 
         # ----- Scrollable module toggles ------------------------------
         modules_box = QGroupBox(
-            "Overlay modules — drag body to move, "
-            "drag bottom-right corner to resize, right-click to reset",
+            tr(
+                "Overlay modules \u2014 drag body to move, "
+                "drag bottom-right corner to resize, right-click to "
+                "reset. Position and opacity persist per module.",
+            ),
             self,
         )
-        modules_layout = QVBoxLayout(modules_box)
-        for mid, label, _f in _MODULES:
-            cb = QCheckBox(label, self)
+        modules_layout = QGridLayout(modules_box)
+        modules_layout.setColumnStretch(0, 1)
+        settings = QSettings(ORG, APP)
+        for row, (mid, label, _f) in enumerate(_MODULES):
+            cb = QCheckBox(tr(label), self)
             cb.toggled.connect(
                 lambda on, m=mid: self._toggle_module(m, on)
             )
             self._checkboxes[mid] = cb
-            modules_layout.addWidget(cb)
-        modules_layout.addStretch(1)
+            modules_layout.addWidget(cb, row, 0)
+
+            spin = QSpinBox(self)
+            spin.setRange(20, 100)
+            spin.setSuffix(" %")
+            spin.setToolTip(
+                tr(
+                    "Opacity for this overlay module \u2014 persisted "
+                    "between sessions.",
+                ),
+            )
+            stored = settings.value(
+                f"overlay/{mid}/opacity", None,
+            )
+            try:
+                pct = (
+                    int(round(float(stored) * 100))
+                    if stored is not None else 85
+                )
+            except (TypeError, ValueError):
+                pct = 85
+            spin.setValue(max(20, min(100, pct)))
+            spin.valueChanged.connect(
+                lambda v, m=mid: self._apply_module_opacity(m, v)
+            )
+            self._opacity_spins[mid] = spin
+            modules_layout.addWidget(spin, row, 1)
+        modules_layout.setRowStretch(len(_MODULES), 1)
 
         scroll = QScrollArea(self)
         scroll.setWidget(modules_box)
@@ -183,11 +189,11 @@ class LiveTab(QWidget):
 
         radar_form = QFormLayout()
         radar_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        radar_form.addRow("Scale:", self._radar_scale)
-        radar_form.addRow("Red:", self._red_m)
-        radar_form.addRow("Yellow:", self._yellow_m)
-        radar_form.addRow("White:", self._white_m)
-        radar_box = QGroupBox("Radar", self)
+        radar_form.addRow(tr("Scale:"), self._radar_scale)
+        radar_form.addRow(tr("Red:"), self._red_m)
+        radar_form.addRow(tr("Yellow:"), self._yellow_m)
+        radar_form.addRow(tr("White:"), self._white_m)
+        radar_box = QGroupBox(tr("Radar"), self)
         radar_box.setLayout(radar_form)
 
         # ----- Delta config -------------------------------------------
@@ -198,8 +204,8 @@ class LiveTab(QWidget):
         self._delta_scale.setValue(2000)
         delta_form = QFormLayout()
         delta_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        delta_form.addRow("Full scale (\u00b1):", self._delta_scale)
-        delta_box = QGroupBox("Delta bar", self)
+        delta_form.addRow(tr("Full scale (\u00b1):"), self._delta_scale)
+        delta_box = QGroupBox(tr("Delta bar"), self)
         delta_box.setLayout(delta_form)
 
         # ----- RPM redline --------------------------------------------
@@ -210,8 +216,8 @@ class LiveTab(QWidget):
         self._rpm_redline.setValue(8000)
         rpm_form = QFormLayout()
         rpm_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        rpm_form.addRow("Redline:", self._rpm_redline)
-        rpm_box = QGroupBox("RPM", self)
+        rpm_form.addRow(tr("Redline:"), self._rpm_redline)
+        rpm_box = QGroupBox(tr("RPM"), self)
         rpm_box.setLayout(rpm_form)
 
         # ----- G full-scale -------------------------------------------
@@ -223,25 +229,17 @@ class LiveTab(QWidget):
 
         misc_form = QFormLayout()
         misc_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        misc_form.addRow("G-meter full scale:", self._g_full_scale)
-        misc_box = QGroupBox("G-meter", self)
+        misc_form.addRow(tr("G-meter full scale:"), self._g_full_scale)
+        misc_box = QGroupBox(tr("G-meter"), self)
         misc_box.setLayout(misc_form)
-
-        # ----- Common opacity -----------------------------------------
-        self._opacity = QSpinBox(self)
-        self._opacity.setRange(20, 100)
-        self._opacity.setSuffix(" %")
-        self._opacity.setValue(85)
-        opacity_form = QFormLayout()
-        opacity_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        opacity_form.addRow("Opacity (all modules):", self._opacity)
-        opacity_box = QGroupBox("Appearance", self)
-        opacity_box.setLayout(opacity_form)
 
         # ----- Status label -------------------------------------------
         self._status = QLabel(
-            "Start a capture, then tick the modules you want. "
-            "Each window is frameless and stays on top.",
+            tr(
+                "Start a capture, then tick the modules you want. "
+                "Each window is frameless, stays on top, and remembers "
+                "its last position and opacity.",
+            ),
             self,
         )
         self._status.setWordWrap(True)
@@ -254,7 +252,6 @@ class LiveTab(QWidget):
         grid.addWidget(delta_box, 0, 1)
         grid.addWidget(rpm_box, 1, 0)
         grid.addWidget(misc_box, 1, 1)
-        grid.addWidget(opacity_box, 2, 0)
         layout.addLayout(grid)
         layout.addWidget(self._status)
 
@@ -266,7 +263,6 @@ class LiveTab(QWidget):
         self._delta_scale.valueChanged.connect(self._apply_delta_config)
         self._rpm_redline.valueChanged.connect(self._apply_rpm_config)
         self._g_full_scale.valueChanged.connect(self._apply_g_config)
-        self._opacity.valueChanged.connect(self._apply_opacity)
 
         # Poll for capture lifecycle / live.json path.
         self._timer = QTimer(self)
@@ -285,9 +281,24 @@ class LiveTab(QWidget):
             for k, _label, factory in _MODULES:
                 if k != mid:
                     continue
-                w = factory(self._source, self._opacity.value() / 100.0)
+                # Pass the spinbox value as fallback; the module will
+                # prefer its persisted per-module opacity if present.
+                op = self._opacity_spins[mid].value() / 100.0
+                w = factory(self._source, op)
                 self._widgets[mid] = w
                 self._configure_freshly_created(mid, w)
+                # Sync the spinner with whatever the module actually
+                # ended up with (restored from disk on first creation).
+                try:
+                    pct = int(
+                        w.current_opacity_pct()  # type: ignore[attr-defined]
+                    )
+                    spin = self._opacity_spins[mid]
+                    spin.blockSignals(True)
+                    spin.setValue(max(20, min(100, pct)))
+                    spin.blockSignals(False)
+                except (AttributeError, TypeError, ValueError):
+                    pass
                 break
         if w is None:
             return
@@ -341,11 +352,16 @@ class LiveTab(QWidget):
         if isinstance(w, GMeterWindow):
             w.set_full_scale_g(self._g_full_scale.value())
 
-    def _apply_opacity(self) -> None:
-        pct = self._opacity.value()
-        for w in self._widgets.values():
-            if w is not None:
-                w.set_opacity_pct(pct)  # type: ignore[attr-defined]
+    def _apply_module_opacity(self, mid: str, pct: int) -> None:
+        w = self._widgets.get(mid)
+        if w is not None:
+            w.set_opacity_pct(pct)  # type: ignore[attr-defined]
+        else:
+            # Module not instantiated yet — still persist so the next
+            # toggle picks the user's intent up.
+            QSettings(ORG, APP).setValue(
+                f"overlay/{mid}/opacity", pct / 100.0,
+            )
 
     # ------------------------------------------------------------------
     # Runner polling

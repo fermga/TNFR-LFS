@@ -70,7 +70,7 @@ Modules
 
 from __future__ import annotations
 
-__version__ = "0.2.0"
+from .. import __version__
 
 # --- Live capture -----------------------------------------------------------
 from .live import LiveTelemetry, TelemetrySample

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from ..models import CapturesTableModel
 from ..signals import SignalBus
+from ..i18n import tr
 from ..workspace_state import WorkspaceState
 
 
@@ -61,18 +62,18 @@ class CapturesDock(QWidget):
 
         # Search box.
         self._search = QLineEdit(self)
-        self._search.setPlaceholderText("Filter (file, car, track)…")
+        self._search.setPlaceholderText(tr("Filter (file, car, track)\u2026"))
         self._search.setClearButtonEnabled(True)
         self._search.textChanged.connect(self._proxy.setFilterFixedString)
 
         # Toolbar (refresh + counter).
         self._toolbar = QToolBar(self)
-        refresh_action = QAction("Refresh", self)
+        refresh_action = QAction(tr("Refresh"), self)
         refresh_action.triggered.connect(self.refresh)
         refresh_action.setShortcut("F5")
         self._toolbar.addAction(refresh_action)
         self._toolbar.addSeparator()
-        self._summary_button = QPushButton("0 captures", self)
+        self._summary_button = QPushButton(tr("0 captures"), self)
         self._summary_button.setFlat(True)
         self._summary_button.setEnabled(False)
         self._toolbar.addWidget(self._summary_button)
@@ -97,7 +98,9 @@ class CapturesDock(QWidget):
     def refresh(self) -> None:
         captures = self._workspace.refresh()
         self._model.set_captures(captures)
-        self._summary_button.setText(f"{len(captures)} captures")
+        self._summary_button.setText(
+            tr("{n} captures").format(n=len(captures)),
+        )
         self._signals.captures_refreshed.emit()
         # Resize file column nicely; leave the rest interactive.
         self._view.resizeColumnsToContents()

@@ -52,13 +52,16 @@ alrededor de un widget central tabulado:
 El widget central es `widgets/center_tabs.CenterTabs(QTabWidget)`, con
 las pestañas en este orden:
 
-1. **Channels** — `widgets/charts_dock.py` + `charts/multi_chart.py`.
-2. **Stint** — `widgets/stint_tab.py`.
+1. **Telemetry** — `widgets/charts_dock.py` + `charts/multi_chart.py`.
+2. **Dampers** — `widgets/dampers_tab.py`.
 3. **Sectors** — `widgets/sectors_tab.py`.
-4. **Dampers** — `widgets/dampers_tab.py`.
-5. **Setup** — `widgets/setup_tab.py` (lee `car_info.bin` parseado).
-6. **Capture** — `widgets/capture_tab.py` (controla la subprocess CLI).
-7. **Live** — `widgets/live_tab.py` (consume `live_publisher` JSON).
+4. **Stint** — `widgets/stint_tab.py`.
+5. **Capture** — `widgets/capture_tab.py` (controla la subprocess CLI).
+6. **Overlay** — `widgets/live_tab.py` (consume `live_publisher` JSON).
+
+Los módulos `setup_tab.py`, `setup_editor_tab.py` y `setup_advisor_tab.py`
+siguen en el repositorio como utilidad para futuras ampliaciones, pero
+**no están cableados en `CenterTabs`** en la build actual.
 
 El menú *Tools* abre `widgets/lfs_config_dialog.py` para parchear
 `cfg.txt` y, opcionalmente, el cargador de racing lines
@@ -108,7 +111,6 @@ El menú *Tools* abre `widgets/lfs_config_dialog.py` para parchear
 | `stint_tab.py` | Tabla `StintTelemetry.per_lap` + trend lines. |
 | `sectors_tab.py` | Splits por sector + best / theoretical-best. |
 | `dampers_tab.py` | Histogramas HS/LS por rueda (`damper_histogram`). |
-| `setup_tab.py` | Vista parseada de `car_info.bin` (geometría, gearing, diff, brake bias, alerón…). |
 | `capture_tab.py` | Botones Start/Stop; UI sobre `app.capture_runner`. |
 | `live_tab.py` | Race-engineer overlay live a partir del snapshot JSON. |
 | `live_modules.py` | Módulos componibles del Live tab (radar, fuel, splits, delta, traffic). |

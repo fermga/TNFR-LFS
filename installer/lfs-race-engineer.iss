@@ -4,7 +4,7 @@
 
 #define MyAppName       "LFS Race Engineer"
 #define MyAppShortName  "lfs-race-engineer"
-#define MyAppVersion    "0.2.0"
+#define MyAppVersion    "0.3.0"
 #define MyAppPublisher  "LFS Race Engineer"
 #define MyAppExeName    "lfs-race-engineer.exe"
 #define MyAppSourceDir  "..\dist\lfs-race-engineer"
@@ -43,12 +43,10 @@ Name: "desktopicon";    Description: "{cm:CreateDesktopIcon}";    GroupDescripti
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; The whole onedir build (.exe + _internal/ + bundled config/, racing_lines/, tracks/).
-Source: "{#MyAppSourceDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#MyAppSourceDir}\_internal\*";    DestDir: "{app}\_internal";    Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#MyAppSourceDir}\config\*";       DestDir: "{app}\config";       Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-Source: "{#MyAppSourceDir}\racing_lines\*"; DestDir: "{app}\racing_lines"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-Source: "{#MyAppSourceDir}\tracks\*";       DestDir: "{app}\tracks";       Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+; The whole onedir build (.exe + every PyInstaller-emitted file +
+; bundled config/, racing_lines/, tracks/ at the top level — see
+; ``contents_directory='.'`` in lfs-race-engineer.spec).
+Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Dirs]
 ; Default workspace folder, writable by the user (per-user install).
@@ -62,7 +60,7 @@ Name: "{autodesktop}\{#MyAppName}";     Filename: "{app}\{#MyAppExeName}"; Worki
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: quicklaunchicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent unchecked
 
 [UninstallDelete]
 ; Runtime log; captures/ left in place so the user keeps recorded stints.

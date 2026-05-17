@@ -7,6 +7,8 @@ from typing import Sequence
 from PySide6.QtWidgets import QApplication
 
 from . import __version__
+from ..lfs_paths import QSETTINGS_APP, QSETTINGS_DOMAIN, QSETTINGS_ORG
+from .i18n import install_translator
 from .theme import apply_dark_palette, configure_pyqtgraph
 
 
@@ -19,13 +21,14 @@ def create_app(argv: Sequence[str] | None = None) -> QApplication:
     app = QApplication.instance()
     if app is None:
         app = QApplication(list(argv or []))
-    app.setApplicationName("LFS Telemetry Studio")
+    app.setApplicationName(QSETTINGS_APP)
     app.setApplicationVersion(__version__)
-    app.setOrganizationName("LFS-Race-Engineer")
-    app.setOrganizationDomain("lfs-race-engineer.local")
+    app.setOrganizationName(QSETTINGS_ORG)
+    app.setOrganizationDomain(QSETTINGS_DOMAIN)
     app.setStyle("Fusion")
     apply_dark_palette(app)
     configure_pyqtgraph()
+    install_translator(app)
     return app
 
 

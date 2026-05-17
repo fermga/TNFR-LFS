@@ -30,6 +30,7 @@ from ...telemetry import LapTelemetry
 from ..charts import MultiChannelChart
 from ..models import LapLoader
 from ..signals import SignalBus
+from ..i18n import tr
 from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR, trace_color
 
 
@@ -59,7 +60,7 @@ class _LapLegend(QFrame):
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(8, 4, 8, 4)
         self._layout.setSpacing(14)
-        self._placeholder = QLabel("No laps loaded", self)
+        self._placeholder = QLabel(tr("No laps loaded"), self)
         self._placeholder.setStyleSheet(f"color: {MUTED_COLOR};")
         self._layout.addWidget(self._placeholder)
         self._layout.addStretch(1)
@@ -72,7 +73,7 @@ class _LapLegend(QFrame):
             if w is not None:
                 w.deleteLater()
         if not laps:
-            self._placeholder = QLabel("No laps loaded", self)
+            self._placeholder = QLabel(tr("No laps loaded"), self)
             self._placeholder.setStyleSheet(f"color: {MUTED_COLOR};")
             self._layout.addWidget(self._placeholder)
             self._layout.addStretch(1)
@@ -82,7 +83,7 @@ class _LapLegend(QFrame):
             chip = QLabel(self)
             chip.setPixmap(_color_chip(color, 10))
             name = lap.source_path.name if lap.source_path else f"lap{idx}"
-            suffix = " (ref)" if idx == 0 and len(laps) > 1 else ""
+            suffix = tr(" (ref)") if idx == 0 and len(laps) > 1 else ""
             label = QLabel(f"{name}{suffix}", self)
             label.setStyleSheet(f"color: {TEXT_COLOR};")
             entry = QWidget(self)
@@ -110,19 +111,19 @@ class ChartsDock(QWidget):
 
         # ----- Axis radio (Distance / Time) ---------------------------
         self._axis_group = QButtonGroup(self)
-        self._axis_distance = QRadioButton("Distance", self)
-        self._axis_time = QRadioButton("Time", self)
+        self._axis_distance = QRadioButton(tr("Distance"), self)
+        self._axis_time = QRadioButton(tr("Time"), self)
         self._axis_distance.setChecked(True)
         self._axis_group.addButton(self._axis_distance, 0)
         self._axis_group.addButton(self._axis_time, 1)
         self._axis_group.buttonToggled.connect(self._on_axis_toggled)
 
         toolbar = QToolBar(self)
-        toolbar.addWidget(QLabel("X-axis: "))
+        toolbar.addWidget(QLabel(tr("X-axis: ")))
         toolbar.addWidget(self._axis_distance)
         toolbar.addWidget(self._axis_time)
         toolbar.addSeparator()
-        self._caption = QLabel("No laps selected", self)
+        self._caption = QLabel(tr("No laps selected"), self)
         self._caption.setStyleSheet("color: #8a939e;")
         toolbar.addWidget(self._caption)
 
@@ -181,14 +182,16 @@ class ChartsDock(QWidget):
             p: lap for p, lap in self._loaded_laps.items() if p in wanted
         }
         if not self._requested_paths:
-            self._caption.setText("No laps selected")
+            self._caption.setText(tr("No laps selected"))
             self._chart.set_laps([])
             return
         # Update caption + queue loads.
         missing = [p for p in self._requested_paths if p not in self._loaded_laps]
         if missing:
             self._caption.setText(
-                f"Loading {len(missing)} of {len(self._requested_paths)} lap(s)…"
+                tr("Loading {n} of {total} lap(s)\u2026").format(
+                    n=len(missing), total=len(self._requested_paths),
+                )
             )
             for path in missing:
                 self._loader.request(path)
@@ -207,7 +210,10 @@ class ChartsDock(QWidget):
 
     def _on_lap_failed(self, path: Path, message: str) -> None:
         self._signals.status_message.emit(
-            f"Failed to load {Path(path).name}: {message}", 8000,
+            tr("Failed to load {name}: {error}").format(
+                name=Path(path).name, error=message,
+            ),
+            8000,
         )
 
     # ------------------------------------------------------------------
@@ -233,10 +239,14 @@ class ChartsDock(QWidget):
         if not laps:
             return
         if len(laps) == len(self._requested_paths):
-            self._caption.setText(f"{len(laps)} lap(s)")
+            self._caption.setText(
+                tr("{n} lap(s)").format(n=len(laps)),
+            )
         else:
             self._caption.setText(
-                f"{len(laps)} of {len(self._requested_paths)} lap(s) loaded"
+                tr("{n} of {total} lap(s) loaded").format(
+                    n=len(laps), total=len(self._requested_paths),
+                )
             )
 
 

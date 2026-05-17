@@ -5,16 +5,20 @@ Real-time telemetry capture and **Race Engineer Studio** overlay for
 OutGauge (UDP) with InSim (TCP) at 100 Hz into a single typed sample
 stream, persists it to a versioned CSV, and renders it in a frameless
 PySide6 overlay with live splits, traffic radar, fuel tracker, racing
-line, MoTeC-style multi-channel viewer, sector breakdown, damper
-histograms, and a setup tab driven by parsed `car_info.bin`.
+line, MoTeC-style multi-channel viewer, sector breakdown and damper
+histograms.
 
 * Package: `lfs-race-engineer` · entry points: `lfs-race-engineer`
   (Studio) and `lfs-telemetry` (CLI).
 * Python ≥ 3.11 · `numpy`, `pandas`, `scipy` (core) ·
   `PySide6`, `pyqtgraph` (studio extra) · `pyinstaller` (build extra).
+* Studio UI is fully bilingual (English / Español) via an in-process
+  `QTranslator`; language is picked under *Tools → Language* and
+  persisted in `QSettings`.
 * CSV replay schema version `1.1`.
-* 237 tests collected — 230 pass headless, 7 skipped without LFS or
-  PySide6 display server.
+* 358 tests collected — all pass headless, 15 skipped without LFS or
+  a PySide6 display server (the skips include the SMX/PTH suites that
+  require a live LFS install under `C:\LFS\data\smx`).
 
 ```
             ┌──────────── LFS client ────────────┐
@@ -49,7 +53,7 @@ histograms, and a setup tab driven by parsed `car_info.bin`.
 
 ```
 src/lfs_telemetry/
-  __init__.py                 # package metadata (__version__ = 0.2.0)
+  __init__.py                 # package metadata (__version__ from importlib.metadata)
   cli.py                      # lfs-telemetry: capture | calibrate | reslice
   lfs_config.py               # patch LFS\cfg.txt to emit OutSim/OutGauge/InSim
   telemetry/                  # framework-neutral telemetry core
@@ -92,7 +96,7 @@ src/lfs_telemetry/
   app/                        # capture-process support (used by Studio)
     capture_runner.py         # spawn CLI as subprocess, watch stop file
     state.py                  # dataclass mirror of capture state
-tests/                        # 237 tests (230 pass, 7 skipped without LFS)
+tests/                        # 358 tests (all pass headless, 15 skipped without LFS or display)
 scripts/                      # ops + dev helpers (see Scripts section)
 tools/                        # binary-format research helpers
 tracks/                       # per-variant elevation profiles + overviews
@@ -119,13 +123,13 @@ Run the test suite:
 ```powershell
 $env:PYTHONIOENCODING = "utf-8"
 $env:QT_QPA_PLATFORM  = "offscreen"
-python -m pytest -q --ignore="tests/test_racing_line_loader.py" --ignore="tests/studio/test_smoke.py"
-# 230 passed, 7 skipped
+python -m pytest -q
+# 358 passed, 15 skipped
 ```
 
-The two ignored modules exercise the on-disk LFS install layout and a
-full QApplication smoke test; they pass locally with a real LFS folder
-and a display server present.
+The skipped tests exercise the on-disk LFS install layout and the
+live integration suite; they run only with a real LFS folder and a
+live session (see below).
 
 ### Live integration tests against LFS
 
@@ -152,8 +156,8 @@ LFS does not emit telemetry by default. The package can patch
 Manual snippet for `LFS\cfg.txt`:
 
 ```
-OutSim Mode 1
-OutSim Opts 1ff           ; OSO_ALL → extended OutSimPack2 (280 B)
+OutSim Mode 2             ; 2 = extended OutSimPack2 (280 B)
+OutSim Opts 1ff           ; OSO_ALL → full extended payload
 OutSim Delay 1            ; 10 ms ≈ 100 Hz
 OutSim IP 127.0.0.1
 OutSim Port 30000
@@ -164,9 +168,12 @@ OutGauge Delay 1
 OutGauge IP 127.0.0.1
 OutGauge Port 30001
 OutGauge ID 0
-
-InSim Port 29999          ; TCP, optional but required for splits/laps
 ```
+
+InSim has no `cfg.txt` key — start it at runtime with `/insim 29999`
+in the LFS console (or launch `LFS.exe /insim=29999`). Writing an
+`InSim Port` line into `cfg.txt` makes LFS show a red "unknown
+setting" warning.
 
 Without `OutSim Opts 1ff`, LFS falls back to the legacy 64-byte
 `OutSimPacket`; per-wheel load / slip / suspension data is then
@@ -244,16 +251,15 @@ The frameless, dark, in-game-style overlay opens with these regions:
 * **Race dashboard** (right dock) — live splits, predicted lap, gap to
   best, traffic radar, fuel range, lap counter.
 * **Central tabs**:
-  - **Channels** — pyqtgraph multi-channel viewer with shared
-    distance axis (decimated to ≤ 4 000 points/lane).
-  - **Stint** — table of `StintTelemetry.per_lap` + trend lines.
-  - **Sectors** — per-lap sector splits with best / theoretical-best.
+  - **Telemetry** — pyqtgraph multi-channel viewer with shared
+    distance/time axis (decimated to ≤ 4 000 points/lane).
   - **Dampers** — high/low-speed damper histograms per wheel.
-  - **Setup** — parsed `car_info.bin` view (geometry, gearing,
-    differential, brake bias, wing/aero, weight distribution).
+  - **Sectors** — per-lap sector splits with best / theoretical-best.
+  - **Stint** — lap times, fuel, tyre temp, suspension load, friction
+    use and damper-work trends across the loaded stint.
   - **Capture** — start/stop controls for `lfs-telemetry capture`
     (driven via `app/capture_runner.py`).
-  - **Live** — race-engineer overlay during a live session, fed by
+  - **Overlay** — race-engineer overlay during a live session, fed by
     the JSON snapshot written by `live_publisher.write_snapshot_atomic`.
 
 See [src/lfs_telemetry/studio/README.md](src/lfs_telemetry/studio/README.md)
@@ -336,8 +342,10 @@ for the full module-by-module API reference.
 * `config/cars.json` — bundled `CarSpec` defaults (mass, μ_lat, μ_long,
   geometry, gearing) used when no calibrated entry exists in the user
   store `~/.lfs-telemetry/cars.json`.
-* `assets/` — sample stints (`synthetic_*`, `helicorsa_*`, …) plus
-  third-party references kept for documentation only.
+* `assets/` — synthetic sample stints (`synthetic_*`) used by the test
+  suite and the bundled `source/mods` + `source/cars` seed databases
+  consumed by the Studio for unknown-car detection. The icon
+  (`icon.ico`) is embedded into the frozen `.exe`.
 
 ## Building the Windows installer
 

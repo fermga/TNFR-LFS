@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from ...app.capture_runner import CaptureRunner
 from ..signals import SignalBus
+from ..i18n import tr
 from ..theme import MUTED_COLOR, TEXT_COLOR
 from .live_data_source import LiveDataSource
 from ._format import (
@@ -101,6 +102,9 @@ class _BigValue(QFrame):
                 f" font-weight:600;"
             )
 
+    def set_title(self, title: str) -> None:
+        self._title.setText(title)
+
 
 class RaceDashboardDock(QWidget):
     """At-a-glance race dashboard reading live.json."""
@@ -119,23 +123,38 @@ class RaceDashboardDock(QWidget):
         self._source.start()
 
         # ----- Widgets -------------------------------------------------
-        self._w_position = _BigValue("Position", self, size_pt=28)
-        self._w_lap = _BigValue("Lap", self, size_pt=20)
-        self._w_current = _BigValue("Current lap", self, size_pt=22)
-        self._w_last = _BigValue("Last lap", self, size_pt=20)
-        self._w_best = _BigValue("Best lap", self, size_pt=20)
-        self._w_predicted = _BigValue("Predicted", self, size_pt=20)
-        self._w_delta = _BigValue("Δ vs best", self, size_pt=22)
-        self._w_spb = _BigValue("SPB", self, size_pt=18)
-        self._w_gap_ahead = _BigValue("Gap ahead", self, size_pt=20)
-        self._w_gap_behind = _BigValue("Gap behind", self, size_pt=20)
-        self._w_fuel_pct = _BigValue("Fuel", self, size_pt=20)
-        self._w_fuel_laps = _BigValue("Fuel laps left", self, size_pt=20)
-        self._w_speed = _BigValue("Speed", self, size_pt=20)
-        self._w_gear = _BigValue("Gear", self, size_pt=28)
+        self._w_position = _BigValue(tr("Position"), self, size_pt=28)
+        self._w_lap = _BigValue(tr("Lap"), self, size_pt=20)
+        self._w_current = _BigValue(tr("Current lap"), self, size_pt=22)
+        self._w_last = _BigValue(tr("Last lap"), self, size_pt=20)
+        self._w_best = _BigValue(tr("Best lap"), self, size_pt=20)
+        self._w_predicted = _BigValue(tr("Predicted"), self, size_pt=20)
+        self._w_delta = _BigValue(tr("\u0394 vs best"), self, size_pt=22)
+        self._w_spb = _BigValue(tr("SPB"), self, size_pt=18)
+        self._w_avg = _BigValue(tr("Avg (stint)"), self, size_pt=18)
+        # Rotation mode for the Avg card: cycles stint→clean→total
+        # every ~5 s, mirroring D&M's average_auto_interval. The
+        # initial mode is the most useful one for race pace.
+        self._avg_modes: tuple[str, ...] = ("stint", "clean", "total")
+        self._avg_idx: int = 0
+        self._avg_timer = QTimer(self)
+        self._avg_timer.setInterval(5000)
+        self._avg_timer.timeout.connect(self._rotate_avg_mode)
+        self._avg_timer.start()
+        self._last_avg_snap: dict[str, int | None] = {
+            "stint": None, "clean": None, "total": None,
+        }
+        self._w_gap_ahead = _BigValue(tr("Gap ahead"), self, size_pt=20)
+        self._w_gap_behind = _BigValue(tr("Gap behind"), self, size_pt=20)
+        self._w_fuel_pct = _BigValue(tr("Fuel"), self, size_pt=20)
+        self._w_fuel_laps = _BigValue(
+            tr("Fuel laps left"), self, size_pt=20,
+        )
+        self._w_speed = _BigValue(tr("Speed"), self, size_pt=20)
+        self._w_gear = _BigValue(tr("Gear"), self, size_pt=28)
 
         # Group: timing
-        timing = QGroupBox("Timing", self)
+        timing = QGroupBox(tr("Timing"), self)
         gt = QGridLayout(timing)
         gt.setSpacing(4)
         gt.addWidget(self._w_position, 0, 0)
@@ -146,16 +165,17 @@ class RaceDashboardDock(QWidget):
         gt.addWidget(self._w_best, 1, 2)
         gt.addWidget(self._w_predicted, 2, 0)
         gt.addWidget(self._w_spb, 2, 1)
+        gt.addWidget(self._w_avg, 2, 2)
 
         # Group: gaps
-        gaps = QGroupBox("Gaps to rivals", self)
+        gaps = QGroupBox(tr("Gaps to rivals"), self)
         gg = QGridLayout(gaps)
         gg.setSpacing(4)
         gg.addWidget(self._w_gap_ahead, 0, 0)
         gg.addWidget(self._w_gap_behind, 0, 1)
 
         # Group: fuel + drive
-        fuel = QGroupBox("Fuel / Drive", self)
+        fuel = QGroupBox(tr("Fuel / Drive"), self)
         gf = QGridLayout(fuel)
         gf.setSpacing(4)
         gf.addWidget(self._w_fuel_pct, 0, 0)
@@ -164,7 +184,7 @@ class RaceDashboardDock(QWidget):
         gf.addWidget(self._w_gear, 1, 1)
 
         # Context strip (track, weather, race status, capture state)
-        self._context = QLabel("Waiting for capture…", self)
+        self._context = QLabel(tr("Waiting for capture\u2026"), self)
         self._context.setWordWrap(True)
         self._context.setStyleSheet(
             f"color:{MUTED_COLOR}; padding:4px 6px;"
@@ -201,6 +221,17 @@ class RaceDashboardDock(QWidget):
         path = Path(path_str) if path_str else None
         self._source.set_path(path)
 
+    def _rotate_avg_mode(self) -> None:
+        self._avg_idx = (self._avg_idx + 1) % len(self._avg_modes)
+        self._refresh_avg_card()
+
+    def _refresh_avg_card(self) -> None:
+        mode = self._avg_modes[self._avg_idx]
+        self._w_avg.set_title(
+            tr("Avg ({mode})").format(mode=tr(mode)),
+        )
+        self._w_avg.set_value(_fmt_lap_ms(self._last_avg_snap.get(mode)))
+
     def _on_available_changed(self, available: bool) -> None:
         if not available:
             self._reset_values()
@@ -209,6 +240,7 @@ class RaceDashboardDock(QWidget):
         for w in (
             self._w_position, self._w_lap, self._w_current, self._w_last,
             self._w_best, self._w_predicted, self._w_delta, self._w_spb,
+            self._w_avg,
             self._w_gap_ahead, self._w_gap_behind, self._w_fuel_pct,
             self._w_fuel_laps, self._w_speed, self._w_gear,
         ):
@@ -267,15 +299,26 @@ class RaceDashboardDock(QWidget):
         samples = int(snap.get("samples") or 0)
         bits: list[str] = [f"<b>{track}</b>"]
         if weather:
-            bits.append(f"weather {weather}")
+            bits.append(tr("weather {value}").format(value=weather))
         if in_progress is True:
-            bits.append("<span style='color:#7ed957'>race</span>")
+            bits.append(
+                "<span style='color:{c}'>{txt}</span>".format(
+                    c=_GOOD, txt=tr("race"),
+                )
+            )
         elif in_progress is False:
-            bits.append("<span style='color:#ff5d6c'>idle</span>")
+            bits.append(
+                "<span style='color:{c}'>{txt}</span>".format(
+                    c=_BAD, txt=tr("idle"),
+                )
+            )
         bits.append(
-            f"capture {'ARMED' if armed else 'off'} · {samples} samples"
+            tr("capture {state} \u00b7 {n} samples").format(
+                state=tr("ARMED") if armed else tr("off"),
+                n=samples,
+            )
         )
-        self._context.setText(" · ".join(bits))
+        self._context.setText(" \u00b7 ".join(bits))
 
         # ----- Position / lap -----------------------------------------
         pos = snap.get("view_position")
@@ -296,6 +339,14 @@ class RaceDashboardDock(QWidget):
         self._w_best.set_value(_fmt_lap_ms(snap.get("best_lap_ms")), _GOOD)
         self._w_predicted.set_value(_fmt_lap_ms(snap.get("predicted_lap_ms")))
         self._w_spb.set_value(_fmt_lap_ms(snap.get("spb_ms")))
+
+        averages = snap.get("lap_averages_ms") or {}
+        self._last_avg_snap = {
+            "stint": averages.get("stint"),
+            "clean": averages.get("clean"),
+            "total": averages.get("total"),
+        }
+        self._refresh_avg_card()
 
         delta_txt, delta_col = _fmt_delta_ms(snap.get("delta_vs_best_ms"))
         self._w_delta.set_value(delta_txt, delta_col)

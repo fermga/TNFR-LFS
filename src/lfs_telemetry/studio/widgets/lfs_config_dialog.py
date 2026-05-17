@@ -31,6 +31,7 @@ from ...lfs_config import (
     manual_instructions,
     patch_cfg,
 )
+from ..i18n import tr
 
 _ORG = "LFS-Race-Engineer"
 _APP = "LFS Telemetry Studio"
@@ -42,20 +43,22 @@ class LfsConfigDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Configure LFS for telemetry")
+        self.setWindowTitle(tr("Configure LFS for telemetry"))
         self.setModal(True)
         self.resize(640, 520)
 
         root = QVBoxLayout(self)
 
         intro = QLabel(
-            "lfs-telemetry needs a few <b>OutSim</b>, <b>OutGauge</b> and "
-            "<b>InSim</b> entries in your LFS <code>cfg.txt</code>. Point "
-            "the app at your LFS install folder and click "
-            "<i>Patch cfg.txt automatically</i>, or copy the block below "
-            "into the file by hand.<br><br>"
-            "<b>LFS must be closed</b> while the file is patched, "
-            "otherwise it will overwrite your changes on exit.",
+            tr(
+                "lfs-telemetry needs a few <b>OutSim</b>, <b>OutGauge</b> and "
+                "<b>InSim</b> entries in your LFS <code>cfg.txt</code>. Point "
+                "the app at your LFS install folder and click "
+                "<i>Patch cfg.txt automatically</i>, or copy the block below "
+                "into the file by hand.<br><br>"
+                "<b>LFS must be closed</b> while the file is patched, "
+                "otherwise it will overwrite your changes on exit.",
+            ),
         )
         intro.setWordWrap(True)
         intro.setTextFormat(Qt.TextFormat.RichText)
@@ -63,11 +66,11 @@ class LfsConfigDialog(QDialog):
 
         # ---- Path row -------------------------------------------------
         path_row = QHBoxLayout()
-        path_row.addWidget(QLabel("LFS folder:"))
+        path_row.addWidget(QLabel(tr("LFS folder:")))
         self._path_edit = QLineEdit(self)
         self._path_edit.setPlaceholderText(r"e.g. C:\LFS")
         path_row.addWidget(self._path_edit, 1)
-        browse_btn = QPushButton("Browse…", self)
+        browse_btn = QPushButton(tr("Browse\u2026"), self)
         browse_btn.clicked.connect(self._on_browse)
         path_row.addWidget(browse_btn)
         root.addLayout(path_row)
@@ -78,17 +81,21 @@ class LfsConfigDialog(QDialog):
 
         # ---- Action row ----------------------------------------------
         actions_row = QHBoxLayout()
-        self._patch_btn = QPushButton("Patch cfg.txt automatically", self)
+        self._patch_btn = QPushButton(
+            tr("Patch cfg.txt automatically"), self,
+        )
         self._patch_btn.clicked.connect(self._on_patch)
         actions_row.addWidget(self._patch_btn)
-        copy_btn = QPushButton("Copy snippet", self)
+        copy_btn = QPushButton(tr("Copy snippet"), self)
         copy_btn.clicked.connect(self._on_copy_snippet)
         actions_row.addWidget(copy_btn)
         actions_row.addStretch(1)
         root.addLayout(actions_row)
 
         # ---- Manual block --------------------------------------------
-        root.addWidget(QLabel("Manual snippet (paste at the end of cfg.txt):"))
+        root.addWidget(
+            QLabel(tr("Manual snippet (paste at the end of cfg.txt):")),
+        )
         self._snippet = QPlainTextEdit(self)
         self._snippet.setReadOnly(True)
         self._snippet.setPlainText(manual_instructions())
@@ -123,7 +130,7 @@ class LfsConfigDialog(QDialog):
     def _on_browse(self) -> None:
         start = self._path_edit.text().strip() or str(Path.home())
         chosen = QFileDialog.getExistingDirectory(
-            self, "Select LFS install folder", start,
+            self, tr("Select LFS install folder"), start,
         )
         if chosen:
             self._path_edit.setText(chosen)
@@ -131,37 +138,41 @@ class LfsConfigDialog(QDialog):
     def _on_copy_snippet(self) -> None:
         QGuiApplication.clipboard().setText(self._snippet.toPlainText())
         self._status_label.setText(
-            "Snippet copied to clipboard. Paste it at the end of cfg.txt.",
+            tr("Snippet copied to clipboard. Paste it at the end of cfg.txt."),
         )
 
     def _on_patch(self) -> None:
         text = self._path_edit.text().strip()
         if not text:
             QMessageBox.warning(
-                self, "Configure LFS",
-                "Please choose your LFS install folder first.",
+                self, tr("Configure LFS"),
+                tr("Please choose your LFS install folder first."),
             )
             return
         lfs_dir = Path(text)
         if not is_valid_lfs_dir(lfs_dir):
             QMessageBox.warning(
-                self, "Configure LFS",
-                f"{lfs_dir}\n\nDoes not look like an LFS install folder "
-                "(no LFS.exe or cfg.txt found).",
+                self, tr("Configure LFS"),
+                tr(
+                    "{path}\n\nDoes not look like an LFS install folder "
+                    "(no LFS.exe or cfg.txt found).",
+                ).format(path=lfs_dir),
             )
             return
 
         try:
             result = patch_cfg(lfs_dir)
         except FileNotFoundError as exc:
-            QMessageBox.warning(self, "Configure LFS", str(exc))
+            QMessageBox.warning(self, tr("Configure LFS"), str(exc))
             return
         except OSError as exc:
             QMessageBox.critical(
-                self, "Configure LFS",
-                f"Could not write cfg.txt:\n\n{exc}\n\n"
-                "Make sure LFS is closed and that the file is not "
-                "read-only.",
+                self, tr("Configure LFS"),
+                tr(
+                    "Could not write cfg.txt:\n\n{error}\n\n"
+                    "Make sure LFS is closed and that the file is not "
+                    "read-only.",
+                ).format(error=exc),
             )
             return
 
@@ -169,9 +180,9 @@ class LfsConfigDialog(QDialog):
         self._settings.setValue(_KEY_LFS_DIR, str(lfs_dir))
 
         QMessageBox.information(
-            self, "Configure LFS",
+            self, tr("Configure LFS"),
             result.summary_text()
-            + "\n\nDone. Launch LFS and enter a session.",
+            + tr("\n\nDone. Launch LFS and enter a session."),
         )
         self._refresh_status()
 
@@ -183,30 +194,37 @@ class LfsConfigDialog(QDialog):
         text = self._path_edit.text().strip()
         if not text:
             self._status_label.setText(
-                "<i>No folder selected.</i>",
+                tr("<i>No folder selected.</i>"),
             )
             self._patch_btn.setEnabled(False)
             return
         path = Path(text)
         if not is_valid_lfs_dir(path):
             self._status_label.setText(
-                f"<span style='color:#c0392b'>"
-                f"Folder does not look like an LFS install: {path}"
-                "</span>",
+                "<span style='color:#c0392b'>"
+                + tr(
+                    "Folder does not look like an LFS install: {path}",
+                ).format(path=path)
+                + "</span>",
             )
             self._patch_btn.setEnabled(False)
             return
         cfg = cfg_path_for(path)
         if not cfg.exists():
             self._status_label.setText(
-                f"<span style='color:#c0392b'>"
-                f"{cfg} does not exist yet — launch LFS once to generate "
-                "cfg.txt, then quit and try again.</span>",
+                "<span style='color:#c0392b'>"
+                + tr(
+                    "{cfg} does not exist yet \u2014 launch LFS once to "
+                    "generate cfg.txt, then quit and try again.",
+                ).format(cfg=cfg)
+                + "</span>",
             )
             self._patch_btn.setEnabled(False)
             return
         self._status_label.setText(
-            f"<span style='color:#27ae60'>Ready: {cfg}</span>",
+            "<span style='color:#27ae60'>"
+            + tr("Ready: {cfg}").format(cfg=cfg)
+            + "</span>",
         )
         self._patch_btn.setEnabled(True)
 

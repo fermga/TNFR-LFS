@@ -1,6 +1,7 @@
 """Parser for LFS SMX (Simple Mesh eXport) files in ``C:/LFS/data/smx``.
 
-Format spec (verbatim from ``assets/LFS_SMX_6H/SMX.txt``):
+The format spec below is reproduced verbatim from the ``SMX.txt`` shipped
+by LFS in its own ``data/smx`` directory:
 
   X, Y, Z fixed-point: ``1 m == 65536`` (Q16.16, signed int32).
   Vertex colours: ``ARGB`` (4 × byte = opacity, R, G, B).
@@ -53,7 +54,7 @@ __all__ = [
     "SmxObject",
     "SmxMesh",
     "parse_smx",
-    "DEFAULT_SMX_DIR_BUNDLED",
+    "DEFAULT_SMX_DIR",
     "list_smx_files",
     "find_smx_for_track",
     "elevation_envelope",
@@ -84,15 +85,9 @@ _TRI_DTYPE = np.dtype([
     ("pad", "<u2"),
 ])
 
-# Bundled dev-checkout SMX dir (the 7 official LFS env SMX files shipped
-# with this repo for tests and offline dev). The repo layout is::
-#
-#   <repo>/src/lfs_telemetry/telemetry/track/smx.py
-#
-# so the workspace root is ``parents[4]``.
-DEFAULT_SMX_DIR_BUNDLED = (
-    Path(__file__).resolve().parents[4] / "assets" / "LFS_SMX_6H"
-)
+# Default SMX directory — the live LFS install path. Tests and dev tools
+# pass an explicit ``smx_dir`` when they need to point elsewhere.
+DEFAULT_SMX_DIR = Path(r"C:\LFS\data\smx")
 
 
 @dataclass(slots=True, frozen=True)
@@ -312,8 +307,8 @@ def parse_smx_bytes(data: bytes, name: str = "") -> SmxMesh:
 # ---------------------------------------------------------------------------
 
 def list_smx_files(smx_dir: str | Path | None = None) -> list[Path]:
-    """List ``*.smx`` files in ``smx_dir`` (defaults to bundled set)."""
-    base = Path(smx_dir) if smx_dir else DEFAULT_SMX_DIR_BUNDLED
+    """List ``*.smx`` files in ``smx_dir`` (defaults to ``DEFAULT_SMX_DIR``)."""
+    base = Path(smx_dir) if smx_dir else DEFAULT_SMX_DIR
     if not base.exists():
         return []
     return sorted(base.glob("*.smx"))
@@ -332,7 +327,7 @@ def find_smx_for_track(
     * stem starts with the track id followed by ``_``
     * stem matches the human-readable env table (e.g. ``BL`` → ``Blackwood``).
     """
-    base = Path(smx_dir) if smx_dir else DEFAULT_SMX_DIR_BUNDLED
+    base = Path(smx_dir) if smx_dir else DEFAULT_SMX_DIR
     if not base.exists():
         return None
     tid = track.strip().upper()

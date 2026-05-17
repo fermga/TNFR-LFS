@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from .lap_averages import compute_lap_averages
 from .protocol.insim import RaceContext
 from .protocol.packets import CompCar
 from .traffic import _build_snapshot
@@ -167,6 +168,7 @@ def build_snapshot(
             if fuel_burn_pct_per_lap is not None else None
         ),
         "ghost_node": int(ghost_node) if ghost_node is not None else None,
+        "lap_averages_ms": {"stint": None, "clean": None, "total": None},
         "track": None,
         "weather": None,
         "race_in_progress": None,
@@ -221,6 +223,13 @@ def build_snapshot(
             snap["best_lap_ms"] = int(best)
             if current_lap_ms is not None:
                 snap["delta_vs_best_ms"] = int(current_lap_ms) - int(best)
+            pit_in_laps = [
+                p.laps_done for p in ctx.pit_stops
+                if p.player_id == plid
+            ]
+            snap["lap_averages_ms"] = compute_lap_averages(
+                laps, pit_in_laps
+            )
     # If the caller supplies a per-node interpolated delta (the
     # continuous Detect&Monitor-style signal), prefer it over the
     # crude ``current_lap_ms - best_lap_ms`` lap-time difference.

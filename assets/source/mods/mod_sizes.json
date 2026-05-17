@@ -1,0 +1,16 @@
+{
+  "_README": [
+    "LFS mod-car dimensions database keyed by the 6-hex SkinID",
+    "(same canonical form used by Detect&Monitor's cars/mod_sizes.car",
+    "and by the URLs at lfs.net/files/vehmods/<6HEX>).",
+    "",
+    "Each entry has: length_m, width_m and an optional source tag.",
+    "Seeded from D&M v1.x mod_sizes.car (values converted from cm)."
+  ],
+  "mods": {
+    "56f1fe": {"length_m": 1.95, "width_m": 0.93, "source": "detect_monitor"},
+    "7c350b": {"length_m": 4.15, "width_m": 1.62, "source": "detect_monitor"},
+    "ccfec6": {"length_m": 6.77, "width_m": 2.12, "source": "detect_monitor"},
+    "f3c2a4": {"length_m": 7.18, "width_m": 1.81, "source": "detect_monitor"}
+  }
+}

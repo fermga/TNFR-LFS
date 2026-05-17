@@ -57,28 +57,17 @@ class ChannelInfo:
 # (column, label, units, group, description)
 _BASE: tuple[tuple[str, str, str, str, str], ...] = (
     # --- Vehicle (chassis) ---
-    ("time_ms", "Time", "ms", "Vehicle", "Sample timestamp"),
     ("speed_ms", "Speed", "m/s", "Vehicle", "Wheel-derived speed"),
     ("rpm", "RPM", "rpm", "Engine", "Engine speed"),
-    ("gear", "Gear (raw)", "", "Engine",
-     "OutGauge raw byte (0=R, 1=N, 2=1st, ...)"),
     ("gear_lfs", "Gear", "", "Engine",
      "Canonical LFS gear (-1=R, 0=N, 1..N=forward)"),
-    ("gear_label", "Gear label", "", "Engine",
-     "Display label: R / N / 1 / 2 / ..."),
     ("fuel", "Fuel", "frac", "Engine", "Fuel level (0..1)"),
-    ("eng_temp_c", "Eng. Temp", "°C", "Engine", "Engine coolant temp"),
-    ("oil_temp_c", "Oil Temp", "°C", "Engine", "Oil temperature"),
-    ("oil_pressure_bar", "Oil Press", "bar", "Engine", "Oil pressure"),
     ("turbo_bar", "Turbo", "bar", "Engine", "Turbo boost"),
     # --- Driver inputs ---
     ("throttle", "Throttle", "frac", "Driver", "Throttle pedal (0..1)"),
     ("brake", "Brake", "frac", "Driver", "Brake pedal (0..1)"),
     ("clutch", "Clutch", "frac", "Driver", "Clutch pedal (0..1)"),
-    ("input_throttle", "Throttle (raw)", "frac", "Driver", ""),
-    ("input_brake", "Brake (raw)", "frac", "Driver", ""),
     ("input_steer", "Steer (raw)", "rad", "Driver", "Steering wheel angle"),
-    ("input_clutch", "Clutch (raw)", "frac", "Driver", ""),
     ("input_handbrake", "Handbrake", "frac", "Driver", ""),
     ("steer_torque_nm", "Steer Torque", "Nm", "Driver", "FFB steering torque"),
     # --- Chassis dynamics ---
@@ -97,14 +86,10 @@ _BASE: tuple[tuple[str, str, str, str, str], ...] = (
     ("pos_x", "Pos. X", "m", "Chassis", "World X position"),
     ("pos_y", "Pos. Y", "m", "Chassis", "World Y position"),
     ("pos_z", "Pos. Z", "m", "Chassis", "World Z position"),
-    # --- Distance / lap ---
-    ("current_lap_dist_m", "Lap Distance", "m", "Lap", "Distance into current lap"),
-    ("indexed_distance_m", "Indexed Dist", "m", "Lap", "Indexed track distance"),
     # --- Derived (chassis dynamics) ---
     ("yaw_rate_rads", "Yaw rate", "rad/s", "Derived", "Body yaw rate (z)"),
     ("yaw_rate_theoretical_rads", "Yaw rate (th)", "rad/s", "Derived",
      "Neutral-steer yaw rate from steered angle"),
-    ("beta_deg", "Slip angle β", "°", "Derived", "Body slip angle"),
     ("understeer_index", "Understeer idx", "", "Derived", "+= understeer"),
     ("transfer_long_n_real", "Long. transfer", "N", "Derived", "Real long. load Δ"),
     ("transfer_lat_n_real", "Lat. transfer", "N", "Derived", "Real lat. load Δ"),
@@ -127,17 +112,10 @@ _BASE: tuple[tuple[str, str, str, str, str], ...] = (
     ("track_radius_m", "Track radius", "m", "Track", "1/|curvature|, capped"),
     ("track_slope_pct", "Track slope", "%", "Track", "100·dz/ds along centerline"),
     ("track_width_m", "Track width", "m", "Track", "drive_right - drive_left at node"),
-    ("drive_left_local", "Drive edge L", "m", "Track", "PTH drive limit, LFS-left (≤0)"),
-    ("drive_right_local", "Drive edge R", "m", "Track", "PTH drive limit, LFS-right (≥0)"),
-    ("limit_left_local", "Outer limit L", "m", "Track", "PTH outer limit, LFS-left (≤0)"),
-    ("limit_right_local", "Outer limit R", "m", "Track", "PTH outer limit, LFS-right (≥0)"),
     ("track_offset_m", "Lateral offset", "m", "Track", "Perp. distance to centerline"),
     ("segment_id", "Segment id", "", "Track", "Geometry segment index"),
-    ("segment_kind", "Segment kind", "", "Track", "straight | left | right"),
     ("accel_x_road_mps2", "Long. accel (road)", "m/s²", "Derived",
      "accel_x with road-grade gravity removed (+engine, -brake)"),
-    ("velocity_heading_rad", "Velocity heading", "rad", "Derived",
-     "atan2(vel_y, vel_x); NaN when |v|<1 m/s"),
     ("yaw_misalign_rad", "Yaw misalignment", "rad", "Derived",
      "vel-heading − track-heading; trajectory slip proxy"),
     # --- Dash lights (booleans 0/1) ---
@@ -152,10 +130,7 @@ _BASE: tuple[tuple[str, str, str, str, str], ...] = (
     ("dl_fullbeam", "Full beam", "bool", "Aids", ""),
     ("dl_shift_light", "Shift light", "bool", "Aids", ""),
     # --- Race context ---
-    ("car", "Car", "", "Context", "LFS car short name"),
-    ("ctx_track", "Track", "", "Context", "LFS track code"),
-    ("ctx_weather", "Weather", "", "Context", ""),
-    ("ctx_wind", "Wind", "", "Context", ""),
+    ("ctx_wind", "Wind", "m/s", "Context", "Wind speed magnitude"),
 )
 
 

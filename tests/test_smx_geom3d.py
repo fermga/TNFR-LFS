@@ -8,7 +8,7 @@ import pytest
 
 from lfs_telemetry.telemetry.track import geom3d
 from lfs_telemetry.telemetry.track.smx import (
-    DEFAULT_SMX_DIR_BUNDLED, SmxMesh, SmxObject, parse_smx,
+    DEFAULT_SMX_DIR, SmxMesh, SmxObject, parse_smx,
 )
 from lfs_telemetry.telemetry.track.pth import TrackProfile
 
@@ -289,7 +289,7 @@ def test_enrich_profile_with_smx_synthetic():
 # Parametrised over the 7 shipped SMX files
 # ---------------------------------------------------------------------------
 
-_SMX_FILES = sorted(DEFAULT_SMX_DIR_BUNDLED.glob("*.smx"))
+_SMX_FILES = sorted(DEFAULT_SMX_DIR.glob("*.smx")) if DEFAULT_SMX_DIR.exists() else []
 
 
 @pytest.mark.skipif(not _SMX_FILES, reason="no bundled SMX files")

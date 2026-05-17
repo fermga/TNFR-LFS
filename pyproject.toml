@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lfs-race-engineer"
-version = "0.2.0"
+version = "0.3.0"
 description = "Live-for-Speed real-time telemetry capture and Studio race-engineer overlay."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,6 +14,12 @@ dependencies = [
     "numpy>=1.26",
     "pandas>=2.1",
     "scipy>=1.11",
+    # TNFR Setup Advisor (tnfr_racing subpackage) — engine + transitive deps
+    # not declared by tnfr 0.0.3.3. mpmath 1.4 changes the API used by
+    # tnfr.constants.canonical (mp.dps), so pin below 1.4.
+    "tnfr>=0.0.3.3",
+    "mpmath<1.4",
+    "cachetools>=5.0",
 ]
 
 [project.optional-dependencies]

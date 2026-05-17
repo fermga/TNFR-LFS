@@ -325,7 +325,6 @@ class TrackMapDock(QWidget):
         cwd = Path.cwd()
         for sub in (
             "assets/source",
-            "assets/LFS_SMX_6H",
             "assets",
             "tracks",
         ):

@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from lfs_telemetry.telemetry.track.smx import (
-    DEFAULT_SMX_DIR_BUNDLED,
+    DEFAULT_SMX_DIR,
     SmxMesh,
     cross_section_at,
     elevation_envelope,
@@ -16,7 +16,7 @@ from lfs_telemetry.telemetry.track.smx import (
     parse_smx,
 )
 
-SMX_FILES = list_smx_files(DEFAULT_SMX_DIR_BUNDLED)
+SMX_FILES = list_smx_files(DEFAULT_SMX_DIR)
 
 
 def _expected_track_id(stem: str) -> str:
@@ -36,12 +36,15 @@ def _expected_track_id(stem: str) -> str:
 @pytest.fixture(scope="module")
 def first_mesh() -> SmxMesh:
     if not SMX_FILES:
-        pytest.skip("no bundled SMX files in assets/LFS_SMX_6H")
+        pytest.skip("no SMX files in DEFAULT_SMX_DIR (C:/LFS/data/smx)")
     return parse_smx(SMX_FILES[0])
 
 
+@pytest.mark.skipif(
+    not SMX_FILES, reason="no SMX files in DEFAULT_SMX_DIR"
+)
 def test_bundled_smx_files_present() -> None:
-    assert SMX_FILES, "expected the 7 official LFS env SMX files to ship"
+    assert SMX_FILES
     assert len(SMX_FILES) >= 6
 
 
@@ -104,7 +107,7 @@ def test_find_smx_for_track() -> None:
     if not SMX_FILES:
         pytest.skip("no bundled SMX")
     # Match by 2-letter env id via the env_map fallback.
-    p = find_smx_for_track("BL1", smx_dir=DEFAULT_SMX_DIR_BUNDLED)
+    p = find_smx_for_track("BL1", smx_dir=DEFAULT_SMX_DIR)
     if p is not None:
         assert "blackwood" in p.stem.lower()
 

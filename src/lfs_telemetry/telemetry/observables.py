@@ -358,6 +358,97 @@ def reload_car_registry() -> None:
         _CAR_INFO_BIN_FULL_CACHE.clear()
 
 
+def user_car_info_bin_dir() -> Path:
+    """Return the writable directory where imported ``*_CAR_info.bin``
+    files are kept. Honours ``$LFS_TELEMETRY_CAR_INFO_DIR`` when set so
+    advanced users can keep the library outside the install folder."""
+    env = os.environ.get("LFS_TELEMETRY_CAR_INFO_DIR")
+    if env:
+        return Path(env)
+    return Path.cwd() / "assets" / "source" / "cars"
+
+
+def import_car_info_bin(
+    source: Path, *, target_key: str | None = None,
+) -> tuple[Path, "CarInfoBin"]:
+    """Validate and copy a user-chosen ``CAR_info.bin`` into the search path.
+
+    The file is parsed first to make sure it really is a CAR_info.bin
+    export; on success it is copied into :func:`user_car_info_bin_dir`
+    under the canonical ``<key>_CAR_info.bin`` filename, the per-key
+    caches are cleared, and ``(destination_path, parsed)`` is returned.
+
+    Parameters
+    ----------
+    source:
+        Path to the user-chosen ``.bin`` file.
+    target_key:
+        Optional explicit car short name (e.g. ``"FBM"``). When omitted
+        the key is inferred from the source filename if it matches the
+        ``<key>_CAR_info.bin`` pattern, otherwise from the parsed
+        ``short_name`` field.
+    """
+    from .car_info_bin import parse_car_info_bin
+    src = Path(source)
+    if not src.is_file():
+        raise FileNotFoundError(f"{src} does not exist")
+    info = parse_car_info_bin(src)
+    key = (target_key or "").upper().strip()
+    if not key:
+        stem = src.stem.upper()
+        if stem.endswith("_CAR_INFO"):
+            key = stem[: -len("_CAR_INFO")]
+        else:
+            key = (info.short_name or "").upper().strip()
+    if not key:
+        raise ValueError(
+            "Could not infer car short name; pass target_key explicitly."
+        )
+    dst_dir = user_car_info_bin_dir()
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    dst = dst_dir / f"{key}_CAR_info.bin"
+    # ``shutil.copyfile`` preserves contents without metadata; that's all
+    # we need. Use a local import to avoid pulling shutil at module load.
+    import shutil
+    shutil.copyfile(src, dst)
+    with _CACHE_LOCK:
+        _CAR_INFO_BIN_CACHE.pop(key, None)
+        _CAR_INFO_BIN_FULL_CACHE.pop(key, None)
+    return dst, info
+
+
+def import_car_info_bins_from_lfs(
+    lfs_dir: Path,
+) -> tuple[list[tuple[str, Path]], list[tuple[Path, str]]]:
+    """Bulk-import every ``*_CAR_info.bin`` from an LFS install.
+
+    Scans ``<lfs_dir>/data`` for files written by LFS Programmer Mode
+    (``Save CAR_info.bin``) and copies each one into the writable
+    library returned by :func:`user_car_info_bin_dir`.
+
+    Returns ``(imported, failed)`` where ``imported`` is a list of
+    ``(car_key, destination_path)`` for successful copies and
+    ``failed`` is a list of ``(source_path, error_message)`` for
+    files that could not be parsed or written.
+    """
+    from ..lfs_config import find_lfs_car_info_bins
+    imported: list[tuple[str, Path]] = []
+    failed: list[tuple[Path, str]] = []
+    for src in find_lfs_car_info_bins(Path(lfs_dir)):
+        try:
+            dst, _info = import_car_info_bin(src)
+        except (OSError, ValueError, struct.error) as exc:
+            failed.append((src, f"{type(exc).__name__}: {exc}"))
+            continue
+        # Recover the canonical key from the destination filename
+        # (``<KEY>_CAR_info.bin``).
+        key = dst.stem
+        if key.upper().endswith("_CAR_INFO"):
+            key = key[: -len("_CAR_INFO")]
+        imported.append((key.upper(), dst))
+    return imported, failed
+
+
 @dataclass(slots=True)
 class StructuralObservation:
     """Per-sample structural state for the car-as-NFR."""

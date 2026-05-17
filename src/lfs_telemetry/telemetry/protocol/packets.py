@@ -14,12 +14,16 @@ We model the full set of LFS data sources useful for structural analysis:
 
   Recommended ``cfg.txt`` block for full coverage::
 
-      OutSim Mode 1
+      OutSim Mode 2
       OutSim Delay 1
       OutSim IP 127.0.0.1
       OutSim Port 30000
       OutSim ID 0
       OutSim Opts 1ff
+
+  (``Mode 2`` selects the extended OutSimPack2 layout. ``InSim`` has no
+  cfg.txt entry — enable it at runtime with ``/insim 29999`` in the LFS
+  console or by launching ``LFS.exe /insim=29999``.)
 
 * **OutGauge** – dashboard packet (UDP). Configured via ``cfg.txt``::
 

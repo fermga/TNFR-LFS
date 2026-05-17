@@ -27,5 +27,6 @@ Studio reaches feature parity the Dash app is removed in a single commit.
 
 from __future__ import annotations
 
+from .. import __version__
+
 __all__ = ["__version__"]
-__version__ = "0.2.0"

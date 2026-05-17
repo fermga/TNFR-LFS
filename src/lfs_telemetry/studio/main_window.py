@@ -36,9 +36,15 @@ from .widgets import (
     TrackMapDock,
 )
 from .workspace_state import WorkspaceState
+from ..lfs_paths import QSETTINGS_APP as APP, QSETTINGS_ORG as ORG
+from .i18n import (
+    LANG_ENGLISH,
+    LANG_SPANISH,
+    current_language,
+    set_language,
+    tr,
+)
 
-ORG = "LFS-Race-Engineer"
-APP = "LFS Telemetry Studio"
 # Bump when the dock layout changes so users don't restore a stale
 # (and possibly broken) geometry from a previous build.
 _LAYOUT_VERSION = 5
@@ -58,7 +64,7 @@ class MainWindow(QMainWindow):
         self._loader = LapLoader(self._workspace, max_workers=2, parent=self)
 
         # ----- Docks -----------------------------------------------
-        self._captures_dock = QDockWidget("Captures", self)
+        self._captures_dock = QDockWidget(tr("Captures"), self)
         self._captures_dock.setObjectName("CapturesDock")
         self._captures = CapturesDock(self._workspace, self._signals,
                                       self._captures_dock)
@@ -70,7 +76,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea,
                            self._captures_dock)
 
-        self._channels_dock = QDockWidget("Channels", self)
+        self._channels_dock = QDockWidget(tr("Telemetry"), self)
         self._channels_dock.setObjectName("ChannelsDock")
         self._channels = ChannelsDock(self._signals, self._channels_dock)
         self._channels_dock.setWidget(self._channels)
@@ -82,7 +88,7 @@ class MainWindow(QMainWindow):
                            self._channels_dock)
 
         # Track-map dock (bottom; consumes cursor_moved).
-        self._track_dock = QDockWidget("Track map", self)
+        self._track_dock = QDockWidget(tr("Track map"), self)
         self._track_dock.setObjectName("TrackMapDock")
         self._track_map = TrackMapDock(self._loader, self._signals,
                                        self._track_dock)
@@ -100,7 +106,7 @@ class MainWindow(QMainWindow):
 
         # Track-elevation dock (tabbed with the top-down map so the two
         # 3D-related views share the same screen real-estate).
-        self._elev_dock = QDockWidget("Elevation", self)
+        self._elev_dock = QDockWidget(tr("Elevation"), self)
         self._elev_dock.setObjectName("TrackElevationDock")
         self._track_elev = TrackElevationDock(self._loader, self._signals,
                                               self._elev_dock)
@@ -125,7 +131,7 @@ class MainWindow(QMainWindow):
 
         # Live Race Dashboard dock (right side, tabbed with Channels)
         # — reads live.json via the same CaptureRunner the Live tab uses.
-        self._dash_dock = QDockWidget("Race dashboard", self)
+        self._dash_dock = QDockWidget(tr("Race dashboard"), self)
         self._dash_dock.setObjectName("RaceDashboardDock")
         self._dash = RaceDashboardDock(
             self._center.capture.runner, self._signals, self._dash_dock,
@@ -193,58 +199,78 @@ class MainWindow(QMainWindow):
 
     def _build_actions(self) -> None:
         menubar = self.menuBar()
-        file_menu = menubar.addMenu("&File")
+        file_menu = menubar.addMenu(tr("&File"))
 
-        open_act = QAction("Open Workspace…", self)
+        open_act = QAction(tr("Open Workspace\u2026"), self)
         open_act.setShortcut(QKeySequence.Open)
         open_act.triggered.connect(self._action_open_workspace)
         file_menu.addAction(open_act)
 
-        refresh_act = QAction("Refresh Captures", self)
+        refresh_act = QAction(tr("Refresh Captures"), self)
         refresh_act.setShortcut("F5")
         refresh_act.triggered.connect(self._captures.refresh)
         file_menu.addAction(refresh_act)
 
-        clear_cache_act = QAction("Clear Lap Cache", self)
+        clear_cache_act = QAction(tr("Clear Lap Cache"), self)
         clear_cache_act.triggered.connect(self._action_clear_cache)
         file_menu.addAction(clear_cache_act)
 
         file_menu.addSeparator()
-        quit_act = QAction("&Quit", self)
+        quit_act = QAction(tr("&Quit"), self)
         quit_act.setShortcut(QKeySequence.Quit)
         quit_act.triggered.connect(self.close)
         file_menu.addAction(quit_act)
 
-        view_menu = menubar.addMenu("&View")
+        view_menu = menubar.addMenu(tr("&View"))
         view_menu.addAction(self._captures_dock.toggleViewAction())
         view_menu.addAction(self._channels_dock.toggleViewAction())
         view_menu.addAction(self._track_dock.toggleViewAction())
         view_menu.addAction(self._elev_dock.toggleViewAction())
         view_menu.addAction(self._dash_dock.toggleViewAction())
         view_menu.addSeparator()
-        reset_act = QAction("Reset Layout", self)
+        reset_act = QAction(tr("Reset Layout"), self)
         reset_act.triggered.connect(self._action_reset_layout)
         view_menu.addAction(reset_act)
+        view_menu.addSeparator()
+        lang_menu = view_menu.addMenu(tr("&Language"))
+        self._lang_actions: dict[str, QAction] = {}
+        current = current_language()
+        for code, label in (
+            (LANG_ENGLISH, tr("English")),
+            (LANG_SPANISH, tr("Spanish")),
+        ):
+            act = QAction(label, self)
+            act.setCheckable(True)
+            act.setChecked(code == current)
+            act.triggered.connect(
+                lambda _checked, c=code: self._action_set_language(c),
+            )
+            lang_menu.addAction(act)
+            self._lang_actions[code] = act
 
-        tools_menu = menubar.addMenu("&Tools")
-        configure_lfs_act = QAction("Configure LFS\u2026", self)
+        tools_menu = menubar.addMenu(tr("&Tools"))
+        configure_lfs_act = QAction(tr("Configure LFS\u2026"), self)
         configure_lfs_act.setStatusTip(
-            "Patch LFS cfg.txt with the OutSim/OutGauge/InSim settings "
-            "required by lfs-telemetry.",
+            tr(
+                "Patch LFS cfg.txt with the OutSim/OutGauge/InSim settings "
+                "required by lfs-telemetry.",
+            ),
         )
         configure_lfs_act.triggered.connect(self._action_configure_lfs)
         tools_menu.addAction(configure_lfs_act)
 
-        help_menu = menubar.addMenu("&Help")
-        guide_act = QAction("Channel guide\u2026", self)
+        help_menu = menubar.addMenu(tr("&Help"))
+        guide_act = QAction(tr("Channel guide\u2026"), self)
         guide_act.setShortcut("F1")
         guide_act.setStatusTip(
-            "Open the telemetry guide: what each channel measures "
-            "and how to read it, in plain language.",
+            tr(
+                "Open the telemetry guide: what each channel measures "
+                "and how to read it, in plain language.",
+            ),
         )
         guide_act.triggered.connect(self._action_channel_guide)
         help_menu.addAction(guide_act)
-        about_act = QAction("About", self)
+        about_act = QAction(tr("About"), self)
         about_act.triggered.connect(self._action_about)
         help_menu.addAction(about_act)
 
@@ -254,7 +280,9 @@ class MainWindow(QMainWindow):
 
     def _action_open_workspace(self) -> None:
         path = QFileDialog.getExistingDirectory(
-            self, "Choose workspace folder", str(self._workspace.workspace),
+            self,
+            tr("Choose workspace folder"),
+            str(self._workspace.workspace),
         )
         if not path:
             return
@@ -262,7 +290,7 @@ class MainWindow(QMainWindow):
 
     def _action_clear_cache(self) -> None:
         self._workspace.clear_cache()
-        self._status.showMessage("Lap cache cleared.", 4000)
+        self._status.showMessage(tr("Lap cache cleared."), 4000)
 
     def _action_reset_layout(self) -> None:
         self.removeDockWidget(self._captures_dock)
@@ -305,19 +333,33 @@ class MainWindow(QMainWindow):
     def _action_about(self) -> None:
         from . import __version__
         QMessageBox.information(
-            self, "About",
-            f"LFS Telemetry Studio {__version__}\n"
-            "Native dockable analyser built on PySide6 + pyqtgraph.\n\n"
-            "To stream telemetry, LFS needs OutSim/OutGauge/InSim entries "
-            "in cfg.txt.\n"
-            "Use \u201cTools \u2192 Configure LFS\u2026\u201d to patch them "
-            "automatically or copy the snippet manually.",
+            self, tr("About"),
+            tr(
+                "LFS Telemetry Studio {version}\n"
+                "Native dockable analyser built on PySide6 + pyqtgraph.\n\n"
+                "To stream telemetry, LFS needs OutSim/OutGauge/InSim entries "
+                "in cfg.txt.\n"
+                "Use \u201cTools \u2192 Configure LFS\u2026\u201d to patch "
+                "them automatically or copy the snippet manually.",
+            ).format(version=__version__),
         )
 
     def _action_configure_lfs(self) -> None:
         from .widgets.lfs_config_dialog import LfsConfigDialog
         dlg = LfsConfigDialog(self)
         dlg.exec()
+
+    def _action_set_language(self, code: str) -> None:
+        set_language(code)
+        for c, act in self._lang_actions.items():
+            act.setChecked(c == code)
+        QMessageBox.information(
+            self, tr("Restart required"),
+            tr(
+                "Language will change the next time you start "
+                "the application.",
+            ),
+        )
 
     def _action_channel_guide(self) -> None:
         from .widgets.help_dialog import HelpDialog

@@ -30,6 +30,10 @@ class LiveDataSource(QObject):
         self._path: Path | None = None
         self._available = False
         self._last_snap: dict[str, Any] = {}
+        # Cache (mtime_ns, size) of the last successful read so we can
+        # skip the JSON parse when the file has not changed between
+        # ticks (typical case: LFS not writing new samples).
+        self._last_stat: tuple[int, int] | None = None
         self._timer = QTimer(self)
         self._timer.setInterval(int(interval_ms))
         self._timer.timeout.connect(self._tick)
@@ -48,6 +52,7 @@ class LiveDataSource(QObject):
             return
         self._path = new_path
         self._last_snap = {}
+        self._last_stat = None
         self.snapshot_changed.emit(self._last_snap)
         self._update_available(False)
 
@@ -58,6 +63,7 @@ class LiveDataSource(QObject):
     def stop(self) -> None:
         if self._timer.isActive():
             self._timer.stop()
+        self._last_stat = None
         self._update_available(False)
 
     # ------------------------------------------------------------------
@@ -71,8 +77,19 @@ class LiveDataSource(QObject):
 
     def _tick(self) -> None:
         path = self._path
-        if path is None or not path.exists():
+        if path is None:
             self._update_available(False)
+            return
+        try:
+            st = path.stat()
+        except OSError:
+            self._last_stat = None
+            self._update_available(False)
+            return
+        stat_key = (st.st_mtime_ns, st.st_size)
+        if stat_key == self._last_stat:
+            # File untouched since last successful read; nothing to do.
+            self._update_available(True)
             return
         try:
             text = path.read_text(encoding="utf-8")
@@ -87,6 +104,7 @@ class LiveDataSource(QObject):
             return
         if not isinstance(snap, dict):
             return
+        self._last_stat = stat_key
         self._last_snap = snap
         self._update_available(True)
         self.snapshot_changed.emit(snap)

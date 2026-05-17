@@ -30,6 +30,7 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 from ...telemetry import LapTelemetry, StintTelemetry
 from ..models import LapLoader
 from ..signals import SignalBus
+from ..i18n import tr
 from ..theme import (
     MUTED_COLOR,
     PANEL_COLOR,
@@ -59,7 +60,7 @@ def _styled_plot(
     plot.setTitle(title, color=TEXT_COLOR, size="9pt")
     plot.showGrid(x=False, y=True, alpha=0.12)
     plot.getAxis("left").setLabel(ylabel, color=TEXT_COLOR)
-    plot.getAxis("bottom").setLabel("Lap #", color=TEXT_COLOR)
+    plot.getAxis("bottom").setLabel(tr("Lap #"), color=TEXT_COLOR)
     plot.getAxis("left").setTextPen(TEXT_COLOR)
     plot.getAxis("bottom").setTextPen(TEXT_COLOR)
     return plot
@@ -81,7 +82,7 @@ class StintTab(QWidget):
         self._loaded: Dict[Path, LapTelemetry] = {}
 
         # Header summary
-        self._summary = QLabel("No laps selected.", self)
+        self._summary = QLabel(tr("No laps selected."), self)
         self._summary.setWordWrap(True)
         self._summary.setStyleSheet(
             f"color:{MUTED_COLOR}; padding:4px 6px;"
@@ -94,19 +95,21 @@ class StintTab(QWidget):
         self._gfx.ci.layout.setSpacing(2)
         self._gfx.ci.layout.setContentsMargins(2, 2, 2, 2)
 
-        self._p_times = _styled_plot(self._gfx, "Lap times", "s", row=0)
-        self._p_fuel = _styled_plot(self._gfx, "Fuel", "%", row=1)
+        self._p_times = _styled_plot(self._gfx, tr("Lap times"), "s", row=0)
+        self._p_fuel = _styled_plot(self._gfx, tr("Fuel"), "%", row=1)
         self._p_tyre = _styled_plot(
-            self._gfx, "Tyre temp end-of-lap", "°C", row=2,
+            self._gfx, tr("Tyre temp end-of-lap"), "\u00b0C", row=2,
         )
         self._p_susp = _styled_plot(
-            self._gfx, "Peak vertical load (suspension)", "kN", row=3,
+            self._gfx, tr("Peak vertical load (suspension)"), "kN", row=3,
         )
         self._p_friction = _styled_plot(
-            self._gfx, "Friction use p95 (circle saturation)", "", row=4,
+            self._gfx,
+            tr("Friction use p95 (circle saturation)"), "", row=4,
         )
         self._p_damper = _styled_plot(
-            self._gfx, "Damper work — RMS shaft speed", "mm/s", row=5,
+            self._gfx, tr("Damper work \u2014 RMS shaft speed"),
+            "mm/s", row=5,
         )
         # Link x-axes so zoom/pan stays in sync per lap index.
         for p in (self._p_fuel, self._p_tyre, self._p_susp,
@@ -186,7 +189,7 @@ class StintTab(QWidget):
                 plot.legend = None
 
     def _reset(self) -> None:
-        self._summary.setText("No laps selected.")
+        self._summary.setText(tr("No laps selected."))
         self._clear_plots()
 
     def _refresh(self) -> None:
@@ -195,7 +198,9 @@ class StintTab(QWidget):
         ]
         if not ordered:
             self._summary.setText(
-                f"Loading {len(self._requested)} lap(s)…"
+                tr("Loading {n} lap(s)\u2026").format(
+                    n=len(self._requested),
+                ),
             )
             return
         try:
@@ -203,7 +208,9 @@ class StintTab(QWidget):
             df = stint.per_lap
             trends = stint.trends
         except Exception as exc:  # noqa: BLE001
-            self._summary.setText(f"Stint build failed: {exc}")
+            self._summary.setText(
+                tr("Stint build failed: {error}").format(error=exc),
+            )
             return
 
         # Header summary — stint-wide overview.
@@ -379,7 +386,7 @@ class StintTab(QWidget):
                 sample = pg.PlotDataItem(
                     pen=pg.mkPen("#4ea3ff", width=6),
                 )
-                plot.legend.addItem(sample, "used / lap")
+                plot.legend.addItem(sample, tr("used / lap"))
         if "fuel_pct_end" in df:
             end = df["fuel_pct_end"].to_numpy(dtype=float)
             if np.isfinite(end).any():
@@ -388,7 +395,7 @@ class StintTab(QWidget):
                     pen=pg.mkPen("#ffa040", width=2),
                     symbol="o", symbolSize=6,
                     symbolBrush="#ffa040", symbolPen=None,
-                    name="remaining @ end",
+                    name=tr("remaining @ end"),
                 )
                 self._dyn_items.append(curve)
         plot.getViewBox().autoRange()

@@ -51,6 +51,19 @@ class SignalBus(QObject):
     cursor_left = Signal()
     """The pointer left every chart; siblings should hide their crosshairs."""
 
+    # ----- Setup garage editor ------------------------------------
+    setup_overrides_changed = Signal(str, object)
+    """User edited the in-app garage form for a car.
+
+    Arguments:
+        car_key: 4-letter car short-name the overrides apply to
+            (e.g. ``"FBM"``). Empty string means "no car selected".
+        bin: A :class:`~telemetry.car_info_bin.CarInfoBin` with the
+            user's overrides merged on top of the loaded baseline. The
+            advisor consumes this in place of the raw baseline export.
+            ``None`` means "fall back to the on-disk baseline".
+    """
+
     # ----- Status -------------------------------------------------
     status_message = Signal(str, int)
     """Show ``msg`` in the status bar for ``timeout_ms`` (0 = persistent)."""
