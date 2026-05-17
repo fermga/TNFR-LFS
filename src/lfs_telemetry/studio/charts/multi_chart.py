@@ -31,6 +31,7 @@ from PySide6.QtWidgets import QSizePolicy, QSplitter, QVBoxLayout, QWidget
 from ...telemetry import LapTelemetry, channel_info
 from ...telemetry.comparison import LapComparison
 from ...telemetry.sectors import insim_split_distances_m, sector_times_s
+from ..i18n import tr
 from ..theme import CURSOR_COLOR, GRID_COLOR, MUTED_COLOR, TEXT_COLOR, trace_color
 from .lap_arrays import LapArrayCache
 
@@ -171,6 +172,19 @@ class MultiChannelChart(QWidget):
         if self._delta_row is not None:
             self._delta_row.cursor.hide()
 
+    def exportable_rows(self) -> list[tuple[str, QWidget]]:
+        """Return visible telemetry rows as ``(channel, widget)``.
+
+        Used by the charts dock to export each generated graph as PNG.
+        """
+        out: list[tuple[str, QWidget]] = []
+        for col in self._row_order:
+            row = self._rows.get(col)
+            if row is None:
+                continue
+            out.append((col, row.plot))
+        return out
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
@@ -198,7 +212,7 @@ class MultiChannelChart(QWidget):
                 continue
             info = channel_info(col)
             row = _Row(col, info.units, self)
-            row.plot.setToolTip(info.tooltip_html())
+            row.plot.setToolTip(info.tooltip_html(translate=tr))
             self._rows[col] = row
             self._splitter.insertWidget(position, row.plot)
             self._wire_cursor(row)

@@ -26,11 +26,11 @@ from PySide6.QtWidgets import (
 
 from ...lfs_config import (
     cfg_path_for,
-    find_default_lfs_dir,
     is_valid_lfs_dir,
     manual_instructions,
     patch_cfg,
 )
+from ...lfs_paths import autodetect_lfs_dir
 from ..i18n import tr
 
 _ORG = "LFS-Race-Engineer"
@@ -116,7 +116,7 @@ class LfsConfigDialog(QDialog):
         if saved:
             self._path_edit.setText(saved)
         else:
-            guess = find_default_lfs_dir()
+            guess = autodetect_lfs_dir()
             if guess is not None:
                 self._path_edit.setText(str(guess))
 

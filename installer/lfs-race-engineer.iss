@@ -4,7 +4,7 @@
 
 #define MyAppName       "LFS Race Engineer"
 #define MyAppShortName  "lfs-race-engineer"
-#define MyAppVersion    "0.3.0"
+#define MyAppVersion    "0.3.1"
 #define MyAppPublisher  "LFS Race Engineer"
 #define MyAppExeName    "lfs-race-engineer.exe"
 #define MyAppSourceDir  "..\dist\lfs-race-engineer"

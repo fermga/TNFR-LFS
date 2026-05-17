@@ -226,7 +226,6 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self._channels_dock.toggleViewAction())
         view_menu.addAction(self._track_dock.toggleViewAction())
         view_menu.addAction(self._elev_dock.toggleViewAction())
-        view_menu.addAction(self._dash_dock.toggleViewAction())
         view_menu.addSeparator()
         reset_act = QAction(tr("Reset Layout"), self)
         reset_act.triggered.connect(self._action_reset_layout)

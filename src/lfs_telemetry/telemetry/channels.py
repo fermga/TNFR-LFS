@@ -18,6 +18,7 @@ Usage::
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 from .protocol.packets import WHEEL_ORDER
 
@@ -33,22 +34,36 @@ class ChannelInfo:
     description: str = ""
     interpretation: str = ""
 
-    def tooltip_html(self) -> str:
+    def tooltip_html(
+        self,
+        *,
+        translate: Callable[[str], str] | None = None,
+    ) -> str:
         """Rich HTML tooltip combining label, units, description and
         interpretation guidance. Safe to feed directly into Qt's
         ``ToolTipRole`` (Qt auto-detects HTML by the leading ``<``).
         """
-        units = f" [{self.units}]" if self.units else ""
+        tr = translate or (lambda s: s)
+        label = tr(self.label)
+        units_value = tr(self.units)
+        group = tr(self.group)
+        description = tr(self.description) if self.description else ""
+        interpretation = (
+            tr(self.interpretation) if self.interpretation else ""
+        )
+        how_to_read = tr("How to read it")
+
+        units = f" [{units_value}]" if units_value else ""
         parts = [
-            f"<b>{self.label}</b>{units}",
-            f"<i>{self.group} &middot; <code>{self.column}</code></i>",
+            f"<b>{label}</b>{units}",
+            f"<i>{group} &middot; <code>{self.column}</code></i>",
         ]
-        if self.description:
-            parts.append(self.description)
-        if self.interpretation:
+        if description:
+            parts.append(description)
+        if interpretation:
             parts.append(
                 "<div style='margin-top:4px;'>"
-                f"<u>How to read it</u>: {self.interpretation}"
+                f"<u>{how_to_read}</u>: {interpretation}"
                 "</div>"
             )
         return "<div style='max-width:380px;'>" + "<br>".join(parts) + "</div>"

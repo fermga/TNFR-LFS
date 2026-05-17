@@ -115,7 +115,8 @@ class DictTranslator(QTranslator):
             key = sourceText.decode("utf-8", "replace")
         else:
             key = sourceText
-        return self._map.get(key, "")
+        # If a key is missing, keep the source text visible.
+        return self._map.get(key, key)
 
 
 # ---------------------------------------------------------------------
@@ -362,6 +363,18 @@ _ES: dict[str, str] = {
     "Yellow:": "Amarillo:",
     "White:": "Blanco:",
     "Radar": "Radar",
+    "G-meter (friction circle)":
+        "G-metro (c\u00edrculo de fricci\u00f3n)",
+    "Delta bar vs personal best":
+        "Barra de delta vs mejor personal",
+    "Gap to driver ahead": "Diferencia con el coche de delante",
+    "Gap to driver behind": "Diferencia con el coche de detr\u00e1s",
+    "Gear (big digit)": "Marcha (d\u00edgito grande)",
+    "RPM bar": "Barra de RPM",
+    "Speed (km/h)": "Velocidad (km/h)",
+    "Fuel %": "Combustible %",
+    "Fuel laps remaining": "Vueltas de combustible restantes",
+    "Flags (BLUE / YELLOW)": "Banderas (AZUL / AMARILLA)",
     "Full scale (\u00b1):": "Escala completa (\u00b1):",
     "Delta bar": "Barra de delta",
     "Redline:": "L\u00ednea roja:",
@@ -417,6 +430,21 @@ _ES: dict[str, str] = {
     "balance):":
         "Nombre del preajuste (p. ej. Clasificaci\u00f3n, Salida "
         "de carrera, Reparto de frenada):",
+    "Export PNG\u2026": "Exportar PNG\u2026",
+    "Export CSV\u2026": "Exportar CSV\u2026",
+    "Export charts": "Exportar gr\u00e1ficas",
+    "No telemetry charts available to export yet.":
+        "A\u00fan no hay gr\u00e1ficas de telemetr\u00eda para exportar.",
+    "Choose folder for PNG export":
+        "Elige carpeta para exportar PNG",
+    "Choose folder for CSV export":
+        "Elige carpeta para exportar CSV",
+    "Load laps and select channels before exporting CSV.":
+        "Carga vueltas y selecciona canales antes de exportar CSV.",
+    "Exported {n} PNG chart(s) to {path}.":
+        "Exportadas {n} gr\u00e1fica(s) PNG a {path}.",
+    "Exported {n} CSV chart(s) to {path}.":
+        "Exportadas {n} gr\u00e1fica(s) CSV a {path}.",
     "Overwrite preset?": "\u00bfSobrescribir preajuste?",
     "A preset named \u2018{name}\u2019 already exists. "
     "Overwrite it?":
@@ -476,9 +504,25 @@ _ES: dict[str, str] = {
         "de telemetr\u00eda.",
     "Channels by group": "Canales por grupo",
     "Channel": "Canal",
+    "Units": "Unidades",
     "Unit": "Unidad",
     "What it is &amp; how to read it":
         "Qu\u00e9 es y c\u00f3mo leerlo",
+    "How to read it": "C\u00f3mo leerlo",
+    "Lat. accel": "Acel. lat.",
+    "+right": "+derecha",
+    "Lateral acceleration (m/s\u00b2, +left). Its absolute peak in a "
+    "corner equals the lateral grip you actually used. Cross-plot "
+    "against accel_x (a \u2018g\u2013g diagram\u2019) to see how well "
+    "you fill the friction ellipse \u2014 missing quadrants reveal "
+    "areas where you are leaving grip on the table.":
+        "Aceleraci\u00f3n lateral (m/s\u00b2, +izquierda). Su pico "
+        "absoluto en curva equivale al agarre lateral que realmente "
+        "has usado. Comp\u00e1rala con accel_x "
+        "(diagrama \u2018g\u2013g\u2019) "
+        "para ver c\u00f3mo rellenas la elipse de fricci\u00f3n: "
+        "los cuadrantes vac\u00edos muestran d\u00f3nde est\u00e1s "
+        "dejando agarre sobre la mesa.",
     "Driver": "Piloto",
     "Vehicle": "Veh\u00edculo",
     "Engine": "Motor",

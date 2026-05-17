@@ -20,6 +20,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 
 from ...telemetry import ChannelInfo, channels_by_group
+from ..i18n import tr
 
 
 # Display order matches the Dash viewer for muscle memory continuity.
@@ -36,7 +37,7 @@ class ChannelTreeModel(QStandardItemModel):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setHorizontalHeaderLabels(["Channel", "Units"])
+        self.setHorizontalHeaderLabels([tr("Channel"), tr("Units")])
         self._available_columns: set[str] = set()
         self._populate(channels_by_group())
 
@@ -115,7 +116,7 @@ class ChannelTreeModel(QStandardItemModel):
             g for g in sorted(groups) if g not in _GROUP_ORDER
         ]
         for group in ordered:
-            group_item = QStandardItem(group)
+            group_item = QStandardItem(tr(group))
             group_item.setEditable(False)
             group_item.setSelectable(False)
             group_item.setFlags(
@@ -125,10 +126,10 @@ class ChannelTreeModel(QStandardItemModel):
             blank.setEditable(False)
             blank.setFlags(Qt.ItemFlag.ItemIsEnabled)
             for info in groups[group]:
-                name = QStandardItem(info.label)
+                name = QStandardItem(tr(info.label))
                 name.setEditable(False)
                 name.setData(info.column, self.ColumnRole)
-                name.setData(info.tooltip_html(),
+                name.setData(info.tooltip_html(translate=tr),
                              Qt.ItemDataRole.ToolTipRole)
                 name.setCheckable(True)
                 name.setCheckState(Qt.CheckState.Unchecked)
@@ -136,9 +137,9 @@ class ChannelTreeModel(QStandardItemModel):
                 # selected lap actually has; ``set_available_columns``
                 # flips the right ones on.
                 name.setFlags(Qt.ItemFlag.NoItemFlags)
-                units = QStandardItem(info.units)
+                units = QStandardItem(tr(info.units))
                 units.setEditable(False)
-                units.setData(info.tooltip_html(),
+                units.setData(info.tooltip_html(translate=tr),
                               Qt.ItemDataRole.ToolTipRole)
                 units.setFlags(Qt.ItemFlag.NoItemFlags)
                 group_item.appendRow([name, units])

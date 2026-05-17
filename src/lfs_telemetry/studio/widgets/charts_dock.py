@@ -11,13 +11,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
 
+import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QRadioButton,
     QScrollArea,
     QSizePolicy,
@@ -28,9 +32,9 @@ from PySide6.QtWidgets import (
 
 from ...telemetry import LapTelemetry
 from ..charts import MultiChannelChart
+from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
-from ..i18n import tr
 from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR, trace_color
 
 
@@ -66,7 +70,6 @@ class _LapLegend(QFrame):
         self._layout.addStretch(1)
 
     def set_laps(self, laps: list[LapTelemetry]) -> None:
-        # Remove all existing items.
         while self._layout.count():
             item = self._layout.takeAt(0)
             w = item.widget()
@@ -109,7 +112,6 @@ class ChartsDock(QWidget):
         self._loader = loader
         self._signals = signals
 
-        # ----- Axis radio (Distance / Time) ---------------------------
         self._axis_group = QButtonGroup(self)
         self._axis_distance = QRadioButton(tr("Distance"), self)
         self._axis_time = QRadioButton(tr("Time"), self)
@@ -123,17 +125,23 @@ class ChartsDock(QWidget):
         toolbar.addWidget(self._axis_distance)
         toolbar.addWidget(self._axis_time)
         toolbar.addSeparator()
+
+        export_png = QPushButton(tr("Export PNG…"), self)
+        export_png.clicked.connect(self._export_all_png)
+        toolbar.addWidget(export_png)
+
+        export_csv = QPushButton(tr("Export CSV…"), self)
+        export_csv.clicked.connect(self._export_all_csv)
+        toolbar.addWidget(export_csv)
+
+        toolbar.addSeparator()
         self._caption = QLabel(tr("No laps selected"), self)
         self._caption.setStyleSheet("color: #8a939e;")
         toolbar.addWidget(self._caption)
 
-        # ----- The chart ---------------------------------------------
         self._legend = _LapLegend(self)
         self._chart = MultiChannelChart(self)
 
-        # Wrap the chart in a scroll area so many channels can be
-        # browsed via the vertical scrollbar (each row keeps its
-        # 110-px minimum height instead of being squeezed).
         self._scroll = QScrollArea(self)
         self._scroll.setWidget(self._chart)
         self._scroll.setWidgetResizable(True)
@@ -152,7 +160,6 @@ class ChartsDock(QWidget):
         layout.addWidget(self._legend)
         layout.addWidget(self._scroll, 1)
 
-        # ----- State + wiring ---------------------------------------
         self._requested_paths: List[Path] = []
         self._loaded_laps: Dict[Path, LapTelemetry] = {}
         self._channels: List[str] = []
@@ -164,19 +171,13 @@ class ChartsDock(QWidget):
         self._chart.cursor_moved.connect(signals.cursor_moved)
         self._chart.cursor_left.connect(signals.cursor_left)
 
-    # ------------------------------------------------------------------
-    # Slots
-    # ------------------------------------------------------------------
-
     def _on_axis_toggled(self, *_args) -> None:
         kind = "distance" if self._axis_distance.isChecked() else "time"
         self._chart.set_axis_kind(kind)
         self._signals.x_axis_changed.emit(kind)
 
     def _on_laps_selected(self, paths: List[Path]) -> None:
-        # Recompute "what to show" and queue any missing lap loads.
         self._requested_paths = [Path(p) for p in paths]
-        # Drop loaded laps that are no longer requested.
         wanted = set(self._requested_paths)
         self._loaded_laps = {
             p: lap for p, lap in self._loaded_laps.items() if p in wanted
@@ -185,11 +186,13 @@ class ChartsDock(QWidget):
             self._caption.setText(tr("No laps selected"))
             self._chart.set_laps([])
             return
-        # Update caption + queue loads.
-        missing = [p for p in self._requested_paths if p not in self._loaded_laps]
+        missing = [
+            p for p in self._requested_paths
+            if p not in self._loaded_laps
+        ]
         if missing:
             self._caption.setText(
-                tr("Loading {n} of {total} lap(s)\u2026").format(
+                tr("Loading {n} of {total} lap(s)…").format(
                     n=len(missing), total=len(self._requested_paths),
                 )
             )
@@ -204,7 +207,7 @@ class ChartsDock(QWidget):
     def _on_lap_loaded(self, path: Path, lap: LapTelemetry) -> None:
         path = Path(path)
         if path not in self._requested_paths:
-            return  # selection changed mid-flight; ignore stale result
+            return
         self._loaded_laps[path] = lap
         self._refresh_chart()
 
@@ -216,26 +219,17 @@ class ChartsDock(QWidget):
             8000,
         )
 
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
-
     def _refresh_chart(self) -> None:
-        # Preserve the user's selection order (selection_set order from
-        # the captures dock is path order, but we keep the table-view
-        # order for visual stability).
         laps = [
             self._loaded_laps[p]
             for p in self._requested_paths
             if p in self._loaded_laps
         ]
         if laps:
-            # Broadcast the column union to whoever cares (channels dock).
             cols = list(laps[0].enriched.columns)
             self._signals.available_columns_changed.emit(cols)
         self._chart.set_laps(laps)
         self._legend.set_laps(laps)
-        # Update caption.
         if not laps:
             return
         if len(laps) == len(self._requested_paths):
@@ -248,6 +242,103 @@ class ChartsDock(QWidget):
                     n=len(laps), total=len(self._requested_paths),
                 )
             )
+
+    def _export_all_png(self) -> None:
+        rows = self._chart.exportable_rows()
+        if not rows:
+            QMessageBox.information(
+                self,
+                tr("Export charts"),
+                tr("No telemetry charts available to export yet."),
+            )
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            tr("Choose folder for PNG export"),
+            str(self._default_export_dir()),
+        )
+        if not folder:
+            return
+        out_dir = Path(folder)
+        exported = 0
+        for channel, widget in rows:
+            file_name = self._safe_file_name(f"telemetry_{channel}.png")
+            out_path = out_dir / file_name
+            if widget.grab().save(str(out_path), "PNG"):
+                exported += 1
+        self._signals.status_message.emit(
+            tr("Exported {n} PNG chart(s) to {path}.").format(
+                n=exported,
+                path=out_dir,
+            ),
+            5000,
+        )
+
+    def _export_all_csv(self) -> None:
+        laps = [
+            self._loaded_laps[p]
+            for p in self._requested_paths
+            if p in self._loaded_laps
+        ]
+        if not laps or not self._channels:
+            QMessageBox.information(
+                self,
+                tr("Export charts"),
+                tr("Load laps and select channels before exporting CSV."),
+            )
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            tr("Choose folder for CSV export"),
+            str(self._default_export_dir()),
+        )
+        if not folder:
+            return
+        out_dir = Path(folder)
+        x_col = "distance_m" if self._axis_distance.isChecked() else "t_s"
+        exported = 0
+        for channel in self._channels:
+            series_map: dict[str, pd.Series] = {}
+            for idx, lap in enumerate(laps):
+                if x_col not in lap.enriched.columns:
+                    continue
+                if channel not in lap.enriched.columns:
+                    continue
+                lap_name = self._lap_name(lap.source_path, idx)
+                series_map[f"{lap_name}__{x_col}"] = pd.Series(
+                    lap.enriched[x_col].to_numpy()
+                )
+                series_map[f"{lap_name}__{channel}"] = pd.Series(
+                    lap.enriched[channel].to_numpy()
+                )
+            if not series_map:
+                continue
+            file_name = self._safe_file_name(f"telemetry_{channel}.csv")
+            out_path = out_dir / file_name
+            pd.DataFrame(series_map).to_csv(out_path, index=False)
+            exported += 1
+        self._signals.status_message.emit(
+            tr("Exported {n} CSV chart(s) to {path}.").format(
+                n=exported,
+                path=out_dir,
+            ),
+            5000,
+        )
+
+    def _default_export_dir(self) -> Path:
+        if self._requested_paths:
+            return self._requested_paths[0].parent
+        return Path.cwd()
+
+    def _lap_name(self, path: Path | None, idx: int) -> str:
+        if path is None:
+            return f"lap{idx + 1}"
+        return path.stem
+
+    def _safe_file_name(self, name: str) -> str:
+        forbidden = '<>:"/\\|?*'
+        clean = "".join("_" if ch in forbidden else ch for ch in name)
+        return clean.strip().replace(" ", "_")
 
 
 __all__ = ["ChartsDock"]
