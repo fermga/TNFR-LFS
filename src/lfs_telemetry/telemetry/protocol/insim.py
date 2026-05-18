@@ -26,6 +26,7 @@ import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
+from ..constants import INSIM_DEFAULT_PORT
 from .packets import (
     FUEL_SCALE,
     ISF_CON,
@@ -243,7 +244,15 @@ class RaceContext:
             self.track = packet.track
             self.weather = packet.weather
             self.wind = packet.wind
-            self.view_player_id = packet.view_plid
+            # IS_STA arrives before the car is on track during the
+            # initial InSim handshake — ViewPLID is 0 then. Don't let
+            # that zero clobber a real PLID we may already have
+            # inferred from IS_NPL/IS_NCN. Only adopt non-zero values
+            # or clear when we genuinely have no candidate.
+            if packet.view_plid:
+                self.view_player_id = packet.view_plid
+            elif not self.players:
+                self.view_player_id = None
         elif isinstance(packet, InSimRaceStart):
             self.race_laps = packet.race_laps
             self.qual_minutes = packet.qual_minutes
@@ -286,6 +295,18 @@ class RaceContext:
         elif isinstance(packet, InSimNewPlayer):
             self.players[packet.player_id] = packet
             self.player_flags[packet.player_id] = packet.flags
+            # In single-player LFS doesn't always send a fresh IS_STA
+            # when the user spawns into the car: the InSim handshake's
+            # initial IS_STA arrives before the car is on track, so
+            # ``view_player_id`` stays 0 and every MCI-driven overlay
+            # (radar, gap-ahead/behind, speed-delta-vs-PB) silently
+            # disables. Fall back to the local UCID==0 player here so
+            # those overlays light up as soon as the car appears.
+            if (
+                not self.view_player_id
+                and packet.connection_id == 0
+            ):
+                self.view_player_id = packet.player_id
         elif isinstance(packet, InSimLap):
             self.last_lap_ms[packet.player_id] = packet.lap_time_ms
             self.lap_count[packet.player_id] = (
@@ -485,7 +506,7 @@ class InSimClient:
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: int = 29999,
+        port: int = INSIM_DEFAULT_PORT,
         *,
         admin_password: str = "",
         request_mci: bool = False,
@@ -713,6 +734,10 @@ class InSimClient:
             while True:
                 await asyncio.sleep(_STATE_REFRESH_INTERVAL_S)
                 self._writer.write(build_tiny_packet(TINY_SST, req_i=1))
+                # Also re-request the player list so we recover from
+                # any missed IS_NPL (e.g. user joined after the initial
+                # handshake or rejoined after a /reset).
+                self._writer.write(build_tiny_packet(TINY_NPL, req_i=1))
                 await self._writer.drain()
         except asyncio.CancelledError:
             raise

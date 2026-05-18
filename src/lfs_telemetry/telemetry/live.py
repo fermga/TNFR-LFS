@@ -22,6 +22,11 @@ import socket
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
+from .constants import (
+    INSIM_DEFAULT_PORT,
+    OUTGAUGE_DEFAULT_PORT,
+    OUTSIM_DEFAULT_PORT,
+)
 from .protocol.insim import InSimClient, RaceContext
 from .protocol.packets import (
     OSO_ALL,
@@ -116,15 +121,15 @@ class LiveTelemetry:
 
     def __init__(
         self,
-        outsim_port: int = 30000,
-        outgauge_port: int = 30001,
+        outsim_port: int = OUTSIM_DEFAULT_PORT,
+        outgauge_port: int = OUTGAUGE_DEFAULT_PORT,
         bind_host: str = "0.0.0.0",
         queue_size: int = 1024,
         join_window_ms: int = 50,
         *,
         outsim_opts: int = OSO_ALL,
         insim_host: str | None = None,
-        insim_port: int = 29999,
+        insim_port: int = INSIM_DEFAULT_PORT,
         insim_admin_password: str = "",
         insim_request_mci: bool = False,
         insim_request_nlp: bool = False,

@@ -168,8 +168,10 @@ def test_traffic_time_gap_ahead_and_behind():
     assert snap.gap_to_ahead_m == pytest.approx(100.0)
     # gap_s for ahead uses view speed (50 m/s) → 2.0 s
     assert snap.gap_to_ahead_s == pytest.approx(2.0)
-    # gap_s for behind uses behind's speed (52 m/s) → 200/52
-    assert snap.gap_to_behind_s == pytest.approx(200.0 / 52.0)
+    # gap_s for behind also uses view speed (50 m/s, timing-tower
+    # convention: both gaps are computed at the reference car's
+    # rate so they tick down at a comparable cadence) → 200/50
+    assert snap.gap_to_behind_s == pytest.approx(200.0 / 50.0)
 
 
 def test_traffic_time_gap_none_when_stationary():
@@ -179,3 +181,44 @@ def test_traffic_time_gap_none_when_stationary():
     assert snap.gap_to_ahead_m == pytest.approx(100.0)
     # speed below 0.5 m/s threshold → no time gap
     assert snap.gap_to_ahead_s is None
+
+
+def test_traffic_skips_disconnect_gap_in_positions():
+    # Positions 1, 2, _, 4 — driver at position 3 disconnected. View
+    # at pos 4 should find pos 2 as ahead (not silently fall back to
+    # spatial because pos 3 is missing).
+    view = _cc(plid=1, pos=4, x=0.0, y=0.0, speed=50.0)
+    ahead = _cc(plid=2, pos=2, x=300.0, y=0.0, speed=50.0)
+    leader = _cc(plid=3, pos=1, x=900.0, y=0.0, speed=50.0)
+    snap = _build_snapshot(view, [view, ahead, leader])
+    assert snap.car_ahead_plid == 2  # immediate-above, not skipped
+    assert snap.gap_to_ahead_m == pytest.approx(300.0)
+
+
+def test_traffic_spatial_skips_stationary_pit_car():
+    # View moving on track; one opponent racing behind, another
+    # stationary (pit/spectator). Spatial fallback must pick the
+    # racing one, not the pit car which is geometrically closer.
+    view = _cc(plid=1, pos=0, x=0.0, y=0.0, speed=50.0)
+    racing_behind = _cc(plid=2, pos=0, x=0.0, y=-80.0, speed=50.0)
+    pit_car = _cc(plid=3, pos=0, x=0.0, y=-20.0, speed=0.0)
+    snap = _build_snapshot(view, [view, racing_behind, pit_car])
+    assert snap.car_behind_plid == 2  # racing one, not the pit car
+
+
+def test_traffic_gap_arclength_falls_back_to_euclidean_on_lap_wrap():
+    # Two cars physically adjacent (eu ≈ 5 m) but at opposite ends of
+    # the node table → node arclength would wrap to ~track_length.
+    # Sanity check must return the euclidean value instead.
+    from lfs_telemetry.telemetry.traffic import _gap_on_track_m
+    track_length = 3000.0
+    node_to_s = [float(i) for i in range(0, int(track_length))]
+    view = _cc(plid=1, pos=0, x=0.0, y=0.0, speed=50.0)
+    view.node = 5  # s=5.0
+    other = _cc(plid=2, pos=0, x=5.0, y=0.0, speed=50.0)
+    other.node = 2995  # s=2995.0 → forward gap by node ≈ 2990 m
+    gap = _gap_on_track_m(
+        view, other, forward=True,
+        node_to_s_m=node_to_s, track_length_m=track_length,
+    )
+    assert gap == pytest.approx(5.0)  # euclidean, not 2990

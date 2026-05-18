@@ -26,7 +26,7 @@ import pandas as pd
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPen
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from ...telemetry import LapTelemetry, StintTelemetry
 from ..i18n import tr
@@ -128,16 +128,36 @@ class StintTab(QWidget):
                   self._p_susp, self._p_friction, self._p_grip,
                   self._p_damper):
             p.setMinimumHeight(140)
+        # The stacked plots together need ~7 * 140 px + spacing. Give
+        # the GraphicsLayoutWidget an explicit minimum so the scroll
+        # area below can scroll vertically instead of squashing them
+        # when the tab is shorter than the combined plot stack.
+        self._gfx.setMinimumHeight(7 * 140 + 60)
 
         # Items recreated each refresh; tracked so we can clear them.
         self._mean_line: pg.InfiniteLine | None = None
         self._dyn_items: list[pg.GraphicsObject] = []
 
+        # Wrap the plot stack in a vertical scroll area so every chart
+        # remains reachable on smaller windows (the tab used to clip
+        # the lower plots — friction / grip / damper — with no way to
+        # scroll to them).
+        self._scroll = QScrollArea(self)
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self._scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._scroll.setWidget(self._gfx)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(4)
         layout.addWidget(self._summary)
-        layout.addWidget(self._gfx, 1)
+        layout.addWidget(self._scroll, 1)
 
         # Wiring
         signals.laps_selected.connect(self._on_laps_selected)

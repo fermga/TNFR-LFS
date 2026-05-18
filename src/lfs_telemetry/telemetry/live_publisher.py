@@ -371,8 +371,15 @@ def build_snapshot(
         if laps:
             best = min(laps)
             snap["best_lap_ms"] = int(best)
-            if current_lap_ms is not None:
-                snap["delta_vs_best_ms"] = int(current_lap_ms) - int(best)
+            # NOTE: we deliberately do NOT publish
+            # ``current_lap_ms - best_lap_ms`` here. That value is
+            # *not* a delta-vs-PB — it's "ms remaining to match the
+            # PB if you crossed the line right now", which swings from
+            # ≈ -best_lap_ms at the start/finish line up to 0 at the
+            # line again, making the overlay look like it's measuring
+            # distance to start/finish rather than pace vs PB. The
+            # real, node-interpolated delta is supplied by the caller
+            # via ``delta_to_best_ms`` (computed by NodeDeltaTracker).
             pit_in_laps = [
                 p.laps_done for p in ctx.pit_stops
                 if p.player_id == plid
@@ -380,9 +387,11 @@ def build_snapshot(
             snap["lap_averages_ms"] = compute_lap_averages(
                 laps, pit_in_laps
             )
-    # If the caller supplies a per-node interpolated delta (the
-    # continuous Detect&Monitor-style signal), prefer it over the
-    # crude ``current_lap_ms - best_lap_ms`` lap-time difference.
+    # Per-node interpolated delta vs PB (Detect&Monitor-style). The
+    # capture loop feeds this from :class:`NodeDeltaTracker` and only
+    # when IS_MCI + view_player_id are both available; otherwise the
+    # field stays ``None`` (overlay shows "--.---") instead of the
+    # misleading crude lap-time difference.
     if delta_to_best_ms is not None:
         snap["delta_vs_best_ms"] = int(delta_to_best_ms)
     mci = ctx.last_mci

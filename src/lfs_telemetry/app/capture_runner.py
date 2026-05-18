@@ -24,6 +24,12 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
+from ..telemetry.constants import (
+    INSIM_DEFAULT_PORT,
+    OUTGAUGE_DEFAULT_PORT,
+    OUTSIM_DEFAULT_PORT,
+)
+
 
 class CaptureRunner:
     """Spawn / supervise one ``lfs-telemetry capture`` subprocess at a time."""
@@ -75,9 +81,9 @@ class CaptureRunner:
         per_lap: bool = True,
         include_out_lap: bool = True,
         insim_host: str = "127.0.0.1",
-        insim_port: int = 29999,
-        outsim_port: int = 30000,
-        outgauge_port: int = 30001,
+        insim_port: int = INSIM_DEFAULT_PORT,
+        outsim_port: int = OUTSIM_DEFAULT_PORT,
+        outgauge_port: int = OUTGAUGE_DEFAULT_PORT,
         write_csv: bool = True,
     ) -> str:
         if self.running:

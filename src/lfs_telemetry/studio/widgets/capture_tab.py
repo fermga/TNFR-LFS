@@ -31,6 +31,11 @@ from PySide6.QtWidgets import (
 )
 
 from ...app.capture_runner import CaptureRunner
+from ...telemetry.constants import (
+    INSIM_DEFAULT_PORT,
+    OUTGAUGE_DEFAULT_PORT,
+    OUTSIM_DEFAULT_PORT,
+)
 from ..i18n import tr
 from ..signals import SignalBus
 from ..theme import MUTED_COLOR
@@ -82,7 +87,7 @@ class CaptureTab(QWidget):
         self._insim_host = QLineEdit("127.0.0.1", self)
         self._insim_port = QSpinBox(self)
         self._insim_port.setRange(1, 65535)
-        self._insim_port.setValue(29999)
+        self._insim_port.setValue(INSIM_DEFAULT_PORT)
         self._insim_port.setToolTip(
             tr(
                 "TCP port LFS uses for InSim. Enable it inside LFS at "
@@ -93,11 +98,11 @@ class CaptureTab(QWidget):
 
         self._outsim_port = QSpinBox(self)
         self._outsim_port.setRange(1, 65535)
-        self._outsim_port.setValue(30000)
+        self._outsim_port.setValue(OUTSIM_DEFAULT_PORT)
 
         self._outgauge_port = QSpinBox(self)
         self._outgauge_port.setRange(1, 65535)
-        self._outgauge_port.setValue(30001)
+        self._outgauge_port.setValue(OUTGAUGE_DEFAULT_PORT)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)

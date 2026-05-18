@@ -75,6 +75,7 @@ def _gap_on_track_m(
     ahead). ``forward=False`` returns ``(s_view - s_other) mod L``
     (other is behind).
     """
+    eu = _euclidean(view, other)
     if (
         node_to_s_m
         and track_length_m > 0.0
@@ -85,19 +86,24 @@ def _gap_on_track_m(
         oi = int(other.node) % n
         s_view = node_to_s_m[vi]
         s_other = node_to_s_m[oi]
-        if forward:
-            gap = s_other - s_view
-        else:
-            gap = s_view - s_other
+        gap = s_other - s_view if forward else s_view - s_other
         if gap < 0.0:
             gap += track_length_m
+        # Lap-mismatch / wrap artefact: when an opponent is one lap
+        # apart from us but physically right next to us, node arclength
+        # wraps to ~track_length while euclidean shows them within a
+        # few metres. Trust euclidean in that close-range case so the
+        # behind/ahead gauge doesn't jump to ~3 km on the grid or just
+        # after the start/finish line.
+        if eu < 30.0 and gap > eu + 50.0:
+            return eu
         # Cars sharing exactly the same node fall through to euclidean
         # so the radar's near-field readout still has sub-node
         # resolution (LFS nodes are several metres apart on most
         # tracks).
         if gap > 0.5:
             return gap
-    return _euclidean(view, other)
+    return eu
 
 
 def _find_nearest_neighbours(
@@ -114,11 +120,21 @@ def _find_nearest_neighbours(
     overtake semantics. Works in every session type — including solo
     practice, qualifying and hot-lapping where race positions don't
     discriminate cars.
+
+    When the view car is moving we ignore stationary opponents (cars
+    with ``speed_ms < 0.5``). LFS exposes no explicit "in pit" flag in
+    ``CompCar.Info`` so a pitting / spectating / just-spawned car would
+    otherwise lock the ahead/behind gauge to a car that isn't actually
+    racing us. On a standing grid (view also stationary) the filter
+    self-disables so we still see neighbours at the start.
     """
+    view_moving = view.speed_ms > 0.5
     nearest_ahead: tuple[float, CompCar] | None = None
     nearest_behind: tuple[float, CompCar] | None = None
     for other in cars:
         if other.player_id == view.player_id:
+            continue
+        if view_moving and other.speed_ms < 0.5:
             continue
         x_l, y_l = project_to_local(view, other)
         d = math.hypot(x_l, y_l)
@@ -177,16 +193,24 @@ def _build_snapshot(
         num_cars=len(cars_list),
     )
     # Primary signal: race-position ordering (works in races where every
-    # car has a unique, ranked position). This preserves classical
-    # "car-in-front-in-the-standings" semantics that fans of timing
-    # screens expect.
+    # car has a unique, ranked position). Use ``max(p < view)`` /
+    # ``min(p > view)`` instead of strict ``view.position ± 1`` so that
+    # a disconnect/DNF leaving a gap in the position table (e.g. 1, 2,
+    # 4, 5) still resolves to the *actually* adjacent car instead of
+    # silently falling through to the spatial fallback.
     by_pos = {
         c.position: c
         for c in cars_list
         if c.player_id != view.player_id and c.position > 0
     }
-    ahead = by_pos.get(view.position - 1) if view.position > 1 else None
-    behind = by_pos.get(view.position + 1)
+    ahead = behind = None
+    if view.position > 0 and by_pos:
+        above = [p for p in by_pos if p < view.position]
+        below = [p for p in by_pos if p > view.position]
+        if above:
+            ahead = by_pos[max(above)]
+        if below:
+            behind = by_pos[min(below)]
     # Fallback: helicorsa-style spatial proximity. Triggered whenever
     # race-position can't tell us who's around (solo practice, qualy,
     # hot-lap, broken position field, lapped opponents that share a

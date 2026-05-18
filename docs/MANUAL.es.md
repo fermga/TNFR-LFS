@@ -302,6 +302,10 @@ proceso de captura.
   sesiones (almacenado en `QSettings`).
 * La **opacidad** se ajusta por módulo (20–100 %) desde la columna
   derecha de la lista de la pestaña.
+* **Deseleccionar todos** — un botón al inicio de la lista de
+  módulos cierra todas las ventanas del overlay con un solo clic;
+  útil cuando la pantalla está saturada o cuando cambias entre
+  configuraciones (carrera vs hot-lap vs trabajo de setup).
 
 **Módulos disponibles** (en el orden en que aparecen en la lista):
 
@@ -310,10 +314,10 @@ proceso de captura.
 | **Radar** | Radar 360° con los coches alrededor (azul = delante, rojo = detrás). Escala y umbrales de color configurables. |
 | **G-meter (friction circle)** | Círculo de fricción con la aceleración longitudinal y lateral instantánea. Escala configurable en g. |
 | **Delta bar vs personal best** | Barra horizontal con el delta frente a tu mejor vuelta personal (verde = ganando, rojo = perdiendo). Fondo de escala configurable en ms. |
-| **Session info (dynamic)** | Resumen de la sesión: vuelta actual, última vuelta, mejor vuelta, tiempo de sesión, etc. Modo compacto opcional. |
+| **Session info (dynamic)** | Resumen de la sesión: vuelta actual, última vuelta, mejor vuelta, tiempo de sesión, etc. En modo detallado la ventana se redimensiona automáticamente para mostrar toda la tabla de clasificación en vivo (todos los pilotos clasificados). Modo compacto opcional. |
 | **Grip (per wheel)** | Indicador de agarre/riesgo por rueda (4 segmentos), útil para detectar pérdida de grip o sobrecalentamiento. |
-| **Gap to driver ahead** | Tiempo hasta el coche que va por delante (decodificado desde InSim). |
-| **Gap to driver behind** | Tiempo hasta el coche que va por detrás. |
+| **Gap to driver ahead** | Tiempo hasta el coche que va por delante (decodificado desde InSim). Robusto frente a coches desconectados/DNF en la tabla de posiciones, coches parados en pits/espectadores y artefactos de wrap por desfase de vuelta. |
+| **Gap to driver behind** | Tiempo hasta el coche que va por detrás. Misma robustez que Gap to ahead. |
 | **Gear (big digit)** | Marcha actual en dígito grande. |
 | **RPM bar** | Barra de revoluciones con redline configurable. |
 | **Speed (km/h)** | Velocidad actual en km/h. |

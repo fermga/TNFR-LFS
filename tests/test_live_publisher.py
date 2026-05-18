@@ -78,11 +78,15 @@ def test_build_radar_cars_marks_view_and_computes_distance() -> None:
 
 def test_radar_car_to_dict_uses_short_keys() -> None:
     rc = RadarCar(plid=7, x_local_m=1.234, y_local_m=-2.345,
-                  distance_m=2.6, relative_speed_ms=1.1, is_view=False)
+                  distance_m=2.6, relative_speed_ms=1.1, is_view=False,
+                  node=42, lap=3)
     d = rc.to_dict()
-    assert set(d) == {"plid", "x", "y", "d", "rel_v", "view"}
+    assert set(d) == {"plid", "x", "y", "d", "rel_v", "view",
+                      "node", "lap"}
     assert d["plid"] == 7
     assert d["view"] is False
+    assert d["node"] == 42
+    assert d["lap"] == 3
 
 
 # ---------------------------------------------------------------- snapshot
@@ -132,7 +136,12 @@ def test_build_snapshot_with_mci_populates_cars_and_traffic() -> None:
     assert snap["view_lap"] == 2
     assert snap["last_lap_ms"] == 90_500
     assert snap["best_lap_ms"] == 90_500
-    assert snap["delta_vs_best_ms"] == 89_900 - 90_500
+    # Without a per-node ``delta_to_best_ms`` from NodeDeltaTracker
+    # the snapshot leaves delta_vs_best_ms unset (None); the crude
+    # ``current_lap_ms - best_lap_ms`` fallback was removed because it
+    # behaves like "time-to-start/finish-line" rather than a real
+    # pace-vs-PB signal.
+    assert snap["delta_vs_best_ms"] is None
     cars = snap["cars"]
     assert len(cars) == 2
     # JSON-serialisable.

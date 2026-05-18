@@ -298,6 +298,10 @@ capture process.
   sessions (stored in `QSettings`).
 * **Opacity** is per module (20–100 %) and is set from the right
   column of the module list in the tab.
+* **Deselect all** — a button at the top of the module list hides
+  every overlay window in one click; useful when the screen is
+  cluttered or when switching between configurations (race vs
+  hot-lap vs setup work).
 
 **Available modules** (in the order they appear in the list):
 
@@ -306,10 +310,10 @@ capture process.
 | **Radar** | 360° radar with surrounding cars (blue = ahead, red = behind). Scale and colour thresholds are configurable. |
 | **G-meter (friction circle)** | Friction circle with instantaneous longitudinal and lateral acceleration. Full scale configurable in g. |
 | **Delta bar vs personal best** | Horizontal bar with the delta against your personal best lap (green = gaining, red = losing). Full scale configurable in ms. |
-| **Session info (dynamic)** | Session summary: current lap, last lap, best lap, session time, etc. Optional compact mode. |
+| **Session info (dynamic)** | Session summary: current lap, last lap, best lap, session time, etc. In detailed mode the window auto-resizes to fit the full live standings table (every classified driver). Optional compact mode. |
 | **Grip (per wheel)** | Grip/risk indicator per wheel (4 segments), useful to spot grip loss or overheating. |
-| **Gap to driver ahead** | Time gap to the car ahead (decoded from InSim). |
-| **Gap to driver behind** | Time gap to the car behind. |
+| **Gap to driver ahead** | Time gap to the car ahead (decoded from InSim). Robust against disconnected/DNF cars in the position table, stationary pit/spectator cars, and lap-mismatch wrap artifacts. |
+| **Gap to driver behind** | Time gap to the car behind. Same robustness as Gap to ahead. |
 | **Gear (big digit)** | Current gear as a large digit. |
 | **RPM bar** | RPM bar with configurable redline. |
 | **Speed (km/h)** | Current speed in km/h. |

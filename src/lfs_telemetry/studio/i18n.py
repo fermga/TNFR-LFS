@@ -383,6 +383,8 @@ _ES: dict[str, str] = {
     "between sessions.":
         "Opacidad de este m\u00f3dulo de overlay \u2014 se guarda "
         "entre sesiones.",
+    "Deselect all": "Deseleccionar todos",
+    "Hide every overlay module.": "Ocultar todos los m\u00f3dulos del overlay.",
     "Scale:": "Escala:",
     "Red:": "Rojo:",
     "Yellow:": "Amarillo:",

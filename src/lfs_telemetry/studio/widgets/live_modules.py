@@ -1014,6 +1014,14 @@ class SessionInfoWindow(_LiveModuleWindow):
     def set_compact_mode(self, on: bool) -> None:
         self._compact = bool(on)
         self._save_compact_mode()
+        # Re-trigger sizing logic so switching to detailed mode grows
+        # the window immediately (without waiting for the next 10 Hz
+        # snapshot) and switching back to compact restores the small
+        # default footprint.
+        if self._compact:
+            self.resize(self.width(), self._DETAILED_MIN_H)
+        else:
+            self._on_snapshot(self._snap)
         self.update()
 
     def compact_mode(self) -> bool:
@@ -1025,6 +1033,32 @@ class SessionInfoWindow(_LiveModuleWindow):
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
+
+    # Layout constants for the detailed leaderboard: top reserved for
+    # SESSION / POS / LAP / times / AHEAD-BEHIND / "LEADERBOARD" header.
+    _LEADERBOARD_TOP_Y = 110
+    _LEADERBOARD_ROW_PX = 14
+    _LEADERBOARD_BOTTOM_PAD = 24  # shortcut hint
+    _DETAILED_MIN_H = 200
+    _DETAILED_MAX_H = 720
+
+    def _on_snapshot(self, snap: dict[str, Any]) -> None:
+        # Resize the window so every classified driver fits when in
+        # detailed mode. Compact mode keeps its fixed size so users
+        # who pin it as a small HUD don't see it grow unexpectedly.
+        if not self._compact:
+            standings = snap.get("standings")
+            n = len(standings) if isinstance(standings, list) else 0
+            needed = (
+                self._LEADERBOARD_TOP_Y
+                + max(1, n) * self._LEADERBOARD_ROW_PX
+                + self._LEADERBOARD_BOTTOM_PAD
+            )
+            needed = max(self._DETAILED_MIN_H,
+                         min(self._DETAILED_MAX_H, needed))
+            if needed != self.height():
+                self.resize(self.width(), needed)
+        super()._on_snapshot(snap)
 
     def _mode_text(self) -> str:
         mode = str(self._snap.get("session_mode") or "practice")
@@ -1152,7 +1186,7 @@ class SessionInfoWindow(_LiveModuleWindow):
             return
 
         lines: list[str] = []
-        for row in standings[:4]:
+        for row in standings:
             try:
                 rpos = int(row.get("pos", 0))
                 name = str(row.get("name") or "?")[:14]

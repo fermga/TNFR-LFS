@@ -17,6 +17,11 @@ from pathlib import Path
 
 from .telemetry import live_publisher
 from .telemetry.car_calibration import CarSpecStore, RestCalibrator
+from .telemetry.constants import (
+    INSIM_DEFAULT_PORT,
+    OUTGAUGE_DEFAULT_PORT,
+    OUTSIM_DEFAULT_PORT,
+)
 from .telemetry.fuel_tracker import FuelTracker
 from .telemetry.lap_slicer import reslice_csv, write_per_lap_files
 from .telemetry.live import LiveTelemetry, TelemetrySample
@@ -49,15 +54,21 @@ def _request_stop(*_args) -> None:
 
 
 def _add_lfs_flags(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--outsim-port", type=int, default=30000)
-    parser.add_argument("--outgauge-port", type=int, default=30001)
+    parser.add_argument(
+        "--outsim-port", type=int, default=OUTSIM_DEFAULT_PORT,
+    )
+    parser.add_argument(
+        "--outgauge-port", type=int, default=OUTGAUGE_DEFAULT_PORT,
+    )
     parser.add_argument(
         "--outsim-opts", type=lambda s: int(s, 0), default=OSO_ALL,
         help="OutSim Opts hex flags (default 0x1ff = full extended packets)")
     parser.add_argument(
         "--insim-host", default=None,
         help="enable InSim TCP client by host (e.g. 127.0.0.1)")
-    parser.add_argument("--insim-port", type=int, default=29999)
+    parser.add_argument(
+        "--insim-port", type=int, default=INSIM_DEFAULT_PORT,
+    )
     parser.add_argument("--insim-admin", default="",
                         help="LFS admin password (if required)")
     parser.add_argument(

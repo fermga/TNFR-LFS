@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QLabel,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QVBoxLayout,
@@ -136,13 +137,25 @@ class LiveTab(QWidget):
         modules_layout = QGridLayout(modules_box)
         modules_layout.setColumnStretch(0, 1)
         settings = QSettings(ORG, APP)
+
+        # Bulk actions: turn every overlay module off in one click,
+        # useful when the screen is cluttered or when switching
+        # between configurations (race vs hot-lap vs setup work).
+        self._deselect_all_btn = QPushButton(tr("Deselect all"), self)
+        self._deselect_all_btn.setToolTip(
+            tr("Hide every overlay module.")
+        )
+        self._deselect_all_btn.clicked.connect(self._deselect_all_modules)
+        modules_layout.addWidget(self._deselect_all_btn, 0, 0, 1, 2)
+        row_offset = 1
+
         for row, (mid, label, _f) in enumerate(_MODULES):
             cb = QCheckBox(tr(label), self)
             cb.toggled.connect(
                 lambda on, m=mid: self._toggle_module(m, on)
             )
             self._checkboxes[mid] = cb
-            modules_layout.addWidget(cb, row, 0)
+            modules_layout.addWidget(cb, row + row_offset, 0)
 
             spin = QSpinBox(self)
             spin.setRange(20, 100)
@@ -168,8 +181,8 @@ class LiveTab(QWidget):
                 lambda v, m=mid: self._apply_module_opacity(m, v)
             )
             self._opacity_spins[mid] = spin
-            modules_layout.addWidget(spin, row, 1)
-        modules_layout.setRowStretch(len(_MODULES), 1)
+            modules_layout.addWidget(spin, row + row_offset, 1)
+        modules_layout.setRowStretch(len(_MODULES) + row_offset, 1)
 
         scroll = QScrollArea(self)
         scroll.setWidget(modules_box)
@@ -319,6 +332,14 @@ class LiveTab(QWidget):
     # ------------------------------------------------------------------
     # Toggle dispatch
     # ------------------------------------------------------------------
+
+    def _deselect_all_modules(self) -> None:
+        """Untick every module checkbox; the toggle handler closes
+        each open window and persists the off state.
+        """
+        for cb in self._checkboxes.values():
+            if cb.isChecked():
+                cb.setChecked(False)
 
     def _toggle_module(self, mid: str, on: bool) -> None:
         w = self._widgets.get(mid)
