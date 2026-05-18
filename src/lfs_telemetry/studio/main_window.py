@@ -17,6 +17,7 @@ from pathlib import Path
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QDockWidget,
     QFileDialog,
     QLabel,
@@ -192,6 +193,16 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # type: ignore[override]
         self._save_state()
         self._loader.shutdown()
+        # Frameless overlay modules are independent top-level windows
+        # (no parent), so closing the main window doesn't propagate to
+        # them and Qt keeps the process alive with the overlay frozen
+        # on screen. Explicitly close every other top-level widget so
+        # the app shuts down cleanly.
+        app = QApplication.instance()
+        if app is not None:
+            for w in list(app.topLevelWidgets()):
+                if w is not self and not w.isHidden():
+                    w.close()
         super().closeEvent(event)
 
     # ------------------------------------------------------------------

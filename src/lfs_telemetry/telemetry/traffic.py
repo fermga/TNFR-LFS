@@ -54,6 +54,52 @@ def _euclidean(a: CompCar, b: CompCar) -> float:
     return math.hypot(a.x_m - b.x_m, a.y_m - b.y_m)
 
 
+def _gap_on_track_m(
+    view: CompCar,
+    other: CompCar,
+    *,
+    forward: bool,
+    node_to_s_m: list[float] | None = None,
+    track_length_m: float = 0.0,
+) -> float:
+    """Best-effort on-track distance from ``view`` to ``other``.
+
+    If a per-node arclength table is provided (one entry per LFS path
+    node, e.g. loaded from ``racing_lines/<TRACK>_racing.csv``), the
+    gap is computed along the track using ``CompCar.node`` and wraps
+    around the start/finish line. Otherwise falls back to straight-line
+    euclidean distance, which is correct on straights but underestimates
+    the real gap inside curves (chicanes, hairpins).
+
+    ``forward=True`` returns ``(s_other - s_view) mod L``  (other is
+    ahead). ``forward=False`` returns ``(s_view - s_other) mod L``
+    (other is behind).
+    """
+    if (
+        node_to_s_m
+        and track_length_m > 0.0
+        and len(node_to_s_m) > 0
+    ):
+        n = len(node_to_s_m)
+        vi = int(view.node) % n
+        oi = int(other.node) % n
+        s_view = node_to_s_m[vi]
+        s_other = node_to_s_m[oi]
+        if forward:
+            gap = s_other - s_view
+        else:
+            gap = s_view - s_other
+        if gap < 0.0:
+            gap += track_length_m
+        # Cars sharing exactly the same node fall through to euclidean
+        # so the radar's near-field readout still has sub-node
+        # resolution (LFS nodes are several metres apart on most
+        # tracks).
+        if gap > 0.5:
+            return gap
+    return _euclidean(view, other)
+
+
 def _find_nearest_neighbours(
     view: CompCar, cars: Iterable[CompCar],
 ) -> tuple[CompCar | None, CompCar | None]:
@@ -90,7 +136,9 @@ def _find_nearest_neighbours(
 
 
 def traffic_snapshot(
-    ctx: RaceContext, *, view_player_id: int | None = None
+    ctx: RaceContext, *, view_player_id: int | None = None,
+    node_to_s_m: list[float] | None = None,
+    track_length_m: float = 0.0,
 ) -> TrafficSnapshot | None:
     """Compute a :class:`TrafficSnapshot` from the latest IS_MCI in ``ctx``.
 
@@ -106,10 +154,18 @@ def traffic_snapshot(
     view: CompCar | None = next((c for c in mci.cars if c.player_id == plid), None)
     if view is None:
         return None
-    return _build_snapshot(view, mci.cars)
+    return _build_snapshot(
+        view, mci.cars,
+        node_to_s_m=node_to_s_m, track_length_m=track_length_m,
+    )
 
 
-def _build_snapshot(view: CompCar, cars: Iterable[CompCar]) -> TrafficSnapshot:
+def _build_snapshot(
+    view: CompCar, cars: Iterable[CompCar],
+    *,
+    node_to_s_m: list[float] | None = None,
+    track_length_m: float = 0.0,
+) -> TrafficSnapshot:
     cars_list = list(cars)
     snap = TrafficSnapshot(
         view_player_id=view.player_id,
@@ -148,7 +204,10 @@ def _build_snapshot(view: CompCar, cars: Iterable[CompCar]) -> TrafficSnapshot:
     if ahead is not None:
         snap.car_ahead_plid = ahead.player_id
         snap.car_ahead_position = ahead.position
-        snap.gap_to_ahead_m = _euclidean(view, ahead)
+        snap.gap_to_ahead_m = _gap_on_track_m(
+            view, ahead, forward=True,
+            node_to_s_m=node_to_s_m, track_length_m=track_length_m,
+        )
         snap.closing_speed_to_ahead_ms = view.speed_ms - ahead.speed_ms
         # Time gap: closure / view_speed; canonical when both cars
         # are roughly on the same racing line.
@@ -157,10 +216,20 @@ def _build_snapshot(view: CompCar, cars: Iterable[CompCar]) -> TrafficSnapshot:
     if behind is not None:
         snap.car_behind_plid = behind.player_id
         snap.car_behind_position = behind.position
-        snap.gap_to_behind_m = _euclidean(view, behind)
+        snap.gap_to_behind_m = _gap_on_track_m(
+            view, behind, forward=False,
+            node_to_s_m=node_to_s_m, track_length_m=track_length_m,
+        )
         snap.closing_speed_to_behind_ms = behind.speed_ms - view.speed_ms
-        if behind.speed_ms > 0.5:
-            snap.gap_to_behind_s = snap.gap_to_behind_m / behind.speed_ms
+        # Convention: both ahead/behind time gaps use the view car's
+        # speed as reference (timing-tower style "time at line").
+        # Previously we divided by ``behind.speed_ms`` which produced
+        # a different physical quantity and made the two gaps not
+        # directly comparable. Falls back to behind's speed only when
+        # the view car is essentially stopped.
+        ref_speed = view.speed_ms if view.speed_ms > 0.5 else behind.speed_ms
+        if ref_speed > 0.5:
+            snap.gap_to_behind_s = snap.gap_to_behind_m / ref_speed
     return snap
 
 

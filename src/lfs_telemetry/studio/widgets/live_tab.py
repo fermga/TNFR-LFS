@@ -41,9 +41,11 @@ from .live_modules import (
     GapBehindWindow,
     GearWindow,
     GMeterWindow,
+    PitLimiterWindow,
     RadarWindow,
     RpmWindow,
     SessionInfoWindow,
+    SpeedDeltaBarWindow,
     SpeedWindow,
     TyreRiskWindow,
 )
@@ -68,6 +70,8 @@ _MODULES: list[tuple[str, str, _ModuleFactory]] = [
     # Headline timing
     ("delta", "Delta bar vs personal best",
      _factory(DeltaBarWindow)),
+    ("speed_delta", "Speed delta vs PB (same track point)",
+     _factory(SpeedDeltaBarWindow)),
     ("session_info", "Session info (dynamic)",
      _factory(SessionInfoWindow)),
     ("grip", "Grip (per wheel)",
@@ -92,6 +96,9 @@ _MODULES: list[tuple[str, str, _ModuleFactory]] = [
     # Flags
     ("flags", "Flags (BLUE / YELLOW)",
      _factory(FlagsWindow)),
+    # Pit lane
+    ("pit_limiter", "Pit limiter (flashing + speed delta)",
+     _factory(PitLimiterWindow)),
 ]
 
 

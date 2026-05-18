@@ -1,4 +1,4 @@
-# Build the standalone "LFS Race Engineer" Windows application (v0.3.5+).
+# Build the standalone "LFS Race Engineer" Windows application (v0.3.6+).
 #
 # Modern build pipeline with validation, cleanup, and installer generation.
 #
@@ -58,7 +58,7 @@ function Get-ProjectVersion {
             return $matches[1]
         }
     }
-    return "0.3.5"
+    return "0.3.6"
 }
 
 # ===== Setup & Validation =====

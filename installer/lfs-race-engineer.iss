@@ -1,4 +1,4 @@
-; Inno Setup 6.3+ script for LFS Race Engineer (v0.3.5+)
+; Inno Setup 6.3+ script for LFS Race Engineer (v0.3.6+)
 ; Modern Windows installer with bilingual support, auto-update checks, and best practices.
 ;
 ; Build with:
@@ -14,7 +14,7 @@
 ; the installer is built by hand without that flag — keep it in sync with
 ; pyproject.toml when you cut a release.
 #ifndef MyAppVersion
-  #define MyAppVersion "0.3.5"
+  #define MyAppVersion "0.3.6"
 #endif
 #define MyAppPublisher  "LFS Race Engineer Contributors"
 #define MyAppURL        "https://github.com/fermga/TNFR-LFS"

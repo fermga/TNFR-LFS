@@ -1216,6 +1216,139 @@ class FlagsWindow(_LiveModuleWindow):
         p.drawText(rect_y, int(Qt.AlignmentFlag.AlignCenter), "YELLOW")
 
 
+class PitLimiterWindow(_LiveModuleWindow):
+    MODULE_ID = "pit_limiter"
+    """Flashing band + speed-vs-limit delta while the pit limiter is on.
+
+    Reads ``view_pit_limiter`` (OutGauge ``show_lights & DL_PITSPEED``)
+    and ``view_speed_kmh`` from the live snapshot. The pit-lane speed
+    limit defaults to 80 km/h (LFS standard) and is persisted per-user
+    via ``QSettings`` so each driver can tune it for tracks that differ.
+    """
+
+    DEFAULT_LIMIT_KMH = 80.0
+
+    def __init__(
+        self, source: LiveDataSource, *, opacity: float = 0.85,
+    ) -> None:
+        super().__init__(
+            source, size=(240, 90),
+            title="LFS Live - pit limiter", opacity=opacity,
+        )
+        raw = self._settings().value(
+            "overlay/pit_limiter/limit_kmh", self.DEFAULT_LIMIT_KMH,
+        )
+        try:
+            self._limit_kmh = max(20.0, min(200.0, float(raw)))
+        except (TypeError, ValueError):
+            self._limit_kmh = self.DEFAULT_LIMIT_KMH
+
+    def set_limit_kmh(self, value: float) -> None:
+        self._limit_kmh = max(20.0, min(200.0, float(value)))
+        self._settings().setValue(
+            "overlay/pit_limiter/limit_kmh", self._limit_kmh,
+        )
+        self.update()
+
+    def limit_kmh(self) -> float:
+        return self._limit_kmh
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        import time as _time
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        self._paint_card(p)
+
+        active = bool(self._snap.get("view_pit_limiter"))
+        speed = self._snap.get("view_speed_kmh")
+        limit = float(self._limit_kmh)
+        delta = (
+            float(speed) - limit if isinstance(speed, (int, float)) else None
+        )
+
+        m = 6
+        band = QRectF(m, m, self.width() - 2 * m, self.height() * 0.42)
+        if active:
+            # Blink ~2.5 Hz: phase toggles every 200 ms based on wall
+            # clock so the flash keeps animating regardless of snapshot
+            # cadence.
+            phase = int(_time.monotonic() * 2.5) % 2
+            if delta is not None and delta > 1.0:
+                base = QColor(220, 40, 40) if phase else QColor(120, 20, 20)
+            else:
+                base = (
+                    QColor(255, 200, 40) if phase else QColor(150, 110, 20)
+                )
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(base)
+            p.drawRoundedRect(band, 6, 6)
+            p.setPen(QPen(QColor(20, 20, 24)))
+            p.setFont(self._font(13, QFont.Weight.Black))
+            p.drawText(
+                band, int(Qt.AlignmentFlag.AlignCenter), "PIT LIMITER",
+            )
+        else:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(40, 40, 50))
+            p.drawRoundedRect(band, 6, 6)
+            p.setPen(QPen(QColor(120, 120, 130)))
+            p.setFont(self._font(12, QFont.Weight.Bold))
+            p.drawText(
+                band, int(Qt.AlignmentFlag.AlignCenter), "PIT LIMITER OFF",
+            )
+
+        # ----- Bottom row: SPEED / LIMIT and DELTA --------------------
+        row_top = self.height() * 0.50
+        row_h = self.height() - row_top - 4
+        left = QRectF(m, row_top, (self.width() - 2 * m) * 0.55, row_h)
+        right = QRectF(
+            left.right() + 4, row_top,
+            self.width() - m - left.right() - 4, row_h,
+        )
+
+        if isinstance(speed, (int, float)):
+            speed_txt = f"{speed:5.1f} / {limit:3.0f}"
+        else:
+            speed_txt = f"-- / {limit:3.0f}"
+        p.setPen(QPen(QColor(220, 220, 230)))
+        p.setFont(QFont(
+            "Consolas", self._scale_pt(15), QFont.Weight.Bold,
+        ))
+        p.drawText(
+            left,
+            int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+            speed_txt,
+        )
+
+        if delta is None:
+            delta_txt = "--"
+            delta_col = QColor(180, 180, 190)
+        else:
+            sign = "+" if delta >= 0 else ""
+            delta_txt = f"{sign}{delta:4.1f}"
+            if delta > 1.0:
+                delta_col = QColor(255, 90, 90)
+            elif delta > -1.0:
+                delta_col = QColor(255, 220, 60)
+            else:
+                delta_col = QColor(120, 230, 140)
+        p.setPen(QPen(delta_col))
+        p.setFont(QFont(
+            "Consolas", self._scale_pt(18), QFont.Weight.Black,
+        ))
+        p.drawText(
+            right,
+            int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+            delta_txt,
+        )
+
+    def _on_snapshot(self, snap: dict[str, Any]) -> None:
+        # Force redraw at the snapshot cadence so the flash phase keeps
+        # animating even when speed/limiter values are unchanged.
+        super()._on_snapshot(snap)
+
+
 class TcAbsWindow(_LiveModuleWindow):
     """LED that lights when wheel slip exceeds a threshold."""
 
@@ -1647,8 +1780,15 @@ class RadarWindow(_LiveModuleWindow):
             d = float(car.get("d", 0.0))
             if d <= 0:
                 continue
+            # Side-warning bars: trigger when an opponent is roughly
+            # alongside (small longitudinal offset) AND laterally
+            # inside the yellow proximity ring. Using ``d`` (total
+            # distance) here used to miss cars that were 5 m ahead
+            # and 3 m to the side because their hypotenuse exceeds
+            # ``yellow_m``. Checking ``abs(x_local)`` directly fixes
+            # that and matches helicorsa's intent.
             if abs(y_local) <= max(self._yellow_m, 5.0) \
-                    and d <= self._yellow_m:
+                    and abs(x_local) <= self._yellow_m:
                 if x_local < -0.3:
                     warn_left = True
                 elif x_local > 0.3:
@@ -1815,6 +1955,120 @@ class DeltaBarWindow(_LiveModuleWindow):
                    int(cx), int(rect.bottom() + 2))
 
 
+class SpeedDeltaBarWindow(_LiveModuleWindow):
+    MODULE_ID = "speed_delta"
+    """Speed delta vs PB at the same track node (km/h, bar).
+
+    Companion to :class:`DeltaBarWindow`: instead of comparing time,
+    it compares the **speed** you are carrying right now against the
+    speed you carried through the same point of the circuit on your
+    PB lap. Detect&Monitor exposes a similar gauge; it complements
+    the time delta because you can be losing time (positive time
+    delta) while still being faster locally (positive speed delta)
+    -- typical signature of a different line / wider entry that pays
+    off later.
+
+    Positive = faster than PB here (green). Negative = slower (red).
+    Reads ``speed_delta_kmh_vs_best`` from the live snapshot, low-pass
+    filtered with an EMA (same time constant as the time bar) to
+    suppress sample-level jitter.
+    """
+
+    # 10 Hz source -> alpha 0.25 ~ 400 ms time constant.
+    _DELTA_ALPHA = 0.25
+
+    def __init__(
+        self,
+        source: LiveDataSource,
+        *,
+        full_scale_kmh: float = 20.0,
+        opacity: float = 0.85,
+    ) -> None:
+        super().__init__(
+            source, size=(360, 70),
+            title="LFS Live - speed delta", opacity=opacity,
+        )
+        self._full_scale_kmh = max(1.0, float(full_scale_kmh))
+        self._delta_smoothed: float | None = None
+
+    def set_full_scale_kmh(self, kmh: float) -> None:
+        self._full_scale_kmh = max(1.0, float(kmh))
+        self.update()
+
+    def _on_snapshot(self, snap: dict[str, Any]) -> None:
+        raw = snap.get("speed_delta_kmh_vs_best")
+        if raw is None:
+            self._delta_smoothed = None
+        else:
+            x = float(raw)
+            if self._delta_smoothed is None:
+                self._delta_smoothed = x
+            else:
+                a = self._DELTA_ALPHA
+                self._delta_smoothed = (
+                    self._delta_smoothed + a * (x - self._delta_smoothed)
+                )
+        super()._on_snapshot(snap)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        self._paint_card(p)
+        margin = 12
+        bar_h = max(14, int(self.height() * 0.32))
+        rect = QRectF(margin, self.height() - margin - bar_h - 4,
+                      self.width() - 2 * margin, bar_h)
+        cx = rect.center().x()
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(40, 40, 50))
+        p.drawRoundedRect(rect, 4, 4)
+        delta = self._delta_smoothed
+        p.setFont(QFont(
+            "Consolas", self._scale_pt(14), QFont.Weight.Bold,
+        ))
+        if delta is None:
+            p.setPen(QPen(QColor(180, 180, 190)))
+            value_text = "--.-"
+        elif delta >= 0:
+            p.setPen(QPen(QColor(120, 230, 140)))
+            value_text = f"{delta:+.1f}"
+        else:
+            p.setPen(QPen(QColor(255, 120, 120)))
+            value_text = f"{delta:+.1f}"
+        p.drawText(
+            QRectF(margin, 6, self.width() - 2 * margin,
+                   self.height() - bar_h - 16),
+            int(Qt.AlignmentFlag.AlignCenter),
+            f"\u0394V  {value_text} km/h",
+        )
+        if delta is not None:
+            clamped = max(-self._full_scale_kmh,
+                          min(self._full_scale_kmh, float(delta)))
+            frac = clamped / self._full_scale_kmh
+            half_w = rect.width() / 2.0
+            if frac >= 0:
+                # Faster than PB -> grow to the RIGHT, green.
+                fill = QRectF(cx, rect.top(),
+                              frac * half_w, rect.height())
+                grad = QLinearGradient(fill.left(), 0, fill.right(), 0)
+                grad.setColorAt(0.0, QColor(120, 230, 140))
+                grad.setColorAt(1.0, QColor(40, 160, 80))
+                p.setBrush(QBrush(grad))
+            else:
+                # Slower than PB -> grow to the LEFT, red.
+                fill = QRectF(cx + frac * half_w, rect.top(),
+                              -frac * half_w, rect.height())
+                grad = QLinearGradient(fill.right(), 0, fill.left(), 0)
+                grad.setColorAt(0.0, QColor(255, 120, 120))
+                grad.setColorAt(1.0, QColor(200, 40, 40))
+                p.setBrush(QBrush(grad))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(fill, 4, 4)
+        p.setPen(QPen(QColor(220, 220, 230), 2))
+        p.drawLine(int(cx), int(rect.top() - 2),
+                   int(cx), int(rect.bottom() + 2))
+
+
 __all__ = [
     "BrakeWindow",
     "ClutchWindow",
@@ -1828,10 +2082,12 @@ __all__ = [
     "GapCompassWindow",
     "GearWindow",
     "MiniMapWindow",
+    "PitLimiterWindow",
     "PositionWindow",
     "RadarWindow",
     "RpmWindow",
     "SessionInfoWindow",
+    "SpeedDeltaBarWindow",
     "SpeedWindow",
     "TyreRiskWindow",
     "TcAbsWindow",

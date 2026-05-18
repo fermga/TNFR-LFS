@@ -132,6 +132,8 @@ class RadarCar:
     distance_m: float
     relative_speed_ms: float
     is_view: bool
+    node: int = 0
+    lap: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -141,6 +143,8 @@ class RadarCar:
             "d": round(self.distance_m, 2),
             "rel_v": round(self.relative_speed_ms, 2),
             "view": self.is_view,
+            "node": int(self.node),
+            "lap": int(self.lap),
         }
 
 
@@ -171,6 +175,8 @@ def build_radar_cars(
                 distance_m=0.0,
                 relative_speed_ms=0.0,
                 is_view=True,
+                node=int(c.node),
+                lap=int(c.lap),
             ))
             continue
         x_l, y_l = project_to_local(view, c)
@@ -180,6 +186,8 @@ def build_radar_cars(
             distance_m=d,
             relative_speed_ms=c.speed_ms - view.speed_ms,
             is_view=False,
+            node=int(c.node),
+            lap=int(c.lap),
         ))
     return out
 
@@ -210,6 +218,10 @@ def build_snapshot(
     fuel_laps_remaining: float | None = None,
     fuel_burn_pct_per_lap: float | None = None,
     ghost_node: int | None = None,
+    last_sample_pit_limiter: bool | None = None,
+    speed_delta_ms_vs_best: float | None = None,
+    node_to_s_m: list[float] | None = None,
+    track_length_m: float = 0.0,
 ) -> dict[str, Any]:
     """Build a JSON-ready snapshot dict from the live race state."""
     snap: dict[str, Any] = {
@@ -254,6 +266,14 @@ def build_snapshot(
             if fuel_burn_pct_per_lap is not None else None
         ),
         "ghost_node": int(ghost_node) if ghost_node is not None else None,
+        "view_pit_limiter": (
+            bool(last_sample_pit_limiter)
+            if last_sample_pit_limiter is not None else None
+        ),
+        "speed_delta_kmh_vs_best": (
+            round(float(speed_delta_ms_vs_best) * 3.6, 2)
+            if speed_delta_ms_vs_best is not None else None
+        ),
         "lap_averages_ms": {"stint": None, "clean": None, "total": None},
         "track": None,
         "weather": None,
@@ -384,7 +404,11 @@ def build_snapshot(
             snap["view_y_m"] = round(float(view.y_m), 2)
             snap["view_heading_rad"] = round(float(view.heading_rad), 4)
             snap["view_node"] = int(view.node)
-            traffic = _build_snapshot(view, mci.cars)
+            traffic = _build_snapshot(
+                view, mci.cars,
+                node_to_s_m=node_to_s_m,
+                track_length_m=track_length_m,
+            )
             snap["traffic"] = {
                 "ahead_plid": traffic.car_ahead_plid,
                 "ahead_pos": traffic.car_ahead_position,
@@ -407,6 +431,8 @@ def build_snapshot(
                     "x": round(float(c.x_m), 2),
                     "y": round(float(c.y_m), 2),
                     "pos": int(c.position),
+                    "node": int(c.node),
+                    "lap": int(c.lap),
                     "view": c.player_id == plid,
                 }
                 for c in mci.cars

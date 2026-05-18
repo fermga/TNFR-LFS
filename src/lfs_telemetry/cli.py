@@ -22,8 +22,9 @@ from .telemetry.lap_slicer import reslice_csv, write_per_lap_files
 from .telemetry.live import LiveTelemetry, TelemetrySample
 from .telemetry.node_delta import NodeDeltaTracker
 from .telemetry.predict import SplitPredictor
-from .telemetry.protocol.packets import OSO_ALL, WHEEL_ORDER
+from .telemetry.protocol.packets import DL_PITSPEED, OSO_ALL, WHEEL_ORDER
 from .telemetry.replay import write_csv_replay
+from .telemetry.track.loader import find_racing_line_csv
 
 # Module-level stop flag set by SIGBREAK / SIGINT handlers. The capture
 # loop polls it every sample so a Stop from the Studio (CTRL_BREAK_EVENT)
@@ -296,7 +297,12 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
             insim_port=args.insim_port,
             insim_admin_password=args.insim_admin,
             insim_connect_retry_interval_s=insim_retry_s,
-            insim_request_mci=live_file is not None,
+            # MCI is required for the live overlay's traffic/radar
+            # modules and is cheap (one packet per 100 ms). We also
+            # leave it on when no live overlay is configured so the
+            # recorded session captures opponent positions for later
+            # offline analysis.
+            insim_request_mci=True,
             insim_mci_interval_ms=100,
         ) as live:
             stop_file = getattr(args, "stop_file", None)
@@ -359,6 +365,14 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
             node_delta_tracker = NodeDeltaTracker()
             split_predictor = SplitPredictor(n_splits=3)
             fuel_tracker = FuelTracker(window=3)
+            # Per-track racing-line cache: maps LFS path-node index ->
+            # cumulative arclength in metres. Lets traffic.py compute
+            # on-track gaps (instead of straight-line euclidean) which
+            # is critical in curvy sections. Lazy-loaded the first
+            # time we see a track name and reloaded on track changes.
+            _rl_cache_track: str | None = None
+            _rl_node_to_s_m: list[float] = []
+            _rl_total_length_m: float = 0.0
             last_seen_split_idx = 0
             async for sample in live.samples():
                 # ---- arm-on-motion gate -----------------------------
@@ -369,6 +383,19 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                         speed = (vx * vx + vy * vy + vz * vz) ** 0.5
                     if speed >= arm_speed_mps:
                         armed = True
+                        # Anchor the LFS-internal lap clock to *now*. Without
+                        # this, ``lap_start_og_time_ms`` stays None until the
+                        # first IS_LAP fires, so during lap 1 we record no
+                        # nodes into NodeDeltaTracker and the live overlay's
+                        # delta bar never gets a PB to compare against (it
+                        # would only start working from lap 3+). Anchoring on
+                        # arm means lap 1 already feeds the tracker, so the
+                        # delta bar lights up on lap 2 — matching what users
+                        # expect from in-game delta overlays.
+                        og_arm = sample.outgauge
+                        if og_arm is not None and lap_start_og_time_ms is None:
+                            lap_start_og_time_ms = int(og_arm.time_ms)
+                            last_lap_seen_at = asyncio.get_running_loop().time()
                         print(
                             f"[capture] armed: car moving "
                             f"({speed * 3.6:.1f} km/h) — recording starts now",
@@ -402,36 +429,55 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                             file=sys.stderr,
                         )
 
-                if (use_laps or per_lap) and sample.race_context is not None:
+                if sample.race_context is not None:
                     rc = sample.race_context
                     # Pick the active PLID. Prefer the one LFS reports as
                     # "viewed". If view_plid hasn't propagated yet, fall back
                     # to whichever PLID is racking up laps.
-                    if target_plid is None:
-                        if rc.view_player_id is not None and rc.view_player_id in rc.players:
-                            target_plid = rc.view_player_id
-                            last_lap_count = rc.lap_count.get(target_plid, 0)
+                    #
+                    # NOTE: also re-latch if ``view_player_id`` changes
+                    # mid-session (driver swap, late IS_NPL, spectator → car).
+                    # The previous "latch once and forget" logic left
+                    # ``target_plid`` stuck on a stale/empty PLID, which made
+                    # ``cur_lap`` permanently 0 and silently disabled both the
+                    # delta-vs-PB overlay and the fuel-laps-remaining widget.
+                    rc_view = rc.view_player_id
+                    if (
+                        rc_view is not None
+                        and rc_view in rc.players
+                        and rc_view != target_plid
+                    ):
+                        prev = target_plid
+                        target_plid = rc_view
+                        last_lap_count = rc.lap_count.get(target_plid, 0)
+                        if prev is None:
                             print(f"[capture] tracking PLID {target_plid} "
                                   f"(via view_plid, lap_count={last_lap_count})",
                                   file=sys.stderr)
-                        elif rc.lap_count:
-                            # First PLID with completed laps = our driver.
-                            # IS_NPL never arrived (common): we discover the
-                            # PLID only AFTER the first IS_LAP. That IS_LAP is
-                            # almost certainly the out-lap completion we just
-                            # missed — anchor flying laps starting now.
-                            target_plid = max(rc.lap_count, key=rc.lap_count.get)
-                            last_lap_count = rc.lap_count.get(target_plid, 0)
+                        else:
+                            print(f"[capture] view_plid changed "
+                                  f"{prev} -> {target_plid} "
+                                  f"(lap_count={last_lap_count}); resyncing",
+                                  file=sys.stderr)
+                    elif target_plid is None and rc.lap_count:
+                        # First PLID with completed laps = our driver.
+                        # IS_NPL never arrived (common): we discover the
+                        # PLID only AFTER the first IS_LAP. That IS_LAP is
+                        # almost certainly the out-lap completion we just
+                        # missed — anchor flying laps starting now.
+                        target_plid = max(rc.lap_count, key=rc.lap_count.get)
+                        last_lap_count = rc.lap_count.get(target_plid, 0)
+                        if use_laps or per_lap:
                             if args.trim_out_lap:
                                 samples = [sample]
                                 flying_lap_start_idx = 0
                             else:
                                 flying_lap_start_idx = len(samples) - 1
                             flying_lap_started = True
-                            print(f"[capture] tracking PLID {target_plid} "
-                                  f"(no IS_NPL; assuming first {last_lap_count} "
-                                  f"lap(s) were out-lap, starting flying now)",
-                                  file=sys.stderr)
+                        print(f"[capture] tracking PLID {target_plid} "
+                              f"(no IS_NPL; assuming first {last_lap_count} "
+                              f"lap(s) were out-lap, starting flying now)",
+                              file=sys.stderr)
                     # Only act on lap transitions once we know who we're tracking.
                     cur_lap = (rc.lap_count.get(target_plid, 0)
                                if target_plid is not None else 0)
@@ -453,14 +499,15 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                             file=sys.stderr,
                         )
                         last_lap_count = cur_lap
-                        # Drop the now-orphaned in-progress samples and
-                        # restart the flying-lap window from this sample.
-                        if args.trim_out_lap:
-                            samples = [sample]
-                            flying_lap_start_idx = 0
-                        else:
-                            flying_lap_start_idx = len(samples) - 1
-                        flying_lap_started = False
+                        if use_laps or per_lap:
+                            # Drop the now-orphaned in-progress samples and
+                            # restart the flying-lap window from this sample.
+                            if args.trim_out_lap:
+                                samples = [sample]
+                                flying_lap_start_idx = 0
+                            else:
+                                flying_lap_start_idx = len(samples) - 1
+                            flying_lap_started = False
                         last_lap_seen_at = None
                         lap_start_og_time_ms = None
                         node_delta_tracker.reset_lap()
@@ -494,42 +541,47 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                             node_delta_tracker.reset_lap()
                             split_predictor.reset_lap()
                             last_seen_split_idx = 0
-                        if not flying_lap_started:
-                            # First lap completion = end of out-lap. Drop the
-                            # in-progress lap from the buffer and re-anchor.
-                            if args.trim_out_lap:
-                                samples = [sample]
-                                flying_lap_start_idx = 0
-                            else:
-                                flying_lap_start_idx = len(samples) - 1
-                            flying_lap_started = True
-                            print(
-                                f"[capture] out-lap complete, starting flying laps "
-                                f"(skipping {laps_to_skip} warmup, "
-                                f"recording {args.laps or 'all'})",
-                                file=sys.stderr)
-                        else:
-                            if laps_to_skip > 0:
-                                laps_to_skip -= 1
-                                samples = [sample]      # drop warmup lap
-                                flying_lap_start_idx = 0
-                                print(f"[capture] warmup lap done, "
-                                      f"{laps_to_skip} more to skip",
-                                      file=sys.stderr)
-                            else:
-                                # Close the just-finished flying lap.
-                                _close_lap(len(samples) - 1, lap_ms)
-                                completed_flying_laps += 1
-                                lap_s = (lap_ms / 1000.0) if lap_ms else None
+                        # CSV slicing / per-lap output — only when the user
+                        # actually asked for it (--per-lap or --laps N). The
+                        # live overlay always benefits from the trackers
+                        # above regardless of CSV emission.
+                        if use_laps or per_lap:
+                            if not flying_lap_started:
+                                # First lap completion = end of out-lap. Drop the
+                                # in-progress lap from the buffer and re-anchor.
+                                if args.trim_out_lap:
+                                    samples = [sample]
+                                    flying_lap_start_idx = 0
+                                else:
+                                    flying_lap_start_idx = len(samples) - 1
+                                flying_lap_started = True
                                 print(
-                                    f"[capture] flying lap "
-                                    f"{completed_flying_laps}"
-                                    + (f"/{args.laps}" if use_laps else "")
-                                    + " complete"
-                                    + (f" ({lap_s:.3f}s)" if lap_s else ""),
+                                    f"[capture] out-lap complete, starting flying laps "
+                                    f"(skipping {laps_to_skip} warmup, "
+                                    f"recording {args.laps or 'all'})",
                                     file=sys.stderr)
-                                if use_laps and completed_flying_laps >= args.laps:
-                                    break
+                            else:
+                                if laps_to_skip > 0:
+                                    laps_to_skip -= 1
+                                    samples = [sample]      # drop warmup lap
+                                    flying_lap_start_idx = 0
+                                    print(f"[capture] warmup lap done, "
+                                          f"{laps_to_skip} more to skip",
+                                          file=sys.stderr)
+                                else:
+                                    # Close the just-finished flying lap.
+                                    _close_lap(len(samples) - 1, lap_ms)
+                                    completed_flying_laps += 1
+                                    lap_s = (lap_ms / 1000.0) if lap_ms else None
+                                    print(
+                                        f"[capture] flying lap "
+                                        f"{completed_flying_laps}"
+                                        + (f"/{args.laps}" if use_laps else "")
+                                        + " complete"
+                                        + (f" ({lap_s:.3f}s)" if lap_s else ""),
+                                        file=sys.stderr)
+                                    if use_laps and completed_flying_laps >= args.laps:
+                                        break
 
                 if len(samples) % 200 == 0:
                     print(f"[capture] {len(samples)} samples", file=sys.stderr)
@@ -544,6 +596,54 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                         # expose it directly so we approximate.
                         cur_lap_ms: int | None = None
                         rc_live = live.race_context
+                        # Refresh the per-track racing-line arclength
+                        # cache when LFS reports a new circuit.
+                        track_now = (
+                            rc_live.track if rc_live is not None else None
+                        )
+                        if track_now and track_now != _rl_cache_track:
+                            _rl_cache_track = track_now
+                            _rl_node_to_s_m = []
+                            _rl_total_length_m = 0.0
+                            try:
+                                csv_path = find_racing_line_csv(track_now)
+                                if csv_path is not None:
+                                    import csv as _csv
+                                    with csv_path.open(
+                                        "r", newline="", encoding="utf-8",
+                                    ) as fh:
+                                        reader = _csv.DictReader(fh)
+                                        for row in reader:
+                                            try:
+                                                _rl_node_to_s_m.append(
+                                                    float(row["s_m"])
+                                                )
+                                            except (KeyError, TypeError,
+                                                    ValueError):
+                                                continue
+                                    if len(_rl_node_to_s_m) >= 2:
+                                        # Close the loop: assume the
+                                        # gap from last node back to
+                                        # node 0 equals the average
+                                        # inter-node spacing (good
+                                        # enough for wraparound
+                                        # bookkeeping).
+                                        avg = (
+                                            _rl_node_to_s_m[-1]
+                                            / max(len(_rl_node_to_s_m) - 1, 1)
+                                        )
+                                        _rl_total_length_m = (
+                                            _rl_node_to_s_m[-1] + avg
+                                        )
+                            except Exception as exc:  # noqa: BLE001
+                                print(
+                                    f"[capture] racing-line load failed "
+                                    f"for {track_now}: "
+                                    f"{type(exc).__name__}: {exc}",
+                                    file=sys.stderr,
+                                )
+                                _rl_node_to_s_m = []
+                                _rl_total_length_m = 0.0
                         if (
                             rc_live is not None
                             and rc_live.view_player_id is not None
@@ -568,6 +668,7 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                                 )
                         # Per-node continuous delta vs PB.
                         node_delta_value: int | None = None
+                        node_speed_delta_value: float | None = None
                         ghost_node_value: int | None = None
                         if (
                             cur_lap_ms is not None
@@ -585,11 +686,18 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                                 node_delta_tracker.record(
                                     node=view_car.node,
                                     elapsed_ms=cur_lap_ms,
+                                    speed_ms=float(view_car.speed_ms),
                                 )
                                 node_delta_value = (
                                     node_delta_tracker.delta_ms(
                                         node=view_car.node,
                                         elapsed_ms=cur_lap_ms,
+                                    )
+                                )
+                                node_speed_delta_value = (
+                                    node_delta_tracker.speed_delta_ms(
+                                        node=view_car.node,
+                                        speed_ms=float(view_car.speed_ms),
                                     )
                                 )
                                 ghost_node_value = (
@@ -722,6 +830,15 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                                     fuel_tracker.avg_burn_pct_per_lap
                                 ),
                                 ghost_node=ghost_node_value,
+                                last_sample_pit_limiter=(
+                                    bool(og.show_lights & DL_PITSPEED)
+                                    if og is not None else None
+                                ),
+                                speed_delta_ms_vs_best=(
+                                    node_speed_delta_value
+                                ),
+                                node_to_s_m=_rl_node_to_s_m,
+                                track_length_m=_rl_total_length_m,
                             )
                             live_publisher.write_snapshot_atomic(
                                 live_file, snap
