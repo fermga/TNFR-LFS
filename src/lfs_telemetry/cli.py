@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import io
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -76,7 +77,65 @@ def _add_lfs_flags(parser: argparse.ArgumentParser) -> None:
         help="LFS car short name (FOX, FO8, BF1, MRT). Overrides auto-detect.")
 
 
+class _ResilientTextStream(io.TextIOBase):
+    """Wrap a text stream so writes never raise.
+
+    PyInstaller windowed bundles attach ``sys.stdout`` / ``sys.stderr``
+    to a special handle that can fail with ``OSError [Errno 22] Invalid
+    argument`` after long-running sessions or large cumulative writes
+    (known PyInstaller + Windows windowed-mode issue). The capture
+    subprocess logs a lot of diagnostics through these streams, so a
+    single failed write must not crash the loop and lose the in-flight
+    capture. We swallow OSError / ValueError on write, flush and close.
+    """
+
+    def __init__(self, inner: io.TextIOBase | None) -> None:
+        self._inner = inner
+
+    def writable(self) -> bool:  # type: ignore[override]
+        return True
+
+    def write(self, s: str) -> int:  # type: ignore[override]
+        if self._inner is None:
+            return len(s)
+        try:
+            return self._inner.write(s)
+        except (OSError, ValueError):
+            return len(s)
+
+    def flush(self) -> None:  # type: ignore[override]
+        if self._inner is None:
+            return
+        with contextlib.suppress(OSError, ValueError):
+            self._inner.flush()
+
+    def isatty(self) -> bool:  # type: ignore[override]
+        if self._inner is None:
+            return False
+        try:
+            return bool(self._inner.isatty())
+        except (OSError, ValueError):
+            return False
+
+
+def _harden_std_streams() -> None:
+    """Replace ``sys.stdout`` / ``sys.stderr`` with resilient wrappers.
+
+    Only acts when the bundled Studio launches the CLI as a child
+    process (frozen build on Windows). Idempotent: re-wrapping an
+    already-resilient stream is a no-op.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        if isinstance(stream, _ResilientTextStream):
+            continue
+        setattr(sys, name, _ResilientTextStream(stream))
+
+
 def main(argv: list[str] | None = None) -> int:
+    _harden_std_streams()
     parser = argparse.ArgumentParser(prog="lfs-telemetry")
     sub = parser.add_subparsers(dest="cmd", required=True)
 

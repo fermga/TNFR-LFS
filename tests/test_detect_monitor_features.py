@@ -222,3 +222,26 @@ def test_traffic_gap_arclength_falls_back_to_euclidean_on_lap_wrap():
         node_to_s_m=node_to_s, track_length_m=track_length,
     )
     assert gap == pytest.approx(5.0)  # euclidean, not 2990
+
+
+def test_resilient_text_stream_swallows_oserror():
+    """Frozen Windows builds can have stdout/stderr raise OSError 22;
+    the resilient wrapper must absorb those without re-raising."""
+    import io as _io
+
+    from lfs_telemetry.cli import _ResilientTextStream
+
+    class _Brokenstream(_io.StringIO):
+        def write(self, s):
+            raise OSError(22, "Invalid argument")
+        def flush(self):
+            raise OSError(22, "Invalid argument")
+
+    rs = _ResilientTextStream(_Brokenstream())
+    # Should not raise
+    assert rs.write("hello") == len("hello")
+    rs.flush()
+    # None inner is also tolerated
+    rs2 = _ResilientTextStream(None)
+    assert rs2.write("x") == 1
+    rs2.flush()

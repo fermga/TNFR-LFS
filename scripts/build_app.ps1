@@ -58,7 +58,7 @@ function Get-ProjectVersion {
             return $matches[1]
         }
     }
-    return "0.3.7"
+    return "0.3.8"
 }
 
 # ===== Setup & Validation =====

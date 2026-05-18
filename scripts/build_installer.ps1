@@ -43,7 +43,7 @@ if (-not (Test-Path $outDir)) {
 & $iscc $issPath
 
 if ($LASTEXITCODE -eq 0) {
-    $setupExe = Join-Path $outDir "lfs-race-engineer-setup-0.3.7.exe"
+    $setupExe = Join-Path $outDir "lfs-race-engineer-setup-0.3.8.exe"
     if (Test-Path $setupExe) {
         $size = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)
         Write-Host ""
