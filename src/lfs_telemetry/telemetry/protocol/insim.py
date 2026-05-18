@@ -21,11 +21,13 @@ LFS InSim notes (v9):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import AsyncIterator
 
 from .packets import (
+    FUEL_SCALE,
     ISF_CON,
     ISF_HLV,
     ISF_LOCAL,
@@ -62,7 +64,10 @@ from .packets import (
     ISP_STA,
     ISP_TOC,
     ISP_VER,
-    FUEL_SCALE,
+    TINY_NCN,
+    TINY_NONE,
+    TINY_NPL,
+    TINY_SST,
     InSimCameraChange,
     InSimCarContact,
     InSimCarStateChanged,
@@ -94,10 +99,6 @@ from .packets import (
     InSimTakeOverCar,
     InSimVersion,
     InSimVoteAction,
-    TINY_NCN,
-    TINY_NONE,
-    TINY_NPL,
-    TINY_SST,
     build_isi_packet,
     build_msl_packet,
     build_tiny_packet,
@@ -518,7 +519,7 @@ class InSimClient:
 
     # -- lifecycle ----------------------------------------------------------
 
-    async def __aenter__(self) -> "InSimClient":
+    async def __aenter__(self) -> InSimClient:
         await self.start()
         return self
 
@@ -685,10 +686,8 @@ class InSimClient:
                       ptype, self.context.view_player_id,
                       self.context.race_in_progress,
                       dict(self.context.lap_count))
-            try:
+            with contextlib.suppress(asyncio.QueueFull):
                 self._queue.put_nowait(evt)
-            except asyncio.QueueFull:
-                pass
 
     async def _keepalive_loop(self) -> None:
         assert self._writer is not None

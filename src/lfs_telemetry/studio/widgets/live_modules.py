@@ -18,6 +18,7 @@ visually consistent regardless of size.
 
 from __future__ import annotations
 
+import contextlib
 import math
 from typing import Any
 
@@ -34,14 +35,16 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QWidget
 
-from ...lfs_paths import QSETTINGS_APP as APP, QSETTINGS_ORG as ORG
-from .live_data_source import LiveDataSource
-from .racing_line_loader import RacingLine
+from ...lfs_paths import QSETTINGS_APP as APP
+from ...lfs_paths import QSETTINGS_ORG as ORG
+from ...telemetry.constants import GRAVITY
 from ._format import (
     format_clock_ms,
     format_gap_seconds,
     format_signed_delta_ms,
 )
+from .live_data_source import LiveDataSource
+from .racing_line_loader import RacingLine
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -101,13 +104,23 @@ class _LiveModuleWindow(QWidget):
         self._drag_offset: QPoint | None = None
         self._resizing = False
         self._default_size = size
+        self._fullscreen_compat = self._load_fullscreen_compat()
 
-        self.setWindowFlags(
+        win_kind = (
+            Qt.WindowType.Window
+            if self._fullscreen_compat
+            else Qt.WindowType.Tool
+        )
+        flags = (
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
+            | win_kind
         )
+        if self._fullscreen_compat:
+            flags |= Qt.WindowType.WindowDoesNotAcceptFocus
+        self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setMinimumSize(MIN_W, MIN_H)
         self.resize(*size)
         self.setWindowTitle(title)
@@ -139,6 +152,13 @@ class _LiveModuleWindow(QWidget):
         except (TypeError, ValueError):
             return default
 
+    def _load_fullscreen_compat(self) -> bool:
+        raw = self._settings().value("overlay/fullscreen_compat", True)
+        if isinstance(raw, bool):
+            return raw
+        txt = str(raw).strip().lower()
+        return txt in {"1", "true", "yes", "on"}
+
     def _save_opacity(self) -> None:
         if not self.MODULE_ID:
             return
@@ -151,10 +171,8 @@ class _LiveModuleWindow(QWidget):
             return
         geo = self._settings().value(self._settings_key("geometry"))
         if geo is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 self.restoreGeometry(geo)
-            except (TypeError, ValueError):
-                pass
 
     def _save_geometry(self) -> None:
         if not self.MODULE_ID:
@@ -1288,8 +1306,8 @@ class GMeterWindow(_LiveModuleWindow):
         ax = self._snap.get("view_accel_lat_ms2")
         ay = self._snap.get("view_accel_lon_ms2")
         if ax is not None and ay is not None:
-            gx = ax / 9.81
-            gy = ay / 9.81
+            gx = ax / GRAVITY
+            gy = ay / GRAVITY
             scale = radius / self._full_scale_g
             px = cx + max(-radius, min(radius, gx * scale))
             py = cy - max(-radius, min(radius, gy * scale))

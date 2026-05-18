@@ -23,6 +23,7 @@ footprint is a fair trade for ~22x faster saves and ~5x faster loads.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import pickle
@@ -68,7 +69,7 @@ class CacheKey:
     size: int
 
     @classmethod
-    def for_path(cls, path: str | Path) -> "CacheKey | None":
+    def for_path(cls, path: str | Path) -> CacheKey | None:
         p = Path(path)
         try:
             st = p.stat()
@@ -82,7 +83,7 @@ class CacheKey:
         # whenever the source bytes change.
         h = hashlib.sha1(
             f"{self.path}|{self.mtime_ns}|{self.size}|"
-            f"v{_CACHE_FORMAT_VERSION}".encode("utf-8")
+            f"v{_CACHE_FORMAT_VERSION}".encode()
         ).hexdigest()[:16]
         stem = self.path.stem[:32].replace(" ", "_")
         return f"{stem}__{h}{_CACHE_SUFFIX}"
@@ -101,10 +102,8 @@ def load(path: str | Path) -> tuple[pd.DataFrame, pd.DataFrame] | None:
             payload = pickle.load(fp)
     except (OSError, pickle.UnpicklingError, EOFError):
         # Corrupt cache entry — drop it so the next save replaces it.
-        try:
+        with contextlib.suppress(OSError):
             target.unlink()
-        except OSError:
-            pass
         return None
     if (
         not isinstance(payload, dict)
@@ -139,10 +138,8 @@ def save(
             os.replace(tmp, target)
     except OSError:
         # Disk full / permission denied → silently skip caching.
-        try:
+        with contextlib.suppress(OSError):
             tmp.unlink()
-        except OSError:
-            pass
 
 
 def clear() -> int:

@@ -6,9 +6,10 @@ model. Sorting is delegated to ``QSortFilterProxyModel`` in the view.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 
@@ -69,10 +70,10 @@ class CapturesTableModel(QAbstractTableModel):
     # QAbstractTableModel
     # ------------------------------------------------------------------
 
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: B008 - Qt override signature
         return 0 if parent.isValid() else len(self._rows)
 
-    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: B008 - Qt override signature
         return 0 if parent.isValid() else len(_COLUMNS)
 
     def headerData(  # type: ignore[override]

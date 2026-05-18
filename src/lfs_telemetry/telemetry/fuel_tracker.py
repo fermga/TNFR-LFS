@@ -17,13 +17,12 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
 class FuelTracker:
     window: int = 3
-    _last_fuel_pct: Optional[float] = None
+    _last_fuel_pct: float | None = None
     _per_lap_burn_pct: deque[float] = field(default_factory=deque)
 
     def observe_fuel(self, fuel_pct: float | None) -> None:
@@ -47,12 +46,12 @@ class FuelTracker:
         self._last_fuel_pct = float(fuel_pct)
 
     @property
-    def avg_burn_pct_per_lap(self) -> Optional[float]:
+    def avg_burn_pct_per_lap(self) -> float | None:
         if not self._per_lap_burn_pct:
             return None
         return sum(self._per_lap_burn_pct) / len(self._per_lap_burn_pct)
 
-    def laps_remaining(self, fuel_pct: float | None) -> Optional[float]:
+    def laps_remaining(self, fuel_pct: float | None) -> float | None:
         """Float estimate of laps left at the current burn rate."""
         burn = self.avg_burn_pct_per_lap
         if burn is None or burn <= 0 or fuel_pct is None:

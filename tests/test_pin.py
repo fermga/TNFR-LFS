@@ -6,9 +6,7 @@ import struct
 import pytest
 
 from lfs_telemetry.telemetry.track.pin import (
-    PIN_BYTES,
     PIN_MAGIC,
-    PinInfo,
     find_env_for_xy,
     list_pin_files,
     load_all,
@@ -16,7 +14,6 @@ from lfs_telemetry.telemetry.track.pin import (
     parse_pin_bytes,
 )
 from lfs_telemetry.telemetry.track.pth import DEFAULT_SMX_DIR, FIXED_POINT_DIVISOR
-
 
 # ---------------------------------------------------------------------------
 # Synthetic-data tests (no LFS install required)

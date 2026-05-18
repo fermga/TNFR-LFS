@@ -11,5 +11,18 @@
     "mu_lat": "peak lateral tyre coefficient (~0.95 road, ~1.4 slicks+wing)",
     "mu_long": "peak longitudinal tyre coefficient"
   },
-  "cars": {}
+  "cars": {
+    "_example_MOD1": {
+      "_comment": "Remove the leading underscore to enable this entry. Keys are LFS short car names (3-6 chars).",
+      "mass_kg": 720.0,
+      "wheelbase_m": 2.60,
+      "track_front_m": 1.50,
+      "track_rear_m": 1.48,
+      "cg_height_m": 0.30,
+      "weight_dist_front": 0.45,
+      "driven": "RWD",
+      "mu_lat": 1.35,
+      "mu_long": 1.25
+    }
+  }
 }

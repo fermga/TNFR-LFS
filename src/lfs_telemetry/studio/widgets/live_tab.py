@@ -8,8 +8,9 @@ the bottom-right corner to resize.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtWidgets import (
@@ -26,26 +27,26 @@ from PySide6.QtWidgets import (
 )
 
 from ...app.capture_runner import CaptureRunner
-from ...lfs_paths import QSETTINGS_APP as APP, QSETTINGS_ORG as ORG
-from ..signals import SignalBus
+from ...lfs_paths import QSETTINGS_APP as APP
+from ...lfs_paths import QSETTINGS_ORG as ORG
 from ..i18n import tr
+from ..signals import SignalBus
 from .live_data_source import LiveDataSource
 from .live_modules import (
     DeltaBarWindow,
     FlagsWindow,
     FuelLapsRemainingWindow,
     FuelPctWindow,
-    GMeterWindow,
     GapAheadWindow,
     GapBehindWindow,
     GearWindow,
+    GMeterWindow,
     RadarWindow,
     RpmWindow,
     SessionInfoWindow,
     SpeedWindow,
     TyreRiskWindow,
 )
-
 
 # Registry: (id, label, factory(source, opacity) -> widget).
 # Order = display order in the scroll list.
@@ -243,10 +244,26 @@ class LiveTab(QWidget):
         }
         self._session_compact.setChecked(compact_on)
 
+        self._fullscreen_compat = QCheckBox(
+            tr("Fullscreen compatibility mode"), self,
+        )
+        self._fullscreen_compat.setToolTip(
+            tr(
+                "Use regular top-most windows for overlay modules. This "
+                "helps visibility over LFS fullscreen/borderless modes.",
+            ),
+        )
+        fs_raw = settings.value("overlay/fullscreen_compat", True)
+        fs_on = str(fs_raw).strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        self._fullscreen_compat.setChecked(fs_on)
+
         misc_form = QFormLayout()
         misc_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         misc_form.addRow(tr("G-meter full scale:"), self._g_full_scale)
         misc_form.addRow("", self._session_compact)
+        misc_form.addRow("", self._fullscreen_compat)
         misc_box = QGroupBox(tr("G-meter"), self)
         misc_box.setLayout(misc_form)
 
@@ -281,6 +298,9 @@ class LiveTab(QWidget):
         self._rpm_redline.valueChanged.connect(self._apply_rpm_config)
         self._g_full_scale.valueChanged.connect(self._apply_g_config)
         self._session_compact.toggled.connect(self._apply_session_overlay_mode)
+        self._fullscreen_compat.toggled.connect(
+            self._apply_fullscreen_compat_mode,
+        )
 
         # Poll for capture lifecycle / live.json path.
         self._timer = QTimer(self)
@@ -388,6 +408,18 @@ class LiveTab(QWidget):
             QSettings(ORG, APP).setValue(
                 f"overlay/{mid}/opacity", pct / 100.0,
             )
+
+    def _apply_fullscreen_compat_mode(self, on: bool) -> None:
+        QSettings(ORG, APP).setValue("overlay/fullscreen_compat", bool(on))
+        # Recreate instantiated modules so new window flags take effect.
+        for mid, w in list(self._widgets.items()):
+            if w is None:
+                continue
+            was_visible = w.isVisible()
+            w.close()
+            self._widgets[mid] = None
+            if was_visible:
+                self._toggle_module(mid, True)
 
     # ------------------------------------------------------------------
     # Runner polling

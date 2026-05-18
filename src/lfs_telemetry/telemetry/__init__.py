@@ -72,43 +72,6 @@ from __future__ import annotations
 
 from .. import __version__
 
-# --- Live capture -----------------------------------------------------------
-from .live import LiveTelemetry, TelemetrySample
-
-# --- Persistence (versioned CSV schema) ------------------------------------
-from .replay import (
-    SCHEMA_VERSION,
-    detect_schema_version,
-    read_csv_dataframe,
-    read_csv_replay,
-    write_csv_replay,
-)
-
-# --- High-level lap facade (preferred entry point for analysis apps) -------
-from .lap import LapTelemetry
-from .stint import StintTelemetry
-from .comparison import LapComparison
-from .sectors import Sector, insim_split_distances_m, lap_sectors, sector_times_s
-from .track_map import TrackBounds, TrackMap
-from .lap_slicer import (
-    LapSlice,
-    find_line_crossings,
-    reslice_csv,
-    slice_into_laps,
-    write_per_lap_files,
-)
-from .predict import SplitPredictor
-
-# --- Channel registry & capture catalog (UI plumbing) ----------------------
-from .channels import CHANNELS, ChannelInfo, channel_info, channels_by_group
-from .catalog import CaptureInfo, captures_to_dataframe, discover_captures, inspect_capture
-
-# --- Physics-derived signals -----------------------------------------------
-from .derived import enrich_dataframe
-
-# --- Car spec / observables ------------------------------------------------
-from .observables import CarSpec, car_spec_for, observe_sample, observe_window
-
 # --- Calibration -----------------------------------------------------------
 from .calibrate import (
     calibrate_spec,
@@ -119,6 +82,24 @@ from .calibrate import (
     estimate_mu_long,
 )
 from .car_calibration import CarCalibration, CarSpecStore, RestCalibrator
+from .catalog import CaptureInfo, captures_to_dataframe, discover_captures, inspect_capture
+
+# --- Channel registry & capture catalog (UI plumbing) ----------------------
+from .channels import CHANNELS, ChannelInfo, channel_info, channels_by_group
+from .comparison import LapComparison
+
+# --- Physics-derived signals -----------------------------------------------
+from .derived import enrich_dataframe
+
+# --- High-level lap facade (preferred entry point for analysis apps) -------
+from .lap import LapTelemetry
+from .lap_slicer import (
+    LapSlice,
+    find_line_crossings,
+    reslice_csv,
+    slice_into_laps,
+    write_per_lap_files,
+)
 
 # --- Race-context derivations ----------------------------------------------
 from .lap_summary import (
@@ -127,6 +108,25 @@ from .lap_summary import (
     dump_lap_records,
     load_lap_records,
 )
+
+# --- Live capture -----------------------------------------------------------
+from .live import LiveTelemetry, TelemetrySample
+
+# --- Car spec / observables ------------------------------------------------
+from .observables import CarSpec, car_spec_for, observe_sample, observe_window
+from .predict import SplitPredictor
+
+# --- Persistence (versioned CSV schema) ------------------------------------
+from .replay import (
+    SCHEMA_VERSION,
+    detect_schema_version,
+    read_csv_dataframe,
+    read_csv_replay,
+    write_csv_replay,
+)
+from .sectors import Sector, insim_split_distances_m, lap_sectors, sector_times_s
+from .stint import StintTelemetry
+from .track_map import TrackBounds, TrackMap
 from .traffic import TrafficSnapshot, traffic_snapshot
 
 __all__ = [

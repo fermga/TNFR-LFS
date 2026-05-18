@@ -236,10 +236,7 @@ def _looks_like_lfs_dir(path: Path) -> bool:
             return False
     except OSError:
         return False
-    for marker in ("LFS.exe", "cfg.txt"):
-        if (path / marker).exists():
-            return True
-    return False
+    return any((path / marker).exists() for marker in ("LFS.exe", "cfg.txt"))
 
 
 __all__ = [

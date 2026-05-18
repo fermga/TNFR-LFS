@@ -10,19 +10,19 @@ reader tolerates older CSVs that lack them.
 
 from __future__ import annotations
 
+import contextlib
 import csv
+from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Iterable, Iterator
 
 from .live import TelemetrySample
 from .protocol.packets import (
+    WHEEL_ORDER,
     OutGaugePacket,
     OutSimPack2,
     OutSimPacket,
     OutSimWheel,
-    WHEEL_ORDER,
 )
-
 
 # Bumped whenever the canonical column set changes. Old readers ignore the
 # preamble comment line; new readers can warn or migrate as needed.
@@ -185,7 +185,10 @@ def _iter_no_preamble(fp):
 def _sample_to_row(sample: TelemetrySample) -> dict[str, object]:
     os_pkt = sample.outsim
     og_pkt = sample.outgauge
-    assert os_pkt is not None and og_pkt is not None
+    if os_pkt is None or og_pkt is None:
+        raise ValueError(
+            "incomplete sample: outsim/outgauge are required to serialize a row"
+        )
     row: dict[str, object] = {
         "time_ms": sample.time_ms,
         "ang_vel_x": os_pkt.ang_vel[0],
@@ -252,7 +255,7 @@ def _fill_outsim2(row: dict[str, object], pkt2: OutSimPack2) -> None:
         row["input_clutch"] = pkt2.clutch
         row["input_handbrake"] = pkt2.handbrake
     if pkt2.wheels is not None and len(pkt2.wheels) == 4:
-        for c, w in zip(WHEEL_ORDER, pkt2.wheels):
+        for c, w in zip(WHEEL_ORDER, pkt2.wheels, strict=True):
             prefix = f"wheel_{c}_"
             row[prefix + "susp_deflect_m"] = w.susp_deflect_m
             row[prefix + "vertical_load_n"] = w.vertical_load_n
@@ -378,16 +381,12 @@ def _row_to_outsim2(row: dict[str, str], time_ms: int) -> OutSimPack2 | None:
     # would otherwise be lost on reload.
     cld = row.get("current_lap_dist_m", "")
     if cld not in (None, ""):
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             pkt2.current_lap_dist_m = float(cld)
-        except (TypeError, ValueError):
-            pass
     ixd = row.get("indexed_distance_m", "")
     if ixd not in (None, ""):
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             pkt2.indexed_distance_m = float(ixd)
-        except (TypeError, ValueError):
-            pass
     return pkt2
 
 

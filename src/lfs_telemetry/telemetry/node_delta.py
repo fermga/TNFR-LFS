@@ -20,7 +20,6 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -38,7 +37,7 @@ class NodeDeltaTracker:
         tracker.complete_lap(last_lap_ms)
     """
 
-    best_lap_ms: Optional[int] = None
+    best_lap_ms: int | None = None
     best_node_to_ms: dict[int, int] = field(default_factory=dict)
     # Last *completed valid* lap, kept as a transient reference so the
     # delta bar has something to show on lap 2 even when lap 1 was the
@@ -46,7 +45,7 @@ class NodeDeltaTracker:
     # invalid (cut, /restart, lag) so no PB has been promoted yet.
     # Detect&Monitor exposes the same fallback so the gauge never
     # sits at "--.---" once the driver has done at least one lap.
-    last_lap_ms: Optional[int] = None
+    last_lap_ms: int | None = None
     _last_node_to_ms: dict[int, int] = field(default_factory=dict)
     _last_keys_sorted: list[int] = field(default_factory=list)
     _cur_node_to_ms: dict[int, int] = field(default_factory=dict)
@@ -99,7 +98,7 @@ class NodeDeltaTracker:
 
     def delta_ms(
         self, *, node: int, elapsed_ms: int
-    ) -> Optional[int]:
+    ) -> int | None:
         """Live delta (ms) vs PB at the same track node.
 
         Positive = slower than PB, negative = faster. Returns ``None``
@@ -137,7 +136,7 @@ class NodeDeltaTracker:
                 best_at = int(t_lo + frac * (t_hi - t_lo))
         return int(elapsed_ms) - int(best_at)
 
-    def ghost_node_at(self, *, elapsed_ms: int) -> Optional[int]:
+    def ghost_node_at(self, *, elapsed_ms: int) -> int | None:
         """Find the PB node whose recorded clock matches ``elapsed_ms``.
 
         Used by the Live mini-map's "ghost" indicator: where on the

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -30,8 +31,8 @@ from PySide6.QtWidgets import (
 )
 
 from ...app.capture_runner import CaptureRunner
-from ..signals import SignalBus
 from ..i18n import tr
+from ..signals import SignalBus
 from ..theme import MUTED_COLOR
 
 _LAP_DONE_RE = re.compile(r"flying lap (\d+)")
@@ -106,6 +107,23 @@ class CaptureTab(QWidget):
         form.addRow(tr("OutSim port:"), self._outsim_port)
         form.addRow(tr("OutGauge port:"), self._outgauge_port)
 
+        # Overlay-only mode: keep the live snapshot updating for the
+        # Overlay tab but skip buffering samples and writing CSVs. The
+        # session catalog is left untouched, no per-lap files are
+        # produced — ideal for users who only want the in-game HUD.
+        self._overlay_only = QCheckBox(
+            tr("Overlay only (no CSV recording)"), self,
+        )
+        self._overlay_only.setToolTip(
+            tr(
+                "When enabled, the connection to LFS still drives the "
+                "Overlay tab in real time, but no telemetry is buffered "
+                "in memory and no per-lap or aggregate CSV is written "
+                "to the workspace. Uncheck to record stints as usual.",
+            )
+        )
+        form.addRow("", self._overlay_only)
+
         form_box = QGroupBox(tr("Capture"), self)
         form_box.setLayout(form)
 
@@ -120,7 +138,7 @@ class CaptureTab(QWidget):
         self._led = QLabel(self)
         self._led.setStyleSheet(_led_qss("#5a5f66"))  # grey = idle
         self._led.setToolTip(tr("LFS InSim status: idle"))
-        self._led_label = QLabel("LFS", self)
+        self._led_label = QLabel(tr("LFS"), self)
         self._led_label.setStyleSheet(f"color: {MUTED_COLOR};")
 
         btn_row = QHBoxLayout()
@@ -211,6 +229,7 @@ class CaptureTab(QWidget):
                 insim_port=int(self._insim_port.value()),
                 outsim_port=int(self._outsim_port.value()),
                 outgauge_port=int(self._outgauge_port.value()),
+                write_csv=not self._overlay_only.isChecked(),
             )
         except Exception as exc:  # noqa: BLE001
             self._status.setText(

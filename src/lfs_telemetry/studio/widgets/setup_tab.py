@@ -5,9 +5,8 @@ that mounts a :class:`QTabWidget` with two sub-tabs:
 
 * **Baseline** — :class:`SetupBaselineTab`, the historical HTML report
   parsed from ``<car>_CAR_info.bin`` (unchanged behaviour).
-* **Advisor (experimental)** — :class:`SetupAdvisorTab`, the
-  TNFR-grounded setup recommender (Phase 6 of the Setup Advisor
-  initiative — see ``docs/TNFR_SETUP_ADVISOR.md`` §9).
+* **Garage editor** — :class:`SetupEditorTab`, the in-app editor for
+  setup overrides.
 
 ``SetupBaselineTab`` subscribes to ``laps_selected`` on the shared
 :class:`SignalBus`, takes the first selected lap's ``summary["car"]``
@@ -24,7 +23,6 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import List
 
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -48,7 +46,6 @@ from ..models import LapLoader
 from ..signals import SignalBus
 from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR, WHEEL_ORDER_UI
 from ._format import format_finite, format_signed_finite
-
 
 _WHEEL_ORDER = WHEEL_ORDER_UI  # canonical UI order, re-exported locally
 
@@ -89,7 +86,7 @@ class SetupBaselineTab(QWidget):
         super().__init__(parent)
         self._loader = loader
         self._signals = signals
-        self._requested: List[Path] = []
+        self._requested: list[Path] = []
         self._first_lap: LapTelemetry | None = None
         self._first_path: Path | None = None
 
@@ -193,7 +190,7 @@ class SetupBaselineTab(QWidget):
     # Slots
     # ------------------------------------------------------------------
 
-    def _on_laps_selected(self, paths: List[Path]) -> None:
+    def _on_laps_selected(self, paths: list[Path]) -> None:
         self._requested = list(paths)
         self._first_lap = None
         self._first_path = paths[0] if paths else None
@@ -720,13 +717,12 @@ class SetupBaselineTab(QWidget):
 
 
 class SetupTab(QWidget):
-    """Container tab: hosts ``Baseline`` and ``Advisor`` sub-tabs.
+    """Container tab: hosts ``Baseline`` and ``Garage editor`` sub-tabs.
 
     The class deliberately holds *no* business logic — the heavy lifting
-    lives in :class:`SetupBaselineTab` (parsed ``CAR_info.bin`` view) and
-    :class:`SetupAdvisorTab` (TNFR-grounded recommender). This keeps the
-    refactor surgical: existing call-sites that import :class:`SetupTab`
-    keep working bit-for-bit.
+    lives in :class:`SetupBaselineTab` (parsed ``CAR_info.bin`` view)
+    and the garage editor. This keeps the refactor surgical: existing
+    call-sites that import :class:`SetupTab` keep working bit-for-bit.
     """
 
     def __init__(
@@ -736,19 +732,15 @@ class SetupTab(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        # Lazy imports: both widgets pull in heavier dependencies the
-        # baseline tab does not need (advisor → tnfr engine; editor →
-        # the setup-overrides apply path).
-        from .setup_advisor_tab import SetupAdvisorTab
+        # Lazy import: the editor pulls in the setup-overrides apply
+        # path which is not needed for the baseline view alone.
         from .setup_editor_tab import SetupEditorTab
 
         tabs = QTabWidget(self)
         self._baseline = SetupBaselineTab(loader, signals)
         self._editor = SetupEditorTab(loader, signals)
-        self._advisor = SetupAdvisorTab(loader, signals)
         tabs.addTab(self._baseline, "Baseline")
         tabs.addTab(self._editor, "Garage editor")
-        tabs.addTab(self._advisor, "Advisor (experimental)")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

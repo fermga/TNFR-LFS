@@ -119,8 +119,8 @@ def test_clear_removes_entries(tmp_path):
 
 def test_lap_telemetry_uses_cache(tmp_path, monkeypatch):
     """End-to-end: second LapTelemetry.from_csv hits the disk cache."""
-    from lfs_telemetry.telemetry.lap import LapTelemetry
     from lfs_telemetry.telemetry import derived
+    from lfs_telemetry.telemetry.lap import LapTelemetry
 
     # Minimal CSV the loader accepts.
     csv = tmp_path / "stint.csv"

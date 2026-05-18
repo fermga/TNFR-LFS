@@ -59,6 +59,7 @@ class LfsConfigDialog(QDialog):
                 "<b>LFS must be closed</b> while the file is patched, "
                 "otherwise it will overwrite your changes on exit.",
             ),
+            self,
         )
         intro.setWordWrap(True)
         intro.setTextFormat(Qt.TextFormat.RichText)
@@ -66,7 +67,7 @@ class LfsConfigDialog(QDialog):
 
         # ---- Path row -------------------------------------------------
         path_row = QHBoxLayout()
-        path_row.addWidget(QLabel(tr("LFS folder:")))
+        path_row.addWidget(QLabel(tr("LFS folder:"), self))
         self._path_edit = QLineEdit(self)
         self._path_edit.setPlaceholderText(r"e.g. C:\LFS")
         path_row.addWidget(self._path_edit, 1)
@@ -94,7 +95,7 @@ class LfsConfigDialog(QDialog):
 
         # ---- Manual block --------------------------------------------
         root.addWidget(
-            QLabel(tr("Manual snippet (paste at the end of cfg.txt):")),
+            QLabel(tr("Manual snippet (paste at the end of cfg.txt):"), self),
         )
         self._snippet = QPlainTextEdit(self)
         self._snippet.setReadOnly(True)

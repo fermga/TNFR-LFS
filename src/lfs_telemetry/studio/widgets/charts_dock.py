@@ -9,7 +9,6 @@ enrichment run in the background.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
 
 import pandas as pd
 from PySide6.QtCore import Qt
@@ -160,9 +159,9 @@ class ChartsDock(QWidget):
         layout.addWidget(self._legend)
         layout.addWidget(self._scroll, 1)
 
-        self._requested_paths: List[Path] = []
-        self._loaded_laps: Dict[Path, LapTelemetry] = {}
-        self._channels: List[str] = []
+        self._requested_paths: list[Path] = []
+        self._loaded_laps: dict[Path, LapTelemetry] = {}
+        self._channels: list[str] = []
 
         signals.laps_selected.connect(self._on_laps_selected)
         signals.channels_changed.connect(self._on_channels_changed)
@@ -176,7 +175,7 @@ class ChartsDock(QWidget):
         self._chart.set_axis_kind(kind)
         self._signals.x_axis_changed.emit(kind)
 
-    def _on_laps_selected(self, paths: List[Path]) -> None:
+    def _on_laps_selected(self, paths: list[Path]) -> None:
         self._requested_paths = [Path(p) for p in paths]
         wanted = set(self._requested_paths)
         self._loaded_laps = {
@@ -200,7 +199,7 @@ class ChartsDock(QWidget):
                 self._loader.request(path)
         self._refresh_chart()
 
-    def _on_channels_changed(self, channels: List[str]) -> None:
+    def _on_channels_changed(self, channels: list[str]) -> None:
         self._channels = list(channels)
         self._chart.set_channels(self._channels)
 

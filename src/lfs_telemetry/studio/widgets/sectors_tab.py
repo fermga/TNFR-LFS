@@ -22,8 +22,8 @@ The view shows:
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import pyqtgraph as pg
@@ -33,12 +33,11 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ...telemetry import LapTelemetry
 from ...telemetry.sectors import insim_split_distances_m, lap_sectors
+from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
-from ..i18n import tr
 from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR
 from ._format import format_finite
-
 
 # Stable per-sector colours (cycled if more than 6 sectors).
 _SECTOR_COLORS = (
@@ -63,8 +62,8 @@ class SectorsTab(QWidget):
         super().__init__(parent)
         self._loader = loader
         self._signals = signals
-        self._requested: List[Path] = []
-        self._loaded: Dict[Path, LapTelemetry] = {}
+        self._requested: list[Path] = []
+        self._loaded: dict[Path, LapTelemetry] = {}
 
         self._summary = QLabel(tr("No laps selected."), self)
         self._summary.setWordWrap(True)
@@ -87,7 +86,7 @@ class SectorsTab(QWidget):
         self._plot.getAxis("bottom").setTextPen(TEXT_COLOR)
         self._plot.setMinimumHeight(220)
 
-        self._dyn_items: List[pg.GraphicsObject] = []
+        self._dyn_items: list[pg.GraphicsObject] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -102,7 +101,7 @@ class SectorsTab(QWidget):
     # Slots
     # ------------------------------------------------------------------
 
-    def _on_laps_selected(self, paths: List[Path]) -> None:
+    def _on_laps_selected(self, paths: list[Path]) -> None:
         self._requested = list(paths)
         keep = set(paths)
         self._loaded = {
@@ -128,17 +127,13 @@ class SectorsTab(QWidget):
 
     def _clear_plot(self) -> None:
         for it in self._dyn_items:
-            try:
+            with contextlib.suppress(Exception):
                 self._plot.removeItem(it)
-            except Exception:  # noqa: BLE001
-                pass
         self._dyn_items.clear()
         legend = self._plot.legend
         if legend is not None:
-            try:
+            with contextlib.suppress(Exception):
                 legend.scene().removeItem(legend)
-            except Exception:  # noqa: BLE001
-                pass
             self._plot.legend = None
 
     def _reset(self) -> None:
@@ -146,7 +141,7 @@ class SectorsTab(QWidget):
         self._clear_plot()
 
     def _shared_boundaries(
-        self, laps: List[LapTelemetry]
+        self, laps: list[LapTelemetry]
     ) -> list[float] | None:
         """Return median of per-lap InSim split distances if available."""
         per_lap = [insim_split_distances_m(lap) for lap in laps]
@@ -228,8 +223,8 @@ class SectorsTab(QWidget):
                 best=_fmt_s(theo_best),
             )
         )
-        for li, (lap_idx, secs) in enumerate(
-            zip(lap_indices, per_lap_sectors)
+        for _li, (lap_idx, secs) in enumerate(
+            zip(lap_indices, per_lap_sectors, strict=True)
         ):
             parts = [f"L{lap_idx}"]
             total = 0.0
@@ -287,7 +282,7 @@ class SectorsTab(QWidget):
         ax = self._plot.getAxis("bottom")
         ax.setTicks(
             [list(zip(x_lap.tolist(),
-                      [f"L{i}" for i in lap_indices]))]
+                      [f"L{i}" for i in lap_indices], strict=True))]
         )
         self._plot.getViewBox().autoRange()
 

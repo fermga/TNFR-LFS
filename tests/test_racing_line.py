@@ -12,7 +12,6 @@ from lfs_telemetry.telemetry.track.racing_line import (
     compute_target_speed,
 )
 
-
 SMX = DEFAULT_SMX_DIR
 pytestmark = pytest.mark.skipif(
     not SMX.exists(), reason="LFS install not available at C:/LFS",

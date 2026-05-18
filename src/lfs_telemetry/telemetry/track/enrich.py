@@ -33,7 +33,8 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-from .pin import PinInfo, load_all as _load_pins
+from .pin import PinInfo
+from .pin import load_all as _load_pins
 from .pth import (
     DEFAULT_SMX_DIR,
     TrackProfile,
@@ -63,14 +64,14 @@ class TrackIndex:
     tree: cKDTree
 
     @classmethod
-    def from_profile(cls, profile: TrackProfile) -> "TrackIndex":
+    def from_profile(cls, profile: TrackProfile) -> TrackIndex:
         if profile.pos.shape[0] == 0:
             raise ValueError(f"profile {profile.name!r} has no nodes")
         xy = profile.pos[:, :2]
         return cls(profile=profile, tree=cKDTree(xy))
 
     @classmethod
-    def from_pth(cls, pth_path: str | _Path) -> "TrackIndex":
+    def from_pth(cls, pth_path: str | _Path) -> TrackIndex:
         return cls.from_profile(compute_profile(parse_pth(pth_path)))
 
     def query(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -403,9 +404,7 @@ def detect_track(
     #   - "low" otherwise.
     runner = scores[1][1] if len(scores) > 1 else best_score * 10
     ratio = runner / max(best_score, 1e-6)
-    if best_score < 2.0:
-        confidence = "high"
-    elif best_score < 5.0 and ratio > 3.0:
+    if best_score < 2.0 or best_score < 5.0 and ratio > 3.0:
         confidence = "high"
     elif best_score < 25.0 and ratio > 1.5:
         confidence = "medium"

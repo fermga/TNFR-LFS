@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
 from ...telemetry import channels_by_group
 from ..i18n import LANG_SPANISH, current_language, tr
 
-
 _GROUP_ORDER: tuple[str, ...] = (
     "Driver", "Vehicle", "Engine", "Chassis",
     "Suspension", "Tyre", "Derived", "Track", "Aids", "Lap", "Context",

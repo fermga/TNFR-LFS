@@ -3,15 +3,14 @@
 The LFS in-game F11 garage exposes a fixed catalogue of tunable
 parameters (brake balance, gear ratios, springs, dampers, ARBs,
 camber/toe, tyre pressures, ...). Those exact same numbers live inside
-the ``<car>_CAR_info.bin`` export the Setup Advisor consumes as
-*baseline*: when LFS writes the file it serialises the current garage
-state of the car, so a freshly-exported bin already encodes the user's
-current setup.
+the ``<car>_CAR_info.bin`` export LFS writes: when LFS produces the
+file it serialises the current garage state of the car, so a freshly
+exported bin already encodes the user's current setup.
 
 The catch is that re-exporting the bin after every garage tweak is
 tedious and easy to forget. To close the loop we let the user edit the
-same fields in-app via :class:`SetupEditorTab` and feed the modified
-view to the advisor. This module is the pure data layer:
+same fields in-app via :class:`SetupEditorTab`. This module is the
+pure data layer:
 
 * :class:`SetupOverrides` — a flat, mutable dataclass with one optional
   field per editable LFS F11 parameter (``None`` means *leave the
@@ -24,8 +23,7 @@ view to the advisor. This module is the pure data layer:
   then tweaks individual fields).
 * :func:`apply` — returns a *new* :class:`CarInfoBin` with the
   overrides merged in. The function is pure and leaves the input bin
-  untouched, so it is safe to call from the UI thread on every edit
-  and pass the result straight to :meth:`SetupAdvisor.advise`.
+  untouched, so it is safe to call from the UI thread on every edit.
 
 Unit convention: every field is stored in the same units as the
 underlying ``CarInfoBin`` field (SI: radians, kPa, N/m, N·s/m, Nm,
@@ -36,10 +34,8 @@ to/from display units (degrees, psi, N/mm, percentages).
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Optional
 
 from .car_info_bin import CarInfoBin, CarInfoWheel
-
 
 __all__ = ["SetupOverrides", "from_baseline", "apply"]
 
@@ -60,47 +56,47 @@ class SetupOverrides:
 
     Per-axle fields apply the same value to both wheels of that axle
     (LFS garage default). Asymmetric setups are not exposed: they are
-    a rounding error for the advisor and a footgun for the user.
+    a footgun for the user with negligible payoff.
     """
 
     # ---- Chassis / fuel ------------------------------------------------
-    passengers: Optional[int] = None
-    weight_dist_front: Optional[float] = None      # 0..1 fraction
-    fuel_capacity_l: Optional[float] = None        # tank size, litres
+    passengers: int | None = None
+    weight_dist_front: float | None = None      # 0..1 fraction
+    fuel_capacity_l: float | None = None        # tank size, litres
 
     # ---- Brakes / steering --------------------------------------------
-    brake_strength_nm: Optional[float] = None
-    brake_balance_front: Optional[float] = None    # 0..1 fraction
-    parallel_steer: Optional[float] = None         # 0..1 fraction
+    brake_strength_nm: float | None = None
+    brake_balance_front: float | None = None    # 0..1 fraction
+    parallel_steer: float | None = None         # 0..1 fraction
 
     # ---- Drivetrain ---------------------------------------------------
-    final_drive: Optional[float] = None
+    final_drive: float | None = None
     # Forward gears only (excluding the reverse slot at index 0 in
     # ``CarInfoBin.gear_ratios``). Length must equal
     # ``baseline.forward_gears`` when applied.
-    gear_ratios: Optional[tuple[float, ...]] = None
-    drivetrain_efficiency: Optional[float] = None  # 0..1
-    torque_split: Optional[float] = None           # AWD only, 0..1
+    gear_ratios: tuple[float, ...] | None = None
+    drivetrain_efficiency: float | None = None  # 0..1
+    torque_split: float | None = None           # AWD only, 0..1
 
     # ---- Suspension geometry (per axle, symmetric) --------------------
-    front_camber_rad: Optional[float] = None
-    rear_camber_rad: Optional[float] = None
-    front_toe_in_rad: Optional[float] = None
-    rear_toe_in_rad: Optional[float] = None
+    front_camber_rad: float | None = None
+    rear_camber_rad: float | None = None
+    front_toe_in_rad: float | None = None
+    rear_toe_in_rad: float | None = None
 
     # ---- Suspension rates (per axle, symmetric) -----------------------
-    front_spring_const: Optional[float] = None     # N/m
-    rear_spring_const: Optional[float] = None
-    front_damping_comp: Optional[float] = None     # N·s/m
-    rear_damping_comp: Optional[float] = None
-    front_damping_rebound: Optional[float] = None
-    rear_damping_rebound: Optional[float] = None
-    front_anti_roll: Optional[float] = None        # N/m
-    rear_anti_roll: Optional[float] = None
+    front_spring_const: float | None = None     # N/m
+    rear_spring_const: float | None = None
+    front_damping_comp: float | None = None     # N·s/m
+    rear_damping_comp: float | None = None
+    front_damping_rebound: float | None = None
+    rear_damping_rebound: float | None = None
+    front_anti_roll: float | None = None        # N/m
+    rear_anti_roll: float | None = None
 
     # ---- Tyres (per axle, symmetric) ----------------------------------
-    front_tyre_pressure_kpa: Optional[float] = None
-    rear_tyre_pressure_kpa: Optional[float] = None
+    front_tyre_pressure_kpa: float | None = None
+    rear_tyre_pressure_kpa: float | None = None
 
 
 def from_baseline(baseline: CarInfoBin) -> SetupOverrides:
@@ -145,13 +141,13 @@ def from_baseline(baseline: CarInfoBin) -> SetupOverrides:
 def _patch_wheel(
     w: CarInfoWheel,
     *,
-    camber_rad: Optional[float],
-    toe_in_rad: Optional[float],
-    spring_const: Optional[float],
-    damping_comp: Optional[float],
-    damping_rebound: Optional[float],
-    anti_roll: Optional[float],
-    tyre_pressure_kpa: Optional[float],
+    camber_rad: float | None,
+    toe_in_rad: float | None,
+    spring_const: float | None,
+    damping_comp: float | None,
+    damping_rebound: float | None,
+    anti_roll: float | None,
+    tyre_pressure_kpa: float | None,
 ) -> CarInfoWheel:
     """Return a copy of ``w`` with the given non-None fields replaced."""
     patch: dict = {}

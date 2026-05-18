@@ -23,22 +23,21 @@ import threading
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 
 class CaptureRunner:
     """Spawn / supervise one ``lfs-telemetry capture`` subprocess at a time."""
 
     def __init__(self, log_lines: int = 400) -> None:
-        self._proc: Optional[subprocess.Popen] = None
-        self._reader: Optional[threading.Thread] = None
+        self._proc: subprocess.Popen | None = None
+        self._reader: threading.Thread | None = None
         self._lock = threading.Lock()
         self._log: deque[str] = deque(maxlen=log_lines)
-        self._exit_code: Optional[int] = None
+        self._exit_code: int | None = None
         self._cmd_str: str = ""
-        self._out_path: Optional[Path] = None
-        self._stop_file: Optional[Path] = None
-        self._live_file: Optional[Path] = None
+        self._out_path: Path | None = None
+        self._stop_file: Path | None = None
+        self._live_file: Path | None = None
 
     # ------------------------------------------------------------------
     # Status
@@ -79,6 +78,7 @@ class CaptureRunner:
         insim_port: int = 29999,
         outsim_port: int = 30000,
         outgauge_port: int = 30001,
+        write_csv: bool = True,
     ) -> str:
         if self.running:
             return "Already running"
@@ -89,13 +89,24 @@ class CaptureRunner:
         safe_stem = "".join(
             c if (c.isalnum() or c in "-_") else "_" for c in stem
         ) or "stint"
-        # Each capture lands in its own subfolder under the workspace, so
-        # the aggregate stint CSV and the per-lap CSVs stay grouped and
-        # don't pollute the workspace root. The catalog scans recursively
-        # so the new files show up on the next reload.
-        session_dir = workspace / f"{safe_stem}_{ts}"
-        session_dir.mkdir(parents=True, exist_ok=True)
-        out_path = session_dir / f"{safe_stem}_{ts}.csv"
+        if write_csv:
+            # Each capture lands in its own subfolder under the workspace, so
+            # the aggregate stint CSV and the per-lap CSVs stay grouped and
+            # don't pollute the workspace root. The catalog scans recursively
+            # so the new files show up on the next reload.
+            session_dir = workspace / f"{safe_stem}_{ts}"
+            session_dir.mkdir(parents=True, exist_ok=True)
+            out_path = session_dir / f"{safe_stem}_{ts}.csv"
+        else:
+            # Overlay-only mode: no per-session folder, no CSV. Reuse a
+            # single hidden directory under the workspace for live.json
+            # and the stop sentinel so we don't litter the catalog with
+            # empty session folders.
+            session_dir = workspace / "_overlay"
+            session_dir.mkdir(parents=True, exist_ok=True)
+            # The CLI still requires a positional output path; nothing
+            # will be written to it because --no-csv is passed below.
+            out_path = session_dir / f"{safe_stem}.csv"
 
         # When running under a regular Python interpreter we invoke the
         # CLI module directly (``python -m lfs_telemetry.cli``). Under
@@ -126,6 +137,8 @@ class CaptureRunner:
             argv += ["--per-lap"]
         if include_out_lap:
             argv += ["--include-out-lap"]
+        if not write_csv:
+            argv += ["--no-csv"]
 
         # Sentinel file used by stop(): when the GUI parent has no
         # console (PyInstaller windowed exe), GenerateConsoleCtrlEvent
@@ -133,8 +146,9 @@ class CaptureRunner:
         # polls.
         stop_file = session_dir / ".stop"
         try:
-            if stop_file.exists():
-                stop_file.unlink()
+            stop_file.unlink()
+        except FileNotFoundError:
+            pass
         except OSError:
             pass
         argv += ["--stop-file", str(stop_file)]
@@ -143,8 +157,9 @@ class CaptureRunner:
         # the in-game-style overlay). The CLI refreshes it at ~10 Hz.
         live_file = session_dir / "live.json"
         try:
-            if live_file.exists():
-                live_file.unlink()
+            live_file.unlink()
+        except FileNotFoundError:
+            pass
         except OSError:
             pass
         argv += ["--live-file", str(live_file)]
@@ -173,6 +188,8 @@ class CaptureRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
                 creationflags=creationflags,
             )

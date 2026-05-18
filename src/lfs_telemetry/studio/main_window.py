@@ -25,6 +25,15 @@ from PySide6.QtWidgets import (
     QStatusBar,
 )
 
+from ..lfs_paths import QSETTINGS_APP as APP
+from ..lfs_paths import QSETTINGS_ORG as ORG
+from .i18n import (
+    LANG_ENGLISH,
+    LANG_SPANISH,
+    current_language,
+    set_language,
+    tr,
+)
 from .models import LapLoader
 from .signals import SignalBus
 from .widgets import (
@@ -36,14 +45,6 @@ from .widgets import (
     TrackMapDock,
 )
 from .workspace_state import WorkspaceState
-from ..lfs_paths import QSETTINGS_APP as APP, QSETTINGS_ORG as ORG
-from .i18n import (
-    LANG_ENGLISH,
-    LANG_SPANISH,
-    current_language,
-    set_language,
-    tr,
-)
 
 # Bump when the dock layout changes so users don't restore a stale
 # (and possibly broken) geometry from a previous build.
@@ -364,6 +365,11 @@ class MainWindow(QMainWindow):
         from .widgets.help_dialog import HelpDialog
         dlg = HelpDialog(self)
         dlg.exec()
+
+    def _action_user_manual(self) -> None:
+        from .widgets.manual_dialog import ManualDialog
+        dlg = ManualDialog(self)
+        dlg.show()
 
     # ------------------------------------------------------------------
     # Public

@@ -16,7 +16,6 @@ toolbar so the user can match the convention of their team.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import pyqtgraph as pg
@@ -39,14 +38,18 @@ from ...telemetry.damper_histogram import (
     DamperHistogram,
     damper_histogram,
 )
+from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
-from ..i18n import tr
 from ..theme import (
     MUTED_COLOR,
     PANEL_COLOR,
     TEXT_COLOR,
+)
+from ..theme import (
     WHEEL_COLORS as _WHEEL_COLORS,
+)
+from ..theme import (
     WHEEL_GRID_LAYOUT as _GRID_LAYOUT,
 )
 
@@ -217,8 +220,8 @@ class DampersTab(QWidget):
         super().__init__(parent)
         self._loader = loader
         self._signals = signals
-        self._requested: List[Path] = []
-        self._loaded: Dict[Path, LapTelemetry] = {}
+        self._requested: list[Path] = []
+        self._loaded: dict[Path, LapTelemetry] = {}
         self._low_speed_mps = DEFAULT_LOW_SPEED_MPS
         self._bin_width_mps = DEFAULT_BIN_WIDTH_MPS
         self._max_abs_mps = DEFAULT_MAX_ABS_MPS
@@ -240,7 +243,7 @@ class DampersTab(QWidget):
         toolbar.addWidget(self._caption)
 
         # Grid of four histogram tiles, layout matches driver's view.
-        self._tiles: Dict[str, _WheelHistogramPlot] = {}
+        self._tiles: dict[str, _WheelHistogramPlot] = {}
         grid_widget = QWidget(self)
         grid = QGridLayout(grid_widget)
         grid.setContentsMargins(0, 0, 0, 0)
@@ -264,7 +267,7 @@ class DampersTab(QWidget):
     # Slots
     # ------------------------------------------------------------------
 
-    def _on_laps_selected(self, paths: List[Path]) -> None:
+    def _on_laps_selected(self, paths: list[Path]) -> None:
         self._requested = list(paths)
         keep = set(paths)
         self._loaded = {

@@ -1,12 +1,11 @@
 """In-app garage editor — the LFS F11 garage as a Qt form.
 
-This widget closes the loop between the Setup Advisor and the user's
-actual on-track setup. Workflow:
+This widget lets the user mirror in-app the setup actually loaded in
+LFS. Workflow:
 
 1. The user selects a lap on the left dock; we resolve the car and
-   load ``<car>_CAR_info.bin`` via the same path the Baseline tab and
-   the Advisor already use (:func:`load_car_info_bin_for`). The bin is
-   the *baseline* — it is whatever the user had in the LFS garage the
+   load ``<car>_CAR_info.bin`` via :func:`load_car_info_bin_for`. The
+   bin is the *baseline* — whatever the user had in the LFS garage the
    last time they exported it.
 2. We pre-fill every editable field with
    :func:`setup_overrides.from_baseline`, so the form opens on the
@@ -16,9 +15,6 @@ actual on-track setup. Workflow:
    commit (``Apply`` button or focus-out) we build a patched
    :class:`CarInfoBin` with :func:`setup_overrides.apply` and broadcast
    it through ``signals.setup_overrides_changed``.
-4. :class:`SetupAdvisorTab` listens to that signal and uses the patched
-   bin as its baseline when the user hits Recalculate, so its
-   recommendations are deltas from the *real* current setup.
 
 The form intentionally mirrors the LFS garage panels (Brakes,
 Suspension, Drivetrain, Tyres, Chassis) and uses display units the
@@ -36,7 +32,6 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import List
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -58,13 +53,15 @@ from ...telemetry.car_info_bin import CarInfoBin
 from ...telemetry.observables import load_car_info_bin_for
 from ...telemetry.setup_overrides import (
     SetupOverrides,
-    apply as apply_overrides,
     from_baseline,
 )
+from ...telemetry.setup_overrides import (
+    apply as apply_overrides,
+)
+from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
 from ..theme import MUTED_COLOR, TEXT_COLOR
-
 
 # Unit conversions (LFS internal SI ⇄ garage display).
 _KPA_PER_PSI = 6.894757293168361     # psi → kPa
@@ -117,7 +114,8 @@ class SetupEditorTab(QWidget):
 
         # ---------- Header / hint ------------------------------------
         self._hint = QLabel(
-            "Select a lap on the left to load the car's garage."
+            tr("Select a lap on the left to load the car's garage."),
+            self,
         )
         self._hint.setStyleSheet(f"color: {MUTED_COLOR};")
         self._hint.setWordWrap(True)
@@ -131,20 +129,24 @@ class SetupEditorTab(QWidget):
         self._gears_group = self._build_gears_group()
 
         # ---------- Buttons -----------------------------------------
-        self._apply_btn = QPushButton("Apply to Advisor")
+        self._apply_btn = QPushButton(tr("Apply overrides"))
         self._apply_btn.setToolTip(
-            "Send the current values to the Setup Advisor as its"
-            " baseline. Recommendations will be deltas from these"
-            " numbers instead of the raw CAR_info.bin export."
+            tr(
+                "Broadcast the current values as the active setup"
+                " override. Other tabs that consume CAR_info will see"
+                " these numbers instead of the raw on-disk export."
+            )
         )
         self._apply_btn.clicked.connect(self._on_apply_clicked)
-        self._reset_btn = QPushButton("Reset to imported")
+        self._reset_btn = QPushButton(tr("Reset to imported"))
         self._reset_btn.setToolTip(
-            "Re-read the values from the on-disk CAR_info.bin export"
-            " and discard local edits."
+            tr(
+                "Re-read the values from the on-disk CAR_info.bin"
+                " export and discard local edits."
+            )
         )
         self._reset_btn.clicked.connect(self._on_reset_clicked)
-        self._status = QLabel("")
+        self._status = QLabel("", self)
         self._status.setStyleSheet(f"color: {MUTED_COLOR};")
 
         toolbar = QHBoxLayout()
@@ -188,11 +190,11 @@ class SetupEditorTab(QWidget):
         self._brake_balance = _spin(0.0, 100.0, 0.5, 1, " % front")
         self._parallel_steer = _spin(0.0, 100.0, 1.0, 0, " %")
 
-        g = QGroupBox("Brakes &  steering")
+        g = QGroupBox(tr("Brakes & steering"))
         form = QFormLayout(g)
-        form.addRow("Max force", self._brake_strength)
-        form.addRow("Balance", self._brake_balance)
-        form.addRow("Parallel steer", self._parallel_steer)
+        form.addRow(tr("Max force"), self._brake_strength)
+        form.addRow(tr("Balance"), self._brake_balance)
+        form.addRow(tr("Parallel steer"), self._parallel_steer)
         self._brakes_group = g
 
     def _build_suspension_group(self) -> None:
@@ -211,18 +213,18 @@ class SetupEditorTab(QWidget):
         self._fr_arb = _spin(0.0, 500.0, 1.0, 1, " N/mm")
         self._rr_arb = _spin(0.0, 500.0, 1.0, 1, " N/mm")
 
-        g = QGroupBox("Suspension (per axle)")
+        g = QGroupBox(tr("Suspension (per axle)"))
         grid = QGridLayout(g)
         grid.addWidget(QLabel(""), 0, 0)
-        grid.addWidget(QLabel("<b>Front</b>"), 0, 1)
-        grid.addWidget(QLabel("<b>Rear</b>"), 0, 2)
+        grid.addWidget(QLabel(f"<b>{tr('Front')}</b>"), 0, 1)
+        grid.addWidget(QLabel(f"<b>{tr('Rear')}</b>"), 0, 2)
         rows = [
-            ("Camber", self._fr_camber, self._rr_camber),
-            ("Toe-in", self._fr_toe, self._rr_toe),
-            ("Spring rate", self._fr_spring, self._rr_spring),
-            ("Damper bump", self._fr_bump, self._rr_bump),
-            ("Damper rebound", self._fr_rebound, self._rr_rebound),
-            ("Anti-roll bar", self._fr_arb, self._rr_arb),
+            (tr("Camber"), self._fr_camber, self._rr_camber),
+            (tr("Toe-in"), self._fr_toe, self._rr_toe),
+            (tr("Spring rate"), self._fr_spring, self._rr_spring),
+            (tr("Damper bump"), self._fr_bump, self._rr_bump),
+            (tr("Damper rebound"), self._fr_rebound, self._rr_rebound),
+            (tr("Anti-roll bar"), self._fr_arb, self._rr_arb),
         ]
         for i, (lbl, fr, rr) in enumerate(rows, start=1):
             grid.addWidget(QLabel(lbl), i, 0)
@@ -234,11 +236,11 @@ class SetupEditorTab(QWidget):
         self._fr_press = _spin(5.0, 60.0, 0.1, 1, " psi")
         self._rr_press = _spin(5.0, 60.0, 0.1, 1, " psi")
 
-        g = QGroupBox("Tyres (per axle)")
+        g = QGroupBox(tr("Tyres (per axle)"))
         grid = QGridLayout(g)
-        grid.addWidget(QLabel("<b>Front</b>"), 0, 1)
-        grid.addWidget(QLabel("<b>Rear</b>"), 0, 2)
-        grid.addWidget(QLabel("Pressure"), 1, 0)
+        grid.addWidget(QLabel(f"<b>{tr('Front')}</b>"), 0, 1)
+        grid.addWidget(QLabel(f"<b>{tr('Rear')}</b>"), 0, 2)
+        grid.addWidget(QLabel(tr("Pressure")), 1, 0)
         grid.addWidget(self._fr_press, 1, 1)
         grid.addWidget(self._rr_press, 1, 2)
         self._tyres_group = g
@@ -247,17 +249,17 @@ class SetupEditorTab(QWidget):
         self._final_drive = _spin(1.0, 12.0, 0.01, 3, "")
         self._drive_eff = _spin(0.0, 100.0, 0.5, 1, " %")
         self._torque_split = _spin(0.0, 100.0, 1.0, 1, " % front")
-        g = QGroupBox("Drivetrain")
+        g = QGroupBox(tr("Drivetrain"))
         form = QFormLayout(g)
-        form.addRow("Final drive", self._final_drive)
-        form.addRow("Drivetrain efficiency", self._drive_eff)
-        form.addRow("Torque split (AWD)", self._torque_split)
+        form.addRow(tr("Final drive"), self._final_drive)
+        form.addRow(tr("Drivetrain efficiency"), self._drive_eff)
+        form.addRow(tr("Torque split (AWD)"), self._torque_split)
         self._drivetrain_group = g
 
     def _build_gears_group(self) -> QGroupBox:
         # The contents are rebuilt every time a baseline with a
         # different ``forward_gears`` is loaded.
-        g = QGroupBox("Gear ratios")
+        g = QGroupBox(tr("Gear ratios"))
         self._gears_layout = QFormLayout(g)
         return g
 
@@ -274,7 +276,7 @@ class SetupEditorTab(QWidget):
         self._gear_boxes = []
         for i in range(count):
             box = _spin(0.20, 10.0, 0.01, 3, "")
-            self._gears_layout.addRow(f"{i + 1}{_ordinal(i + 1)} gear", box)
+            self._gears_layout.addRow(tr("Gear {n}").format(n=i + 1), box)
             self._gear_boxes.append(box)
 
     def _build_chassis_group(self) -> None:
@@ -282,30 +284,32 @@ class SetupEditorTab(QWidget):
         self._passengers.setRange(0, 4)
         self._weight_dist = _spin(0.0, 100.0, 0.5, 1, " % front")
         self._fuel_capacity = _spin(0.0, 200.0, 0.5, 1, " L")
-        g = QGroupBox("Chassis  &  fuel")
+        g = QGroupBox(tr("Chassis & fuel"))
         form = QFormLayout(g)
-        form.addRow("Passengers / ballast", self._passengers)
-        form.addRow("Weight distribution", self._weight_dist)
-        form.addRow("Fuel tank capacity", self._fuel_capacity)
+        form.addRow(tr("Passengers / ballast"), self._passengers)
+        form.addRow(tr("Weight distribution"), self._weight_dist)
+        form.addRow(tr("Fuel tank capacity"), self._fuel_capacity)
         self._chassis_group = g
 
     # ------------------------------------------------------------------
     # Lap selection lifecycle
     # ------------------------------------------------------------------
 
-    def _on_laps_selected(self, paths: List[Path]) -> None:
+    def _on_laps_selected(self, paths: list[Path]) -> None:
         self._first_lap = None
         self._first_path = paths[0] if paths else None
         if not paths:
             self._car_key = ""
             self._baseline = None
             self._hint.setText(
-                "Select a lap on the left to load the car's garage."
+                tr("Select a lap on the left to load the car's garage.")
             )
             self._set_enabled(False)
             return
         self._loader.request(paths[0])
-        self._hint.setText(f"Loading garage for {paths[0].name}…")
+        self._hint.setText(
+            tr("Loading garage for {name}\u2026").format(name=paths[0].name)
+        )
 
     def _on_lap_loaded(self, path: Path, lap: LapTelemetry) -> None:
         if path != self._first_path:
@@ -316,7 +320,7 @@ class SetupEditorTab(QWidget):
             car_key = str(lap.summary.get("car") or "").upper().strip()
         if not car_key:
             self._hint.setText(
-                "Lap has no car id in its summary — cannot load garage."
+                tr("Lap has no car id in its summary \u2014 cannot load garage.")
             )
             self._baseline = None
             self._car_key = ""
@@ -325,9 +329,11 @@ class SetupEditorTab(QWidget):
         baseline = load_car_info_bin_for(car_key)
         if baseline is None:
             self._hint.setText(
-                f"No <code>{car_key}_CAR_info.bin</code> found on the"
-                f" search path. Use <b>Import from LFS folder…</b> on"
-                f" the Baseline tab first."
+                tr(
+                    "No <code>{key}_CAR_info.bin</code> found on the"
+                    " search path. Use <b>Import from LFS folder\u2026</b>"
+                    " on the Baseline tab first."
+                ).format(key=car_key)
             )
             self._baseline = None
             self._car_key = car_key
@@ -336,9 +342,12 @@ class SetupEditorTab(QWidget):
         self._car_key = car_key
         self._baseline = baseline
         self._hint.setText(
-            f"<b>{car_key}</b> — loaded from"
-            f" <code>{car_key}_CAR_info.bin</code>. Edit any field"
-            f" and press <b>Apply to Advisor</b> to use it as baseline."
+            tr(
+                "<b>{key}</b> \u2014 loaded from"
+                " <code>{key}_CAR_info.bin</code>. Edit any field and"
+                " press <b>Apply overrides</b> to publish it as the"
+                " active setup."
+            ).format(key=car_key)
         )
         self._populate_from(from_baseline(baseline), baseline.forward_gears)
         self._set_enabled(True)
@@ -440,10 +449,10 @@ class SetupEditorTab(QWidget):
         try:
             patched = apply_overrides(self._baseline, self._collect())
         except ValueError as exc:
-            self._status.setText(f"Invalid setup: {exc}")
+            self._status.setText(tr("Invalid setup: {error}").format(error=exc))
             return
         self._status.setText(
-            "Applied to Advisor — recalculate to use new baseline."
+            tr("Overrides applied \u2014 other tabs will use the new values.")
         )
         self._signals.setup_overrides_changed.emit(self._car_key, patched)
 
@@ -453,8 +462,8 @@ class SetupEditorTab(QWidget):
         self._populate_from(
             from_baseline(self._baseline), self._baseline.forward_gears,
         )
-        self._status.setText("Reset to imported CAR_info.bin values.")
-        # Broadcast a None so the advisor falls back to the raw bin.
+        self._status.setText(tr("Reset to imported CAR_info.bin values."))
+        # Broadcast a None so listeners fall back to the raw bin.
         self._signals.setup_overrides_changed.emit(self._car_key, None)
 
     # ------------------------------------------------------------------
@@ -469,12 +478,6 @@ class SetupEditorTab(QWidget):
             g.setEnabled(enabled)
         self._apply_btn.setEnabled(enabled)
         self._reset_btn.setEnabled(enabled)
-
-
-def _ordinal(n: int) -> str:
-    if 10 <= n % 100 <= 20:
-        return "th"
-    return {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
 
 
 __all__ = ["SetupEditorTab"]

@@ -34,13 +34,10 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 
+from ..constants import GRAVITY
 from .enrich import TrackSegment
 from .knw import KnwInfo
 from .pth import TrackProfile
-
-
-GRAVITY = 9.81
-
 
 # ---------------------------------------------------------------------------
 # Track edges
@@ -221,10 +218,7 @@ def compute_geometric_line(
     # Linear interpolation across NaN gaps over the s axis.
     s = profile.s
     finite = ~np.isnan(target_offset)
-    if finite.sum() < 2:
-        offsets = np.zeros(n)
-    else:
-        offsets = np.interp(s, s[finite], target_offset[finite])
+    offsets = np.zeros(n) if finite.sum() < 2 else np.interp(s, s[finite], target_offset[finite])
 
     # Smooth to remove kinks (units = nodes, not metres).
     if smooth_nodes > 0:

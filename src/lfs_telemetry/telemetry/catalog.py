@@ -16,9 +16,10 @@ so cost is O(1) per file regardless of size.
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass, asdict
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .replay import detect_schema_version
 

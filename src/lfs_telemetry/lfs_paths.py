@@ -25,9 +25,11 @@ from PySide6.QtCore import QSettings
 
 from .lfs_config import (
     cfg_path_for,
-    is_valid_lfs_dir as _is_valid_lfs_dir,
     lfs_data_dir,
     lfs_setups_dir,
+)
+from .lfs_config import (
+    is_valid_lfs_dir as _is_valid_lfs_dir,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -243,7 +245,7 @@ def car_info_bin_path(lfs_dir: Path, car_key: str) -> Path:
 # ---------------------------------------------------------------------------
 
 def ask_for_lfs_dir(
-    parent: "QWidget | None" = None,
+    parent: QWidget | None = None,
     *,
     initial: Path | None = None,
     persist: bool = True,
@@ -276,7 +278,7 @@ def ask_for_lfs_dir(
 
 
 def require_lfs_dir(
-    parent: "QWidget | None" = None,
+    parent: QWidget | None = None,
     *,
     allow_autodetect: bool = True,
 ) -> Path | None:

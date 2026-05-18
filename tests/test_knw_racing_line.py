@@ -8,10 +8,8 @@ import pytest
 
 from lfs_telemetry.telemetry.track.knw import (
     DEFAULT_KNW_DIR,
-    HEADER_SIZE,
     KNW_MAGIC,
     KNW_VERSION,
-    RECORD_SIZE,
     load_for,
     parse_knw_bytes,
 )
@@ -24,7 +22,6 @@ from lfs_telemetry.telemetry.track.racing_line import (
     RacingLine,
     compute_knw_line,
 )
-
 
 # ---------------------------------------------------------------------------
 # Synthetic profile + knw builder

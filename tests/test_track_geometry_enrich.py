@@ -9,7 +9,6 @@ from lfs_telemetry.telemetry.derived import enrich_dataframe
 from lfs_telemetry.telemetry.observables import car_spec_for
 from lfs_telemetry.telemetry.track import loader as tg_loader
 
-
 # ---------------------------------------------------------------------------
 # Synthetic racing-line CSV fixture
 # ---------------------------------------------------------------------------

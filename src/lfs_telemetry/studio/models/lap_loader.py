@@ -28,7 +28,7 @@ class _LoaderTask(QRunnable):
 
     def __init__(
         self,
-        loader: "LapLoader",
+        loader: LapLoader,
         path: Path,
     ) -> None:
         super().__init__()

@@ -19,7 +19,6 @@ pytest.importorskip("pyqtgraph")
 # Windows agents without a display server.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from lfs_telemetry.studio.app import create_app  # noqa: E402
 from lfs_telemetry.studio.main_window import MainWindow  # noqa: E402

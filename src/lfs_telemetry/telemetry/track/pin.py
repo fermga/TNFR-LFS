@@ -24,9 +24,9 @@ Coordinate system matches OutSim and PTH: X east, Y north, Z up.
 from __future__ import annotations
 
 import struct
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path as _Path
-from typing import Iterable
 
 from .pth import DEFAULT_SMX_DIR, FIXED_POINT_DIVISOR
 

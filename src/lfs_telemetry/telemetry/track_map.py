@@ -11,9 +11,9 @@ Only :mod:`numpy` and :mod:`pandas` are imported.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path as _FsPath
-from typing import Iterable, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -21,7 +21,7 @@ import pandas as pd
 from .comparison import _unwrapped_lap_arrays
 from .lap import LapTelemetry
 
-PthLike = Union[str, _FsPath]
+PthLike = str | _FsPath
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ class TrackMap:
         lap: LapTelemetry,
         *,
         n_points: int = 1000,
-    ) -> "TrackMap":
+    ) -> TrackMap:
         """Build from one lap (resampled to ``n_points`` along distance)."""
         d_grid, x, y = _xy_along_distance(lap, n_points)
         track = lap.summary.get("track")
@@ -77,7 +77,7 @@ class TrackMap:
         laps: Iterable[LapTelemetry],
         *,
         n_points: int = 1000,
-    ) -> "TrackMap":
+    ) -> TrackMap:
         """Average X/Y across multiple laps on the same distance grid.
 
         Laps with mismatched lengths are clipped to the shortest common
@@ -124,11 +124,11 @@ class TrackMap:
     @classmethod
     def from_pth(
         cls,
-        track: str | "PthLike",
+        track: str | PthLike,
         *,
-        smx_dir: "PthLike | None" = None,
+        smx_dir: PthLike | None = None,
         n_points: int | None = None,
-    ) -> "TrackMap":
+    ) -> TrackMap:
         """Build the canonical centreline from an LFS PTH file.
 
         This is the **ground truth** geometry shipped with LFS. Use it
@@ -149,8 +149,8 @@ class TrackMap:
         """
         # Local import so the telemetry sub-package keeps no hard
         # runtime dependency on the LFS install.
-        from .track.pth import (DEFAULT_SMX_DIR, Path as PthPath,
-                                TrackProfile, compute_profile, parse_pth)
+        from .track.pth import DEFAULT_SMX_DIR, TrackProfile, compute_profile, parse_pth
+        from .track.pth import Path as PthPath
 
         profile: TrackProfile
         if isinstance(track, TrackProfile):

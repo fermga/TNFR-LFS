@@ -7,11 +7,13 @@ import numpy as np
 import pytest
 
 from lfs_telemetry.telemetry.track import geom3d
-from lfs_telemetry.telemetry.track.smx import (
-    DEFAULT_SMX_DIR, SmxMesh, SmxObject, parse_smx,
-)
 from lfs_telemetry.telemetry.track.pth import TrackProfile
-
+from lfs_telemetry.telemetry.track.smx import (
+    DEFAULT_SMX_DIR,
+    SmxMesh,
+    SmxObject,
+    parse_smx,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers: synthetic meshes

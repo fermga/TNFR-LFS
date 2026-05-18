@@ -21,7 +21,7 @@ the live publisher and any future report.
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 CLEAN_THRESHOLD = 1.03
 

@@ -8,9 +8,8 @@ import pandas as pd
 import pytest
 
 from lfs_telemetry.telemetry import LapTelemetry, StintTelemetry
-from lfs_telemetry.telemetry.protocol.packets import WHEEL_ORDER
+from lfs_telemetry.telemetry.protocol.packets import WHEEL_ORDER, CompCar
 from lfs_telemetry.telemetry.traffic import _build_snapshot
-from lfs_telemetry.telemetry.protocol.packets import CompCar
 
 
 def _synthetic_lap_df(

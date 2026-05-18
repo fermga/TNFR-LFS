@@ -17,15 +17,17 @@ Design notes
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import math
 import os
 import re
 import tempfile
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .lap_averages import compute_lap_averages
 from .protocol.insim import RaceContext
@@ -441,10 +443,8 @@ def write_snapshot_atomic(path: Path, snap: dict[str, Any]) -> None:
         # FILE_SHARE_DELETE, antivirus locking, etc.) become diagnosable
         # without flooding stderr. Missing one snapshot frame is not
         # fatal; the next ~100 ms tick retries naturally.
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_name)
-        except OSError:
-            pass
         if last_exc is not None:
             _LOG.debug(
                 "live snapshot atomic replace failed after retries: %s",
@@ -452,10 +452,8 @@ def write_snapshot_atomic(path: Path, snap: dict[str, Any]) -> None:
             )
             return
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_name)
-        except OSError:
-            pass
         raise
 
 

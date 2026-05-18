@@ -25,9 +25,9 @@ from __future__ import annotations
 import json
 import os
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from .protocol.packets import _STOCK_CARS
 
@@ -52,7 +52,7 @@ STOCK_CARS: frozenset[str] = _STOCK_CARS
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[3]
 _LOCK = threading.RLock()
-_MODS: dict[str, "ModInfo"] = {}
+_MODS: dict[str, ModInfo] = {}
 _LOADED = False
 
 

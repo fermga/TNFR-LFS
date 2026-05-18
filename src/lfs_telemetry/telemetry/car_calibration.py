@@ -16,12 +16,13 @@ import json
 import logging
 import os
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
+from .constants import GRAVITY
 from .live import TelemetrySample
-from .observables import CarSpec, _CAR_SPECS
+from .observables import _CAR_SPECS, CarSpec
 
 _LOG = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class CarCalibration:
         return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> "CarCalibration":
+    def from_dict(cls, data: dict) -> CarCalibration:
         return cls(
             car_id=str(data["car_id"]).upper(),
             mass_kg=float(data["mass_kg"]),
@@ -164,13 +165,13 @@ class CarSpecStore:
             return
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, json.JSONDecodeError) as exc:
             _LOG.warning("could not read %s: %s", self.path, exc)
             return
         for cid, data in (raw.get("cars") or {}).items():
             try:
                 self._cache[cid.upper()] = CarCalibration.from_dict(data)
-            except Exception as exc:  # noqa: BLE001
+            except (KeyError, TypeError, ValueError) as exc:
                 _LOG.warning("skipping invalid entry %s: %s", cid, exc)
 
     def save(self) -> None:
@@ -221,9 +222,9 @@ class CarSpecStore:
         calibration; if none exists, generic placeholders are stored so
         that μ values can still be queried via :meth:`spec_for`.
         """
-        from .calibrate import (estimate_mu_lat, estimate_mu_lat_curve,
-                                estimate_mu_long)
         import math
+
+        from .calibrate import estimate_mu_lat, estimate_mu_lat_curve, estimate_mu_long
 
         mu0, k_aero, n_bins = estimate_mu_lat_curve(df)
         mu_lat = mu0 if math.isfinite(mu0) else estimate_mu_lat(df)
@@ -284,8 +285,8 @@ def _rest_failure(samples: Iterable[TelemetrySample]) -> str | None:
 
 def _measure(samples: list[TelemetrySample], car_id: str) -> CarCalibration:
     """Average the four wheel loads across the window into a calibration."""
-    from ..telemetry.protocol.packets import WHEEL_ORDER
     from ..telemetry.observables import CORNERS
+    from ..telemetry.protocol.packets import WHEEL_ORDER
 
     # Map LFS native order (RL,RR,FL,FR) into FL/FR/RL/RR.
     idx = {name: WHEEL_ORDER.index(name) for name in CORNERS}
@@ -304,10 +305,9 @@ def _measure(samples: list[TelemetrySample], car_id: str) -> CarCalibration:
     total = sum(means.values())
     front = means["FL"] + means["FR"]
     left = means["FL"] + means["RL"]
-    g = 9.81
     return CarCalibration(
         car_id=car_id.strip().upper(),
-        mass_kg=total / g,
+        mass_kg=total / GRAVITY,
         weight_dist_front=front / total if total > 0 else 0.5,
         sample_count=n,
         sum_load_n=total,

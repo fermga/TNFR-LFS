@@ -1,9 +1,9 @@
 """Shared helper: bulk-import ``*_CAR_info.bin`` from the user's LFS install.
 
-Both :mod:`setup_tab` and :mod:`setup_advisor_tab` expose an "Import from
-LFS folder…" button that calls into this helper. The LFS install folder
-is resolved through :mod:`lfs_paths` (single source of truth across the
-app), so this module no longer touches ``QSettings`` directly.
+The :mod:`setup_tab` exposes an "Import from LFS folder…" button that
+calls into this helper. The LFS install folder is resolved through
+:mod:`lfs_paths` (single source of truth across the app), so this
+module no longer touches ``QSettings`` directly.
 
 It also exposes :func:`launch_lfs_programmer_mode`, a one-click helper
 that spawns ``LFS.exe /prog`` so the user can save the bin from inside

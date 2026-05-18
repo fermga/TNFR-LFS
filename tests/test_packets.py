@@ -19,7 +19,7 @@ def _make_outsim(time_ms: int = 1234) -> bytes:
         0.1, 0.02, -0.03,             # heading, pitch, roll
         2.0, 1.5, 9.81,               # accel (long, lat, vert)
         25.0, 0.0, 0.0,               # vel
-        int(100 * 65536), int(50 * 65536), int(0),  # pos
+        int(100 * 65536), int(50 * 65536), 0,  # pos
     )
 
 
@@ -80,11 +80,11 @@ from lfs_telemetry.telemetry.protocol.packets import (  # noqa: E402
     ISP_STA,
     OSO_ALL,
     OUTSIMPACK2_FULL_SIZE,
-    OutSimPack2,
+    WHEEL_ORDER,
     InSimLap,
     InSimNewPlayer,
     InSimState,
-    WHEEL_ORDER,
+    OutSimPack2,
     outsim2_size,
 )
 

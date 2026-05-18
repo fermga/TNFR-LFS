@@ -38,7 +38,6 @@ Example::
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -55,7 +54,7 @@ class SplitPredictor:
     """
 
     n_splits: int
-    best_lap_ms: Optional[int] = None
+    best_lap_ms: int | None = None
     best_segments_ms: dict[int, int] = field(default_factory=dict)
     # Transient buffer for the lap underway: cumulative split times.
     _current_splits_ms: dict[int, int] = field(default_factory=dict)
@@ -110,13 +109,13 @@ class SplitPredictor:
     # Derived metrics
     # ------------------------------------------------------------------
 
-    def spb_ms(self) -> Optional[int]:
+    def spb_ms(self) -> int | None:
         """Sum of personal-best segments. ``None`` if any is missing."""
         if len(self.best_segments_ms) != self.n_segments:
             return None
         return int(sum(self.best_segments_ms.values()))
 
-    def best_cumulative_at_split(self, split_idx: int) -> Optional[int]:
+    def best_cumulative_at_split(self, split_idx: int) -> int | None:
         """SPB-cumulative time at the end of segment ``split_idx``."""
         if split_idx < 1 or split_idx > self.n_segments:
             return None
@@ -133,7 +132,7 @@ class SplitPredictor:
         *,
         elapsed_ms: int,
         last_split_idx: int,
-    ) -> Optional[int]:
+    ) -> int | None:
         """Project the lap currently underway.
 
         ``last_split_idx`` is the index of the most recently completed
@@ -173,7 +172,7 @@ class SplitPredictor:
         *,
         elapsed_ms: int,
         last_split_idx: int,
-    ) -> Optional[int]:
+    ) -> int | None:
         """Live delta to the personal best at the same point in lap.
 
         Positive = slower than PB, negative = faster.
@@ -212,7 +211,7 @@ class SplitPredictor:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "SplitPredictor":
+    def from_dict(cls, data: dict) -> SplitPredictor:
         return cls(
             n_splits=int(data["n_splits"]),
             best_lap_ms=(int(data["best_lap_ms"])

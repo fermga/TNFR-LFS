@@ -1,8 +1,8 @@
 """Pilot diagnostics: ¿hay señal física accionable en un stint?
 
-Carga las 5 vueltas sintéticas BL1/FBM, las enriquece con la pipeline
-existente y aplica 8 heurísticas vehiculares sin TNFR. Salida: un
-veredicto que decide si vale la pena construir el advisor TNFR.
+Carga 5 vueltas sintéticas, las enriquece con la pipeline existente y
+aplica 8 heurísticas vehiculares puramente físicas. Salida: un
+veredicto que decide si el stint contiene señales accionables.
 """
 
 from __future__ import annotations
@@ -393,8 +393,7 @@ def main() -> int:
     n_border = len(borderlines)
     print(f"  Findings: {n_flag} FLAGS, {n_border} borderline")
     if n_flag >= 3 and "1_consistency" not in borderlines:
-        print("  -> GO: 3+ accionables, stint consistente. TNFR engine añadiría "
-              "priorización + gramática + delta numérico al setup.")
+        print("  -> GO: 3+ accionables, stint consistente.")
         return 0
     if n_flag >= 1:
         print("  -> CAUTIOUS GO: pocas señales; las sintéticas dan margen estrecho. "

@@ -18,7 +18,6 @@ from __future__ import annotations
 import csv
 import sys
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import pyqtgraph as pg
@@ -46,8 +45,8 @@ class TrackMapDock(QWidget):
         self._loader = loader
         self._signals = signals
         self._axis_kind = "distance"
-        self._maps: Dict[Path, TrackMap] = {}
-        self._loaded_laps: Dict[Path, LapTelemetry] = {}
+        self._maps: dict[Path, TrackMap] = {}
+        self._loaded_laps: dict[Path, LapTelemetry] = {}
         self._anchor_map: TrackMap | None = None  # for cursor dot
 
         self._plot = pg.PlotWidget(self)
@@ -95,17 +94,17 @@ class TrackMapDock(QWidget):
         )
 
         # Per-lap polyline items, keyed by capture path.
-        self._lines: Dict[Path, pg.PlotDataItem] = {}
+        self._lines: dict[Path, pg.PlotDataItem] = {}
 
         # Reference racing line (ideal line from racing_lines/<TRACK>).
         self._rline_item: pg.PlotDataItem | None = None
         self._apex_item: pg.ScatterPlotItem | None = None
-        self._rline_cache: Dict[str, tuple] = {}
+        self._rline_cache: dict[str, tuple] = {}
         self._current_track: str | None = None
 
         # Per-car KNW AI line overlay.
         self._knw_item: pg.PlotDataItem | None = None
-        self._knw_cache: Dict[tuple, np.ndarray | None] = {}
+        self._knw_cache: dict[tuple, np.ndarray | None] = {}
         self._current_car: str | None = None
 
         layout = QVBoxLayout(self)
@@ -139,7 +138,7 @@ class TrackMapDock(QWidget):
     # Slots
     # ------------------------------------------------------------------
 
-    def _on_laps_selected(self, paths: List[Path]) -> None:
+    def _on_laps_selected(self, paths: list[Path]) -> None:
         wanted = {Path(p) for p in paths}
         # Drop maps for laps no longer selected.
         for p in list(self._maps):
@@ -389,8 +388,8 @@ class TrackMapDock(QWidget):
             self._knw_cache[key] = None
             return None
         try:
-            from ...telemetry.track.pth import compute_profile
             from ...telemetry.track.knw import parse_knw
+            from ...telemetry.track.pth import compute_profile
             from ...telemetry.track.racing_line import compute_knw_line
             profile = compute_profile(pth_path)
             knw = parse_knw(knw_path)

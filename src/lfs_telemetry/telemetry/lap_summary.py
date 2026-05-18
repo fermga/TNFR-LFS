@@ -29,11 +29,11 @@ from typing import Any
 
 from .protocol.insim import RaceContext
 from .protocol.packets import (
+    PENALTY_NONE,
     InSimHotLapValid,
     InSimObjectHit,
     hlvc_name,
     penalty_name,
-    PENALTY_NONE,
 )
 
 

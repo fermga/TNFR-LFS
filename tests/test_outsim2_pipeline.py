@@ -4,20 +4,20 @@ from __future__ import annotations
 
 import struct
 
-from lfs_telemetry.telemetry.live import _PendingByTime, _outsim2_to_basic
+from lfs_telemetry.telemetry.live import _outsim2_to_basic, _PendingByTime
+from lfs_telemetry.telemetry.observables import car_spec_for, observe_sample
+from lfs_telemetry.telemetry.protocol.insim import RaceContext
+from lfs_telemetry.telemetry.protocol.packets import (
+    OSO_ALL,
+    WHEEL_ORDER,
+    OutSimPack2,
+    OutSimPacket,
+    outsim2_size,
+)
 from lfs_telemetry.telemetry.replay import (
     _row_to_sample,
     _sample_to_row,
 )
-from lfs_telemetry.telemetry.protocol.packets import (
-    OSO_ALL,
-    OutSimPack2,
-    OutSimPacket,
-    WHEEL_ORDER,
-    outsim2_size,
-)
-from lfs_telemetry.telemetry.protocol.insim import RaceContext
-from lfs_telemetry.telemetry.observables import car_spec_for, observe_sample
 
 
 def _build_outsim2_full(time_ms: int = 5000) -> bytes:
@@ -32,7 +32,7 @@ def _build_outsim2_full(time_ms: int = 5000) -> bytes:
         0.0, 0.0, 0.0,
         2.0, 0.5, 9.81,
         25.0, 0.0, 0.0,
-        int(0 * 65536), int(0 * 65536), int(0),
+        int(0 * 65536), int(0 * 65536), 0,
     ))
     # INPUTS: 5f
     parts.append(struct.pack("<5f", 0.7, 0.0, 0.05, 0.0, 0.0))
@@ -124,7 +124,7 @@ def test_observe_sample_uses_real_wheel_loads() -> None:
     spec = car_spec_for("FOX")
     obs = observe_sample(sample, spec)
     # Expected mapping: WHEEL_ORDER[i]=("RL","RR","FL","FR")
-    expected = dict(zip(WHEEL_ORDER, [w.vertical_load_n for w in pkt2.wheels]))
+    expected = dict(zip(WHEEL_ORDER, [w.vertical_load_n for w in pkt2.wheels], strict=True))
     for c in ("FL", "FR", "RL", "RR"):
         assert obs.corner_load_n[c] == expected[c]
 
@@ -162,8 +162,8 @@ def test_csv_roundtrip_preserves_wheels_and_context() -> None:
     assert parsed.outsim2.wheels is not None
     assert len(parsed.outsim2.wheels) == 4
     # Verify a known wheel value survived the roundtrip.
-    original = dict(zip(WHEEL_ORDER, pkt2.wheels))
-    restored = dict(zip(WHEEL_ORDER, parsed.outsim2.wheels))
+    original = dict(zip(WHEEL_ORDER, pkt2.wheels, strict=True))
+    restored = dict(zip(WHEEL_ORDER, parsed.outsim2.wheels, strict=True))
     for c in WHEEL_ORDER:
         assert restored[c].vertical_load_n == original[c].vertical_load_n
         assert restored[c].slip_ratio == original[c].slip_ratio

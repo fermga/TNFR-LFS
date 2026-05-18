@@ -18,8 +18,8 @@ trend across the stint (warm-up vs heat soak).
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -29,16 +29,20 @@ from PySide6.QtGui import QPen
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ...telemetry import LapTelemetry, StintTelemetry
+from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
-from ..i18n import tr
 from ..theme import (
     MUTED_COLOR,
     PANEL_COLOR,
     TEXT_COLOR,
-    WHEEL_COLORS as _WHEEL_COLORS,
-    WHEEL_ORDER_UI as _UI_WHEEL_ORDER,
     trace_color,
+)
+from ..theme import (
+    WHEEL_COLORS as _WHEEL_COLORS,
+)
+from ..theme import (
+    WHEEL_ORDER_UI as _UI_WHEEL_ORDER,
 )
 from ._format import format_lap_time_s, format_signed_delta_s
 
@@ -79,8 +83,8 @@ class StintTab(QWidget):
         super().__init__(parent)
         self._loader = loader
         self._signals = signals
-        self._requested: List[Path] = []
-        self._loaded: Dict[Path, LapTelemetry] = {}
+        self._requested: list[Path] = []
+        self._loaded: dict[Path, LapTelemetry] = {}
 
         # Header summary
         self._summary = QLabel(tr("No laps selected."), self)
@@ -127,7 +131,7 @@ class StintTab(QWidget):
 
         # Items recreated each refresh; tracked so we can clear them.
         self._mean_line: pg.InfiniteLine | None = None
-        self._dyn_items: List[pg.GraphicsObject] = []
+        self._dyn_items: list[pg.GraphicsObject] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -143,7 +147,7 @@ class StintTab(QWidget):
     # Slots
     # ------------------------------------------------------------------
 
-    def _on_laps_selected(self, paths: List[Path]) -> None:
+    def _on_laps_selected(self, paths: list[Path]) -> None:
         self._requested = list(paths)
         keep = set(paths)
         self._loaded = {
@@ -167,7 +171,7 @@ class StintTab(QWidget):
     # Rendering
     # ------------------------------------------------------------------
 
-    def _all_plots(self) -> List[pg.PlotItem]:
+    def _all_plots(self) -> list[pg.PlotItem]:
         return [self._p_times, self._p_fuel, self._p_tyre,
                 self._p_susp, self._p_friction, self._p_grip,
                 self._p_damper]
@@ -175,24 +179,18 @@ class StintTab(QWidget):
     def _clear_plots(self) -> None:
         for it in self._dyn_items:
             for plot in self._all_plots():
-                try:
+                with contextlib.suppress(Exception):
                     plot.removeItem(it)
-                except Exception:  # noqa: BLE001
-                    pass
         self._dyn_items.clear()
         if self._mean_line is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._p_times.removeItem(self._mean_line)
-            except Exception:  # noqa: BLE001
-                pass
             self._mean_line = None
         for plot in self._all_plots():
             legend = plot.legend
             if legend is not None:
-                try:
+                with contextlib.suppress(Exception):
                     legend.scene().removeItem(legend)
-                except Exception:  # noqa: BLE001
-                    pass
                 plot.legend = None
 
     def _reset(self) -> None:
@@ -246,7 +244,7 @@ class StintTab(QWidget):
             )
 
         # Line 2 — fuel + Gs.
-        line2: List[str] = []
+        line2: list[str] = []
         if "fuel_pct_used" in df.columns:
             total = float(df["fuel_pct_used"].fillna(0.0).sum())
             line2.append(f"fuel total <b>{total:.2f}</b> %")
@@ -282,7 +280,7 @@ class StintTab(QWidget):
         # Line 3 — per-wheel tyre temperature trend across the stint
         # (last lap end vs first lap end). Positive = heat soak, negative
         # = tyres cooled down (e.g. wet patch, slowing pace).
-        line3: List[str] = []
+        line3: list[str] = []
         if len(df) >= 2:
             for c in _UI_WHEEL_ORDER:
                 col = f"tyre_temp_end_c_{c}"
@@ -300,7 +298,7 @@ class StintTab(QWidget):
         )
 
         # Line 4 — grip index summary per wheel and degradation slope.
-        line4: List[str] = []
+        line4: list[str] = []
         for c in _UI_WHEEL_ORDER:
             g_col = f"grip_idx_{c}"
             if g_col not in df.columns:
@@ -520,7 +518,7 @@ class StintTab(QWidget):
         plot.getViewBox().autoRange()
 
     def _render_dampers(
-        self, df, ordered: List[LapTelemetry],
+        self, df, ordered: list[LapTelemetry],
     ) -> None:
         """Per-lap RMS damper shaft speed per wheel (mm/s).
 
@@ -532,11 +530,11 @@ class StintTab(QWidget):
         plot = self._p_damper
         plot.addLegend(offset=(8, 4), labelTextColor=TEXT_COLOR)
         # Build a {lap_index: {wheel: rms_mm_s}} table.
-        per_lap_rms: Dict[int, Dict[str, float]] = {}
+        per_lap_rms: dict[int, dict[str, float]] = {}
         for lap in ordered:
             idx = int(lap.summary.get("lap_index", 0))
             raw = lap.raw
-            row: Dict[str, float] = {}
+            row: dict[str, float] = {}
             for c in _UI_WHEEL_ORDER:
                 col = f"wheel_{c}_susp_speed_mps"
                 if col not in raw.columns:

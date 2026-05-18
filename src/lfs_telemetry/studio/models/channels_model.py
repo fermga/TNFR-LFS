@@ -14,14 +14,13 @@ so the chart dock can subscribe directly to ``itemChanged``.
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
 
 from ...telemetry import ChannelInfo, channels_by_group
 from ..i18n import current_language, tr
-
 
 # Display order matches the Dash viewer for muscle memory continuity.
 _GROUP_ORDER: tuple[str, ...] = (

@@ -17,9 +17,9 @@ Output: ``assets/synthetic_<TRACK>_<CAR>_v2_lap0N.csv`` for N=1..laps.
 
 This is a *physics-lite simulator*: the goal is to produce telemetry whose
 derived quantities (friction_use_<c>, understeer_index, susp_speed_mps PSD)
-behave like real data so the TNFR Setup Advisor pilot/tests have a credible
-fixture. It is NOT a vehicle-dynamics engine — slip curves are linearised,
-the engine is a torque-by-gear table, and the driver is a v-target PID.
+behave like real data so downstream tests have a credible fixture. It is
+NOT a vehicle-dynamics engine — slip curves are linearised, the engine is
+a torque-by-gear table, and the driver is a v-target PID.
 """
 from __future__ import annotations
 
@@ -36,10 +36,11 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from lfs_telemetry.telemetry.observables import CarSpec, car_spec_for  # noqa: E402
 from lfs_telemetry.telemetry.lap import LapTelemetry  # noqa: E402
+from lfs_telemetry.telemetry.constants import GRAVITY  # noqa: E402
 
 WHEEL_ORDER = ("RL", "RR", "FL", "FR")
 DT = 0.01  # 100 Hz fixed-step
-GRAV = 9.81
+GRAV = GRAVITY
 
 # Suspension natural frequency / damping per corner (typical race-tuned setup).
 SUSP_FN_HZ = 2.5

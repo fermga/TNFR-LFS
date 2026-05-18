@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 from pandas.errors import PerformanceWarning
 
+from .constants import GRAVITY as GRAVITY_MS2  # re-export for back-compat
 from .observables import CarSpec, car_spec_for
 from .protocol.packets import (
     DL_ABS,
@@ -51,9 +52,6 @@ from .protocol.packets import (
     WHEEL_ORDER,
 )
 from .track.loader import cached_track_geometry
-
-GRAVITY_MS2 = 9.80665
-
 
 _DASH_LIGHT_COLS: tuple[tuple[int, str], ...] = (
     (DL_SHIFT,     "dl_shift_light"),
@@ -114,6 +112,7 @@ def enrich_dataframe(
         _add_ffb(out, ffb_max_torque_nm)
         _add_smoothness(out, smoothness_window_s)
         _add_gear_lfs(out)
+        _add_combined_channels(out, spec, smoothness_window_s)
         _add_track_geometry(out)
     return out.copy()
 
@@ -222,9 +221,12 @@ def _add_friction_circle(df: pd.DataFrame, spec: CarSpec) -> None:
     speed = df["speed_ms"] if "speed_ms" in df.columns else None
     for c in WHEEL_ORDER:
         fz_col = f"wheel_{c}_vertical_load_n"
-        fx_col = f"wheel_{c}_y_force_n"   # y_force = longitudinal in LFS car frame
-        fy_col = f"wheel_{c}_x_force_n"   # x_force = lateral
-        if not _has(df, fz_col, fx_col, fy_col):
+        # Note: LFS stores wheel forces in the wheel's local frame with axes
+        # swapped relative to the car frame: y_force == longitudinal,
+        # x_force == lateral. We expose them with engineering-friendly names.
+        f_long_col = f"wheel_{c}_y_force_n"
+        f_lat_col = f"wheel_{c}_x_force_n"
+        if not _has(df, fz_col, f_long_col, f_lat_col):
             continue
         fz = df[fz_col].clip(lower=1.0)
         # Treat <50 N (effectively airborne) as missing to avoid spikes.
@@ -236,8 +238,8 @@ def _add_friction_circle(df: pd.DataFrame, spec: CarSpec) -> None:
         else:
             mu_l = pd.Series(spec.mu_lat, index=df.index)
         mu_x = spec.mu_long
-        fx_norm = df[fx_col] / (mu_x * fz)
-        fy_norm = df[fy_col] / (mu_l * fz)
+        fx_norm = df[f_long_col] / (mu_x * fz)
+        fy_norm = df[f_lat_col] / (mu_l * fz)
         use = np.sqrt(fx_norm**2 + fy_norm**2)
         df[f"friction_use_{c}"] = use.where(~airborne, np.nan)
 
@@ -254,9 +256,10 @@ def _add_tyre_work(df: pd.DataFrame) -> None:
     for c in WHEEL_ORDER:
         sa_col = f"wheel_{c}_tan_slip_angle"
         sr_col = f"wheel_{c}_slip_ratio"
-        fx_col = f"wheel_{c}_y_force_n"
-        fy_col = f"wheel_{c}_x_force_n"
-        if not _has(df, sa_col, sr_col, fx_col, fy_col):
+        # See _add_friction_circle: LFS swaps long/lat names per wheel.
+        f_long_col = f"wheel_{c}_y_force_n"
+        f_lat_col = f"wheel_{c}_x_force_n"
+        if not _has(df, sa_col, sr_col, f_long_col, f_lat_col):
             continue
         # Slip velocities (approx): v_slip_lat ≈ v · tan(slip_angle);
         # v_slip_long ≈ v · slip_ratio (in driven/braked wheel approximation).
@@ -264,8 +267,8 @@ def _add_tyre_work(df: pd.DataFrame) -> None:
         v_slip_long = v * df[sr_col]
         # Power dissipated [W]: |F · v_slip|.
         df[f"tyre_work_w_{c}"] = (
-            df[fy_col].abs() * v_slip_lat.abs()
-            + df[fx_col].abs() * v_slip_long.abs()
+            df[f_lat_col].abs() * v_slip_lat.abs()
+            + df[f_long_col].abs() * v_slip_long.abs()
         )
 
 
@@ -392,6 +395,161 @@ def _add_gear_lfs(df: pd.DataFrame) -> None:
     )
     out[valid] = labels
     df["gear_label"] = pd.array(out, dtype="string")
+
+
+# ---------------------------------------------------------------------------
+# Combined / synergy channels — leverage multiple raw inputs to expose
+# information useful for both drivers and engineers that is not directly
+# in any single LFS packet.
+# ---------------------------------------------------------------------------
+
+
+def _add_combined_channels(
+    df: pd.DataFrame, spec: CarSpec, smoothness_window_s: float,
+) -> None:
+    """Append cross-channel synergy metrics.
+
+    Channels added (when their inputs are present):
+
+    * ``g_total_g`` — friction-circle magnitude
+      ``sqrt(accel_x² + accel_y²) / g``. The classic g–g headline: how
+      close the car is to the total grip envelope at any instant.
+    * ``susp_compression_front_avg_m`` / ``..._rear_avg_m`` and
+      ``rake_compression_m`` (front − rear) — axle-level ride-height
+      proxies and dynamic rake. Aero-sensitive cars live or die by these.
+    * ``slip_angle_balance_rad`` — ``mean(|α_front|) − mean(|α_rear|)``.
+      Direct kinematic balance: positive → front slides (understeer),
+      negative → rear slides (oversteer). Complements
+      ``understeer_index`` (yaw-rate based).
+    * ``wheel_<c>_lockup`` — boolean: braking with deeply negative slip
+      ratio at that wheel (``brake > 0.1`` and ``slip_ratio < −0.3``).
+      Per-wheel ABS-event detector independent of any tyre radius.
+    * ``brake_power_w`` — instantaneous mechanical brake power
+      ``|F_long_total| · speed`` while braking. Integrates per lap to a
+      reliable brake-heat / brake-pad-wear proxy.
+    * ``throttle_reversal_rate_hz`` — mirror of ``steer_reversal_rate``
+      for the throttle pedal: smoothness / pedal-tap detector.
+    * ``coasting`` — ``throttle < 0.05 ∧ brake < 0.05 ∧ speed > 3 m/s``.
+      Identifies mid-corner coasting (lift-off oversteer technique).
+    * ``trail_brake_intensity`` — ``brake · |input_steer|``. Non-zero
+      only on combined-load corner entry; rises with both pedal and
+      hand engagement.
+    * ``chassis_roll_per_lat_g_rad_per_g`` — instantaneous roll
+      compliance ``roll / (accel_y/g)`` (NaN at low lat. g). Direct
+      probe for ARB / spring choice.
+    * ``chassis_pitch_per_long_g_rad_per_g`` — analogous
+      ``pitch / (accel_x/g)`` (NaN at low long. g): brake-dive /
+      power-squat compliance.
+    """
+    g = spec.g
+
+    # --- g_total: friction-circle magnitude --------------------------
+    if _has(df, "accel_x", "accel_y"):
+        ax = df["accel_x"].astype(float)
+        ay = df["accel_y"].astype(float)
+        df["g_total_g"] = np.hypot(ax, ay) / g
+
+    # --- Axle-level susp. compression & rake -------------------------
+    susp_cols = [f"wheel_{c}_susp_deflect_m" for c in WHEEL_ORDER]
+    if _has(df, *susp_cols):
+        fl = df["wheel_FL_susp_deflect_m"].astype(float)
+        fr = df["wheel_FR_susp_deflect_m"].astype(float)
+        rl = df["wheel_RL_susp_deflect_m"].astype(float)
+        rr = df["wheel_RR_susp_deflect_m"].astype(float)
+        front_avg = 0.5 * (fl + fr)
+        rear_avg = 0.5 * (rl + rr)
+        df["susp_compression_front_avg_m"] = front_avg
+        df["susp_compression_rear_avg_m"] = rear_avg
+        # Positive ``rake_compression_m`` ⇒ front compresses more than
+        # rear ⇒ nose-down attitude (typical under braking / aero load).
+        df["rake_compression_m"] = front_avg - rear_avg
+
+    # --- Kinematic slip-angle balance --------------------------------
+    sa_cols = [f"wheel_{c}_tan_slip_angle" for c in WHEEL_ORDER]
+    if _has(df, *sa_cols):
+        af = 0.5 * (
+            df["wheel_FL_tan_slip_angle"].abs()
+            + df["wheel_FR_tan_slip_angle"].abs()
+        )
+        ar = 0.5 * (
+            df["wheel_RL_tan_slip_angle"].abs()
+            + df["wheel_RR_tan_slip_angle"].abs()
+        )
+        # tan(α) ≈ α for the small angles typical here, so reusing the
+        # tan column as a near-angle is acceptable for a balance metric.
+        df["slip_angle_balance_rad"] = af - ar
+
+    # --- Per-wheel lockup (slip-ratio based, no tyre radius needed) --
+    if "brake" in df.columns:
+        braking = df["brake"].astype(float) > 0.1
+        for c in WHEEL_ORDER:
+            sr_col = f"wheel_{c}_slip_ratio"
+            if sr_col not in df.columns:
+                continue
+            sr = df[sr_col].astype(float)
+            df[f"wheel_{c}_lockup"] = (braking & (sr < -0.3)).astype(bool)
+
+    # --- Brake power dissipation -------------------------------------
+    long_cols = [f"wheel_{c}_y_force_n" for c in WHEEL_ORDER]
+    if _has(df, *long_cols, "speed_ms", "brake"):
+        # Total longitudinal tyre force; negative under braking. Power
+        # bled into brakes ≈ |F_brake_total| · v while pedal is down.
+        f_total_long = (
+            df["wheel_FL_y_force_n"]
+            + df["wheel_FR_y_force_n"]
+            + df["wheel_RL_y_force_n"]
+            + df["wheel_RR_y_force_n"]
+        ).astype(float)
+        braking_mask = df["brake"].astype(float) > 0.05
+        power = (-f_total_long).clip(lower=0.0) * df["speed_ms"].astype(float)
+        df["brake_power_w"] = power.where(braking_mask, 0.0)
+
+    # --- Throttle smoothness (mirror of steer reversal rate) ---------
+    if "throttle" in df.columns:
+        thr = df["throttle"].astype(float)
+        # Direction change in pedal motion (Δ ↔ sign of throttle rate),
+        # debounced by a small deadband to ignore quantisation flutter.
+        d_thr = thr.diff().fillna(0.0)
+        sign = np.sign(d_thr.where(d_thr.abs() > 0.005, 0.0))
+        reversals = (sign.diff().abs() > 0).astype(int)
+        dt = _dt_seconds(df)
+        win = max(int(smoothness_window_s / max(dt.median(), 1e-3)), 1)
+        df["throttle_reversal_rate_hz"] = (
+            reversals.rolling(win, min_periods=1).sum() / smoothness_window_s
+        )
+
+    # --- Coasting flag (mid-corner technique) ------------------------
+    if _has(df, "throttle", "brake", "speed_ms"):
+        df["coasting"] = (
+            (df["throttle"].astype(float) < 0.05)
+            & (df["brake"].astype(float) < 0.05)
+            & (df["speed_ms"].astype(float) > 3.0)
+        ).astype(bool)
+
+    # --- Trail-brake intensity ---------------------------------------
+    if _has(df, "brake", "input_steer"):
+        df["trail_brake_intensity"] = (
+            df["brake"].astype(float) * df["input_steer"].abs().astype(float)
+        )
+
+    # --- Chassis compliance ratios -----------------------------------
+    # Only meaningful when the axis is actually loaded; below the
+    # threshold the ratio is dominated by sensor noise and the divisor
+    # crosses zero, so we mask with NaN instead of reporting garbage.
+    if _has(df, "roll", "accel_y"):
+        ay = df["accel_y"].astype(float)
+        roll = df["roll"].astype(float)
+        loaded = ay.abs() > 2.0  # ~0.2 g
+        df["chassis_roll_per_lat_g_rad_per_g"] = (
+            (roll / (ay / g)).where(loaded, np.nan)
+        )
+    if _has(df, "pitch", "accel_x"):
+        ax = df["accel_x"].astype(float)
+        pitch = df["pitch"].astype(float)
+        loaded = ax.abs() > 2.0
+        df["chassis_pitch_per_long_g_rad_per_g"] = (
+            (pitch / (ax / g)).where(loaded, np.nan)
+        )
 
 
 # ---------------------------------------------------------------------------

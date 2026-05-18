@@ -20,7 +20,6 @@ from lfs_telemetry.telemetry.track.knw import (
     parse_knw_bytes,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic file builder
 # ---------------------------------------------------------------------------
@@ -118,7 +117,7 @@ def test_chain_continuity_synthetic():
     data = _build_knw()
     info = parse_knw_bytes(data)
     # node_end[i] must equal node_start[i+1] for an interior chain.
-    for a, b in zip(info.segments, info.segments[1:]):
+    for a, b in zip(info.segments, info.segments[1:], strict=False):
         assert a.node_end == b.node_start
 
 
@@ -160,7 +159,7 @@ def test_install_chain_continuity_holds_everywhere():
     bad: list[tuple[str, int]] = []
     for p in list_knw_files():
         info = parse_knw(p)
-        for i, (a, b) in enumerate(zip(info.segments, info.segments[1:])):
+        for i, (a, b) in enumerate(zip(info.segments, info.segments[1:], strict=False)):
             if a.node_end != b.node_start:
                 bad.append((p.name, i))
                 break

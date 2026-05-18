@@ -18,11 +18,8 @@ from lfs_telemetry.telemetry import (
     channels_by_group,
     discover_captures,
     inspect_capture,
-    write_csv_replay,
 )
-from lfs_telemetry.telemetry.live import TelemetrySample
 from lfs_telemetry.telemetry.protocol.packets import WHEEL_ORDER
-
 
 # ---------------------------------------------------------------------------
 # Synthetic lap helpers (mirrors test_stint.py)
@@ -204,7 +201,6 @@ def test_lap_comparison_summary_has_swing_metrics() -> None:
 
 def _write_real_csv(path: Path, df: pd.DataFrame) -> None:
     """Persist via the real replay schema to keep the catalog test honest."""
-    samples: list[TelemetrySample] = []  # build minimal samples from df
     # Easier: just write a CSV that mirrors the schema preamble + header so
     # inspect_capture sees a valid file.
     from lfs_telemetry.telemetry.replay import _SCHEMA_HEADER  # type: ignore[attr-defined]

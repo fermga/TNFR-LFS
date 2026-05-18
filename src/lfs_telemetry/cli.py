@@ -4,28 +4,26 @@ Subcommands:
     capture          Listen to LFS UDP and write a CSV stint capture.
     calibrate        Auto-measure car mass + weight distribution from rest.
     reslice          Re-slice an aggregate capture CSV into per-lap CSVs.
-    advise           Run the TNFR Setup Advisor on a captured stint.
-    compare-stints   Compare two stints (before / after a setup change).
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from .telemetry.live import LiveTelemetry, TelemetrySample
 from .telemetry import live_publisher
+from .telemetry.car_calibration import CarSpecStore, RestCalibrator
 from .telemetry.fuel_tracker import FuelTracker
+from .telemetry.lap_slicer import reslice_csv, write_per_lap_files
+from .telemetry.live import LiveTelemetry, TelemetrySample
 from .telemetry.node_delta import NodeDeltaTracker
 from .telemetry.predict import SplitPredictor
-from .telemetry.replay import write_csv_replay
-from .telemetry.lap_slicer import reslice_csv, write_per_lap_files
 from .telemetry.protocol.packets import OSO_ALL, WHEEL_ORDER
-from .telemetry.car_calibration import CarSpecStore, RestCalibrator
-
+from .telemetry.replay import write_csv_replay
 
 # Module-level stop flag set by SIGBREAK / SIGINT handlers. The capture
 # loop polls it every sample so a Stop from the Studio (CTRL_BREAK_EVENT)
@@ -45,10 +43,8 @@ def _request_stop(*_args) -> None:
     loop = _CAPTURE_LOOP
     task = _CAPTURE_TASK
     if loop is not None and task is not None and not task.done():
-        try:
+        with contextlib.suppress(RuntimeError):
             loop.call_soon_threadsafe(task.cancel)
-        except RuntimeError:
-            pass
 
 
 def _add_lfs_flags(parser: argparse.ArgumentParser) -> None:
@@ -131,6 +127,13 @@ def main(argv: list[str] | None = None) -> int:
              "best, fuel, traffic, radar). Consumed by the Studio "
              "Live tab to drive the in-game-style overlay. Implies "
              "InSim MCI subscription.")
+    p_cap.add_argument(
+        "--no-csv", action="store_true",
+        help="overlay-only mode: connect to LFS and refresh the live "
+             "snapshot (requires --live-file), but do NOT buffer "
+             "samples in memory and do NOT write any per-lap or "
+             "aggregate CSV at the end. Useful when the user only "
+             "wants the in-game overlay without recording telemetry.")
 
     p_cal = sub.add_parser(
         "calibrate",
@@ -161,79 +164,6 @@ def main(argv: list[str] | None = None) -> int:
                        help="minimum negative jump in current_lap_dist_m to "
                             "count as a line crossing (default 100 m)")
 
-    p_adv = sub.add_parser(
-        "advise",
-        help="run the TNFR Setup Advisor on a captured stint and write a "
-             "JSON / Markdown report.")
-    p_adv.add_argument(
-        "--car", required=True,
-        help="LFS car short name used to resolve <CAR>_CAR_info.bin if "
-             "--baseline is not given (e.g. FBM, FOX, BF1).")
-    p_adv.add_argument(
-        "--track", required=True,
-        help="LFS track short code (e.g. BL1, AS3, KY2R). Used to seed "
-             "the per-track network and the stint signature.")
-    p_adv.add_argument(
-        "--laps", nargs="+", type=Path, required=True,
-        metavar="LAP_CSV",
-        help="2+ per-lap CSV files (at least 5 consecutive valid laps "
-             "are required for an actual proposal).")
-    p_adv.add_argument(
-        "--baseline", type=Path, default=None,
-        help="explicit path to <CAR>_CAR_info.bin. If omitted, the "
-             "standard asset search path is used (assets/source/cars/).")
-    p_adv.add_argument(
-        "--seed", type=int, default=20260516,
-        help="deterministic seed for the network builders (default "
-             "20260516).")
-    p_adv.add_argument(
-        "--output", type=Path, default=None,
-        help="output base path (without extension). The literal token "
-             "'<timestamp>' is replaced with YYYYMMDD-HHMMSS. If "
-             "omitted, the report is written to stdout.")
-    p_adv.add_argument(
-        "--format", choices=("json", "md", "both"), default="both",
-        help="report format(s) to emit (default: both).")
-
-    p_cmp = sub.add_parser(
-        "compare-stints",
-        help="compare two captured stints (typically before/after a setup "
-             "change) and write a JSON / Markdown diff report.")
-    p_cmp.add_argument(
-        "--car", required=True,
-        help="LFS car short name used to resolve <CAR>_CAR_info.bin if "
-             "no --baseline-* override is given.")
-    p_cmp.add_argument(
-        "--track", required=True,
-        help="LFS track short code (e.g. BL1, AS3, KY2R).")
-    p_cmp.add_argument(
-        "--before", nargs="+", type=Path, required=True,
-        metavar="LAP_CSV",
-        help="per-lap CSVs for the BEFORE stint.")
-    p_cmp.add_argument(
-        "--after", nargs="+", type=Path, required=True,
-        metavar="LAP_CSV",
-        help="per-lap CSVs for the AFTER stint.")
-    p_cmp.add_argument(
-        "--baseline-before", type=Path, default=None,
-        help="explicit <CAR>_CAR_info.bin captured at the time of the "
-             "BEFORE stint.")
-    p_cmp.add_argument(
-        "--baseline-after", type=Path, default=None,
-        help="explicit <CAR>_CAR_info.bin captured at the time of the "
-             "AFTER stint.")
-    p_cmp.add_argument(
-        "--seed", type=int, default=20260516,
-        help="deterministic seed for the network builders (default "
-             "20260516).")
-    p_cmp.add_argument(
-        "--output", type=Path, default=None,
-        help="output base path (without extension). '<timestamp>' is "
-             "replaced with YYYYMMDD-HHMMSS. If omitted, stdout.")
-    p_cmp.add_argument(
-        "--format", choices=("json", "md", "both"), default="both",
-        help="report format(s) to emit (default: both).")
-
     args = parser.parse_args(argv)
 
     # On Windows, the Studio's Capture tab stops the child by sending
@@ -250,10 +180,8 @@ def main(argv: list[str] | None = None) -> int:
             _sig = getattr(_signal, _name, None)
             if _sig is None:
                 continue
-            try:
+            with contextlib.suppress(ValueError, OSError):
                 _signal.signal(_sig, _request_stop)
-            except (ValueError, OSError):
-                pass
 
     if args.cmd == "capture":
         return asyncio.run(_cmd_capture(args))
@@ -261,10 +189,6 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_cmd_calibrate(args))
     if args.cmd == "reslice":
         return _cmd_reslice(args)
-    if args.cmd == "advise":
-        return _cmd_advise(args)
-    if args.cmd == "compare-stints":
-        return _cmd_compare_stints(args)
     parser.error(f"unknown command: {args.cmd}")
     return 2
 
@@ -280,7 +204,7 @@ def _safe_tag(value: str | None) -> str:
     return cleaned.strip("_") or "unknown"
 
 
-def _session_tag(samples: list["TelemetrySample"]) -> str:
+def _session_tag(samples: list[TelemetrySample]) -> str:
     """Build ``YYYYMMDD-HHMMSS_CAR_TRACK`` for unique per-lap filenames."""
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     car: str | None = None
@@ -302,6 +226,10 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
     samples: list[TelemetrySample] = []
     use_laps = args.laps > 0
     per_lap = args.per_lap
+    # Overlay-only mode: keep the InSim/OutSim pipeline + live.json
+    # publisher running, but don't retain samples in memory and don't
+    # emit any CSV when the capture stops.
+    no_csv = bool(getattr(args, "no_csv", False))
     # --include-out-lap means: keep every sample, no warmup skipping,
     # no out-lap trimming. The slicer will emit _lap00 for the out-lap.
     if getattr(args, "include_out_lap", False):
@@ -450,7 +378,8 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                         # Stationary in pits / on grid / countdown — drop.
                         continue
 
-                samples.append(sample)
+                if not no_csv:
+                    samples.append(sample)
 
                 # ------------- diagnostic heartbeat ----------------
                 if args.debug_insim and sample.race_context is not None:
@@ -743,7 +672,7 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                                     "fy_n": float(w.y_force_n),
                                     "touching": bool(w.touching),
                                 }
-                                for corner, w in zip(WHEEL_ORDER, os2.wheels)
+                                for corner, w in zip(WHEEL_ORDER, os2.wheels, strict=True)
                             ]
                             # Prefer extended OutSim's clutch/handbrake
                             # over OutGauge-only when both available.
@@ -822,17 +751,19 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
     finally:
         if 'stop_watcher_task' in locals() and stop_watcher_task is not None:
             stop_watcher_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await stop_watcher_task
-            except (asyncio.CancelledError, Exception):
-                pass
 
     if (use_laps or per_lap) and not flying_lap_started:
         print("[capture] WARNING: no IS_LAP packet received. Drove past "
               "start/finish? In LFS use S1 lap mode, not /restart loops.",
               file=sys.stderr)
 
-    _flush_capture(args, samples, per_lap)
+    if no_csv:
+        print("[capture] overlay-only mode: no CSV written.",
+              file=sys.stderr)
+    else:
+        _flush_capture(args, samples, per_lap)
     return 0
 
 
@@ -978,218 +909,6 @@ async def _cmd_calibrate(args: argparse.Namespace) -> int:
         print("[calibrate] stopped by user", file=sys.stderr)
         return 1
     return 1
-
-
-# ---------------------------------------------------------------------------
-# advise
-# ---------------------------------------------------------------------------
-
-
-def _cmd_advise(args: argparse.Namespace) -> int:
-    """Run the TNFR Setup Advisor on a captured stint.
-
-    Mirrors the Studio's Setup → Advisor tab so the CLI and the UI
-    emit byte-identical JSON / Markdown reports for the same stint.
-    """
-    from .telemetry import LapTelemetry
-    from .telemetry.car_info_bin import CarInfoBin, parse_car_info_bin
-    from .telemetry.observables import load_car_info_bin_for
-    from .tnfr_racing.advisor import SetupAdvisor
-    from .tnfr_racing.serialize import result_to_json, result_to_markdown
-
-    # --- 1. Load laps -------------------------------------------------
-    lap_paths: list[Path] = [Path(p) for p in args.laps]
-    missing = [p for p in lap_paths if not p.is_file()]
-    if missing:
-        for p in missing:
-            print(f"[advise] missing lap CSV: {p}", file=sys.stderr)
-        return 2
-    try:
-        laps = [LapTelemetry.from_csv(p, car=args.car) for p in lap_paths]
-    except (OSError, ValueError) as exc:
-        print(f"[advise] failed to load laps: {exc}", file=sys.stderr)
-        return 1
-
-    # --- 2. Resolve baseline -----------------------------------------
-    baseline: CarInfoBin | None
-    if args.baseline is not None:
-        if not args.baseline.is_file():
-            print(f"[advise] baseline file not found: {args.baseline}",
-                  file=sys.stderr)
-            return 2
-        try:
-            baseline = parse_car_info_bin(args.baseline)
-        except (OSError, ValueError) as exc:
-            print(f"[advise] failed to parse baseline {args.baseline}: "
-                  f"{exc}", file=sys.stderr)
-            return 1
-    else:
-        baseline = load_car_info_bin_for(args.car)
-        if baseline is None:
-            print(f"[advise] no <{args.car}>_CAR_info.bin found on the "
-                  f"asset search path. Pass --baseline explicitly or set "
-                  f"LFS_TELEMETRY_CAR_INFO_DIR.", file=sys.stderr)
-            return 2
-
-    # --- 3. Run advisor ----------------------------------------------
-    advisor = SetupAdvisor(seed=int(args.seed))
-    try:
-        result = advisor.advise(laps, baseline, laps[0].car, args.track)
-    except Exception as exc:  # noqa: BLE001 - surface as exit code
-        print(f"[advise] advisor failed: {exc!r}", file=sys.stderr)
-        return 1
-
-    json_text = result_to_json(result)
-    md_text = result_to_markdown(
-        result,
-        car_key=args.car.upper(),
-        track_code=args.track.upper(),
-        n_laps=len(laps),
-        baseline=baseline,
-    )
-
-    # --- 4. Emit ------------------------------------------------------
-    if args.output is None:
-        if args.format in ("md", "both"):
-            sys.stdout.write(md_text)
-            if args.format == "both":
-                sys.stdout.write("\n")
-        if args.format in ("json", "both"):
-            sys.stdout.write(json_text)
-            sys.stdout.write("\n")
-    else:
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        base_str = str(args.output).replace("<timestamp>", ts)
-        base = Path(base_str)
-        # Strip any caller-supplied extension so --format controls output.
-        if base.suffix.lower() in (".json", ".md", ".markdown"):
-            base = base.with_suffix("")
-        base.parent.mkdir(parents=True, exist_ok=True)
-        written: list[Path] = []
-        if args.format in ("json", "both"):
-            p_json = base.with_suffix(".json")
-            p_json.write_text(json_text, encoding="utf-8")
-            written.append(p_json)
-        if args.format in ("md", "both"):
-            p_md = base.with_suffix(".md")
-            p_md.write_text(md_text, encoding="utf-8")
-            written.append(p_md)
-        for p in written:
-            print(f"[advise] wrote {p}")
-
-    # Exit code 0 even on a refusal: the user got a structured report.
-    return 0
-
-
-# ---------------------------------------------------------------------------
-# compare-stints (Phase 9.A)
-# ---------------------------------------------------------------------------
-
-
-def _cmd_compare_stints(args: argparse.Namespace) -> int:
-    """Compare two captured stints (before/after a setup change)."""
-    from .telemetry import LapTelemetry
-    from .telemetry.car_info_bin import CarInfoBin, parse_car_info_bin
-    from .telemetry.observables import load_car_info_bin_for
-    from .tnfr_racing.multi_stint import compare_stints
-    from .tnfr_racing.serialize import (
-        comparison_to_json, comparison_to_markdown,
-    )
-
-    def _load(paths: list[Path], label: str) -> list[LapTelemetry] | int:
-        missing = [p for p in paths if not p.is_file()]
-        if missing:
-            for p in missing:
-                print(f"[compare] missing {label} lap CSV: {p}",
-                      file=sys.stderr)
-            return 2
-        try:
-            return [LapTelemetry.from_csv(p, car=args.car) for p in paths]
-        except (OSError, ValueError) as exc:
-            print(f"[compare] failed to load {label} laps: {exc}",
-                  file=sys.stderr)
-            return 1
-
-    before_laps = _load([Path(p) for p in args.before], "before")
-    if isinstance(before_laps, int):
-        return before_laps
-    after_laps = _load([Path(p) for p in args.after], "after")
-    if isinstance(after_laps, int):
-        return after_laps
-
-    def _resolve_baseline(path: Path | None) -> CarInfoBin | int:
-        if path is not None:
-            if not path.is_file():
-                print(f"[compare] baseline file not found: {path}",
-                      file=sys.stderr)
-                return 2
-            try:
-                return parse_car_info_bin(path)
-            except (OSError, ValueError) as exc:
-                print(f"[compare] failed to parse baseline {path}: {exc}",
-                      file=sys.stderr)
-                return 1
-        b = load_car_info_bin_for(args.car)
-        if b is None:
-            print(f"[compare] no <{args.car}>_CAR_info.bin found. Pass "
-                  f"--baseline-before / --baseline-after explicitly.",
-                  file=sys.stderr)
-            return 2
-        return b
-
-    bl_before = _resolve_baseline(args.baseline_before)
-    if isinstance(bl_before, int):
-        return bl_before
-    bl_after = _resolve_baseline(args.baseline_after)
-    if isinstance(bl_after, int):
-        return bl_after
-
-    try:
-        cmp = compare_stints(
-            before_laps=before_laps,
-            after_laps=after_laps,
-            baseline_before=bl_before,
-            baseline_after=bl_after,
-            car=before_laps[0].car,
-            track_code=args.track,
-            seed=int(args.seed),
-        )
-    except Exception as exc:  # noqa: BLE001
-        print(f"[compare] comparison failed: {exc!r}", file=sys.stderr)
-        return 1
-
-    json_text = comparison_to_json(cmp)
-    md_text = comparison_to_markdown(
-        cmp, car_key=args.car.upper(), track_code=args.track.upper(),
-    )
-
-    if args.output is None:
-        if args.format in ("md", "both"):
-            sys.stdout.write(md_text)
-            if args.format == "both":
-                sys.stdout.write("\n")
-        if args.format in ("json", "both"):
-            sys.stdout.write(json_text)
-            sys.stdout.write("\n")
-    else:
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        base_str = str(args.output).replace("<timestamp>", ts)
-        base = Path(base_str)
-        if base.suffix.lower() in (".json", ".md", ".markdown"):
-            base = base.with_suffix("")
-        base.parent.mkdir(parents=True, exist_ok=True)
-        written: list[Path] = []
-        if args.format in ("json", "both"):
-            p_json = base.with_suffix(".json")
-            p_json.write_text(json_text, encoding="utf-8")
-            written.append(p_json)
-        if args.format in ("md", "both"):
-            p_md = base.with_suffix(".md")
-            p_md.write_text(md_text, encoding="utf-8")
-            written.append(p_md)
-        for p in written:
-            print(f"[compare] wrote {p}")
-    return 0
 
 
 if __name__ == "__main__":

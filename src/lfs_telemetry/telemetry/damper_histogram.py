@@ -17,7 +17,6 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-
 # Default low-speed boundary in m/s. 25 mm/s is the conventional split
 # between low-speed (chassis pitch/roll) and high-speed (kerbs, bumps)
 # damper work used by every major data-engineering tool.

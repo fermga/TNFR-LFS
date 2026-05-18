@@ -50,7 +50,6 @@ import struct
 from dataclasses import dataclass
 from typing import ClassVar
 
-
 # ---------------------------------------------------------------------------
 # OutSim
 # ---------------------------------------------------------------------------
@@ -85,7 +84,7 @@ class OutSimPacket:
     _STRUCT: ClassVar[struct.Struct] = struct.Struct(_OUTSIM_FMT)
 
     @classmethod
-    def parse(cls, data: bytes) -> "OutSimPacket":
+    def parse(cls, data: bytes) -> OutSimPacket:
         if len(data) not in (OUTSIM_SIZE, OUTSIM_SIZE_WITH_ID):
             raise ValueError(f"unexpected OutSim packet size: {len(data)}")
         unpacked = cls._STRUCT.unpack_from(data, 0)
@@ -169,7 +168,7 @@ class OutGaugePacket:
     _STRUCT: ClassVar[struct.Struct] = struct.Struct(_OUTGAUGE_FMT)
 
     @classmethod
-    def parse(cls, data: bytes) -> "OutGaugePacket":
+    def parse(cls, data: bytes) -> OutGaugePacket:
         if len(data) not in (OUTGAUGE_SIZE, OUTGAUGE_SIZE_WITH_ID):
             raise ValueError(f"unexpected OutGauge packet size: {len(data)}")
         unpacked = cls._STRUCT.unpack_from(data, 0)
@@ -621,7 +620,14 @@ CSC_START = 1
 
 
 # Wheel order used by every per-wheel LFS data structure.
-WHEEL_ORDER: tuple[str, ...] = ("RL", "RR", "FL", "FR")
+#
+# LFS wire format orders wheels as (RL, RR, FL, FR). UI / engineering code
+# expects the "front-to-back" canonical order (FL, FR, RL, RR). Always remap
+# between the two using these aliases — never assume one matches the other.
+WHEEL_ORDER_WIRE: tuple[str, ...] = ("RL", "RR", "FL", "FR")
+WHEEL_ORDER_CANON: tuple[str, ...] = ("FL", "FR", "RL", "RR")
+# Backward-compatible alias (legacy name → wire order).
+WHEEL_ORDER: tuple[str, ...] = WHEEL_ORDER_WIRE
 
 
 def build_isi_packet(
@@ -676,7 +682,7 @@ class InSimHeader:
     data: bytes  # raw payload after the 4-byte header
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimHeader":
+    def parse(cls, data: bytes) -> InSimHeader:
         if len(data) < 4:
             raise ValueError("short InSim packet")
         size, ptype, reqi, _zero = struct.unpack_from("<BBBB", data, 0)
@@ -776,7 +782,7 @@ class OutSimPack2:
     steer_torque_nm: float | None = None
 
     @classmethod
-    def parse(cls, data: bytes, opts: int) -> "OutSimPack2":
+    def parse(cls, data: bytes, opts: int) -> OutSimPack2:
         expected = outsim2_size(opts)
         if len(data) != expected:
             raise ValueError(
@@ -959,7 +965,7 @@ class InSimVersion:
     insim_ver: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimVersion":
+    def parse(cls, data: bytes) -> InSimVersion:
         # offsets 0-3: Size, Type, ReqI, Zero
         # offset 4: char Version[8]
         # offset 12: char Product[6]
@@ -990,7 +996,7 @@ class InSimState:
     wind: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimState":
+    def parse(cls, data: bytes) -> InSimState:
         # Payload at offset 4: float, word, 8 bytes, 6s, 2 bytes
         (rs, fl, cam, vplid, np_, nc, nf, rip, qm, rl,
          _sp2, _sp3, track, wx, wd) = struct.unpack_from(
@@ -1021,7 +1027,7 @@ class InSimRaceStart:
     split3_node: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimRaceStart":
+    def parse(cls, data: bytes) -> InSimRaceStart:
         reqi = data[2]
         # Payload at offset 4 (total packet size = 28 bytes):
         # RaceLaps, QualMins, NumP, Timing,
@@ -1067,7 +1073,7 @@ class InSimNewPlayer:
     fuel_pct: int             # 0..100
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimNewPlayer":
+    def parse(cls, data: bytes) -> InSimNewPlayer:
         plid = data[3]
         # Payload at offset 4: UCID, PType, Flags(word),
         # PName[24], Plate[8], CName[4], SName[16],
@@ -1111,7 +1117,7 @@ class InSimLap:
     fuel200: int              # fuel * 2 (0..200) — divide by FUEL_SCALE for %
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimLap":
+    def parse(cls, data: bytes) -> InSimLap:
         plid = data[3]
         # Payload at offset 4: LTime u32, ETime u32, LapsDone u16, Flags u16,
         # Sp0, Penalty, NumStops, Fuel200 (4 bytes).
@@ -1135,7 +1141,7 @@ class InSimSplit:
     fuel200: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimSplit":
+    def parse(cls, data: bytes) -> InSimSplit:
         plid = data[3]
         (stime, etime, split, pen, stops, fuel200) = struct.unpack_from(
             "<II BBBB", data, 4)
@@ -1157,7 +1163,7 @@ class InSimPit:
     work: int                 # PSE_* bitfield (what was changed)
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimPit":
+    def parse(cls, data: bytes) -> InSimPit:
         plid = data[3]
         # Payload: LapsDone(word), Flags(word), FuelAdd(byte), Penalty(byte),
         # NumStops(byte), Sp3(byte), Tyres[4], Work(uint), Spare(uint).
@@ -1178,7 +1184,7 @@ class InSimPitStopFinish:
     stop_time_ms: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimPitStopFinish":
+    def parse(cls, data: bytes) -> InSimPitStopFinish:
         plid = data[3]
         # Payload: STime(u32), Spare(u32) = 8 bytes (12 - 4).
         (stime, _spare) = struct.unpack_from("<II", data, 4)
@@ -1208,7 +1214,7 @@ class InSimHotLapValid:
     car_y_m: float            # Y short / 16
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimHotLapValid":
+    def parse(cls, data: bytes) -> InSimHotLapValid:
         plid = data[3]
         # Offset 4: HLVC, Sp1, Time(word). Then CarContOBJ at offset 8.
         (hlvc, _sp1, time_w,
@@ -1245,7 +1251,7 @@ class CompCar:
     _STRUCT: ClassVar[struct.Struct] = struct.Struct("<HHBBBB iii HHHh")
 
     @classmethod
-    def parse(cls, data: bytes, off: int) -> "CompCar":
+    def parse(cls, data: bytes, off: int) -> CompCar:
         (node, lap, plid, pos, info, _sp,
          x, y, z, speed, direction, heading, ang_vel) = cls._STRUCT.unpack_from(
             data, off)
@@ -1266,7 +1272,7 @@ class InSimMCI:
     cars: list[CompCar]
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimMCI":
+    def parse(cls, data: bytes) -> InSimMCI:
         # InSim header (4 B): Size, Type, ReqI, NumC.
         # CompCar array (NumC × 28 B) starts immediately at offset 4.
         # Total packet size = 4 + NumC * 28.
@@ -1285,7 +1291,7 @@ class NodeLap:
     position: int
 
     @classmethod
-    def parse(cls, data: bytes, off: int) -> "NodeLap":
+    def parse(cls, data: bytes, off: int) -> NodeLap:
         node, lap, plid, pos = struct.unpack_from("<HHBB", data, off)
         return cls(node=node, lap=lap, player_id=plid, position=pos)
 
@@ -1297,7 +1303,7 @@ class InSimNodeLap:
     entries: list[NodeLap]
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimNodeLap":
+    def parse(cls, data: bytes) -> InSimNodeLap:
         # Layout: Size, Type, ReqI, NumP, then NumP × NodeLap(6).
         nump = data[3]
         return cls(entries=[NodeLap.parse(data, 4 + i * 6) for i in range(nump)])
@@ -1322,7 +1328,7 @@ class InSimObjectHit:
     flags: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimObjectHit":
+    def parse(cls, data: bytes) -> InSimObjectHit:
         plid = data[3]
         # Payload at offset 4: SpClose(word), Time(word),
         # CarContOBJ(8 B): Direction, Heading, Speed, Zbyte, X(short), Y(short)
@@ -1361,7 +1367,7 @@ class InSimNewConnection:
     flags: int                  # bit 2 = remote
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimNewConnection":
+    def parse(cls, data: bytes) -> InSimNewConnection:
         ucid = data[3]
         # Payload at offset 4: UName[24], PName[24], Admin, Total, Flags, Sp3.
         uname, pname, admin, total, flags, _sp3 = struct.unpack_from(
@@ -1380,7 +1386,7 @@ class InSimConnectionLeft:
     total: int                  # remaining connections incl. host
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimConnectionLeft":
+    def parse(cls, data: bytes) -> InSimConnectionLeft:
         ucid = data[3]
         reason, total, _sp2, _sp3 = struct.unpack_from("<BBBB", data, 4)
         return cls(connection_id=ucid, reason=reason, total=total)
@@ -1398,7 +1404,7 @@ class InSimSelectedCar:
     car_name: str               # stock short-name or 6-hex mod ID (empty if none)
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimSelectedCar":
+    def parse(cls, data: bytes) -> InSimSelectedCar:
         ucid = data[3]
         cname = data[4:8]
         return cls(connection_id=ucid, car_name=decode_car_id(cname))
@@ -1412,7 +1418,7 @@ class InSimPitLane:
     fact: int                   # PITLANE_EXIT / ENTER / NO_PURPOSE / DT / SG
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimPitLane":
+    def parse(cls, data: bytes) -> InSimPitLane:
         plid = data[3]
         fact, _sp1, _sp2, _sp3 = struct.unpack_from("<BBBB", data, 4)
         return cls(player_id=plid, fact=fact)
@@ -1435,7 +1441,7 @@ class InSimModsAllowed:
     mod_ids: tuple[str, ...]    # 6-hex lowercase, one per mod
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimModsAllowed":
+    def parse(cls, data: bytes) -> InSimModsAllowed:
         # InSim header: Size, Type, ReqI, NumM. Then UCID, Flags, Sp2, Sp3.
         # Total packet size = 8 + NumM * 4.
         num_mods = data[3]
@@ -1456,7 +1462,7 @@ class InSimSmall:
     u_val: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimSmall":
+    def parse(cls, data: bytes) -> InSimSmall:
         sub_t = data[3]
         (u_val,) = struct.unpack_from("<I", data, 4)
         # Specialise on subtype where we have a richer model.
@@ -1513,7 +1519,7 @@ class CarContact:
     # Heading(B), AccelF(b), AccelR(b), X(h), Y(h)  → 1+1+1+1+1+1+1+1+1+1+1+1+2+2 = 16 ✓
 
     @classmethod
-    def parse(cls, data: bytes, off: int) -> "CarContact":
+    def parse(cls, data: bytes, off: int) -> CarContact:
         (plid, info, _sp2, steer,
          thrbrk, cluhan, gearsp,
          speed, direction, heading,
@@ -1547,7 +1553,7 @@ class InSimCarContact:
     b: CarContact
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimCarContact":
+    def parse(cls, data: bytes) -> InSimCarContact:
         # Offset 4: SpClose(word), Time(word) = 4 bytes.
         sp_close, time_w = struct.unpack_from("<HH", data, 4)
         return cls(
@@ -1571,7 +1577,7 @@ class InSimFinish:
     flags: int                # PIF_* at time of finish
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimFinish":
+    def parse(cls, data: bytes) -> InSimFinish:
         plid = data[3]
         (ttime, btime,
          _sp_a, num_stops, confirm, _sp_b,
@@ -1603,7 +1609,7 @@ class InSimResult:
     penalty_seconds: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimResult":
+    def parse(cls, data: bytes) -> InSimResult:
         plid = data[3]
         (uname, pname, plate, cname,
          ttime, btime,
@@ -1632,7 +1638,7 @@ class InSimTakeOverCar:
     new_connection_id: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimTakeOverCar":
+    def parse(cls, data: bytes) -> InSimTakeOverCar:
         plid = data[3]
         old_ucid, new_ucid, _sp2, _sp3 = struct.unpack_from("<BBBB", data, 4)
         return cls(player_id=plid,
@@ -1650,7 +1656,7 @@ class InSimPenalty:
     reason: int               # PENR_*
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimPenalty":
+    def parse(cls, data: bytes) -> InSimPenalty:
         plid = data[3]
         old_pen, new_pen, reason, _sp3 = struct.unpack_from("<BBBB", data, 4)
         return cls(player_id=plid,
@@ -1667,7 +1673,7 @@ class InSimFlag:
     car_behind: int           # PLID of car causing the flag (blue flag)
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimFlag":
+    def parse(cls, data: bytes) -> InSimFlag:
         plid = data[3]
         off_on, flag, car_behind, _sp3 = struct.unpack_from("<BBBB", data, 4)
         return cls(player_id=plid, off_on=off_on, flag=flag,
@@ -1682,7 +1688,7 @@ class InSimPlayerFlags:
     flags: int                # PIF_* bits
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimPlayerFlags":
+    def parse(cls, data: bytes) -> InSimPlayerFlags:
         plid = data[3]
         (flags, _sp) = struct.unpack_from("<HH", data, 4)
         return cls(player_id=plid, flags=flags)
@@ -1695,7 +1701,7 @@ class InSimPlayerTelepit:
     player_id: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimPlayerTelepit":
+    def parse(cls, data: bytes) -> InSimPlayerTelepit:
         return cls(player_id=data[3])
 
 
@@ -1706,7 +1712,7 @@ class InSimPlayerLeaves:
     player_id: int
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimPlayerLeaves":
+    def parse(cls, data: bytes) -> InSimPlayerLeaves:
         return cls(player_id=data[3])
 
 
@@ -1718,7 +1724,7 @@ class InSimCameraChange:
     camera: int               # ISS_* view-camera index (in_game_cam)
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimCameraChange":
+    def parse(cls, data: bytes) -> InSimCameraChange:
         plid = data[3]
         camera, _sp1, _sp2, _sp3 = struct.unpack_from("<BBBB", data, 4)
         return cls(player_id=plid, camera=camera)
@@ -1734,7 +1740,7 @@ class InSimInterfaceMode:
     sel_type: int             # context-specific (selected item index)
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimInterfaceMode":
+    def parse(cls, data: bytes) -> InSimInterfaceMode:
         ucid = data[3]
         mode, sub_mode, sel_type, _sp3 = struct.unpack_from("<BBBB", data, 4)
         return cls(connection_id=ucid, mode=mode,
@@ -1750,7 +1756,7 @@ class InSimCarStateChanged:
     time_ms: int              # u32
 
     @classmethod
-    def parse(cls, data: bytes) -> "InSimCarStateChanged":
+    def parse(cls, data: bytes) -> InSimCarStateChanged:
         plid = data[3]
         # Layout (post v9): PLID at header[3]; payload at offset 4:
         # CSCAction(byte), Sp1, Sp2, Sp3, Time(u32).

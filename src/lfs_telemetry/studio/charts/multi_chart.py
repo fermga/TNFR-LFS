@@ -20,7 +20,7 @@ Performance properties (validated empirically):
 
 from __future__ import annotations
 
-from typing import Dict, List, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 import pyqtgraph as pg
@@ -39,7 +39,7 @@ from .lap_arrays import LapArrayCache
 class _Row(QObject):
     """One PlotWidget + the trace items currently drawn on it."""
 
-    def __init__(self, column: str, units: str, parent: "MultiChannelChart") -> None:
+    def __init__(self, column: str, units: str, parent: MultiChannelChart) -> None:
         super().__init__(parent)
         self.column = column
         self.units = units
@@ -67,10 +67,10 @@ class _Row(QObject):
         self.plot.addItem(self.cursor, ignoreBounds=True)
         # column → PlotDataItem; one item per (lap, channel) but we
         # store them in MultiChannelChart, not per row.
-        self.items: Dict[int, pg.PlotDataItem] = {}
+        self.items: dict[int, pg.PlotDataItem] = {}
         # InSim split markers (one InfiniteLine per split). Cleared and
         # rebuilt whenever the lap set or x-axis kind changes.
-        self.sector_lines: List[pg.InfiniteLine] = []
+        self.sector_lines: list[pg.InfiniteLine] = []
         # Optional theoretical-best overlay (delta row only).
         self.theo_best_item: pg.PlotDataItem | None = None
 
@@ -96,8 +96,8 @@ class MultiChannelChart(QWidget):
         self._laps: list[LapTelemetry] = []
         self._channels: list[str] = []
         self._axis_kind: str = "distance"
-        self._rows: Dict[str, _Row] = {}
-        self._row_order: List[str] = []
+        self._rows: dict[str, _Row] = {}
+        self._row_order: list[str] = []
         # Optional delta-vs-reference row, shown above the channels
         # when there are >=2 laps and the x-axis is distance.
         self._delta_row: _Row | None = None
@@ -155,7 +155,7 @@ class MultiChannelChart(QWidget):
         self._sync_rows()
         self._rebuild_traces()
 
-    def set_cursor_x(self, x: float, source: "MultiChannelChart | None" = None) -> None:
+    def set_cursor_x(self, x: float, source: MultiChannelChart | None = None) -> None:
         """Set the crosshair on every row to ``x``. Re-entrancy safe."""
         if source is self:
             return
@@ -313,7 +313,7 @@ class MultiChannelChart(QWidget):
         vb.enableAutoRange(axis=vb.YAxis, enable=True)
         vb.autoRange()
 
-    def _split_distances(self) -> List[float]:
+    def _split_distances(self) -> list[float]:
         """Sorted split distances (m) from the reference lap, if any."""
         if not self._laps:
             return []
@@ -354,7 +354,7 @@ class MultiChannelChart(QWidget):
         total_d = self._ref_total_distance()
         if total_d <= splits[-1]:
             return
-        boundaries: List[float] = list(splits)
+        boundaries: list[float] = list(splits)
         # sector_times_s uses (n+1) sectors for n boundaries.
         try:
             ref_times = sector_times_s(
@@ -401,7 +401,7 @@ class MultiChannelChart(QWidget):
     def _sync_sector_markers(self) -> None:
         """Refresh InSim split markers on every visible row."""
         # Clear existing markers everywhere first.
-        all_rows: List[_Row] = list(self._rows.values())
+        all_rows: list[_Row] = list(self._rows.values())
         if self._delta_row is not None:
             all_rows.append(self._delta_row)
         for r in all_rows:

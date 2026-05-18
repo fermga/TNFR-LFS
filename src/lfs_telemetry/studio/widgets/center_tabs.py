@@ -12,9 +12,9 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QTabWidget, QWidget
 
+from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
-from ..i18n import tr
 from .capture_tab import CaptureTab
 from .charts_dock import ChartsDock
 from .dampers_tab import DampersTab

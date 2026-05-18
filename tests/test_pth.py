@@ -1,8 +1,6 @@
 """Tests for the PTH parser."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -15,7 +13,6 @@ from lfs_telemetry.telemetry.track.pth import (
     list_path_files,
     parse_pth,
 )
-
 
 SMX_DIR = DEFAULT_SMX_DIR
 

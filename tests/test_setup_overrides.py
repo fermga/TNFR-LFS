@@ -1,9 +1,8 @@
 """Tests for ``telemetry.setup_overrides``.
 
 The module is the data layer that backs the in-app garage editor: it
-turns optional user edits into a modified :class:`CarInfoBin` that the
-:class:`SetupAdvisor` can consume as baseline. These tests pin the
-contract end-to-end:
+turns optional user edits into a modified :class:`CarInfoBin`. These
+tests pin the contract end-to-end:
 
 * :func:`from_baseline` round-trips through :func:`apply` to an
   identical bin (no edits ⇒ no change).
@@ -191,17 +190,4 @@ def test_gear_ratios_wrong_length_raises() -> None:
         apply(baseline, SetupOverrides(gear_ratios=(3.0, 2.0, 1.5)))
 
 
-def test_advisor_consumes_overridden_baseline() -> None:
-    """Sanity: SetupAdvisor accepts the patched bin and the baseline
-    hash reflects the edits (different from raw baseline)."""
-    from lfs_telemetry.tnfr_racing.advisor import _hash_baseline
 
-    baseline = _synthetic_baseline()
-    edited = apply(
-        baseline,
-        SetupOverrides(brake_balance_front=0.55, front_spring_const=50000.0),
-    )
-    h_before = _hash_baseline(baseline)
-    h_after = _hash_baseline(edited)
-    assert h_before != h_after
-    assert len(h_after) == 16

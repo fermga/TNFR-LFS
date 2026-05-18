@@ -24,7 +24,6 @@ Signals consumed:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import pyqtgraph as pg
@@ -33,12 +32,12 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from ...telemetry import LapTelemetry
 from ...telemetry.comparison import _unwrapped_lap_arrays
+from ...telemetry.track import geom3d
 from ...telemetry.track.smx import (
     elevation_envelope,
     find_smx_for_track,
     parse_smx,
 )
-from ...telemetry.track import geom3d
 from ..models import LapLoader
 from ..signals import SignalBus
 from ..theme import CURSOR_COLOR, MUTED_COLOR, TEXT_COLOR, trace_color
@@ -90,16 +89,16 @@ class TrackElevationDock(QWidget):
         self._axis_kind = "distance"
 
         # Per-lap arrays keyed by capture path.
-        self._loaded: Dict[Path, LapTelemetry] = {}
-        self._arrays: Dict[Path, tuple[np.ndarray, np.ndarray,
+        self._loaded: dict[Path, LapTelemetry] = {}
+        self._arrays: dict[Path, tuple[np.ndarray, np.ndarray,
                                        np.ndarray, np.ndarray]] = {}
-        self._lines: Dict[Path, pg.PlotDataItem] = {}
+        self._lines: dict[Path, pg.PlotDataItem] = {}
         self._anchor_path: Path | None = None
 
         # SMX overlay state (one envelope per file; reused across laps
         # that share the same track id). Cache stores XY, Z and the
         # per-vertex surface classification.
-        self._smx_cache: Dict[str, tuple[np.ndarray, np.ndarray,
+        self._smx_cache: dict[str, tuple[np.ndarray, np.ndarray,
                                          np.ndarray]] = {}
         self._envelope_item: pg.FillBetweenItem | None = None
         self._env_lo: pg.PlotDataItem | None = None
@@ -169,7 +168,7 @@ class TrackElevationDock(QWidget):
         self._arrays[path] = _elevation_arrays(lap)
         self._redraw()
 
-    def _on_laps_selected(self, paths: List[Path]) -> None:
+    def _on_laps_selected(self, paths: list[Path]) -> None:
         wanted = {Path(p) for p in paths}
         for p in list(self._arrays):
             if p not in wanted:

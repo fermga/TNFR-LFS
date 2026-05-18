@@ -11,13 +11,13 @@ from pathlib import Path
 
 import pytest
 
-from lfs_telemetry.telemetry.live import TelemetrySample
-from lfs_telemetry.telemetry.protocol.packets import OutSimPack2
 from lfs_telemetry.telemetry.lap_slicer import (
     find_line_crossings,
     reslice_csv,
     slice_into_laps,
 )
+from lfs_telemetry.telemetry.live import TelemetrySample
+from lfs_telemetry.telemetry.protocol.packets import OutSimPack2
 
 
 def _mk(time_ms: int, d: float | None) -> TelemetrySample:

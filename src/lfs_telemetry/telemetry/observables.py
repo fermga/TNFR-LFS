@@ -22,18 +22,22 @@ import json
 import os
 import struct
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
+from .constants import GRAVITY
 from .live import TelemetrySample
-from .protocol.packets import WHEEL_ORDER
+from .protocol.packets import WHEEL_ORDER, WHEEL_ORDER_CANON
 
-
-CORNERS: tuple[str, ...] = ("FL", "FR", "RL", "RR")
+# Canonical UI/engineering wheel order (FL, FR, RL, RR). Re-exported from
+# ``protocol.packets.WHEEL_ORDER_CANON`` for back-compat with the historical
+# ``CORNERS`` name used throughout this module.
+CORNERS: tuple[str, ...] = WHEEL_ORDER_CANON
 
 
 # Per-car physical defaults indexed by LFS short car name.
@@ -163,7 +167,7 @@ class CarSpec:
     # (m/s)^-2. Zero for road cars without aero. Tuned per-car via
     # :func:`lfs_telemetry.telemetry.calibrate.estimate_mu_lat_curve`.
     mu_lat_aero_k: float = 0.0
-    g: float = 9.81
+    g: float = GRAVITY
 
     def mu_lat_at(self, speed_ms: float | np.ndarray) -> float | np.ndarray:
         """Effective lateral grip coefficient at the given speed.
@@ -222,7 +226,7 @@ def car_spec_for(car_name: str | None) -> CarSpec:
 _CAR_INFO_BIN_CACHE: dict[str, dict | None] = {}
 if TYPE_CHECKING:  # pragma: no cover
     from .car_info_bin import CarInfoBin
-_CAR_INFO_BIN_FULL_CACHE: dict[str, "CarInfoBin | None"] = {}
+_CAR_INFO_BIN_FULL_CACHE: dict[str, CarInfoBin | None] = {}
 _PACKAGE_ROOT = Path(__file__).resolve().parents[3]
 
 # Guards module-level caches (_CAR_INFO_BIN_CACHE, _CAR_INFO_BIN_FULL_CACHE,
@@ -263,7 +267,7 @@ def _car_info_bin_candidates(key: str) -> tuple[str, ...]:
             f"{key[:3]}_CAR_info.bin")
 
 
-def load_car_info_bin_for(key: str) -> "CarInfoBin | None":
+def load_car_info_bin_for(key: str) -> CarInfoBin | None:
     """Locate and parse ``<key>_CAR_info.bin``, returning the full record.
 
     Mirrors :func:`_load_car_info_bin_kwargs` (same search path and
@@ -370,7 +374,7 @@ def user_car_info_bin_dir() -> Path:
 
 def import_car_info_bin(
     source: Path, *, target_key: str | None = None,
-) -> tuple[Path, "CarInfoBin"]:
+) -> tuple[Path, CarInfoBin]:
     """Validate and copy a user-chosen ``CAR_info.bin`` into the search path.
 
     The file is parsed first to make sure it really is a CAR_info.bin
@@ -479,7 +483,10 @@ def observe_sample(sample: TelemetrySample, spec: CarSpec) -> StructuralObservat
         raise ValueError("sample must contain both OutSim and OutGauge data")
     os_pkt = sample.outsim
     og_pkt = sample.outgauge
-    assert os_pkt is not None and og_pkt is not None
+    if os_pkt is None or og_pkt is None:
+        raise ValueError(
+            "sample.is_complete returned True but outsim/outgauge are None"
+        )
 
     # OutSim accel is in the car local frame: +x forward, +y right, +z down.
     long_a, lat_a, vert_a = os_pkt.accel
@@ -492,7 +499,7 @@ def observe_sample(sample: TelemetrySample, spec: CarSpec) -> StructuralObservat
     if real_wheels is not None and len(real_wheels) == 4:
         # Real per-corner data path. WHEEL_ORDER from LFS is RL, RR, FL, FR;
         # CORNERS uses FL, FR, RL, RR — remap explicitly.
-        by_lfs = dict(zip(WHEEL_ORDER, real_wheels))
+        by_lfs = dict(zip(WHEEL_ORDER, real_wheels, strict=True))
         loads = {c: float(by_lfs[c].vertical_load_n) for c in CORNERS}
         # Lateral demand: load × |tan(slip angle)| (proxy for cornering work).
         lat_demand = {

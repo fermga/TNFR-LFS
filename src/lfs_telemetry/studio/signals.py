@@ -59,8 +59,7 @@ class SignalBus(QObject):
         car_key: 4-letter car short-name the overrides apply to
             (e.g. ``"FBM"``). Empty string means "no car selected".
         bin: A :class:`~telemetry.car_info_bin.CarInfoBin` with the
-            user's overrides merged on top of the loaded baseline. The
-            advisor consumes this in place of the raw baseline export.
+            user's overrides merged on top of the loaded baseline.
             ``None`` means "fall back to the on-disk baseline".
     """
 

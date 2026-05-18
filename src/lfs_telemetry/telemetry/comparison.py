@@ -18,6 +18,7 @@ Only :mod:`numpy` and :mod:`pandas` are imported.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Any
@@ -49,7 +50,7 @@ class LapComparison:
         *,
         n_points: int = 1000,
         restrict_post_line: bool | None = None,
-    ) -> "LapComparison":
+    ) -> LapComparison:
         return cls(
             reference=reference,
             candidate=candidate,
@@ -281,10 +282,8 @@ def _store_unwrapped_cache(
     result: tuple[np.ndarray, np.ndarray, np.ndarray],
 ) -> None:
     """Best-effort memoization on the lap instance."""
-    try:
+    with contextlib.suppress(AttributeError, TypeError):
         lap._unwrapped_cache = result
-    except (AttributeError, TypeError):
-        pass
 
 
 def _enforce_monotone(

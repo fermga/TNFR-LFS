@@ -12,12 +12,10 @@ every comparison delta the rest of the package produces.
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import numpy as np
 
 from ...telemetry.comparison import _unwrapped_lap_arrays
-from .decimate import DECIMATE_THRESHOLD, DECIMATE_TARGET, lttb
+from .decimate import DECIMATE_TARGET, DECIMATE_THRESHOLD, lttb
 
 
 def lap_x_array(lap, axis_kind: str) -> np.ndarray:
@@ -51,8 +49,8 @@ class LapArrayCache:
     """
 
     def __init__(self) -> None:
-        self._x: dict[Tuple[int, str], np.ndarray] = {}
-        self._yz: dict[Tuple[int, str, str, int], Tuple[np.ndarray, np.ndarray]] = {}
+        self._x: dict[tuple[int, str], np.ndarray] = {}
+        self._yz: dict[tuple[int, str, str, int], tuple[np.ndarray, np.ndarray]] = {}
 
     def x(self, lap, axis_kind: str) -> np.ndarray:
         key = (id(lap), axis_kind)
@@ -65,17 +63,14 @@ class LapArrayCache:
 
     def xy_decimated(
         self, lap, column: str, axis_kind: str,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         x = self.x(lap, axis_kind)
         key = (id(lap), column, axis_kind, x.size)
         hit = self._yz.get(key)
         if hit is not None:
             return hit
         y = lap_y_array(lap, column)
-        if x.size <= DECIMATE_THRESHOLD:
-            pair = (x, y)
-        else:
-            pair = lttb(x, y, DECIMATE_TARGET)
+        pair = (x, y) if x.size <= DECIMATE_THRESHOLD else lttb(x, y, DECIMATE_TARGET)
         self._yz[key] = pair
         return pair
 

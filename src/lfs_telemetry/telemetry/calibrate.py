@@ -23,10 +23,8 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 
+from .constants import GRAVITY
 from .observables import CORNERS, CarSpec, car_spec_for
-
-
-GRAVITY = 9.81
 
 
 def _percentile(arr: np.ndarray, q: float) -> float:

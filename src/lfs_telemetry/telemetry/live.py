@@ -19,9 +19,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import AsyncIterator
 
+from .protocol.insim import InSimClient, RaceContext
 from .protocol.packets import (
     OSO_ALL,
     OUTGAUGE_SIZE,
@@ -33,8 +34,6 @@ from .protocol.packets import (
     OutSimPacket,
     outsim2_size,
 )
-from .protocol.insim import InSimClient, RaceContext
-
 
 _LOG = logging.getLogger(__name__)
 
@@ -204,7 +203,7 @@ class LiveTelemetry:
             await self._insim.stop()
             self._insim = None
 
-    async def __aenter__(self) -> "LiveTelemetry":
+    async def __aenter__(self) -> LiveTelemetry:
         await self.start()
         return self
 

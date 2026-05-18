@@ -33,10 +33,11 @@ to ship inside the future standalone visualization app.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -63,7 +64,7 @@ class StintTelemetry:
         paths: Iterable[str | Path],
         *,
         car: CarSpec | str | None = None,
-    ) -> "StintTelemetry":
+    ) -> StintTelemetry:
         """Load a stint from a list of per-lap CSVs (in order)."""
         laps = [LapTelemetry.from_csv(p, car=car) for p in paths]
         return cls(laps=laps)
@@ -75,7 +76,7 @@ class StintTelemetry:
         pattern: str = "*lap*.csv",
         *,
         car: CarSpec | str | None = None,
-    ) -> "StintTelemetry":
+    ) -> StintTelemetry:
         """Load all CSVs in ``directory`` matching ``pattern`` (sorted)."""
         directory = Path(directory)
         paths = sorted(directory.glob(pattern))
@@ -85,7 +86,7 @@ class StintTelemetry:
         return cls.from_csvs(paths, car=car)
 
     @classmethod
-    def from_laps(cls, laps: Sequence[LapTelemetry]) -> "StintTelemetry":
+    def from_laps(cls, laps: Sequence[LapTelemetry]) -> StintTelemetry:
         """Wrap an existing list of LapTelemetry (no I/O)."""
         return cls(laps=list(laps))
 
@@ -324,9 +325,7 @@ class StintTelemetry:
         for i, rec in enumerate(records, start=1):
             if i > len(self.laps):
                 break
-            if not getattr(rec, "valid", True):
-                self.invalid_lap_indices.add(i)
-            elif getattr(rec, "obh_count", 0) > 0:
+            if not getattr(rec, "valid", True) or getattr(rec, "obh_count", 0) > 0:
                 self.invalid_lap_indices.add(i)
 
     @cached_property

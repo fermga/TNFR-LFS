@@ -8,9 +8,9 @@ lock-free and intended to be used from a single Dash worker process.
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
 
 from ..telemetry import (
     CaptureInfo,

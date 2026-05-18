@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from PySide6.QtWidgets import QApplication
 
-from . import __version__
 from ..lfs_paths import QSETTINGS_APP, QSETTINGS_DOMAIN, QSETTINGS_ORG
+from . import __version__
 from .i18n import install_translator
 from .theme import apply_dark_palette, configure_pyqtgraph
 

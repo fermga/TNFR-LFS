@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import struct
 
 import numpy as np
@@ -10,7 +9,6 @@ import pandas as pd
 import pytest
 
 from lfs_telemetry.telemetry import (
-    LapRecord,
     build_lap_records,
     enrich_dataframe,
     traffic_snapshot,
@@ -23,19 +21,18 @@ from lfs_telemetry.telemetry.protocol.packets import (
     DL_PITSPEED,
     DL_TC,
     HLVC_WALL,
+    CompCar,
     InSimHotLapValid,
     InSimLap,
+    InSimMCI,
     InSimNewPlayer,
     InSimNodeLap,
     InSimObjectHit,
     InSimSplit,
     NodeLap,
-    CompCar,
-    InSimMCI,
     decode_dash_lights,
     hlvc_name,
 )
-
 
 # ---------------------------------------------------------------------------
 # Bit decoders
@@ -332,6 +329,48 @@ def test_enrich_dataframe_adds_columns():
     # fy_norm = 600 / (1.40·1500) ≈ 0.286; fx_norm = 400 / (1.20·1500) ≈ 0.222
     # → sqrt = 0.362.
     assert out["friction_use_FL"].iloc[0] == pytest.approx(0.362, rel=1e-2)
+
+
+def test_enrich_dataframe_combined_channels():
+    """Combined / synergy channels expose the right semantics."""
+    df = _synthetic_df()
+    # Add the raw inputs the combined block needs but the base fixture
+    # doesn't have: suspension deflection, roll/pitch, and a lockup
+    # scenario on the FL wheel.
+    for c in ("FL", "FR", "RL", "RR"):
+        df[f"wheel_{c}_susp_deflect_m"] = 0.030 if c.startswith("F") else 0.020
+    df["roll"] = 0.05    # rad
+    df["pitch"] = -0.02  # rad
+    df.loc[0, "wheel_FL_slip_ratio"] = -0.5   # locked under braking
+    df.loc[0, "brake"] = 0.8
+
+    out = enrich_dataframe(df, CarSpec())
+
+    # g_total = sqrt(2² + 5²) / 9.80665 ≈ 0.549
+    assert out["g_total_g"].iloc[0] == pytest.approx(0.549, rel=1e-2)
+    # Front compression = 0.030, rear = 0.020 → rake = +0.010 (nose down).
+    assert out["susp_compression_front_avg_m"].iloc[0] == pytest.approx(0.030)
+    assert out["susp_compression_rear_avg_m"].iloc[0] == pytest.approx(0.020)
+    assert out["rake_compression_m"].iloc[0] == pytest.approx(0.010)
+    # All wheels share |tan α|=0.05 ⇒ balance = 0.
+    assert out["slip_angle_balance_rad"].iloc[0] == pytest.approx(0.0)
+    # Lockup detected on FL only at row 0.
+    assert bool(out["wheel_FL_lockup"].iloc[0]) is True
+    assert bool(out["wheel_FR_lockup"].iloc[0]) is False
+    # Brake power > 0 at row 0 (long. force is +400 N per wheel in the
+    # fixture, which is *positive*; the brake-power channel clips
+    # negative-net-force only, so net positive long. force yields 0 W).
+    # Validate the channel exists and is non-negative everywhere.
+    assert (out["brake_power_w"] >= 0).all()
+    # Coasting flag: row with throttle=0 & brake>0 should be False.
+    assert bool(out["coasting"].iloc[0]) is False
+    # Trail-brake intensity at row 0: brake=0.8, |steer|=0.05 → 0.04.
+    assert out["trail_brake_intensity"].iloc[0] == pytest.approx(0.04)
+    # Throttle reversal rate is present.
+    assert "throttle_reversal_rate_hz" in out.columns
+    # Compliance ratios: ay=5 m/s²>2 ⇒ defined; ax=-2 m/s² not >2 ⇒ NaN.
+    assert np.isfinite(out["chassis_roll_per_lat_g_rad_per_g"].iloc[0])
+    assert np.isnan(out["chassis_pitch_per_long_g_rad_per_g"].iloc[0])
 
 
 def test_enrich_dataframe_handles_missing_columns():

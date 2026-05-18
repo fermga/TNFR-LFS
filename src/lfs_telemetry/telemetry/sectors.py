@@ -28,8 +28,8 @@ and the existing ``LapTelemetry`` / unwrap helpers in ``comparison``.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 import numpy as np
 
@@ -73,6 +73,18 @@ class Sector:
     end_d_m: float      # distance from line at sector end (m)
     start_t_s: float    # time from line at sector start (s, may be negative)
     end_t_s: float      # time from line at sector end (s)
+
+    def __post_init__(self) -> None:
+        if self.end_d_m < self.start_d_m:
+            raise ValueError(
+                f"Sector {self.index}: end_d_m ({self.end_d_m}) < "
+                f"start_d_m ({self.start_d_m})"
+            )
+        if self.end_t_s < self.start_t_s:
+            raise ValueError(
+                f"Sector {self.index}: end_t_s ({self.end_t_s}) < "
+                f"start_t_s ({self.start_t_s})"
+            )
 
     @property
     def time_s(self) -> float:

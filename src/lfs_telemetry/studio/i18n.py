@@ -29,7 +29,8 @@ from PySide6.QtCore import (
     QTranslator,
 )
 
-from ..lfs_paths import QSETTINGS_APP as APP, QSETTINGS_ORG as ORG
+from ..lfs_paths import QSETTINGS_APP as APP
+from ..lfs_paths import QSETTINGS_ORG as ORG
 
 # ---------------------------------------------------------------------
 # Public API
@@ -42,7 +43,7 @@ AVAILABLE_LANGS: Final[tuple[str, ...]] = (LANG_ENGLISH, LANG_SPANISH)
 
 # Module-level translator kept alive by reference so Qt doesn't drop
 # it. Installed by :func:`install_translator`.
-_translator: "DictTranslator | None" = None
+_translator: DictTranslator | None = None
 
 
 def tr(text: str, *, context: str = "app") -> str:
@@ -111,10 +112,7 @@ class DictTranslator(QTranslator):
         disambiguation: bytes | str | None = None,
         n: int = -1,
     ) -> str:
-        if isinstance(sourceText, bytes):
-            key = sourceText.decode("utf-8", "replace")
-        else:
-            key = sourceText
+        key = sourceText.decode("utf-8", "replace") if isinstance(sourceText, bytes) else sourceText
         # If a key is missing, keep the source text visible.
         return self._map.get(key, key)
 
@@ -163,6 +161,20 @@ _ES: dict[str, str] = {
         "necesarios para lfs-telemetry.",
 
     # --- Help menu ----------------------------------------------------
+    "User manual\u2026": "Manual de usuario\u2026",
+    "Open the LFS Race Engineer user manual: how to "
+    "configure LFS and use each tab.":
+        "Abre el manual de usuario de LFS Race Engineer: c\u00f3mo "
+        "configurar LFS y usar cada pesta\u00f1a.",
+    "User manual": "Manual de usuario",
+    "Could not open user manual: {err}":
+        "No se pudo abrir el manual de usuario: {err}",
+    "User manual file not found. It should be at "
+    "'docs/MANUAL.en.md' or 'docs/MANUAL.es.md' next "
+    "to the application.":
+        "No se encontr\u00f3 el archivo del manual. Deber\u00eda estar en "
+        "'docs/MANUAL.en.md' o 'docs/MANUAL.es.md' junto a la "
+        "aplicaci\u00f3n.",
     "Channel guide\u2026": "Gu\u00eda de canales\u2026",
     "Open the telemetry guide: what each channel measures "
     "and how to read it, in plain language.":
@@ -311,6 +323,17 @@ _ES: dict[str, str] = {
     "InSim port:": "Puerto InSim:",
     "OutSim port:": "Puerto OutSim:",
     "OutGauge port:": "Puerto OutGauge:",
+    "Overlay only (no CSV recording)":
+        "Solo overlay (sin grabar CSV)",
+    "When enabled, the connection to LFS still drives the "
+    "Overlay tab in real time, but no telemetry is buffered "
+    "in memory and no per-lap or aggregate CSV is written "
+    "to the workspace. Uncheck to record stints as usual.":
+        "Cuando est\u00e1 activado, la conexi\u00f3n con LFS sigue "
+        "alimentando la pesta\u00f1a Overlay en tiempo real, pero "
+        "no se almacena telemetr\u00eda en memoria ni se escribe "
+        "ning\u00fan CSV por vuelta o agregado en el espacio de "
+        "trabajo. Desact\u00edvalo para grabar stints como siempre.",
     "Start": "Iniciar",
     "Stop": "Detener",
     "LFS InSim status: idle": "Estado InSim de LFS: inactivo",
@@ -497,7 +520,6 @@ _ES: dict[str, str] = {
     "No classification data yet.":
         "Aún no hay datos de clasificación.",
     "Pos": "Pos",
-    "Driver": "Piloto",
     "Last": "Última",
     "Best": "Mejor",
     "Gaps to rivals": "Huecos a rivales",
@@ -556,6 +578,84 @@ _ES: dict[str, str] = {
     "Track": "Circuito",
     "Aids": "Ayudas",
     "Context": "Contexto",
+    # --- Derived (combined channels) ---------------------------------
+    "g-force total": "Fuerza g total",
+    "Front compression": "Compresi\u00f3n delantera",
+    "Rear compression": "Compresi\u00f3n trasera",
+    "Rake (\u0394 compression)": "Rake (\u0394 compresi\u00f3n)",
+    "Slip balance (F\u2212R)": "Balance de deriva (D\u2212T)",
+    "Brake power": "Potencia de frenado",
+    "Throttle reversals": "Inversiones de acelerador",
+    "Coasting": "Rodando libre",
+    "Trail-brake intensity": "Intensidad de trail-brake",
+    "Roll compliance": "Flexibilidad al balanceo",
+    "Pitch compliance": "Flexibilidad al cabeceo",
+    "Lockup": "Bloqueo",
+    # --- Setup editor tab --------------------------------------------
+    "Select a lap on the left to load the car's garage.":
+        "Selecciona una vuelta a la izquierda para cargar el garaje "
+        "del coche.",
+    "Apply overrides": "Aplicar ajustes",
+    "Broadcast the current values as the active setup"
+    " override. Other tabs that consume CAR_info will see"
+    " these numbers instead of the raw on-disk export.":
+        "Publica los valores actuales como ajuste activo. Las dem\u00e1s "
+        "pesta\u00f1as que usan CAR_info ver\u00e1n estos n\u00fameros "
+        "en lugar del archivo exportado original.",
+    "Reset to imported": "Restablecer a importado",
+    "Re-read the values from the on-disk CAR_info.bin"
+    " export and discard local edits.":
+        "Vuelve a leer los valores del archivo CAR_info.bin y descarta "
+        "las ediciones locales.",
+    "Brakes & steering": "Frenos y direcci\u00f3n",
+    "Max force": "Fuerza m\u00e1xima",
+    "Balance": "Balance",
+    "Parallel steer": "Direcci\u00f3n paralela",
+    "Suspension (per axle)": "Suspensi\u00f3n (por eje)",
+    "Front": "Delantero",
+    "Rear": "Trasero",
+    "Camber": "Ca\u00edda",
+    "Toe-in": "Convergencia",
+    "Spring rate": "Constante del muelle",
+    "Damper bump": "Amortiguador en compresi\u00f3n",
+    "Damper rebound": "Amortiguador en extensi\u00f3n",
+    "Anti-roll bar": "Barra estabilizadora",
+    "Tyres (per axle)": "Neum\u00e1ticos (por eje)",
+    "Pressure": "Presi\u00f3n",
+    "Drivetrain": "Transmisi\u00f3n",
+    "Final drive": "Grupo final",
+    "Drivetrain efficiency": "Eficiencia de la transmisi\u00f3n",
+    "Torque split (AWD)": "Reparto de par (AWD)",
+    "Gear ratios": "Relaciones de marchas",
+    "Gear {n}": "Marcha {n}",
+    "Chassis & fuel": "Chasis y combustible",
+    "Passengers / ballast": "Pasajeros / lastre",
+    "Weight distribution": "Distribuci\u00f3n de peso",
+    "Fuel tank capacity": "Capacidad del dep\u00f3sito",
+    "Loading garage for {name}\u2026":
+        "Cargando garaje de {name}\u2026",
+    "Lap has no car id in its summary \u2014 cannot load garage.":
+        "La vuelta no tiene id de coche en su resumen \u2014 no se "
+        "puede cargar el garaje.",
+    "No <code>{key}_CAR_info.bin</code> found on the"
+    " search path. Use <b>Import from LFS folder\u2026</b>"
+    " on the Baseline tab first.":
+        "No se encontr\u00f3 <code>{key}_CAR_info.bin</code> en la ruta "
+        "de b\u00fasqueda. Usa primero <b>Importar desde carpeta de "
+        "LFS\u2026</b> en la pesta\u00f1a Baseline.",
+    "<b>{key}</b> \u2014 loaded from"
+    " <code>{key}_CAR_info.bin</code>. Edit any field and"
+    " press <b>Apply overrides</b> to publish it as the"
+    " active setup.":
+        "<b>{key}</b> \u2014 cargado desde "
+        "<code>{key}_CAR_info.bin</code>. Edita cualquier campo y pulsa "
+        "<b>Aplicar ajustes</b> para publicarlo como ajuste activo.",
+    "Invalid setup: {error}": "Ajuste no v\u00e1lido: {error}",
+    "Overrides applied \u2014 other tabs will use the new values.":
+        "Ajustes aplicados \u2014 las dem\u00e1s pesta\u00f1as usar\u00e1n "
+        "los nuevos valores.",
+    "Reset to imported CAR_info.bin values.":
+        "Restablecido a los valores importados de CAR_info.bin.",
 }
 
 

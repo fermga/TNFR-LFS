@@ -3,11 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from lfs_telemetry import lfs_config
 from lfs_telemetry.telemetry import observables
-
 
 # ---------------------------------------------------------------------------
 # find_lfs_car_info_bins
@@ -99,7 +96,7 @@ def test_import_car_info_bins_from_lfs_collects_failures(
     assert len(imported) == 1
     assert imported[0][0] == "FBM"
     assert len(failed) == 1
-    assert "BROKEN_CAR_info.bin" == failed[0][0].name
+    assert failed[0][0].name == "BROKEN_CAR_info.bin"
     assert "not a valid export" in failed[0][1]
 
 

@@ -14,7 +14,6 @@ from lfs_telemetry.telemetry.track.enrich import (
 )
 from lfs_telemetry.telemetry.track.pth import DEFAULT_SMX_DIR, compute_profile, parse_pth
 
-
 SMX = DEFAULT_SMX_DIR
 pytestmark = pytest.mark.skipif(
     not SMX.exists(), reason="LFS install not available at C:/LFS",

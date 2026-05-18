@@ -7,13 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from lfs_telemetry.telemetry.live import TelemetrySample, _outsim2_to_basic
-from lfs_telemetry.telemetry.protocol.packets import OSO_ALL, OutGaugePacket, OutSimPack2
 from lfs_telemetry.telemetry.car_calibration import (
     CarCalibration,
     CarSpecStore,
     RestCalibrator,
 )
+from lfs_telemetry.telemetry.constants import GRAVITY
+from lfs_telemetry.telemetry.live import TelemetrySample, _outsim2_to_basic
+from lfs_telemetry.telemetry.protocol.packets import OSO_ALL, OutGaugePacket, OutSimPack2
 
 
 def _build_outsim2(
@@ -34,7 +35,7 @@ def _build_outsim2(
         "<12f3i",
         0.0, 0.0, 0.0,        # ang_vel
         0.0, 0.0, 0.0,        # heading,pitch,roll
-        ax, ay, 9.81,         # accel
+        ax, ay, GRAVITY,      # accel
         0.0, 0.0, 0.0,        # velocity
         0, 0, 0,
     ))
@@ -93,7 +94,7 @@ def test_calibrator_emits_after_window_at_rest() -> None:
     assert result.car_id == "FBM"
     total = sum(loads)                                      # 5400 N
     assert result.sum_load_n == pytest.approx(total, rel=1e-6)
-    assert result.mass_kg == pytest.approx(total / 9.81, rel=1e-6)
+    assert result.mass_kg == pytest.approx(total / GRAVITY, rel=1e-6)
     # front fraction = (FL+FR)/total = 2400/5400
     assert result.weight_dist_front == pytest.approx(2400.0 / 5400.0, rel=1e-6)
 
@@ -117,7 +118,7 @@ def test_store_roundtrip_persists_calibration(tmp_path: Path) -> None:
     store = CarSpecStore(p)
     cal = CarCalibration(
         car_id="MOD1", mass_kg=720.5, weight_dist_front=0.48,
-        sample_count=100, sum_load_n=720.5 * 9.81,
+        sample_count=100, sum_load_n=720.5 * GRAVITY,
         front_fraction=0.48, left_fraction=0.501,
     )
     store.put(cal)
@@ -136,7 +137,7 @@ def test_spec_for_uses_calibration_over_defaults(tmp_path: Path) -> None:
     store = CarSpecStore(p)
     cal = CarCalibration(
         car_id="FBM", mass_kg=999.0, weight_dist_front=0.5,
-        sample_count=100, sum_load_n=999.0 * 9.81,
+        sample_count=100, sum_load_n=999.0 * GRAVITY,
         front_fraction=0.5, left_fraction=0.5,
     )
     store.put(cal)
@@ -152,7 +153,7 @@ def test_spec_for_unknown_mod_uses_generic_geometry(tmp_path: Path) -> None:
     store = CarSpecStore(p)
     cal = CarCalibration(
         car_id="X1ABCD", mass_kg=820.0, weight_dist_front=0.55,
-        sample_count=100, sum_load_n=820.0 * 9.81,
+        sample_count=100, sum_load_n=820.0 * GRAVITY,
         front_fraction=0.55, left_fraction=0.5,
     )
     store.put(cal)

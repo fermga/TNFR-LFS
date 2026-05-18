@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QStandardItem
@@ -20,11 +20,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...lfs_paths import QSETTINGS_APP as APP
+from ...lfs_paths import QSETTINGS_ORG as ORG
+from ..i18n import tr
 from ..models import ChannelTreeModel
 from ..signals import SignalBus
-from ..i18n import tr
-from ...lfs_paths import QSETTINGS_APP as APP, QSETTINGS_ORG as ORG
-
 
 # Hard cap on simultaneously plotted channels: above this the chart
 # stack and the track-map overlay degrade. Enforced at tick time.

@@ -28,16 +28,15 @@ from PySide6.QtWidgets import (
 )
 
 from ...app.capture_runner import CaptureRunner
-from ..signals import SignalBus
 from ..i18n import tr
+from ..signals import SignalBus
 from ..theme import MUTED_COLOR, TEXT_COLOR
-from .live_data_source import LiveDataSource
 from ._format import (
     format_gap_meters,
     format_lap_time_ms,
     format_signed_delta_s,
 )
-
+from .live_data_source import LiveDataSource
 
 _GOOD = "#7ed957"
 _WARN = "#ffe066"

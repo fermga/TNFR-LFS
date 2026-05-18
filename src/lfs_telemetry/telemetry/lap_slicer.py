@@ -20,9 +20,9 @@ official LFS lap time stays attached to each canonical slice.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence
 
 from .live import TelemetrySample
 from .replay import read_csv_replay, write_csv_replay
@@ -40,15 +40,15 @@ class LapSlice:
     """
 
     lap_index: int
-    samples: List[TelemetrySample]
+    samples: list[TelemetrySample]
     start_idx: int
     end_idx: int
     duration_s: float
     distance_m: float
-    lap_ms: Optional[int] = None
+    lap_ms: int | None = None
 
 
-def _lap_distance(sample: TelemetrySample) -> Optional[float]:
+def _lap_distance(sample: TelemetrySample) -> float | None:
     """Return ``current_lap_dist_m`` from OutSimPack2 if present."""
     pkt2 = sample.outsim2
     if pkt2 is None:
@@ -82,7 +82,7 @@ def find_line_crossings(
     return crossings
 
 
-def _lap_ms_at(sample: TelemetrySample) -> Optional[int]:
+def _lap_ms_at(sample: TelemetrySample) -> int | None:
     """Best-effort: read the view-player's ``last_lap_ms`` from the
     InSim race context attached to this sample.
     """
@@ -138,7 +138,7 @@ def slice_into_laps(
                     lap_ms=lap_ms,
                 )
             )
-    for n, (a, b) in enumerate(zip(crossings, crossings[1:]), start=1):
+    for n, (a, b) in enumerate(zip(crossings, crossings[1:], strict=False), start=1):
         slice_samples = list(samples[a:b])
         if not slice_samples:
             continue
@@ -152,7 +152,7 @@ def slice_into_laps(
         # The IS_LAP packet for lap N typically updates the race context
         # *just before* sample[b] (the first sample of lap N+1), so the
         # canonical place to look up the lap time is samples[b].
-        lap_ms: Optional[int] = None
+        lap_ms: int | None = None
         if b < len(samples):
             lap_ms = _lap_ms_at(samples[b])
         laps.append(

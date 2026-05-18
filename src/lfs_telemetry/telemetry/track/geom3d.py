@@ -27,14 +27,14 @@ side (low-saturation greys) so the banking fit gets enough points.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 
-from .smx import SmxMesh, cross_section_at
 from .pth import TrackProfile
+from .smx import SmxMesh, cross_section_at
 
 __all__ = [
     "SURFACE_CLASSES",
@@ -226,7 +226,7 @@ def _nearest_station_index(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(idx, dist)`` of the nearest centreline node per point."""
     try:
-        from scipy.spatial import cKDTree   # type: ignore
+        from scipy.spatial import cKDTree  # type: ignore
         tree = cKDTree(centreline_xy)
         dist, idx = tree.query(points_xy, k=1)
         return idx.astype(np.int64), dist
@@ -429,7 +429,7 @@ class CorridorHeightmap:
         return p
 
     @classmethod
-    def load_npz(cls, path: str | Path) -> "CorridorHeightmap":
+    def load_npz(cls, path: str | Path) -> CorridorHeightmap:
         data = np.load(Path(path))
         return cls(
             s=data["s"], t=data["t"], z=data["z"],
@@ -588,7 +588,7 @@ def compute_barrier_offsets(
             # First True along each row sets the barrier distance.
             first = np.argmax(off, axis=1)
             any_off = off.any(axis=1)
-            for k, (hit, row) in enumerate(zip(any_off, first)):
+            for k, (hit, row) in enumerate(zip(any_off, first, strict=True)):
                 if hit:
                     out[i0 + k] = float(step_dists[row])
     return left, right

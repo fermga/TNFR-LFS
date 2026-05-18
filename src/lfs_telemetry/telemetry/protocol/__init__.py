@@ -1,4 +1,10 @@
-"""LFS wire protocol packets (OutSim, OutSim2, OutGauge, InSim)."""
+"""LFS wire protocol packets (OutSim, OutSim2, OutGauge, InSim).
 
-from .packets import *  # noqa: F401,F403
-from . import packets, insim  # noqa: F401
+Consumers should import from the submodules directly
+(``from .protocol.packets import …`` / ``from .protocol.insim import …``);
+this package re-exports the submodules but does not flatten their names.
+"""
+
+from . import insim, packets
+
+__all__ = ["insim", "packets"]

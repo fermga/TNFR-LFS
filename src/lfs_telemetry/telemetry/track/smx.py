@@ -44,9 +44,9 @@ Z = up), in metres after the Q16.16 divide.
 from __future__ import annotations
 
 import struct
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 
@@ -409,7 +409,7 @@ def elevation_envelope(
 
     verts = mesh.vertices
     try:
-        from scipy.spatial import cKDTree   # type: ignore
+        from scipy.spatial import cKDTree  # type: ignore
         tree = cKDTree(centreline_xy)
         dist, idx = tree.query(verts[:, :2], k=1)
     except ImportError:                         # pragma: no cover

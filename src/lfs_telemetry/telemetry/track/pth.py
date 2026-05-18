@@ -36,9 +36,9 @@ LFS coordinate system (matches OutSim pos_x/pos_y/pos_z):
 from __future__ import annotations
 
 import struct
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path as _Path
-from typing import Iterable, Optional
 
 import numpy as np
 
@@ -187,20 +187,20 @@ class TrackProfile:
     limit_right_m: np.ndarray      # outer limit, LFS-right
     # Optional enrichments populated from a parsed SMX mesh
     # (see ``lfs_telemetry.telemetry.track.geom3d.enrich_profile_with_smx``).
-    banking_rad: Optional[np.ndarray] = None  # (N,) signed transverse slope
-    surface_fractions: Optional[np.ndarray] = None  # (N, 5) per class
-    surface_classes: Optional[tuple[str, ...]] = None  # names of the cols
-    apex_visibility_m: Optional[np.ndarray] = None  # (N,) line-of-sight
+    banking_rad: np.ndarray | None = None  # (N,) signed transverse slope
+    surface_fractions: np.ndarray | None = None  # (N, 5) per class
+    surface_classes: tuple[str, ...] | None = None  # names of the cols
+    apex_visibility_m: np.ndarray | None = None  # (N,) line-of-sight
     # 3D bounding / wall enrichments (BVH-style scan of the SMX mesh).
     # Distance from the centreline to the first non-drivable surface
     # (grass / runoff / other) on each side, in metres. ``effective_width_m``
     # = barrier_left_m + barrier_right_m. ``los_apex_m`` is the
     # line-of-sight distance to the next apex (mirrors ``apex_visibility_m``
     # but updated when wall-aware logic is in place).
-    barrier_left_m: Optional[np.ndarray] = None     # (N,) positive
-    barrier_right_m: Optional[np.ndarray] = None    # (N,) positive
-    effective_width_m: Optional[np.ndarray] = None  # (N,) positive
-    los_apex_m: Optional[np.ndarray] = None         # (N,) positive
+    barrier_left_m: np.ndarray | None = None     # (N,) positive
+    barrier_right_m: np.ndarray | None = None    # (N,) positive
+    effective_width_m: np.ndarray | None = None  # (N,) positive
+    los_apex_m: np.ndarray | None = None         # (N,) positive
 
     @property
     def width(self) -> np.ndarray:

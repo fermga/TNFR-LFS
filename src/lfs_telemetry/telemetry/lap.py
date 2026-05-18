@@ -30,9 +30,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from . import lap_cache as _lap_cache
 from .channels import ChannelInfo, channel_info, channels_by_group
 from .derived import enrich_dataframe
-from . import lap_cache as _lap_cache
 from .observables import CarSpec, car_spec_for
 from .replay import detect_schema_version, read_csv_dataframe
 
@@ -74,7 +74,7 @@ class LapTelemetry:
         path: str | Path,
         *,
         car: CarSpec | str | None = None,
-    ) -> "LapTelemetry":
+    ) -> LapTelemetry:
         """Load a captured CSV from :func:`write_csv_replay`.
 
         ``car`` accepts a :class:`CarSpec`, a short LFS car name (e.g.
@@ -114,7 +114,7 @@ class LapTelemetry:
         df: pd.DataFrame,
         *,
         car: CarSpec | str | None = None,
-    ) -> "LapTelemetry":
+    ) -> LapTelemetry:
         """Wrap an already-loaded DataFrame (no I/O)."""
         return cls(raw=df, car=_resolve_car(car, df))
 
@@ -236,9 +236,9 @@ class LapTelemetry:
     def sectors(
         self,
         *,
-        boundaries_m: "list[float] | None" = None,
+        boundaries_m: list[float] | None = None,
         n_equal: int = 3,
-    ) -> "list":
+    ) -> list:
         """Return per-sector :class:`Sector` records for this lap.
 
         Thin wrapper around :func:`lfs_telemetry.telemetry.sectors.lap_sectors`.

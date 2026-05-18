@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 from PySide6.QtCore import QSortFilterProxyModel, Qt
 from PySide6.QtGui import QAction
@@ -19,9 +18,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..i18n import tr
 from ..models import CapturesTableModel
 from ..signals import SignalBus
-from ..i18n import tr
 from ..workspace_state import WorkspaceState
 
 
@@ -105,7 +104,7 @@ class CapturesDock(QWidget):
         # Resize file column nicely; leave the rest interactive.
         self._view.resizeColumnsToContents()
 
-    def selected_paths(self) -> List[Path]:
+    def selected_paths(self) -> list[Path]:
         rows = self._view.selectionModel().selectedRows()
         out: list[Path] = []
         for proxy_idx in rows:

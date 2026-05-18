@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+# Standard gravity (NIST). Mirrors ``lfs_telemetry.telemetry.constants.GRAVITY``
+# so this script stays runnable without installing the package.
+GRAVITY = 9.80665
 
 WHEELS = ("FL", "FR", "RL", "RR")
 WHEEL_COLORS = {"FL": "#1f77b4", "FR": "#d62728", "RL": "#2ca02c", "RR": "#ff7f0e"}
@@ -22,8 +25,8 @@ def _prepare(df: pd.DataFrame) -> pd.DataFrame:
     df["t"] = (df["time_ms"] - df["time_ms"].iloc[0]) / 1000.0
     df["speed_kmh"] = df["speed_ms"] * 3.6
     # planar G-forces (g)
-    df["g_lat"] = df["accel_x"] / 9.81
-    df["g_lon"] = df["accel_y"] / 9.81
+    df["g_lat"] = df["accel_x"] / GRAVITY
+    df["g_lon"] = df["accel_y"] / GRAVITY
     # steer angle deg (rad input)
     df["steer_deg"] = np.degrees(df["input_steer"])
     # tyre slip energy proxy = |slip_ratio| + |tan_slip_angle|

@@ -46,13 +46,12 @@ import pytest
 from lfs_telemetry.telemetry.live import LiveTelemetry
 from lfs_telemetry.telemetry.protocol.insim import InSimClient
 from lfs_telemetry.telemetry.protocol.packets import (
+    OSO_ALL,
     InSimNewPlayer,
     InSimState,
     InSimVersion,
-    OSO_ALL,
     outsim2_size,
 )
-
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("LFS_TELEMETRY_LIVE_TEST"),
@@ -205,7 +204,7 @@ async def test_live_insim_player_event_arrives() -> None:
             return None
         try:
             npl = await asyncio.wait_for(_wait_for_npl(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.skip("no IS_NPL within timeout (no players in session?)")
     finally:
         await client.stop()

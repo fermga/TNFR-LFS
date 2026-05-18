@@ -59,9 +59,29 @@ las pestañas en este orden:
 5. **Capture** — `widgets/capture_tab.py` (controla la subprocess CLI).
 6. **Overlay** — `widgets/live_tab.py` (consume `live_publisher` JSON).
 
-Los módulos `setup_tab.py`, `setup_editor_tab.py` y `setup_advisor_tab.py`
-siguen en el repositorio como utilidad para futuras ampliaciones, pero
-**no están cableados en `CenterTabs`** en la build actual.
+### Cobertura de coches
+
+* La **captura de telemetría y todas las pestañas basadas en CSV**
+  (Telemetry, Dampers, Sectors, Stint) **funcionan con cualquier
+  coche de LFS** — stock, mods o vehículos desconocidos — porque
+  sólo dependen del wire-format OutSim/OutGauge/InSim, idéntico
+  para todos.
+* La **pestaña Overlay (HUD en vivo) está soportada para los coches
+  propios de LFS y los mods verificados**. El HUD usa metadatos por
+  coche (masa, depósito, gearing, compuestos de neumático, setup
+  por defecto) leídos de `config/cars.json`, los `car_info.bin`
+  empaquetados en `assets/source/cars/*.bin` y los footprints
+  curados en `assets/source/mods/*.json`. Si el coche no aparece en
+  ninguna fuente, la captura sigue funcionando, pero los widgets
+  que requieren contexto específico (rango de combustible, lap
+  predicho con consumo, desgaste de neumáticos, escalado del
+  indicador de marcha) muestran valores neutros o quedan en blanco
+  hasta que se registre una calibración con `lfs-telemetry
+  calibrate`.
+
+Los módulos `setup_tab.py` y `setup_editor_tab.py` siguen en el
+repositorio como utilidad para futuras ampliaciones, pero **no están
+cableados en `CenterTabs`** en la build actual.
 
 El menú *Tools* abre `widgets/lfs_config_dialog.py` para parchear
 `cfg.txt` y, opcionalmente, el cargador de racing lines
@@ -111,7 +131,7 @@ El menú *Tools* abre `widgets/lfs_config_dialog.py` para parchear
 | `stint_tab.py` | Tabla `StintTelemetry.per_lap` + trend lines. |
 | `sectors_tab.py` | Splits por sector + best / theoretical-best. |
 | `dampers_tab.py` | Histogramas HS/LS por rueda (`damper_histogram`). |
-| `capture_tab.py` | Botones Start/Stop; UI sobre `app.capture_runner`. |
+| `capture_tab.py` | Botones Start/Stop sobre `app.capture_runner`. Formulario (stem, host/puerto InSim, puertos OutSim/OutGauge), checkbox **"Overlay only (no CSV recording)"** que pasa `write_csv=False` al runner (CLI `--no-csv`), LED de estado InSim (gris=idle / ámbar=esperando / verde=conectado), log embebido y contador de vueltas. |
 | `live_tab.py` | Race-engineer overlay live a partir del snapshot JSON. |
 | `live_modules.py` | Módulos componibles del Live tab (radar, fuel, splits, delta, traffic). |
 | `live_data_source.py` | Lector y watcher del fichero JSON publicado por `live_publisher`. |
@@ -128,7 +148,11 @@ subprocess de captura:
 
 * `capture_runner.CaptureRunner` — lanza `lfs-telemetry capture` con
   los flags configurados desde el *Capture* tab, vigila el fichero
-  stop, redirige stderr/stdout a la UI y emite progreso.
+  stop, redirige stderr/stdout a la UI y emite progreso. Acepta
+  `write_csv: bool = True`; cuando es `False`, el runner crea un
+  directorio compartido `<workspace>/_overlay/` para `live.json` y
+  el sentinel (no una carpeta de sesión por captura), reenvía
+  `--no-csv` al subproceso y, por tanto, no se escribe ningún CSV.
 * `state.CaptureState` — dataclass espejo del estado actual
   (running / paused / stopped, tiempo transcurrido, número de
   muestras, last error).
@@ -144,7 +168,7 @@ buffers se descarguen al CSV.
 El flujo en sesión real:
 
 ```
-LFS  ─►  lfs-telemetry capture --live-file live.json
+LFS  ─►  lfs-telemetry capture --live-file live.json [--no-csv]
                  │
                  ▼
        live_publisher.write_snapshot_atomic(...)   ~10 Hz
@@ -155,6 +179,13 @@ LFS  ─►  lfs-telemetry capture --live-file live.json
                  ▼
  widgets/live_tab.LiveTab  +  widgets/live_modules.*
 ```
+
+Cuando el usuario marca **"Overlay only (no CSV recording)"** en la
+pestaña Capture, el runner pasa `--no-csv` al subproceso: el
+`live.json` sigue refrescándose a ~10 Hz y la pestaña Overlay
+funciona normalmente, pero no se buferean muestras en memoria ni se
+escriben CSV per-lap o agregados. Útil para usar el HUD sin
+dejar registros de telemetría en el workspace.
 
 Módulos Live disponibles (`live_modules.py`):
 

@@ -35,14 +35,22 @@ ROOT = Path(SPECPATH).resolve()  # noqa: F821 - SPECPATH provided by PyInstaller
 hiddenimports: list[str] = []
 datas: list[tuple[str, str]] = []
 
-# Pull every Studio + telemetry submodule so dynamic imports survive.
-hiddenimports += collect_submodules("lfs_telemetry")
+# Modules deliberately *not* shipped in the installable build. The
+# Setup tab and its in-app editor are unwired from ``CenterTabs`` (see
+# ``src/lfs_telemetry/studio/README.md``) and must not travel inside
+# the .exe until they are ready for end users.
+_EXCLUDED_STUDIO_MODULES = {
+    "lfs_telemetry.studio.widgets.setup_tab",
+    "lfs_telemetry.studio.widgets.setup_editor_tab",
+}
 
-# The TNFR Setup Advisor pulls modules from the external `tnfr` package
-# under runtime (operator factories, dynamics helpers). `collect_submodules`
-# guarantees the frozen build keeps every submodule even if the static
-# importer of `lfs_telemetry.tnfr_racing.*` only references a subset.
-hiddenimports += collect_submodules("tnfr")
+# Pull every Studio + telemetry submodule so dynamic imports survive,
+# minus the explicitly hidden modules above.
+hiddenimports += [
+    name
+    for name in collect_submodules("lfs_telemetry")
+    if name not in _EXCLUDED_STUDIO_MODULES
+]
 
 # pyqtgraph occasionally needs runtime templates that hooks miss.
 hiddenimports += collect_submodules("pyqtgraph")
@@ -71,6 +79,8 @@ def _bundle_dir(folder: str, pattern: str = "*") -> list[tuple[str, str]]:
 datas += _bundle_dir("config", "*.json")
 datas += _bundle_dir("racing_lines", "*.csv")
 datas += _bundle_dir("tracks", "*.csv")
+# User manual (English + Spanish). Exposed in-app via Help → User manual.
+datas += _bundle_dir("docs", "*.md")
 # Mod-car footprint database (seeded from Detect&Monitor) — keeps the
 # radar usable for opponents driving LFS mods.
 datas += _bundle_dir("assets/source/mods", "*.json")
@@ -97,6 +107,11 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[str(ROOT / "scripts" / "pyi_runtime_chdir.py")],
     excludes=[
+        # Setup tab + in-app garage editor are not wired into the
+        # Studio UI yet (see studio/README.md). Keep them out of the
+        # installable build so they cannot be loaded at runtime.
+        "lfs_telemetry.studio.widgets.setup_tab",
+        "lfs_telemetry.studio.widgets.setup_editor_tab",
         # Test-only deps.
         "pytest",
         "pytest_asyncio",

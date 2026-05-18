@@ -20,7 +20,7 @@ class RacingLine:
     bbox: tuple[float, float, float, float]  # (xmin, ymin, xmax, ymax)
 
     @classmethod
-    def empty(cls) -> "RacingLine":
+    def empty(cls) -> RacingLine:
         return cls(points=[], bbox=(0.0, 0.0, 0.0, 0.0))
 
     @property
