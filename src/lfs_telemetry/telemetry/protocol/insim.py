@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
@@ -69,6 +70,7 @@ from .packets import (
     TINY_NONE,
     TINY_NPL,
     TINY_SST,
+    CompCar,
     InSimCameraChange,
     InSimCarContact,
     InSimCarStateChanged,
@@ -179,6 +181,16 @@ class RaceContext:
     lap_fuel_pct: dict[int, list[float]] = field(default_factory=dict)
     # Last MCI snapshot (multi-car traffic).
     last_mci: InSimMCI | None = None
+    # Per-PLID merged cache of the latest CompCar seen across IS_MCI
+    # packets, with the monotonic timestamp of the last refresh. LFS
+    # caps IS_MCI at 16 cars per packet, so with >16 cars on track the
+    # server splits one update across multiple back-to-back packets;
+    # we merge by PLID so ``last_mci.cars`` reflects the FULL grid
+    # instead of just the last batch (a missing view car in the
+    # surviving batch silently froze the radar / gap modules).
+    _mci_cars_by_plid: dict[int, tuple[CompCar, float]] = field(
+        default_factory=dict
+    )
     # Last NLP snapshot (compact node/lap for every car).
     last_nlp: InSimNodeLap | None = None
     # Rolling list of HLV (hot-lap-valid lost) events with full payload.
@@ -292,6 +304,11 @@ class RaceContext:
             self.tele_pits.clear()
             self.departures.clear()
             self.engine_events.clear()
+            # Drop the merged IS_MCI cache too so a restart on a
+            # smaller grid doesn't keep ghost cars from the previous
+            # session.
+            self._mci_cars_by_plid.clear()
+            self.last_mci = None
         elif isinstance(packet, InSimNewPlayer):
             self.players[packet.player_id] = packet
             self.player_flags[packet.player_id] = packet.flags
@@ -359,7 +376,31 @@ class RaceContext:
                     stop_time_ms=packet.stop_time_ms,
                 ))
         elif isinstance(packet, InSimMCI):
-            self.last_mci = packet
+            # LFS caps IS_MCI at 16 cars per packet; with >16 cars on
+            # track the server emits multiple back-to-back packets to
+            # cover everyone. Naively storing the last packet drops
+            # earlier batches and silently hides the view car whenever
+            # it falls outside the surviving batch — exactly the bug
+            # where the radar and gap-to-ahead/behind freeze after
+            # joining a 40-car kart server. Merge by PLID so the
+            # exposed snapshot always reflects the full grid.
+            now_t = time.monotonic()
+            for car in packet.cars:
+                self._mci_cars_by_plid[int(car.player_id)] = (car, now_t)
+            # Drop entries that haven't refreshed in 2 s (driver left,
+            # was kicked, lost connection). 2 s is generous relative to
+            # the 100 ms MCI cadence so a couple of dropped packets
+            # don't evict still-on-track cars.
+            stale = [
+                plid
+                for plid, (_, t) in self._mci_cars_by_plid.items()
+                if now_t - t > 2.0
+            ]
+            for plid in stale:
+                self._mci_cars_by_plid.pop(plid, None)
+            self.last_mci = InSimMCI(
+                cars=[c for c, _ in self._mci_cars_by_plid.values()]
+            )
         elif isinstance(packet, InSimNodeLap):
             self.last_nlp = packet
         elif isinstance(packet, InSimNewConnection):
@@ -404,6 +445,15 @@ class RaceContext:
             self.tele_pits.discard(packet.player_id)
             self.player_flags.pop(packet.player_id, None)
             self.camera.pop(packet.player_id, None)
+            # Evict from the merged IS_MCI cache too so the next
+            # snapshot rebuild doesn't keep showing a ghost car.
+            self._mci_cars_by_plid.pop(packet.player_id, None)
+            if self.last_mci is not None:
+                self.last_mci = InSimMCI(
+                    cars=[
+                        c for c, _ in self._mci_cars_by_plid.values()
+                    ]
+                )
         elif isinstance(packet, InSimCameraChange):
             self.camera[packet.player_id] = packet.camera
         elif isinstance(packet, InSimInterfaceMode):
@@ -701,7 +751,20 @@ class InSimClient:
                 _LOG.warning("InSim parse error type=%d size=%d: %s",
                              ptype, size, exc)
                 continue
-            self.context.update(evt)
+            try:
+                self.context.update(evt)
+            except Exception as exc:  # noqa: BLE001
+                # A single malformed/unexpected packet must never kill
+                # the read loop: if it does, every InSim-driven feature
+                # (radar, standings, gaps, view PLID) freezes silently
+                # and the user sees the whole overlay "die" because
+                # downstream snapshots stop containing fresh InSim
+                # data. Swallow and keep going.
+                _LOG.warning(
+                    "InSim context.update failed type=%d size=%d: %s",
+                    ptype, size, exc,
+                )
+                continue
             _LOG.info("InSim ctx after type=%d: view_plid=%s "
                       "race_in_progress=%s lap_count=%s",
                       ptype, self.context.view_player_id,

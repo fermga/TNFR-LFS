@@ -254,6 +254,25 @@ class LiveTab(QWidget):
         self._g_full_scale.setSuffix(" g")
         self._g_full_scale.setValue(2.0)
 
+        # ----- Pit limiter speed --------------------------------------
+        self._pit_limit_kmh = QDoubleSpinBox(self)
+        self._pit_limit_kmh.setRange(20.0, 200.0)
+        self._pit_limit_kmh.setSingleStep(1.0)
+        self._pit_limit_kmh.setDecimals(1)
+        self._pit_limit_kmh.setSuffix(" km/h")
+        pit_raw = settings.value("overlay/pit_limiter/limit_kmh", 80.0)
+        try:
+            pit_default = max(20.0, min(200.0, float(pit_raw)))
+        except (TypeError, ValueError):
+            pit_default = 80.0
+        self._pit_limit_kmh.setValue(pit_default)
+        self._pit_limit_kmh.setToolTip(
+            tr(
+                "Pit-lane speed limit used by the pit-limiter overlay "
+                "to compute the speed vs limit delta. LFS default: 80 km/h.",
+            ),
+        )
+
         self._session_compact = QCheckBox(tr("Session overlay compact"), self)
         self._session_compact.setToolTip(
             tr("Show condensed session info in the session overlay module."),
@@ -282,6 +301,7 @@ class LiveTab(QWidget):
         misc_form = QFormLayout()
         misc_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         misc_form.addRow(tr("G-meter full scale:"), self._g_full_scale)
+        misc_form.addRow(tr("Pit-lane speed limit:"), self._pit_limit_kmh)
         misc_form.addRow("", self._session_compact)
         misc_form.addRow("", self._fullscreen_compat)
         misc_box = QGroupBox(tr("G-meter"), self)
@@ -317,6 +337,7 @@ class LiveTab(QWidget):
         self._delta_scale.valueChanged.connect(self._apply_delta_config)
         self._rpm_redline.valueChanged.connect(self._apply_rpm_config)
         self._g_full_scale.valueChanged.connect(self._apply_g_config)
+        self._pit_limit_kmh.valueChanged.connect(self._apply_pit_limiter_config)
         self._session_compact.toggled.connect(self._apply_session_overlay_mode)
         self._fullscreen_compat.toggled.connect(
             self._apply_fullscreen_compat_mode,
@@ -388,6 +409,8 @@ class LiveTab(QWidget):
             w.set_rpm_redline(self._rpm_redline.value())
         elif mid == "gmeter" and isinstance(w, GMeterWindow):
             w.set_full_scale_g(self._g_full_scale.value())
+        elif mid == "pit_limiter" and isinstance(w, PitLimiterWindow):
+            w.set_limit_kmh(self._pit_limit_kmh.value())
         elif mid == "session_info" and isinstance(w, SessionInfoWindow):
             w.set_compact_mode(self._session_compact.isChecked())
 
@@ -419,6 +442,18 @@ class LiveTab(QWidget):
         w = self._widgets.get("gmeter")
         if isinstance(w, GMeterWindow):
             w.set_full_scale_g(self._g_full_scale.value())
+
+    def _apply_pit_limiter_config(self) -> None:
+        w = self._widgets.get("pit_limiter")
+        if isinstance(w, PitLimiterWindow):
+            w.set_limit_kmh(self._pit_limit_kmh.value())
+        else:
+            # Module not instantiated yet — persist directly so the
+            # widget picks the user's value up on creation.
+            QSettings(ORG, APP).setValue(
+                "overlay/pit_limiter/limit_kmh",
+                float(self._pit_limit_kmh.value()),
+            )
 
     def _apply_session_overlay_mode(self, on: bool) -> None:
         QSettings(ORG, APP).setValue("overlay/session_info/compact", bool(on))
