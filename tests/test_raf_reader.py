@@ -240,23 +240,26 @@ def test_split_into_laps_wraps_on_index_distance(tmp_path):
 
 
 def test_raf_to_lap_csvs_writes_loadable_csvs(tmp_path):
-    blob = _build_header(num_blocks=400, track_ruler_length_m=1000.0)
+    blob = _build_header(num_blocks=420, track_ruler_length_m=1000.0)
     blocks = []
-    # 200 samples in "out lap" then wrap, then 200 samples in lap 1
+    # 200 samples covering the full ruler (a real flying lap), then
+    # wrap, then 220 samples covering only ~110 m (a partial in-lap
+    # fragment that the replay was cut short on).
     for i in range(200):
         blocks.append(_build_block(
-            index_distance_m=float(i) * 5.0,
+            index_distance_m=float(i) * 5.0,         # 0 → 995 m (≈ ruler)
             car_distance_m=float(i) * 5.0,
         ))
-    for i in range(200):
+    for i in range(220):
         blocks.append(_build_block(
-            index_distance_m=float(i) * 5.0,
-            car_distance_m=1000.0 + float(i) * 5.0,
+            index_distance_m=float(i) * 0.5,         # 0 → 109.5 m
+            car_distance_m=1000.0 + float(i) * 0.5,
         ))
     path = tmp_path / "stint.raf"
     path.write_bytes(blob + b"".join(blocks))
     written = raf_to_lap_csvs(path, out_dir=tmp_path / "out")
-    # Out-lap dropped by default → 1 CSV
+    # In-lap fragment (≈ 11 % of ruler) dropped by default; full lap
+    # kept regardless of being the first segment in the file.
     assert len(written) == 1
     csv_path = written[0]
     assert csv_path.exists()
@@ -266,6 +269,33 @@ def test_raf_to_lap_csvs_writes_loadable_csvs(tmp_path):
     # Header row should contain our standard fields
     assert "time_ms" in text[1]
     assert "wheel_FL_vertical_load_n" in text[1]
+    # CSV must contain all 200 rows of the real flying lap
+    # (header + schema = 2 lines, then 200 data rows)
+    assert len(text) == 2 + 200
+
+
+def test_raf_to_lap_csvs_keeps_partials_with_zero_frac(tmp_path):
+    """``min_lap_distance_frac=0.0`` keeps every segment that meets the
+    sample count threshold, mirroring the legacy un-filtered behaviour."""
+    blob = _build_header(num_blocks=420, track_ruler_length_m=1000.0)
+    blocks = []
+    for i in range(200):
+        blocks.append(_build_block(
+            index_distance_m=float(i) * 5.0,
+            car_distance_m=float(i) * 5.0,
+        ))
+    for i in range(220):
+        blocks.append(_build_block(
+            index_distance_m=float(i) * 0.5,
+            car_distance_m=1000.0 + float(i) * 0.5,
+        ))
+    path = tmp_path / "stint.raf"
+    path.write_bytes(blob + b"".join(blocks))
+    written = raf_to_lap_csvs(
+        path, out_dir=tmp_path / "out",
+        min_lap_distance_frac=0.0,
+    )
+    assert len(written) == 2
 
 
 def test_raf_to_lap_csvs_loads_into_lap_telemetry(tmp_path):

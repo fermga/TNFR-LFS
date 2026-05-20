@@ -356,6 +356,7 @@ def raf_to_lap_csvs(
     *,
     skip_outlap: bool = True,
     min_samples_per_lap: int = 100,
+    min_lap_distance_frac: float = 0.8,
 ) -> list[Path]:
     """Read ``raf_path``, split into laps, write one CSV per lap.
 
@@ -371,12 +372,21 @@ def raf_to_lap_csvs(
         Destination folder. Defaults to ``<raf_path>.laps/`` next to
         the input file. Created if missing.
     skip_outlap:
-        Drop the leading partial segment before the first start/finish
-        crossing (typical "lap 0" in a replay). Default ``True``.
+        Drop incomplete partial-lap segments (typical out-lap before
+        the first start/finish crossing AND in-lap fragment after the
+        last one). A segment is considered incomplete when it covers
+        less than ``min_lap_distance_frac`` of the track ruler.
+        Default ``True``.
     min_samples_per_lap:
         Discard lap segments shorter than this many samples (replay
         cut at mid-lap, pause, etc.). Default 100 samples ≈ 1 s at
         100 Hz RAF cadence.
+    min_lap_distance_frac:
+        Minimum fraction of ``track_ruler_length_m`` a segment must
+        cover (measured along ``indexed_distance_m``) to be considered
+        a complete lap when ``skip_outlap`` is ``True``. Default
+        ``0.8`` (80 %). Set to ``0.0`` to keep every segment that
+        passes the sample-count filter.
     """
     raf_path = Path(raf_path)
     if out_dir is None:
@@ -388,9 +398,25 @@ def raf_to_lap_csvs(
     header, rows = parse_raf(raf_path)
     laps = split_into_laps(header, rows)
 
-    # Drop the lead-in segment if requested
-    if skip_outlap and len(laps) > 1:
-        laps = laps[1:]
+    # Drop incomplete segments (out-lap / in-lap fragments) by
+    # measuring how much of the track ruler each segment covers.
+    # A real flying lap covers ~100 % of the ruler; a partial
+    # fragment at start/end of the replay typically covers < 1 %.
+    # NOTE: a single segment may legitimately not start at idx ≈ 0
+    # (the replay can begin anywhere on track), so we use the span
+    # ``max(idx) − min(idx)`` rather than ``last − first``.
+    ruler = max(float(header.track_ruler_length_m), 1.0)
+    if skip_outlap:
+        min_span = ruler * max(0.0, min(min_lap_distance_frac, 1.0))
+        keep: list[list[dict[str, Any]]] = []
+        for lap in laps:
+            if not lap:
+                continue
+            idx_vals = [float(r.get("indexed_distance_m", 0.0)) for r in lap]
+            span = max(idx_vals) - min(idx_vals) if idx_vals else 0.0
+            if span >= min_span:
+                keep.append(lap)
+        laps = keep
     laps = [lap for lap in laps if len(lap) >= min_samples_per_lap]
 
     # Import locally to avoid a hard cyclic import at module load
