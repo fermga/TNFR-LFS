@@ -41,9 +41,9 @@ function Write-Banner { param([string]$msg, [string]$color = "Cyan")
     Write-Host "══" ($msg) "══" -ForegroundColor $color
 }
 
-function Invoke-Cmd { param([string]$exe, [string[]]$args, [string]$desc)
+function Invoke-Cmd { param([string]$exe, [string[]]$cmdArgs, [string]$desc)
     Write-Host "→ $desc" -ForegroundColor Gray
-    & $exe @args
+    & $exe @cmdArgs
     if ($LASTEXITCODE -ne 0) {
         Write-Host "FAILED (exit $LASTEXITCODE): $desc" -ForegroundColor Red
         exit 1
@@ -143,21 +143,38 @@ if ($Sign) {
 
 if ($Full) {
     Write-Banner "Generating installer" "Cyan"
-    
-    $iscc = Get-Command "iscc.exe" -ErrorAction SilentlyContinue
+
+    # Locate iscc: PATH first, then well-known install dirs (mirror of
+    # build_installer.ps1). Inno Setup installs to %LocalAppData% when
+    # the user picks per-user install via winget.
+    $isccCmd = Get-Command "iscc.exe" -ErrorAction SilentlyContinue
+    $iscc = if ($isccCmd) { $isccCmd.Source } else { $null }
+    if (-not $iscc) {
+        $candidates = @(
+            "C:\Program Files\Inno Setup 6\iscc.exe",
+            "C:\Program Files (x86)\Inno Setup 6\iscc.exe",
+            (Join-Path $env:LocalAppData "Programs\Inno Setup 6\iscc.exe"),
+            "C:\Program Files\Inno Setup 5\iscc.exe",
+            "C:\Program Files (x86)\Inno Setup 5\iscc.exe"
+        )
+        foreach ($p in $candidates) {
+            if (Test-Path $p) { $iscc = $p; break }
+        }
+    }
     if (-not $iscc) {
         Write-Host "Inno Setup not found. Install with: winget install JRSoftware.InnoSetup" -ForegroundColor Yellow
         Write-Host "Skipping installer generation." -ForegroundColor Yellow
     } else {
+        Write-Host "Using iscc: $iscc" -ForegroundColor Gray
         $issPath = Join-Path $repoRoot "installer" "lfs-race-engineer.iss"
         $installerOutput = Join-Path $repoRoot "installer" "Output"
-        
+
         # Ensure output dir exists
         New-Item -ItemType Directory $installerOutput -Force | Out-Null
-        
-        Invoke-Cmd "iscc.exe" @("/DMyAppVersion=$version", $issPath) `
+
+        Invoke-Cmd $iscc @("/DMyAppVersion=$version", $issPath) `
             "Inno Setup compilation (lfs-race-engineer.iss)"
-        
+
         $setupExe = Join-Path $installerOutput "lfs-race-engineer-setup-$version.exe"
         if (Test-Path $setupExe) {
             $setupSize = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)

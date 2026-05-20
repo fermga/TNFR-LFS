@@ -57,6 +57,8 @@ def _build_standings(
     *,
     view_plid: int | None,
     session_mode: str,
+    node_to_s_m: list[float] | None = None,
+    track_length_m: float = 0.0,
 ) -> list[dict[str, Any]]:
     cars_list = list(cars)
     if session_mode == "race":
@@ -87,23 +89,129 @@ def _build_standings(
                 c.player_id,
             ),
         )
-    out: list[dict[str, Any]] = []
+
+    # ------------------------------------------------------------------
+    # Pre-compute on-track progress (race mode) and per-car best lap so
+    # the loop below can emit gap_to_leader / interval consistently.
+    # Progress = laps_completed * track_length + s_along_lap, so a car
+    # one lap up is always ahead of a car on the lead lap regardless of
+    # node position. Falls back to euclidean-only ordering when no
+    # arclength table is available.
+    # ------------------------------------------------------------------
+    progress_m: dict[int, float] = {}
+    if (
+        session_mode == "race"
+        and node_to_s_m
+        and track_length_m > 0.0
+    ):
+        n_nodes = len(node_to_s_m)
+        for c in ordered:
+            try:
+                s = float(node_to_s_m[int(c.node) % n_nodes])
+            except (IndexError, TypeError, ValueError):
+                s = 0.0
+            progress_m[c.player_id] = (
+                float(c.lap) * track_length_m + s
+            )
+
+    best_lap_for: dict[int, int | None] = {}
     for c in ordered:
         laps = ctx.lap_times_ms.get(c.player_id, [])
-        best = min(laps) if laps else None
-        out.append(
-            {
-                "pos": int(c.position),
-                "plid": int(c.player_id),
-                "name": _player_name_for(ctx, int(c.player_id)),
-                "lap": int(c.lap),
-                "last_lap_ms": ctx.last_lap_ms.get(c.player_id),
-                "best_lap_ms": int(best) if best is not None else None,
-                "speed_kmh": round(float(c.speed_ms) * 3.6, 1),
-                "rank_mode": session_mode,
-                "view": (view_plid is not None and c.player_id == view_plid),
-            }
-        )
+        best_lap_for[c.player_id] = int(min(laps)) if laps else None
+
+    # ------------------------------------------------------------------
+    # Pit information per car:
+    #   * ``pit_stops``: cumulative completed stops (count of
+    #     :class:`PitStopRecord` entries with this PLID).
+    #   * ``in_pit``: True when the latest PITLANE_* fact for the PLID
+    #     is anything other than PITLANE_EXIT (i.e. the car is currently
+    #     in the pit lane / pit box / serving a penalty).
+    # LFS publishes these as IS_PIT/IS_PSF/IS_PLP packets; both are
+    # already aggregated in ``RaceContext``.
+    # ------------------------------------------------------------------
+    pit_stop_count: dict[int, int] = {}
+    for rec in ctx.pit_stops:
+        pit_stop_count[rec.player_id] = pit_stop_count.get(rec.player_id, 0) + 1
+    in_pit_map: dict[int, bool] = {}
+    for plid_key, fact in ctx.pit_lane.items():
+        # fact == PITLANE_EXIT (0) means the car just exited; anything
+        # else (ENTER, NO_PURPOSE, DT, SG) means it is currently in.
+        in_pit_map[int(plid_key)] = int(fact) != 0
+
+    leader = ordered[0] if ordered else None
+    leader_progress = (
+        progress_m.get(leader.player_id) if leader is not None else None
+    )
+    leader_best = (
+        best_lap_for.get(leader.player_id) if leader is not None else None
+    )
+    leader_speed_ms = (
+        float(leader.speed_ms) if leader is not None else 0.0
+    )
+
+    out: list[dict[str, Any]] = []
+    prev_progress: float | None = None
+    prev_best: int | None = None
+    prev_speed_ms: float = 0.0
+    for c in ordered:
+        best = best_lap_for.get(c.player_id)
+        entry: dict[str, Any] = {
+            "pos": int(c.position),
+            "plid": int(c.player_id),
+            "name": _player_name_for(ctx, int(c.player_id)),
+            "lap": int(c.lap),
+            "last_lap_ms": ctx.last_lap_ms.get(c.player_id),
+            "best_lap_ms": int(best) if best is not None else None,
+            "speed_kmh": round(float(c.speed_ms) * 3.6, 1),
+            "rank_mode": session_mode,
+            "view": (
+                view_plid is not None and c.player_id == view_plid
+            ),
+            "gap_to_leader_m": None,
+            "gap_to_leader_s": None,
+            "gap_to_leader_ms": None,
+            "interval_m": None,
+            "interval_s": None,
+            "interval_ms": None,
+            "laps_down": 0,
+            "in_pit": bool(in_pit_map.get(int(c.player_id), False)),
+            "pit_stops": int(pit_stop_count.get(int(c.player_id), 0)),
+        }
+        if session_mode == "race" and leader_progress is not None:
+            this_progress = progress_m.get(c.player_id)
+            if this_progress is not None and c.player_id != leader.player_id:
+                gap_m = max(0.0, leader_progress - this_progress)
+                entry["gap_to_leader_m"] = round(gap_m, 1)
+                laps_down = int(gap_m // track_length_m) if (
+                    track_length_m > 0.0
+                ) else 0
+                entry["laps_down"] = laps_down
+                ref_speed = (
+                    leader_speed_ms
+                    if leader_speed_ms > 0.5
+                    else float(c.speed_ms)
+                )
+                if ref_speed > 0.5 and laps_down == 0:
+                    entry["gap_to_leader_s"] = round(gap_m / ref_speed, 2)
+                if prev_progress is not None:
+                    int_m = max(0.0, prev_progress - this_progress)
+                    entry["interval_m"] = round(int_m, 1)
+                    ref_speed_p = (
+                        prev_speed_ms
+                        if prev_speed_ms > 0.5
+                        else float(c.speed_ms)
+                    )
+                    if ref_speed_p > 0.5 and int_m < track_length_m:
+                        entry["interval_s"] = round(int_m / ref_speed_p, 2)
+            prev_progress = this_progress
+            prev_speed_ms = float(c.speed_ms)
+        elif session_mode != "race" and best is not None:
+            if leader_best is not None and c.player_id != leader.player_id:
+                entry["gap_to_leader_ms"] = int(best - leader_best)
+            if prev_best is not None:
+                entry["interval_ms"] = int(best - prev_best)
+            prev_best = best
+        out.append(entry)
     return out
 
 
@@ -401,6 +509,8 @@ def build_snapshot(
             mci.cars,
             view_plid=plid,
             session_mode=str(snap["session_mode"]),
+            node_to_s_m=node_to_s_m,
+            track_length_m=track_length_m,
         )
     if mci is not None and mci.cars and plid is not None:
         view: CompCar | None = next(

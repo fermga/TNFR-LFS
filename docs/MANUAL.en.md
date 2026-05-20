@@ -374,6 +374,15 @@ loader dialog.)
 * **Clear Lap Cache** — wipes the parquet cache on disk that speeds
   up reloads (useful if a lap is corrupted or you want to recompute
   the derived channels).
+* **Import RAF…** — import an LFS **Replay Analyser File** (`.raf`).
+  The app walks the RAF, splits it into laps (using the *index
+  distance* track-ruler wrap to detect start/finish crossings) and
+  writes one CSV per lap into `<workspace>/<name>_raf_laps/`. After
+  import the laps appear in **Captures** and can be loaded and
+  compared like any other capture. This is the only official path to
+  analyse another driver's telemetry from their replay (`.mpr`/`.spr`):
+  open the replay in LFS, press **Analyse** to generate the `.raf`,
+  then import it here.
 * **Quit** (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) — close the application.
 
 ## 8 bis. Help menu

@@ -228,6 +228,18 @@ class MainWindow(QMainWindow):
         file_menu.addAction(clear_cache_act)
 
         file_menu.addSeparator()
+
+        raf_act = QAction(tr("Import RAF\u2026"), self)
+        raf_act.setStatusTip(
+            tr(
+                "Convert an LFS RAF (Replay Analyser File) into per-lap "
+                "CSVs inside the current workspace, ready for comparison.",
+            ),
+        )
+        raf_act.triggered.connect(self._action_import_raf)
+        file_menu.addAction(raf_act)
+
+        file_menu.addSeparator()
         quit_act = QAction(tr("&Quit"), self)
         quit_act.setShortcut(QKeySequence.Quit)
         quit_act.triggered.connect(self.close)
@@ -302,6 +314,45 @@ class MainWindow(QMainWindow):
     def _action_clear_cache(self) -> None:
         self._workspace.clear_cache()
         self._status.showMessage(tr("Lap cache cleared."), 4000)
+
+    def _action_import_raf(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("Import RAF replay-analyser file"),
+            str(self._workspace.workspace),
+            tr("LFS RAF files (*.raf);;All files (*)"),
+        )
+        if not path:
+            return
+        raf_path = Path(path)
+        # Convert into <workspace>/<raf-stem>_raf_laps/ so the captures
+        # panel picks the lap CSVs up on the next refresh.
+        out_dir = self._workspace.workspace / f"{raf_path.stem}_raf_laps"
+        try:
+            from ..telemetry.raf import raf_to_lap_csvs
+            written = raf_to_lap_csvs(raf_path, out_dir=out_dir)
+        except Exception as exc:  # noqa: BLE001 — user-facing error
+            QMessageBox.warning(
+                self,
+                tr("Import RAF"),
+                tr("Failed to read RAF: {0}").format(exc),
+            )
+            return
+        if not written:
+            QMessageBox.information(
+                self,
+                tr("Import RAF"),
+                tr("No full lap recovered from this RAF."),
+            )
+            return
+        self._captures.refresh()
+        QMessageBox.information(
+            self,
+            tr("Import RAF"),
+            tr("Imported {0} lap(s) into {1}.").format(
+                len(written), out_dir,
+            ),
+        )
 
     def _action_reset_layout(self) -> None:
         self.removeDockWidget(self._captures_dock)

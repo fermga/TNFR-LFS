@@ -381,6 +381,15 @@ manual.)
 * **Clear Lap Cache** — borra la cache parquet en disco que acelera
   las recargas (útil si una vuelta se corrompe o si quieres recalcular
   los canales derivados).
+* **Import RAF…** — importa un **Replay Analyser File** (`.raf`) de
+  LFS. La aplicación recorre el RAF, lo parte por vueltas (detectando
+  el cruce de meta con el *index distance*) y escribe un CSV por
+  vuelta dentro de `<workspace>/<nombre>_raf_laps/`. Tras la
+  importación los CSV aparecen en **Captures** y se pueden cargar y
+  comparar como cualquier otra vuelta. Es la única vía oficial para
+  analizar la telemetría de otro piloto a partir de su replay
+  (`.mpr`/`.spr`): abre el replay en LFS, pulsa el botón **Analyse**
+  para generar el `.raf`, y luego impórtalo aquí.
 * **Quit** (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) — cierra la aplicación.
 
 ## 8 bis. Menú Help

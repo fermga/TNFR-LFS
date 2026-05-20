@@ -235,6 +235,22 @@ def main(argv: list[str] | None = None) -> int:
                        help="minimum negative jump in current_lap_dist_m to "
                             "count as a line crossing (default 100 m)")
 
+    p_raf = sub.add_parser(
+        "raf-import",
+        help="convert an LFS RAF (Replay Analyser File) v2 into one CSV "
+             "per detected lap, using the app's standard schema so they "
+             "can be loaded by the Studio for cross-driver comparison.")
+    p_raf.add_argument("input", type=Path, help=".raf file produced by LFS")
+    p_raf.add_argument("--out-dir", type=Path, default=None,
+                       help="output directory "
+                            "(default: <input>_raf_laps next to the file)")
+    p_raf.add_argument("--keep-outlap", action="store_true",
+                       help="also export the lead-in partial lap "
+                            "(before the first start/finish crossing)")
+    p_raf.add_argument("--min-samples", type=int, default=100,
+                       help="discard lap segments shorter than this many "
+                            "samples (default 100)")
+
     args = parser.parse_args(argv)
 
     # On Windows, the Studio's Capture tab stops the child by sending
@@ -260,6 +276,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_cmd_calibrate(args))
     if args.cmd == "reslice":
         return _cmd_reslice(args)
+    if args.cmd == "raf-import":
+        return _cmd_raf_import(args)
     parser.error(f"unknown command: {args.cmd}")
     return 2
 
@@ -1030,6 +1048,46 @@ def _cmd_reslice(args: argparse.Namespace) -> int:
         print(f"[reslice] wrote {n:5d} rows to {path}"
               f" [d_max={lap.distance_m:.1f}m, dur={lap.duration_s:.2f}s]"
               f"{tag}")
+    return 0
+
+
+def _cmd_raf_import(args: argparse.Namespace) -> int:
+    """Convert an LFS RAF replay-analyser file into per-lap CSVs."""
+    from .telemetry.raf import parse_raf_header, raf_to_lap_csvs
+
+    src: Path = args.input
+    if not src.exists():
+        print(f"[raf-import] {src} does not exist", file=sys.stderr)
+        return 2
+    try:
+        head = parse_raf_header(src.read_bytes()[:1024])
+    except ValueError as exc:
+        print(f"[raf-import] {src}: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"[raf-import] {src.name}: player={head.player!r} "
+        f"car={head.car!r} track={head.track!r} "
+        f"({head.num_blocks} samples @ {head.update_interval_ms} ms)",
+    )
+    try:
+        written = raf_to_lap_csvs(
+            src,
+            out_dir=args.out_dir,
+            skip_outlap=not args.keep_outlap,
+            min_samples_per_lap=args.min_samples,
+        )
+    except ValueError as exc:
+        print(f"[raf-import] failed: {exc}", file=sys.stderr)
+        return 1
+    if not written:
+        print(
+            "[raf-import] no full lap recovered "
+            "(replay too short or only out-lap).",
+            file=sys.stderr,
+        )
+        return 1
+    for p in written:
+        print(f"[raf-import] wrote {p}")
     return 0
 
 
