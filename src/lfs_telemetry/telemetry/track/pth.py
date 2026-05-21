@@ -259,7 +259,9 @@ class TrackProfile:
         return (float(self.pos[:, 2].min()), float(self.pos[:, 2].max()))
 
 
-def compute_profile(path: Path, *, max_segment_m: float = 50.0) -> TrackProfile:
+def compute_profile(
+    path: Path, *, max_segment_m: float = 50.0,
+) -> TrackProfile:
     """Derive arc length, slope, curvature, heading from a Path.
 
     PTH files often include the pit lane appended to the main racing line,
@@ -393,11 +395,15 @@ def summary_table(paths: Iterable[Path]) -> list[dict]:
             "elev_max_m": zmax,
             "elev_delta_m": zmax - zmin,
             "total_climb_m": prof.total_climb_m,
-            "min_radius_m": float(np.min(prof.radius_m))
-                if prof.radius_m.size else 0.0,
-            "max_slope_pct": float(np.max(np.abs(prof.slope_pct)))
-                if prof.slope_pct.size else 0.0,
-            "mean_width": float(np.mean(prof.width))
-                if prof.width.size else 0.0,
+            "min_radius_m": (
+                float(np.min(prof.radius_m)) if prof.radius_m.size else 0.0
+            ),
+            "max_slope_pct": (
+                float(np.max(np.abs(prof.slope_pct)))
+                if prof.slope_pct.size else 0.0
+            ),
+            "mean_width": (
+                float(np.mean(prof.width)) if prof.width.size else 0.0
+            ),
         })
     return rows
