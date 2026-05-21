@@ -239,6 +239,48 @@ def _looks_like_lfs_dir(path: Path) -> bool:
     return any((path / marker).exists() for marker in ("LFS.exe", "cfg.txt"))
 
 
+def read_lfs_vr_mode(lfs_dir: Path) -> tuple[str, int] | None:
+    """Detect whether LFS is configured for VR in ``cfg.txt``.
+
+    Returns ``(backend, mode)`` where ``backend`` is ``"OpenVR"``,
+    ``"Oculus"`` or ``"VR"`` and ``mode`` is the integer value when
+    it is non-zero; ``None`` otherwise (no cfg.txt, or every VR-mode
+    line is 0/missing/unparseable).
+
+    LFS exposes its VR backend via cfg.txt lines like::
+
+        OpenVR Mode 1
+        Oculus Mode 0
+
+    We do not try to be exhaustive — any line whose first token is
+    ``OpenVR``/``Oculus``/``VR`` and whose second token is ``Mode`` is
+    accepted, with the integer immediately following.
+    """
+    cfg = cfg_path_for(lfs_dir)
+    if not cfg.exists():
+        return None
+    try:
+        text = cfg.read_text(encoding="latin-1")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        backend, key = parts[0], parts[1]
+        if backend not in {"OpenVR", "Oculus", "VR"}:
+            continue
+        if key != "Mode":
+            continue
+        try:
+            value = int(parts[2])
+        except ValueError:
+            continue
+        if value > 0:
+            return backend, value
+    return None
+
+
 __all__ = [
     "REQUIRED_SETTINGS",
     "PatchResult",
@@ -250,6 +292,7 @@ __all__ = [
     "manual_instructions",
     "patch_cfg",
     "preview_cfg_patch",
+    "read_lfs_vr_mode",
 ]
 
 

@@ -98,6 +98,68 @@ class _OverlayEntry:
     last_size: tuple[int, int] = (0, 0)
 
 
+@dataclass(frozen=True)
+class VRRuntimeStatus:
+    """Snapshot of the live SteamVR runtime as we see it.
+
+    Used by the UI to confirm that (a) we are talking to a real HMD and
+    (b) LFS is the currently focused VR scene application — i.e. our
+    overlay layer is going to be composited on top of LFS's frames.
+    """
+
+    hmd_connected: bool = False
+    hmd_model: str | None = None
+    scene_app_pid: int | None = None
+    scene_app_name: str | None = None  # e.g. "LFS.exe"
+    scene_app_is_lfs: bool = False
+
+
+def _process_name_for_pid(pid: int) -> str | None:
+    """Best-effort PID → executable basename on Windows.
+
+    Used to confirm whether the active VR scene-app is ``LFS.exe``.
+    Returns ``None`` if anything fails (non-Windows host, access
+    denied, process gone, etc.) — we never raise to the caller.
+    """
+    if pid is None or pid <= 0:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except Exception:  # pragma: no cover - non-Windows
+        return None
+    try:
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        OpenProcess = kernel32.OpenProcess
+        OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        OpenProcess.restype = wintypes.HANDLE
+        QueryFullProcessImageNameW = kernel32.QueryFullProcessImageNameW
+        QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        QueryFullProcessImageNameW.restype = wintypes.BOOL
+        CloseHandle = kernel32.CloseHandle
+        CloseHandle.argtypes = [wintypes.HANDLE]
+        CloseHandle.restype = wintypes.BOOL
+
+        h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not h:
+            return None
+        try:
+            buf = ctypes.create_unicode_buffer(1024)
+            size = wintypes.DWORD(len(buf))
+            if not QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                return None
+            from pathlib import Path as _Path
+            return _Path(buf.value).name or None
+        finally:
+            CloseHandle(h)
+    except Exception:  # pragma: no cover - defensive
+        return None
+
+
 class OpenVROverlaySink:
     """Holds a SteamVR overlay-app session and one IVROverlay per module.
 
@@ -262,6 +324,64 @@ class OpenVROverlaySink:
             except Exception as exc:  # pragma: no cover - runtime
                 log.debug("set_visible(%s) failed: %s", module_id, exc)
 
+    # ----- Runtime introspection --------------------------------------
+
+    def runtime_status(self) -> VRRuntimeStatus:
+        """Return live evidence that our VR layer is wired up.
+
+        Best-effort: every probe is wrapped so a missing pyopenvr API
+        on older versions never breaks the call. The result is meant
+        for the UI status label, never for control-flow decisions.
+        """
+        if not self.available or self._openvr is None:
+            return VRRuntimeStatus()
+
+        hmd_connected = False
+        hmd_model: str | None = None
+        scene_pid: int | None = None
+        scene_name: str | None = None
+
+        with self._lock:
+            try:
+                vrsys = self._openvr.VRSystem()
+                # k_unTrackedDeviceIndex_Hmd == 0
+                hmd_connected = bool(vrsys.isTrackedDeviceConnected(0))
+                if hmd_connected:
+                    try:
+                        prop = self._openvr.Prop_TrackingSystemName_String
+                        hmd_model = vrsys.getStringTrackedDeviceProperty(
+                            0, prop,
+                        )
+                        if isinstance(hmd_model, bytes):
+                            hmd_model = hmd_model.decode(
+                                "utf-8", errors="replace",
+                            )
+                        hmd_model = (hmd_model or "").strip() or None
+                    except Exception:  # pragma: no cover - runtime
+                        hmd_model = None
+            except Exception:  # pragma: no cover - runtime
+                pass
+
+            try:
+                vrapps = self._openvr.VRApplications()
+                pid = int(vrapps.getCurrentSceneProcessId() or 0)
+                if pid > 0:
+                    scene_pid = pid
+                    scene_name = _process_name_for_pid(pid)
+            except Exception:  # pragma: no cover - runtime
+                pass
+
+        is_lfs = bool(
+            scene_name and scene_name.lower() in {"lfs.exe", "lfs"}
+        )
+        return VRRuntimeStatus(
+            hmd_connected=hmd_connected,
+            hmd_model=hmd_model,
+            scene_app_pid=scene_pid,
+            scene_app_name=scene_name,
+            scene_app_is_lfs=is_lfs,
+        )
+
     # ----- Shutdown ----------------------------------------------------
 
     def shutdown(self) -> None:
@@ -284,4 +404,4 @@ class OpenVROverlaySink:
             log.info("OpenVR overlay sink shut down")
 
 
-__all__ = ["OpenVROverlaySink", "OverlayPose"]
+__all__ = ["OpenVROverlaySink", "OverlayPose", "VRRuntimeStatus"]

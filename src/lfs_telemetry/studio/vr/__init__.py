@@ -5,7 +5,7 @@ Other backends (OpenXR-native, Oculus-native via OpenComposite) can
 plug in here behind the same small interface.
 """
 
-from .openvr_overlay import OpenVROverlaySink, OverlayPose
+from .openvr_overlay import OpenVROverlaySink, OverlayPose, VRRuntimeStatus
 from .vr_mirror import VrMirror
 
-__all__ = ["OpenVROverlaySink", "OverlayPose", "VrMirror"]
+__all__ = ["OpenVROverlaySink", "OverlayPose", "VRRuntimeStatus", "VrMirror"]

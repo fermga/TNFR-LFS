@@ -28,8 +28,10 @@ from PySide6.QtWidgets import (
 )
 
 from ...app.capture_runner import CaptureRunner
+from ...lfs_config import read_lfs_vr_mode
 from ...lfs_paths import QSETTINGS_APP as APP
 from ...lfs_paths import QSETTINGS_ORG as ORG
+from ...lfs_paths import autodetect_lfs_dir, get_lfs_dir
 from ..i18n import tr
 from ..signals import SignalBus
 from ..vr import VrMirror
@@ -426,9 +428,7 @@ class LiveTab(QWidget):
                 )
             ok = self._vr_mirror.enable()
             if ok:
-                self._vr_status.setText(
-                    tr("VR mirror active (SteamVR overlay).")
-                )
+                self._vr_status.setText(self._compose_vr_status_text())
             else:
                 err = (
                     self._vr_mirror._sink.init_error  # noqa: SLF001
@@ -446,6 +446,66 @@ class LiveTab(QWidget):
             if self._vr_mirror is not None:
                 self._vr_mirror.disable()
             self._vr_status.setText("")
+
+    def _compose_vr_status_text(self) -> str:
+        """Build the multi-line status shown after a successful enable.
+
+        Surfaces three pieces of evidence so the user can confirm the
+        whole VR pipeline is wired up *before* putting on the headset:
+
+        * HMD model from SteamVR (proves we're talking to the runtime),
+        * the active scene-app, with a special ``LFS scene detected``
+          callout when ``LFS.exe`` owns the compositor,
+        * the LFS ``cfg.txt`` VR-mode setting when LFS is configured
+          for OpenVR/Oculus but isn't focused yet.
+        """
+        lines: list[str] = [tr("VR mirror active (SteamVR overlay).")]
+
+        sink = (
+            self._vr_mirror._sink if self._vr_mirror else None  # noqa: SLF001
+        )
+        status = sink.runtime_status() if sink is not None else None
+
+        if status is not None:
+            if status.hmd_connected:
+                if status.hmd_model:
+                    lines.append(
+                        tr("HMD: ") + str(status.hmd_model),
+                    )
+                else:
+                    lines.append(tr("HMD connected."))
+            else:
+                lines.append(tr("HMD not connected."))
+
+            if status.scene_app_is_lfs:
+                lines.append(
+                    tr("LFS scene detected — overlays will composite "
+                       "over your VR view."),
+                )
+            elif status.scene_app_name:
+                lines.append(
+                    tr("Scene app: ") + status.scene_app_name,
+                )
+            else:
+                lines.append(
+                    tr("No VR scene focused — start LFS in VR mode "
+                       "to see overlays in your headset."),
+                )
+
+        # Read LFS cfg.txt for OpenVR/Oculus mode (best-effort).
+        lfs_dir = get_lfs_dir() or autodetect_lfs_dir()
+        if lfs_dir is not None:
+            try:
+                vr_mode = read_lfs_vr_mode(lfs_dir)
+            except Exception:
+                vr_mode = None
+            if vr_mode is not None:
+                backend, mode = vr_mode
+                lines.append(
+                    tr("LFS cfg.txt: ") + f"{backend} Mode {mode}",
+                )
+
+        return "\n".join(lines)
 
     def _toggle_module(self, mid: str, on: bool) -> None:
         w = self._widgets.get(mid)
