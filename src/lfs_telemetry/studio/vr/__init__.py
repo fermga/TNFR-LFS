@@ -6,5 +6,6 @@ plug in here behind the same small interface.
 """
 
 from .openvr_overlay import OpenVROverlaySink, OverlayPose
+from .vr_mirror import VrMirror
 
-__all__ = ["OpenVROverlaySink", "OverlayPose"]
+__all__ = ["OpenVROverlaySink", "OverlayPose", "VrMirror"]
