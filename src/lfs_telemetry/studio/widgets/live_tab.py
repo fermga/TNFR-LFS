@@ -289,12 +289,17 @@ class LiveTab(QWidget):
         self._session_compact.setChecked(compact_on)
 
         self._fullscreen_compat = QCheckBox(
-            tr("Fullscreen compatibility mode"), self,
+            tr("Borderless / windowed-fullscreen compat"), self,
         )
         self._fullscreen_compat.setToolTip(
             tr(
-                "Use regular top-most windows for overlay modules. This "
-                "helps visibility over LFS fullscreen/borderless modes.",
+                "Use regular top-most windows for overlay modules. "
+                "Helps visibility when LFS runs in windowed or "
+                "borderless (Full screen window) mode.\n\n"
+                "NOTE: Windows cannot draw any overlay over a true "
+                "DirectX exclusive-fullscreen game. If overlays are "
+                "invisible in LFS fullscreen, set 'Full screen window 1' "
+                "in LFS\\cfg.txt or use windowed mode.",
             ),
         )
         fs_raw = settings.value("overlay/fullscreen_compat", True)
@@ -303,12 +308,24 @@ class LiveTab(QWidget):
         }
         self._fullscreen_compat.setChecked(fs_on)
 
+        self._fullscreen_hint = QLabel(
+            tr(
+                "Tip: for overlays over LFS fullscreen, set "
+                "'Full screen window 1' in LFS\\cfg.txt (exclusive "
+                "fullscreen blocks all overlays system-wide).",
+            ),
+            self,
+        )
+        self._fullscreen_hint.setWordWrap(True)
+        self._fullscreen_hint.setStyleSheet("color: #888; font-size: 10px;")
+
         misc_form = QFormLayout()
         misc_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         misc_form.addRow(tr("G-meter full scale:"), self._g_full_scale)
         misc_form.addRow(tr("Pit-lane speed limit:"), self._pit_limit_kmh)
         misc_form.addRow("", self._session_compact)
         misc_form.addRow("", self._fullscreen_compat)
+        misc_form.addRow("", self._fullscreen_hint)
         misc_box = QGroupBox(tr("G-meter"), self)
         misc_box.setLayout(misc_form)
 

@@ -334,9 +334,19 @@ proceso de captura.
 * **G-meter** — fondo de escala (g), por defecto 2.0 g.
 * **Session overlay compact** — muestra la información de sesión
   en formato condensado.
-* **Fullscreen compatibility mode** — usa ventanas top-most normales
-  para mejorar la visibilidad sobre LFS en pantalla completa o
-  modo borderless.
+* **Borderless / windowed-fullscreen compat** — usa ventanas
+  top-most normales para mejorar la visibilidad del overlay cuando
+  LFS corre en modo ventana o borderless.
+
+> **Importante — LFS en pantalla completa exclusiva**: Windows no
+> permite a ningún overlay (el nuestro, RTSS, Discord, Steam, etc.)
+> dibujarse encima de un juego DirectX en *exclusive fullscreen*.
+> Si los overlays no se ven con LFS en pantalla completa, abre
+> `LFS\cfg.txt` y pon `Full screen window 1` (modo borderless
+> nativo de LFS), o usa modo ventana normal. La única vía que
+> sortea esta limitación es el **espejo VR** (ver más abajo),
+> porque SteamVR tiene su propio compositor por encima del swap
+> chain del juego.
 
 > **Coches soportados en Overlay**: coches propios de LFS y mods
 > verificados (los que tienen ficha en `config/cars.json`,

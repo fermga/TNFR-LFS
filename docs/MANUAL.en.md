@@ -329,8 +329,18 @@ capture process.
 * **RPM** — redline (rpm), default 8000.
 * **G-meter** — full scale (g), default 2.0 g.
 * **Session overlay compact** — show session info in condensed form.
-* **Fullscreen compatibility mode** — use regular top-most windows
-  to improve visibility over LFS in fullscreen or borderless modes.
+* **Borderless / windowed-fullscreen compat** — use regular top-most
+  windows to improve overlay visibility when LFS runs in windowed
+  or borderless mode.
+
+> **Important — LFS exclusive fullscreen**: Windows cannot draw any
+> overlay (ours, RTSS, Discord, Steam, etc.) on top of a DirectX
+> exclusive-fullscreen game. If overlays are invisible while LFS is
+> in fullscreen, open `LFS\cfg.txt` and set `Full screen window 1`
+> (LFS's borderless windowed mode), or use a regular windowed mode.
+> The **VR mirror** (see below) is the only path that bypasses this
+> limit, because SteamVR has its own compositor that runs above the
+> game's swap chain.
 
 > **Cars supported by Overlay**: stock LFS cars and verified mods
 > (those that have a record in `config/cars.json`, in the bundled
