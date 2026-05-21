@@ -28,6 +28,7 @@ from PySide6.QtGui import (
     QColor,
     QFont,
     QFontMetrics,
+    QImage,
     QLinearGradient,
     QMouseEvent,
     QPainter,
@@ -278,6 +279,27 @@ class _LiveModuleWindow(QWidget):
     def _font(self, base_pt: int, weight=QFont.Weight.Bold,
               family: str = "Segoe UI") -> QFont:
         return QFont(family, self._scale_pt(base_pt), weight)
+
+    # ----- Off-screen render (for VR / capture sinks) ------------------
+
+    def render_to_image(self) -> QImage:
+        """Render the current widget contents to an off-screen ARGB image.
+
+        The image has the same pixel size as the widget and a fully
+        transparent background, so alternate sinks (e.g. an OpenVR/OpenXR
+        overlay or a screenshot tool) can composite it without depending
+        on the on-screen window being mapped.
+
+        Safe to call whether or not the window is currently visible.
+        """
+        size = self.size()
+        if size.width() <= 0 or size.height() <= 0:
+            from PySide6.QtCore import QSize
+            size = QSize(*self._default_size)
+        img = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
+        img.fill(0)  # fully transparent background
+        self.render(img)
+        return img
 
 
 # ---------------------------------------------------------------------------
