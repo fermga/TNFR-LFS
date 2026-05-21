@@ -292,10 +292,15 @@ def test_enrich_profile_with_smx_synthetic():
 # ---------------------------------------------------------------------------
 
 _SMX_FILES = sorted(DEFAULT_SMX_DIR.glob("*.smx")) if DEFAULT_SMX_DIR.exists() else []
+# Precomputed ids: when ``_SMX_FILES`` is empty, pytest's parametrize
+# inserts a NotSet sentinel into the param list and would call the
+# lambda-form ``ids`` on it, breaking collection. A precomputed list
+# (empty here) avoids that path entirely.
+_SMX_IDS = [p.stem for p in _SMX_FILES]
 
 
 @pytest.mark.skipif(not _SMX_FILES, reason="no bundled SMX files")
-@pytest.mark.parametrize("smx_path", _SMX_FILES, ids=lambda p: p.stem)
+@pytest.mark.parametrize("smx_path", _SMX_FILES, ids=_SMX_IDS)
 def test_classify_and_checkpoints_on_real_smx(smx_path: Path):
     mesh = parse_smx(smx_path)
     classes = geom3d.classify_surface(mesh)
@@ -314,7 +319,7 @@ def test_classify_and_checkpoints_on_real_smx(smx_path: Path):
 
 
 @pytest.mark.skipif(not _SMX_FILES, reason="no bundled SMX files")
-@pytest.mark.parametrize("smx_path", _SMX_FILES, ids=lambda p: p.stem)
+@pytest.mark.parametrize("smx_path", _SMX_FILES, ids=_SMX_IDS)
 def test_banking_on_real_smx_reasonable(smx_path: Path):
     mesh = parse_smx(smx_path)
     # Build a coarse centreline by sampling 200 points along the mesh

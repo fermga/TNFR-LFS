@@ -46,6 +46,12 @@ _ARMED_RE = re.compile(r"\[capture\] armed:")
 _WAITING_RE = re.compile(r"Waiting for car to start moving")
 _INSIM_WAIT_RE = re.compile(r"\[insim\] waiting for LFS")
 _INSIM_READY_RE = re.compile(r"InSim ready\.|\[capture\] tracking PLID")
+# Streaming per-lap mode: the capture CLI emits one "wrote N rows to
+# /path/to/foo_lapNN.csv (streaming)" line per lap as it lands on disk.
+# We watch for these so the dock can rescan the workspace mid-session.
+_LAP_STREAMED_RE = re.compile(
+    r"wrote\s+\d+\s+rows to .*?_lap\d{2}\.csv\s*\(streaming\)"
+)
 
 
 def _led_qss(color: str) -> str:
@@ -80,6 +86,9 @@ class CaptureTab(QWidget):
         self._was_running = False
         self._completed_laps = 0
         self._out_lap_done = False
+        # How many "(streaming)" lap-write lines we've already
+        # signalled, so each new one fires exactly one refresh.
+        self._streamed_seen = 0
 
         # ----- Form ----------------------------------------------------
         self._stem = QLineEdit("stint", self)
@@ -229,7 +238,10 @@ class CaptureTab(QWidget):
                 laps=0,
                 warmup_laps=0,
                 per_lap=True,
-                include_out_lap=False,
+                # Capture everything by default: out-lap as lap00 + every
+                # flying lap. The user decides afterwards which laps are
+                # useful instead of the recorder silently dropping data.
+                include_out_lap=True,
                 insim_host=self._insim_host.text() or "127.0.0.1",
                 insim_port=int(self._insim_port.value()),
                 outsim_port=int(self._outsim_port.value()),
@@ -245,6 +257,7 @@ class CaptureTab(QWidget):
         self._log.clear()
         self._completed_laps = 0
         self._out_lap_done = False
+        self._streamed_seen = 0
         self._lap_counter.setText(tr("Laps recorded: 0"))
         self._btn_start.setEnabled(False)
         self._btn_stop.setEnabled(True)
@@ -287,6 +300,14 @@ class CaptureTab(QWidget):
             sb = self._log.verticalScrollBar()
             sb.setValue(sb.maximum())
         self._update_lap_counter_from_log(log_lines)
+        # Detect new "(streaming)" per-lap writes and refresh the
+        # captures dock once per new file.
+        streamed_now = sum(
+            1 for ln in log_lines if _LAP_STREAMED_RE.search(ln)
+        )
+        if streamed_now > self._streamed_seen:
+            self._streamed_seen = streamed_now
+            self._signals.capture_lap_streamed.emit()
         running = bool(st["running"])
         out = st.get("output") or ""
         out_name = Path(out).name if out else ""

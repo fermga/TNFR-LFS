@@ -21,7 +21,6 @@ import subprocess
 import sys
 import threading
 from collections import deque
-from datetime import datetime
 from pathlib import Path
 
 from ..telemetry.constants import (
@@ -29,6 +28,7 @@ from ..telemetry.constants import (
     OUTGAUGE_DEFAULT_PORT,
     OUTSIM_DEFAULT_PORT,
 )
+from ..telemetry.session_naming import safe_token, timestamp_tag
 
 
 class CaptureRunner:
@@ -91,10 +91,10 @@ class CaptureRunner:
         workspace = Path(workspace)
         workspace.mkdir(parents=True, exist_ok=True)
 
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        safe_stem = "".join(
-            c if (c.isalnum() or c in "-_") else "_" for c in stem
-        ) or "stint"
+        ts = timestamp_tag()
+        safe_stem = safe_token(stem, extra_allowed="-_") if stem else "stint"
+        if safe_stem == "unknown":
+            safe_stem = "stint"
         if write_csv:
             # Each capture lands in its own subfolder under the workspace, so
             # the aggregate stint CSV and the per-lap CSVs stay grouped and
@@ -153,8 +153,6 @@ class CaptureRunner:
         stop_file = session_dir / ".stop"
         try:
             stop_file.unlink()
-        except FileNotFoundError:
-            pass
         except OSError:
             pass
         argv += ["--stop-file", str(stop_file)]
@@ -164,8 +162,6 @@ class CaptureRunner:
         live_file = session_dir / "live.json"
         try:
             live_file.unlink()
-        except FileNotFoundError:
-            pass
         except OSError:
             pass
         argv += ["--live-file", str(live_file)]

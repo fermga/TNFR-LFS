@@ -16,12 +16,15 @@ so cost is O(1) per file regardless of size.
 from __future__ import annotations
 
 import csv
+import logging
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 from .replay import detect_schema_version
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +148,7 @@ def inspect_capture(path: str | Path) -> CaptureInfo | None:
                 tail = fb.read(tail_size).decode("utf-8", errors="ignore")
             # Drop trailing newlines, take the final line.
             tail_lines = [ln for ln in tail.splitlines() if ln.strip()]
-            if tail_lines and len(tail_lines) >= 1:
+            if tail_lines:
                 last_row_text = tail_lines[-1]
                 # Parse it with csv against the header fieldnames.
                 last_reader = csv.DictReader(
@@ -156,8 +159,8 @@ def inspect_capture(path: str | Path) -> CaptureInfo | None:
                 parsed = next(last_reader, None)
                 if parsed is not None:
                     last = parsed
-        except (OSError, csv.Error, UnicodeDecodeError):
-            pass
+        except (OSError, csv.Error, UnicodeDecodeError) as exc:
+            logger.debug("could not read tail of %s: %s", path, exc)
     except (OSError, csv.Error, UnicodeDecodeError):
         return None
 

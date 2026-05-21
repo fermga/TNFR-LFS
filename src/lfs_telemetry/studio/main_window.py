@@ -182,6 +182,10 @@ class MainWindow(QMainWindow):
         self._signals.cursor_left.connect(lambda: self._cursor_label.setText(""))
         self._signals.x_axis_changed.connect(self._on_axis_changed)
         self._signals.status_message.connect(self._status.showMessage)
+        # Streaming per-lap captures: when the capture subprocess writes
+        # a new lap CSV mid-session, refresh the captures dock so the
+        # user sees it appear without manual F5.
+        self._signals.capture_lap_streamed.connect(self._captures.refresh)
 
         # Restore window geometry / dock state if available.
         self._restore_state()

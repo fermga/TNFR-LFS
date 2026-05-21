@@ -20,7 +20,7 @@ official LFS lap time stays attached to each canonical slice.
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -178,6 +178,7 @@ def write_per_lap_files(
     session_tag: str = "",
     min_drop_m: float = 100.0,
     include_out_lap: bool = False,
+    skip_lap_indices: Iterable[int] = (),
 ) -> list[tuple[Path, LapSlice, int]]:
     """Slice ``samples`` canonically and write one CSV per full lap.
 
@@ -186,15 +187,25 @@ def write_per_lap_files(
     convention: ``{stem}_{session_tag}_lapNN{suffix}`` (the underscore
     before ``session_tag`` is omitted when ``session_tag`` is empty).
     With ``include_out_lap=True`` the out-lap is written as ``_lap00``.
+
+    ``skip_lap_indices`` lets callers skip laps that have already been
+    written incrementally during a live capture (streaming per-lap
+    mode). Skipped laps are still returned in the result list with
+    their ``LapSlice`` and ``rows_written=0`` so the caller can log
+    them, but no file is (re)written.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[tuple[Path, LapSlice, int]] = []
+    skip = frozenset(int(i) for i in skip_lap_indices)
     laps = slice_into_laps(
         samples, min_drop_m=min_drop_m, include_out_lap=include_out_lap,
     )
     for lap in laps:
         tag = f"_{session_tag}" if session_tag else ""
         path = out_dir / f"{stem}{tag}_lap{lap.lap_index:02d}{suffix}"
+        if lap.lap_index in skip:
+            written.append((path, lap, 0))
+            continue
         rows = write_csv_replay(path, lap.samples)
         written.append((path, lap, rows))
     return written

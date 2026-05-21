@@ -138,7 +138,10 @@ def _find_nearest_neighbours(
             continue
         x_l, y_l = project_to_local(view, other)
         d = math.hypot(x_l, y_l)
-        is_ahead = y_l > 0.0 or (y_l == 0.0 and x_l > 0.0)
+        # Tolerance avoids float-eq pitfalls when y_l is computed from
+        # a subtraction; for cars at exactly the y=0 crossing we use
+        # x_l as the tie-breaker.
+        is_ahead = y_l > 1e-6 or (abs(y_l) <= 1e-6 and x_l > 0.0)
         if is_ahead:
             if nearest_ahead is None or d < nearest_ahead[0]:
                 nearest_ahead = (d, other)

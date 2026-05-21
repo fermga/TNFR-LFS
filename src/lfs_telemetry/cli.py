@@ -12,8 +12,8 @@ import argparse
 import asyncio
 import contextlib
 import io
+import os
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from .telemetry import live_publisher
@@ -30,6 +30,7 @@ from .telemetry.node_delta import NodeDeltaTracker
 from .telemetry.predict import SplitPredictor
 from .telemetry.protocol.packets import DL_PITSPEED, OSO_ALL, WHEEL_ORDER
 from .telemetry.replay import write_csv_replay
+from .telemetry.session_naming import session_tag as _session_tag
 from .telemetry.track.loader import find_racing_line_csv
 
 # Module-level stop flag set by SIGBREAK / SIGINT handlers. The capture
@@ -154,12 +155,10 @@ def main(argv: list[str] | None = None) -> int:
         help="extra full laps to discard at the start (in addition to the "
              "in-progress out-lap). Useful for tyre warm-up.")
     p_cap.add_argument(
-        "--trim-out-lap", action="store_true", default=True,
-        help="discard samples taken before the first lap completion "
-             "(default ON when --laps is used).")
-    p_cap.add_argument(
-        "--no-trim-out-lap", action="store_false", dest="trim_out_lap",
-        help="keep the in-progress out-lap in the output CSV.")
+        "--trim-out-lap", action="store_true", default=False,
+        help="discard samples taken before the first lap completion. "
+             "OFF by default: the out-lap is kept so the user decides "
+             "later which data to use.")
     p_cap.add_argument(
         "--per-lap", action="store_true",
         help="also write one CSV per lap next to the aggregate output. "
@@ -173,9 +172,8 @@ def main(argv: list[str] | None = None) -> int:
     p_cap.add_argument(
         "--include-out-lap", action="store_true",
         help="with --per-lap, also write the out-lap (from capture start "
-             "to first start/finish crossing) as _lap00.csv. Implies "
-             "--no-trim-out-lap and disables --warmup-laps so every "
-             "completed lap is preserved.")
+             "to first start/finish crossing) as _lap00.csv. Disables "
+             "--warmup-laps so every completed lap is preserved.")
     p_cap.add_argument(
         "--wait-on-track", action="store_true",
         help="keep retrying the InSim TCP connection until LFS is up, "
@@ -290,29 +288,6 @@ def main(argv: list[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _safe_tag(value: str | None) -> str:
-    """Sanitize a free-form string so it is safe for filenames."""
-    if not value:
-        return "unknown"
-    cleaned = "".join(c if c.isalnum() else "_" for c in str(value))
-    return cleaned.strip("_") or "unknown"
-
-
-def _session_tag(samples: list[TelemetrySample]) -> str:
-    """Build ``YYYYMMDD-HHMMSS_CAR_TRACK`` for unique per-lap filenames."""
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    car: str | None = None
-    track: str | None = None
-    for s in samples:
-        if car is None and s.outgauge and s.outgauge.car:
-            car = s.outgauge.car
-        if track is None and s.race_context and s.race_context.track:
-            track = s.race_context.track
-        if car and track:
-            break
-    return f"{ts}_{_safe_tag(car)}_{_safe_tag(track)}"
-
-
 async def _cmd_capture(args: argparse.Namespace) -> int:
     global _CAPTURE_LOOP, _CAPTURE_TASK
     _CAPTURE_LOOP = asyncio.get_running_loop()
@@ -327,6 +302,12 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
     # --include-out-lap means: keep every sample, no warmup skipping,
     # no out-lap trimming. The slicer will emit _lap00 for the out-lap.
     if getattr(args, "include_out_lap", False):
+        if int(getattr(args, "warmup_laps", 0) or 0) > 0:
+            print(
+                "[capture] --include-out-lap overrides --warmup-laps; "
+                "every completed lap will be kept.",
+                file=sys.stderr,
+            )
         args.trim_out_lap = False
         args.warmup_laps = 0
         args.wait_on_track = True
@@ -371,14 +352,81 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
     # Per-lap slices: list of (lap_number, list_of_samples, lap_ms_or_None)
     lap_slices: list[tuple[int, list[TelemetrySample], int | None]] = []
 
+    # Streaming per-lap output: when --per-lap is on, write each lap's
+    # CSV the moment it closes (canonical line crossing) instead of
+    # batching everything at the end. Lets the user open laps from the
+    # current session in the Studio without having to stop/refresh. The
+    # final ``_flush_capture`` becomes a no-op for already-written laps
+    # but still emits the aggregate CSV.
+    out_dir = args.output.parent
+    stem = args.output.stem
+    suffix = args.output.suffix or ".csv"
+    streaming_session_tag: str = ""
+    written_lap_indices: set[int] = set()
+
+    def _ensure_session_tag(reference_sample: TelemetrySample | None) -> str:
+        """Compute the session tag once and reuse it for the whole capture."""
+        nonlocal streaming_session_tag
+        if streaming_session_tag:
+            return streaming_session_tag
+        # Use the current buffer so car/track are populated; ``samples``
+        # is already at least one element by the time the first lap
+        # closes. If somehow empty, fall back to the reference sample.
+        pool = samples if samples else (
+            [reference_sample] if reference_sample is not None else []
+        )
+        streaming_session_tag = _session_tag(pool)
+        return streaming_session_tag
+
+    def _write_lap_atomic(
+        lap_index: int,
+        slice_samples: list[TelemetrySample],
+        lap_ms: int | None,
+    ) -> None:
+        """Write one lap CSV atomically (tmp + os.replace) to avoid
+        readers (Studio refresh, catalog) ever seeing a partial file.
+        """
+        if not slice_samples:
+            return
+        if lap_index in written_lap_indices:
+            return
+        tag = _ensure_session_tag(slice_samples[0])
+        tag_part = f"_{tag}" if tag else ""
+        path = out_dir / f"{stem}{tag_part}_lap{lap_index:02d}{suffix}"
+        tmp = path.with_name(path.name + ".part")
+        try:
+            rows = write_csv_replay(tmp, slice_samples)
+            os.replace(tmp, path)
+        except BaseException as exc:  # noqa: BLE001
+            print(
+                f"[capture] streaming lap{lap_index:02d} write failed: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            with contextlib.suppress(OSError):
+                tmp.unlink()
+            return
+        written_lap_indices.add(lap_index)
+        lap_s = (lap_ms / 1000.0) if lap_ms else None
+        tag_dur = f" ({lap_s:.3f}s)" if lap_s else ""
+        print(
+            f"[capture] wrote {rows} rows to {path} (streaming){tag_dur}",
+            file=sys.stderr,
+        )
+
     def _close_lap(end_idx_exclusive: int, lap_ms: int | None) -> None:
-        """Snapshot samples[start_idx:end_idx] as a completed flying lap."""
+        """Snapshot samples[start_idx:end_idx] as a completed flying lap
+        and stream it to disk immediately so the user can inspect
+        completed laps without stopping the capture.
+        """
         nonlocal flying_lap_start_idx
         if not per_lap or not flying_lap_started:
             return
         slice_ = samples[flying_lap_start_idx:end_idx_exclusive]
         if slice_:
-            lap_slices.append((completed_flying_laps + 1, list(slice_), lap_ms))
+            lap_index = completed_flying_laps + 1
+            lap_slices.append((lap_index, list(slice_), lap_ms))
+            _write_lap_atomic(lap_index, list(slice_), lap_ms)
         flying_lap_start_idx = end_idx_exclusive
 
     live_file = getattr(args, "live_file", None)
@@ -642,6 +690,22 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
                             if not flying_lap_started:
                                 # First lap completion = end of out-lap. Drop the
                                 # in-progress lap from the buffer and re-anchor.
+                                # When --include-out-lap is on, stream the
+                                # out-lap (lap00) to disk BEFORE we trim the
+                                # buffer / re-anchor, so the user can inspect
+                                # it mid-session.
+                                outlap_end_idx = len(samples) - 1
+                                if (
+                                    per_lap
+                                    and getattr(args, "include_out_lap", False)
+                                    and outlap_end_idx > 0
+                                    and 0 not in written_lap_indices
+                                ):
+                                    _write_lap_atomic(
+                                        0,
+                                        list(samples[:outlap_end_idx]),
+                                        lap_ms,
+                                    )
                                 if args.trim_out_lap:
                                     samples = [sample]
                                     flying_lap_start_idx = 0
@@ -973,7 +1037,11 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
         print("[capture] overlay-only mode: no CSV written.",
               file=sys.stderr)
     else:
-        _flush_capture(args, samples, per_lap)
+        _flush_capture(
+            args, samples, per_lap,
+            written_lap_indices=written_lap_indices,
+            session_tag_override=streaming_session_tag,
+        )
     return 0
 
 
@@ -981,22 +1049,32 @@ def _flush_capture(
     args: argparse.Namespace,
     samples: list[TelemetrySample],
     per_lap: bool,
+    *,
+    written_lap_indices: set[int] | None = None,
+    session_tag_override: str = "",
 ) -> None:
     """Write per-lap and/or aggregate CSVs from buffered samples.
 
     Safe to call from both the normal completion path and from an
     interrupt handler: it never raises (errors are logged instead).
+
+    When the capture loop streamed laps to disk as they completed
+    (the default for ``--per-lap``), pass the indices via
+    ``written_lap_indices`` so we don't rewrite the same files at
+    flush time. ``session_tag_override`` keeps the streaming and
+    final filenames in lockstep.
     """
     if not samples:
         print("[capture] no samples buffered, nothing to write.",
               file=sys.stderr)
         return
+    skip = written_lap_indices or set()
     try:
         if per_lap:
             out_dir = args.output.parent
             stem = args.output.stem
             suffix = args.output.suffix or ".csv"
-            session_tag = _session_tag(samples)
+            session_tag = session_tag_override or _session_tag(samples)
             written = write_per_lap_files(
                 samples,
                 out_dir=out_dir,
@@ -1004,12 +1082,20 @@ def _flush_capture(
                 suffix=suffix,
                 session_tag=session_tag,
                 include_out_lap=getattr(args, "include_out_lap", False),
+                skip_lap_indices=skip,
             )
+            new_writes = [w for w in written if w[2] > 0]
             if not written:
                 print("[capture] WARNING: no full lap recovered from buffer "
                       "(need at least 2 line crossings in current_lap_dist_m).",
                       file=sys.stderr)
-            for path, lap, n in written:
+            elif not new_writes:
+                print(
+                    f"[capture] flush: {len(skip)} lap(s) already streamed; "
+                    "nothing new to write.",
+                    file=sys.stderr,
+                )
+            for path, lap, n in new_writes:
                 tag = f" ({lap.lap_ms / 1000.0:.3f}s)" if lap.lap_ms else ""
                 print(f"[capture] wrote {n:5d} rows to {path}"
                       f" [d_max={lap.distance_m:.1f}m,"
@@ -1068,7 +1154,7 @@ def _raf_inspect(src: Path, n: int) -> int:
     from .telemetry.raf import parse_raf, split_into_laps
 
     head, rows = parse_raf(src)
-    print(f"[raf-inspect] header:")
+    print("[raf-inspect] header:")
     print(f"  raf_version        = {head.raf_version}")
     print(f"  update_interval_ms = {head.update_interval_ms}")
     print(f"  header_size        = {head.header_size}")
@@ -1094,7 +1180,7 @@ def _raf_inspect(src: Path, n: int) -> int:
               f"max={max(speeds):.2f}")
         laps = split_into_laps(head, rows)
         print(f"  laps detected      = {len(laps)} "
-              f"(sizes: {[len(l) for l in laps[:10]]}"
+              f"(sizes: {[len(lap) for lap in laps[:10]]}"
               f"{'...' if len(laps) > 10 else ''})")
     raw = src.read_bytes()
     print(f"\n[raf-inspect] first {n} block(s) — raw + decoded:")

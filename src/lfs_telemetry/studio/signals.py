@@ -29,6 +29,11 @@ class SignalBus(QObject):
     captures_refreshed = Signal()
     """The captures table was repopulated (no payload)."""
 
+    capture_lap_streamed = Signal()
+    """A live capture just wrote a new per-lap CSV to disk (streaming
+    per-lap mode). Listeners (the captures dock) should rescan the
+    workspace so the new file appears without manual F5. No payload."""
+
     # ----- Lap selection -------------------------------------------
     laps_selected = Signal(list)
     """User selected one or more laps. Argument: list[Path]."""

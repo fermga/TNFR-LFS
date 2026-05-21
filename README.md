@@ -215,10 +215,10 @@ lfs-telemetry calibrate --insim-host 127.0.0.1
 | `--seconds N` | `0` | stop after N seconds (0 = no limit). |
 | `--laps N` | `0` | stop after N completed flying laps (requires `--insim-host`). |
 | `--warmup-laps K` | `0` | discard K extra full laps at session start. |
-| `--trim-out-lap` / `--no-trim-out-lap` | on | drop / keep samples before the first start/finish crossing. |
+| `--trim-out-lap` | off | drop samples taken before the first start/finish crossing. Default keeps the out-lap so the user decides later. |
 | `--per-lap` | off | also write one CSV per completed lap, tagged with timestamp, car and track. |
 | `--no-aggregate` | off | with `--per-lap`, skip the combined CSV. |
-| `--include-out-lap` | off | also write the out-lap as `_lap00.csv`. Implies `--no-trim-out-lap` and disables `--warmup-laps`. |
+| `--include-out-lap` | off | also write the out-lap as `_lap00.csv`. Disables `--warmup-laps`. |
 | `--wait-on-track` | off | keep retrying the InSim connection and discard samples below ~3 m/s until the car actually moves. Implied by `--include-out-lap`. |
 | `--debug-insim` | off | log every InSim packet plus a 5 s heartbeat with the current race context. |
 | `--stop-file PATH` | — | sentinel file polled by the capture loop; capture stops cleanly when the file appears (used by the Studio Capture tab). |
