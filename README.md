@@ -538,3 +538,11 @@ Key behaviours encoded in the spec:
 ## Licence
 
 MIT. See `pyproject.toml` and individual file headers.
+
+## Credits
+
+This project was inspired by prior community work on Live for Speed
+telemetry tools. See [CREDITS.md](CREDITS.md) for full attribution to
+**LFSTelemetry** (Cyril Bissey, MIT), **helicorsa** (Jens Lohmann,
+MIT), **Detect&Monitor** (KingOfIce, proprietary — credited for
+inspiration only), and the Live for Speed track-geometry formats.
