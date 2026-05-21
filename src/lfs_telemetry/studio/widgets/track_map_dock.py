@@ -523,11 +523,16 @@ class TrackMapDock(QWidget):
         path = find_overlay_image(env)
         if path is None:
             return None
-        if path in self._overlay_image_cache:
-            return self._overlay_image_cache[path]
+        cached = self._overlay_image_cache.get(path)
+        if cached is not None:
+            return cached
         qimg = QImage(str(path))
         arr = self._qimage_to_array(qimg)
-        self._overlay_image_cache[path] = arr
+        # Only cache successful decodes; otherwise a transient failure
+        # would poison the cache and the overlay would never recover
+        # for the rest of the session.
+        if arr is not None:
+            self._overlay_image_cache[path] = arr
         return arr
 
     def _calibration_for(self, env: str) -> OverlayCalibration:
@@ -571,14 +576,24 @@ class TrackMapDock(QWidget):
             img_to_show = np.ascontiguousarray(img[::-1, :, :])
         else:
             img_to_show = img
-        item = pg.ImageItem(img_to_show, axisOrder="row-major")
+        # ``autoDownsample=True`` is required for the 2560×2560 LFS
+        # track images: without it pyqtgraph keeps a full-resolution
+        # QPixmap cache that silently drops at large zoom factors,
+        # which made the overlay vanish after the user panned/zoomed
+        # and then changed laps.
+        item = pg.ImageItem(
+            img_to_show, axisOrder="row-major", autoDownsample=True,
+        )
         item.setRect(QRectF(
             extent.x0_m, extent.y0_m, extent.width_m, extent.height_m,
         ))
         item.setOpacity(self._overlay_opacity)
         # Sit underneath every other item (racing line is at z=-1).
         item.setZValue(-10)
-        self._plot.addItem(item)
+        # Keep the image out of pyqtgraph's autoRange computation so a
+        # previously-zoomed ViewBox doesn't try to re-fit a 2.5 km box
+        # and end up clipping the overlay off-screen.
+        self._plot.addItem(item, ignoreBounds=True)
         self._overlay_item = item
 
     def _on_overlay_toggled(self, checked: bool) -> None:
