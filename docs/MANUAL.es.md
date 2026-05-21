@@ -334,9 +334,86 @@ proceso de captura.
 * **G-meter** — fondo de escala (g), por defecto 2.0 g.
 * **Session overlay compact** — muestra la información de sesión
   en formato condensado.
-* **Fullscreen compatibility mode** — usa ventanas top-most normales
-  para mejorar la visibilidad sobre LFS en pantalla completa o
-  modo borderless.
+* **Borderless / windowed-fullscreen compat** — usa ventanas
+  top-most normales para mejorar la visibilidad del overlay cuando
+  LFS corre en modo ventana o borderless.
+
+> **Importante — LFS en pantalla completa exclusiva**: Windows no
+> permite a ningún overlay (el nuestro, RTSS, Discord, Steam, etc.)
+> dibujarse encima de un juego DirectX en *exclusive fullscreen*.
+> Si los overlays no se ven con LFS en pantalla completa, abre
+> `LFS\cfg.txt` y pon `Full screen window 1` (modo borderless
+> nativo de LFS), o usa modo ventana normal. La única vía que
+> sortea esta limitación es el **espejo VR** (ver más abajo),
+> porque SteamVR tiene su propio compositor por encima del swap
+> chain del juego.
+
+### 5.7. Espejo VR (SteamVR / OpenVR)
+
+La pestaña Live incluye un grupo **VR** con una sola casilla:
+
+* **Mirror overlays to VR (SteamVR / OpenVR)** — al activarla, cada
+  módulo de overlay visible se dibuja también como un panel
+  `IVROverlay` anclado al casco. El widget Qt es la única fuente de
+  verdad: la ventana de escritorio y el panel VR muestran contenido
+  idéntico. No hay un segundo *look & feel* que configurar.
+
+**Por qué VR funciona donde fullscreen exclusivo no**
+
+SteamVR tiene su propio compositor de escena que corre por encima
+de cualquier swap chain DirectX / Vulkan. Subir una textura a
+`IVROverlay` hace que SteamVR la pinte sobre lo que sea que muestre
+el juego en el casco. Esto funciona con LFS en cualquier modo de
+ventana, incluido pantalla completa exclusiva, y con cualquier
+runtime compatible con OpenVR (Valve Index, HTC Vive, Windows Mixed
+Reality vía OpenVR, cascos Oculus vía OpenComposite, Meta Quest con
+Steam Link, etc.).
+
+**Requisitos**
+
+* SteamVR (u otro runtime compatible con OpenVR) instalado y en
+  ejecución antes de marcar la casilla.
+* El paquete Python `openvr`. Ya empaquetado dentro del instalador
+  de Windows; si ejecutas desde código, instala con
+  `pip install lfs-race-engineer[vr]`.
+* El casco debe estar trackeando (no en standby). La pose por
+  defecto coloca los overlays a ~1.5 m frente al casco.
+
+**Comportamiento**
+
+* La casilla es un *no-op* si SteamVR no está corriendo o si falta
+  el módulo `openvr` — vuelve sola a **off** y la etiqueta de estado
+  bajo ella muestra el motivo (p. ej. `VR mirror unavailable: ...`).
+* Mientras esté activa, un timer a 30 Hz lee cada módulo de overlay
+  visible, lo renderiza off-screen en un `QImage` transparente, lo
+  convierte a `RGBA8888` y lo sube vía `IVROverlay.SetOverlayRaw`.
+  No hay coste extra de CPU/GPU cuando la casilla está apagada.
+* Ocultar un módulo (desmarcándolo en la lista de módulos) también
+  oculta el overlay VR correspondiente en el siguiente tick.
+* Cerrar la pestaña Live o la app apaga todos los overlays VR
+  limpiamente y libera la sesión OpenVR.
+
+**Disposición por defecto de los paneles**
+
+Los overlays se distribuyen en un arco suave a 1.5 m del casco,
+ligeramente por debajo del nivel de los ojos para no sentarse sobre
+el ápice de las curvas. Cada overlay mide ~40 cm de ancho en
+unidades de mundo. La personalización de pose por módulo
+(mover/escalar paneles individuales dentro del casco) está en la
+hoja de ruta; hoy los valores por defecto están calibrados para
+leerse sin ocultar la traza.
+
+**Resolución de problemas**
+
+* *La casilla se desmarca sola* — lee la etiqueta de estado. La
+  causa habitual es que SteamVR no está corriendo.
+* *Los paneles están visibles pero en blanco* — el módulo de origen
+  todavía no ha recibido telemetría. Inicia una sesión en LFS o
+  carga una repetición.
+* *La ventana de escritorio también se ve en el monitor* — es
+  intencionado. Ambos destinos comparten el mismo widget Qt; puedes
+  mover la ventana de escritorio fuera de pantalla si solo quieres
+  el panel VR.
 
 > **Coches soportados en Overlay**: coches propios de LFS y mods
 > verificados (los que tienen ficha en `config/cars.json`,

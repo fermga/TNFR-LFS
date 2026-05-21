@@ -23,6 +23,7 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import (
     collect_data_files,
+    collect_dynamic_libs,
     collect_submodules,
     copy_metadata,
 )
@@ -34,6 +35,7 @@ ROOT = Path(SPECPATH).resolve()  # noqa: F821 - SPECPATH provided by PyInstaller
 
 hiddenimports: list[str] = []
 datas: list[tuple[str, str]] = []
+binaries: list[tuple[str, str]] = []
 
 # Modules deliberately *not* shipped in the installable build. The
 # Setup tab and its in-app editor are unwired from ``CenterTabs`` (see
@@ -66,6 +68,24 @@ try:
 except Exception:
     pass
 
+# Optional VR mirror (SteamVR / OpenVR). The ``openvr`` Python package
+# ships a native ``openvr_api.dll`` next to its module; PyInstaller's
+# default analysis misses it because we only import the package
+# lazily inside ``studio/vr/openvr_overlay.py``.  When the build env
+# has the ``[vr]`` extra installed, bundle the module + its DLL so the
+# shipped .exe can mirror overlays to SteamVR.  Without ``openvr`` the
+# build still succeeds; the runtime will simply report VR unavailable.
+try:
+    import openvr  # noqa: F401  (presence check)
+    hiddenimports += collect_submodules("openvr")
+    binaries += collect_dynamic_libs("openvr")
+    try:
+        datas += collect_data_files("openvr", include_py_files=False)
+    except Exception:
+        pass
+except Exception:
+    pass
+
 # Bundle our static data folders side-by-side with the .exe (NOT inside
 # _internal/) so the app's cwd-based lookups keep working.  The runtime
 # hook chdir's to the .exe directory at startup.
@@ -89,6 +109,12 @@ datas += _bundle_dir("assets/source/mods", "*.json")
 # Studio "Import CAR_info.bin…" button writes new exports there at
 # runtime when launched from a writable working directory.
 datas += _bundle_dir("assets/source/cars", "*.bin")
+# Per-environment top-down track images (used by the Track map dock
+# overlay in the Studio "Map" panel). Without these, the "Track image"
+# checkbox renders nothing because the candidate-dir search never finds
+# ``<ENV>.tif`` in the installed bundle.
+datas += _bundle_dir("assets/tracks", "*.tif")
+datas += _bundle_dir("assets/tracks", "*.png")
 # Track overview .pngs are nice-to-have; uncomment to ship.
 # datas += _bundle_dir("tracks", "*.png")
 
@@ -100,7 +126,7 @@ a = Analysis(
     pathex=[
         str(ROOT / "src"),
     ],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

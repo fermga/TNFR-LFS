@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import csv
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -25,8 +26,14 @@ from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QImage, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -38,8 +45,10 @@ from ...telemetry.track.overlay import (
     OverlayCalibration,
     OverlayExtent,
     compute_overlay_extent,
+    compute_overlay_extent_for_image,
     find_overlay_image,
     load_overlay_calibrations,
+    save_user_overlay_calibration,
     track_to_environment,
 )
 from ...telemetry.track_map import TrackMap
@@ -146,10 +155,17 @@ class TrackMapDock(QWidget):
         self._overlay_slider.valueChanged.connect(self._on_overlay_opacity)
         overlay_label = QLabel("Opacity", self)
         overlay_label.setStyleSheet(f"color: {MUTED_COLOR};")
+        self._overlay_calib_btn = QPushButton("Calibrate map…", self)
+        self._overlay_calib_btn.setToolTip(
+            "Nudge / scale the track image so it lines up with the racing"
+            " line. Saved per environment under your user profile."
+        )
+        self._overlay_calib_btn.clicked.connect(self._on_calibrate_overlay)
         controls_row = QHBoxLayout()
         controls_row.setContentsMargins(2, 0, 2, 0)
         controls_row.addWidget(self._overlay_check)
         controls_row.addStretch(1)
+        controls_row.addWidget(self._overlay_calib_btn)
         controls_row.addWidget(overlay_label)
         controls_row.addWidget(self._overlay_slider)
 
@@ -517,10 +533,23 @@ class TrackMapDock(QWidget):
     def _calibration_for(self, env: str) -> OverlayCalibration:
         return self._overlay_calibrations.get(env, DEFAULT_CALIBRATION)
 
-    def _overlay_extent_for(self, env: str) -> OverlayExtent | None:
+    def _overlay_extent_for(
+        self, env: str, image: np.ndarray | None = None,
+    ) -> OverlayExtent | None:
         if env in self._overlay_extent_cache:
             return self._overlay_extent_cache[env]
-        ext = compute_overlay_extent(env, self._calibration_for(env))
+        cal = self._calibration_for(env)
+        ext: OverlayExtent | None
+        if image is not None and image.ndim >= 2:
+            # Canonical placement: LFS renders every track image at
+            # exactly 1 m/px centred on the world origin (0, 0). So we
+            # derive the world rectangle from image dimensions alone.
+            h_px, w_px = int(image.shape[0]), int(image.shape[1])
+            ext = compute_overlay_extent_for_image((w_px, h_px), cal)
+        else:
+            # Fall back to the legacy bbox auto-fit when we don't yet
+            # have the image (e.g. preview without bundled TIF).
+            ext = compute_overlay_extent(env, cal)
         self._overlay_extent_cache[env] = ext
         return ext
 
@@ -535,7 +564,7 @@ class TrackMapDock(QWidget):
         img = self._load_overlay_image(env)
         if img is None:
             return
-        extent = self._overlay_extent_for(env)
+        extent = self._overlay_extent_for(env, image=img)
         if extent is None:
             return
         if extent.flip_y:
@@ -564,6 +593,135 @@ class TrackMapDock(QWidget):
         self._overlay_opacity = max(0.0, min(1.0, float(value) / 100.0))
         if self._overlay_item is not None:
             self._overlay_item.setOpacity(self._overlay_opacity)
+
+    # ------------------------------------------------------------------
+    # Interactive overlay calibration
+    # ------------------------------------------------------------------
+
+    def _apply_calibration_preview(
+        self, env: str, cal: OverlayCalibration,
+    ) -> None:
+        """Swap in *cal* for *env* and re-render the overlay."""
+        self._overlay_calibrations[env] = cal
+        self._overlay_extent_cache.pop(env, None)
+        if self._overlay_visible:
+            self._render_track_overlay(self._current_env)
+
+    def _on_calibrate_overlay(self) -> None:
+        env = self._current_env
+        if not env:
+            QMessageBox.information(
+                self,
+                "Calibrate map",
+                "Load a lap first so the map dock knows which environment"
+                " (BL, AS, KY, …) you want to calibrate.",
+            )
+            return
+        if find_overlay_image(env) is None:
+            QMessageBox.information(
+                self,
+                "Calibrate map",
+                f"No track image is bundled for environment '{env}'.",
+            )
+            return
+        original = self._calibration_for(env)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Calibrate map · {env}")
+        form = QFormLayout()
+
+        def _spin(
+            value: float, lo: float, hi: float, step: float, decimals: int,
+        ) -> QDoubleSpinBox:
+            sp = QDoubleSpinBox(dlg)
+            sp.setRange(lo, hi)
+            sp.setDecimals(decimals)
+            sp.setSingleStep(step)
+            sp.setValue(value)
+            return sp
+
+        dx_spin = _spin(original.dx_m, -5000.0, 5000.0, 1.0, 2)
+        dy_spin = _spin(original.dy_m, -5000.0, 5000.0, 1.0, 2)
+        scale_spin = _spin(original.scale, 0.5, 2.0, 0.001, 4)
+        flip_chk = QCheckBox("Flip image vertically", dlg)
+        flip_chk.setChecked(bool(original.flip_y))
+
+        form.addRow("dx (m, +east)", dx_spin)
+        form.addRow("dy (m, +north)", dy_spin)
+        form.addRow("scale ×", scale_spin)
+        form.addRow("", flip_chk)
+
+        hint = QLabel(
+            "Track images are auto-aligned at 1 m/px centred on the"
+            " world origin. These spinners apply optional residual"
+            " nudges if a particular environment looks off. Save"
+            " writes them to your user profile.",
+            dlg,
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {MUTED_COLOR};")
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.Reset,
+            parent=dlg,
+        )
+
+        layout = QVBoxLayout(dlg)
+        layout.addLayout(form)
+        layout.addWidget(hint)
+        layout.addWidget(buttons)
+
+        def _current_cal() -> OverlayCalibration:
+            return replace(
+                original,
+                dx_m=float(dx_spin.value()),
+                dy_m=float(dy_spin.value()),
+                scale=float(scale_spin.value()),
+                flip_y=bool(flip_chk.isChecked()),
+            )
+
+        def _on_change(_=None) -> None:
+            self._apply_calibration_preview(env, _current_cal())
+
+        for sp in (dx_spin, dy_spin, scale_spin):
+            sp.valueChanged.connect(_on_change)
+        flip_chk.toggled.connect(_on_change)
+
+        def _on_reset() -> None:
+            dx_spin.setValue(DEFAULT_CALIBRATION.dx_m)
+            dy_spin.setValue(DEFAULT_CALIBRATION.dy_m)
+            scale_spin.setValue(DEFAULT_CALIBRATION.scale)
+            flip_chk.setChecked(DEFAULT_CALIBRATION.flip_y)
+
+        reset_btn = buttons.button(QDialogButtonBox.StandardButton.Reset)
+        if reset_btn is not None:
+            reset_btn.clicked.connect(_on_reset)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+
+        result = dlg.exec()
+        if result == QDialog.DialogCode.Accepted:
+            cal = _current_cal()
+            self._apply_calibration_preview(env, cal)
+            try:
+                path = save_user_overlay_calibration(env, cal)
+            except OSError as exc:
+                QMessageBox.warning(
+                    self,
+                    "Calibrate map",
+                    f"Could not save calibration: {exc}",
+                )
+                return
+            QMessageBox.information(
+                self,
+                "Calibrate map",
+                f"Saved calibration for {env} to:\n{path}",
+            )
+        else:
+            # Roll back the live preview.
+            self._apply_calibration_preview(env, original)
 
 
 __all__ = ["TrackMapDock"]

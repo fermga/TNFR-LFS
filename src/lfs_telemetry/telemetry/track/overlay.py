@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -34,6 +35,7 @@ from .loader import candidate_racing_lines_dirs
 _LOG = logging.getLogger(__name__)
 
 OVERLAY_CONFIG_FILENAME = "track_overlays.json"
+_USER_DIRNAME = "lfs-telemetry-viewer"
 
 
 # ---------------------------------------------------------------------------
@@ -161,44 +163,133 @@ def candidate_overlay_config_dirs() -> list[Path]:
     return out
 
 
+def user_overlay_config_path() -> Path:
+    """User-writable per-environment overlay calibration JSON.
+
+    Lives next to the lap cache so all user-state for the viewer
+    converges in one place. The directory is created on demand.
+    """
+    if sys.platform.startswith("win"):
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        root = Path(base) / _USER_DIRNAME
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library" / "Application Support" / _USER_DIRNAME
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME")
+        root = (
+            Path(xdg) if xdg else Path.home() / ".config"
+        ) / _USER_DIRNAME
+    return root / OVERLAY_CONFIG_FILENAME
+
+
+def _read_calibrations_from(
+    path: Path,
+) -> dict[str, OverlayCalibration]:
+    """Parse one calibration JSON file. Returns ``{}`` on any failure."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        _LOG.warning("could not read overlay config %s: %s", path, exc)
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, OverlayCalibration] = {}
+    for key, value in raw.items():
+        if not isinstance(value, dict):
+            continue
+        kwargs = {
+            f.name: value[f.name]
+            for f in OverlayCalibration.__dataclass_fields__.values()
+            if f.name in value
+        }
+        try:
+            out[str(key).upper()] = replace(DEFAULT_CALIBRATION, **kwargs)
+        except TypeError as exc:
+            _LOG.debug("ignoring overlay entry %s: %s", key, exc)
+    return out
+
+
 def load_overlay_calibrations(
     path: Path | None = None,
 ) -> dict[str, OverlayCalibration]:
-    """Load per-environment calibrations from a JSON file.
+    """Load per-environment calibrations.
 
-    Missing file or malformed entries are tolerated — the caller
+    Resolution order (each later step overrides earlier ones):
+
+    1. The first bundled ``config/track_overlays.json`` we find under
+       :func:`candidate_overlay_config_dirs` (or the explicit ``path``
+       argument when provided).
+    2. The user-scoped override at :func:`user_overlay_config_path`,
+       which is where the Track-map dock's "Calibrate map" dialog
+       saves interactive nudges.
+
+    Missing files or malformed entries are tolerated — the caller
     falls back to :data:`DEFAULT_CALIBRATION` for unknown envs.
     """
-    candidates = [path] if path is not None else [
-        d / OVERLAY_CONFIG_FILENAME for d in candidate_overlay_config_dirs()
-    ]
+    merged: dict[str, OverlayCalibration] = {}
+
+    # Step 1: bundled defaults (or explicit path).
+    candidates: list[Path]
+    if path is not None:
+        candidates = [path]
+    else:
+        candidates = [
+            d / OVERLAY_CONFIG_FILENAME
+            for d in candidate_overlay_config_dirs()
+        ]
     for cand in candidates:
         if cand is None or not cand.exists():
             continue
+        merged.update(_read_calibrations_from(cand))
+        break
+
+    # Step 2: user override (only when no explicit path was forced).
+    if path is None:
+        user = user_overlay_config_path()
+        if user.exists():
+            merged.update(_read_calibrations_from(user))
+
+    return merged
+
+
+def save_user_overlay_calibration(
+    env: str, calibration: OverlayCalibration,
+) -> Path:
+    """Persist *calibration* for *env* to :func:`user_overlay_config_path`.
+
+    Read-modify-write so other environments' overrides are preserved.
+    Returns the path written to. Raises :class:`OSError` on I/O errors.
+    """
+    env_u = str(env).upper()
+    path = user_overlay_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    raw: dict[str, dict] = {}
+    if path.exists():
         try:
-            raw = json.loads(cand.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            _LOG.warning("could not read overlay config %s: %s", cand, exc)
-            continue
-        if not isinstance(raw, dict):
-            continue
-        out: dict[str, OverlayCalibration] = {}
-        for key, value in raw.items():
-            if not isinstance(value, dict):
-                continue
-            kwargs = {
-                f.name: value[f.name]
-                for f in OverlayCalibration.__dataclass_fields__.values()
-                if f.name in value
-            }
-            try:
-                out[str(key).upper()] = replace(
-                    DEFAULT_CALIBRATION, **kwargs
-                )
-            except TypeError as exc:
-                _LOG.debug("ignoring overlay entry %s: %s", key, exc)
-        return out
-    return {}
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(existing, dict):
+                raw = {
+                    str(k).upper(): v
+                    for k, v in existing.items()
+                    if isinstance(v, dict)
+                }
+        except json.JSONDecodeError:
+            # Corrupted file: start over rather than refuse to save.
+            raw = {}
+    raw[env_u] = {
+        "fill_fraction": float(calibration.fill_fraction),
+        "scale": float(calibration.scale),
+        "dx_m": float(calibration.dx_m),
+        "dy_m": float(calibration.dy_m),
+        "flip_y": bool(calibration.flip_y),
+        "rotate_deg": float(calibration.rotate_deg),
+    }
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(raw, indent=2, sort_keys=True), encoding="utf-8",
+    )
+    os.replace(tmp, path)
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -257,15 +348,56 @@ def _racing_line_bbox(env: str) -> tuple[float, float, float, float] | None:
     return float(x.min()), float(y.min()), float(x.max()), float(y.max())
 
 
+def compute_overlay_extent_for_image(
+    image_size_px: tuple[int, int],
+    calibration: OverlayCalibration | None = None,
+) -> OverlayExtent:
+    """Deterministic 1 m/px placement centred on the world origin.
+
+    LFS renders every track overview at exactly 1 metre per pixel and
+    centres the image on world coordinate ``(0, 0)``. So a TIF of size
+    ``W × H`` pixels occupies ``[-W/2, W/2] × [-H/2, H/2]`` in metres,
+    with the image's Y axis flipped relative to LFS world Y (north is
+    up in world coords; row 0 is at the top of the image).
+
+    ``calibration`` is applied as a *residual* tweak: ``scale`` enlarges
+    the rectangle around its centre (rarely needed; defaults to 1.0),
+    and ``dx_m, dy_m`` shift it. ``flip_y`` lets a user override the
+    default Y-flip if a particular TIF is exported with row 0 at the
+    bottom.
+    """
+    cal = calibration or DEFAULT_CALIBRATION
+    width_px, height_px = image_size_px
+    if width_px <= 0 or height_px <= 0:
+        # Degenerate image; fall back to a unit square so the caller
+        # can still render something rather than crashing.
+        width_px = max(1, width_px)
+        height_px = max(1, height_px)
+    scale = float(cal.scale) if cal.scale > 0 else 1.0
+    width_m = float(width_px) * scale
+    height_m = float(height_px) * scale
+    x0 = -width_m / 2.0 + float(cal.dx_m)
+    y0 = -height_m / 2.0 + float(cal.dy_m)
+    return OverlayExtent(
+        x0_m=x0,
+        y0_m=y0,
+        width_m=width_m,
+        height_m=height_m,
+        flip_y=bool(cal.flip_y),
+    )
+
+
 def compute_overlay_extent(
     env: str,
     calibration: OverlayCalibration | None = None,
 ) -> OverlayExtent | None:
-    """Auto-fit the square TIF for ``env`` against its racing-line bbox.
+    """Legacy auto-fit against the racing-line bbox.
 
-    The TIF is treated as a square. We centre it on the racing-line
-    bbox centre and pick a side length such that the larger bbox
-    dimension covers ``calibration.fill_fraction`` of the image.
+    Kept for callers that don't have the source image dimensions
+    handy. Prefer :func:`compute_overlay_extent_for_image` whenever
+    you've already loaded the TIF — it produces the canonical
+    1 m/px placement centred on the world origin, matching how LFS
+    renders the track overviews.
     """
     cal = calibration or DEFAULT_CALIBRATION
     bbox = _racing_line_bbox(env)
@@ -296,7 +428,10 @@ __all__ = [
     "candidate_overlay_dirs",
     "candidate_overlay_config_dirs",
     "compute_overlay_extent",
+    "compute_overlay_extent_for_image",
     "find_overlay_image",
     "load_overlay_calibrations",
+    "save_user_overlay_calibration",
     "track_to_environment",
+    "user_overlay_config_path",
 ]

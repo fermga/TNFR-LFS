@@ -329,8 +329,81 @@ capture process.
 * **RPM** — redline (rpm), default 8000.
 * **G-meter** — full scale (g), default 2.0 g.
 * **Session overlay compact** — show session info in condensed form.
-* **Fullscreen compatibility mode** — use regular top-most windows
-  to improve visibility over LFS in fullscreen or borderless modes.
+* **Borderless / windowed-fullscreen compat** — use regular top-most
+  windows to improve overlay visibility when LFS runs in windowed
+  or borderless mode.
+
+> **Important — LFS exclusive fullscreen**: Windows cannot draw any
+> overlay (ours, RTSS, Discord, Steam, etc.) on top of a DirectX
+> exclusive-fullscreen game. If overlays are invisible while LFS is
+> in fullscreen, open `LFS\cfg.txt` and set `Full screen window 1`
+> (LFS's borderless windowed mode), or use a regular windowed mode.
+> The **VR mirror** (see below) is the only path that bypasses this
+> limit, because SteamVR has its own compositor that runs above the
+> game's swap chain.
+
+### 5.7. VR mirror (SteamVR / OpenVR)
+
+The Live tab includes a **VR** group with a single checkbox:
+
+* **Mirror overlays to VR (SteamVR / OpenVR)** — when enabled, every
+  visible overlay module is also rendered as an `IVROverlay` panel
+  anchored to the HMD. The same Qt widget is the source of truth:
+  the desktop window and the VR panel show identical content. There
+  is no second look-and-feel to configure.
+
+**Why VR works where exclusive fullscreen doesn't**
+
+SteamVR has its own scene compositor that runs above any DirectX /
+Vulkan swap chain. Pushing a texture to `IVROverlay` makes SteamVR
+draw it on top of whatever the game shows in the headset. This
+works for LFS in any windowing mode, including exclusive fullscreen,
+and it works on any OpenVR-compatible runtime (Valve Index, HTC Vive,
+Windows Mixed Reality via OpenVR, Oculus headsets via OpenComposite,
+Meta Quest with Steam Link, etc.).
+
+**Requirements**
+
+* SteamVR (or another OpenVR-compatible runtime) installed and
+  running before you tick the checkbox.
+* The `openvr` Python package. Already shipped inside the Windows
+  installer; if you run from source, install with
+  `pip install lfs-race-engineer[vr]`.
+* The HMD has to be tracking (not in standby). The default pose
+  places overlays roughly 1.5 m in front of the headset.
+
+**Behaviour**
+
+* Toggle is a no-op if SteamVR isn't running or the `openvr` module
+  is missing — the checkbox bounces back to **off** and the status
+  label below it shows the reason (e.g. `VR mirror unavailable: ...`).
+* While enabled, a 30 Hz timer reads each visible overlay module,
+  renders it off-screen to a transparent `QImage`, converts to
+  `RGBA8888`, and uploads it via `IVROverlay.SetOverlayRaw`. There
+  is no extra CPU/GPU cost when the toggle is off.
+* Hiding a module (unchecking it in the modules list) also hides
+  the corresponding VR overlay on the next tick.
+* Closing the Live tab or the app shuts down all VR overlays
+  cleanly and releases the OpenVR session.
+
+**Default panel layout**
+
+Overlays are arranged in a soft arc 1.5 m from the headset, slightly
+below eye level so they don't sit on the apex of corners. Each
+overlay is ~40 cm wide in world units. Per-module pose customisation
+(move/scale individual panels in the headset) is on the roadmap;
+today the defaults are tuned to be readable without occluding the
+racing line.
+
+**Troubleshooting**
+
+* *Checkbox keeps unchecking itself* — read the status label. The
+  most common cause is SteamVR not running.
+* *Panels are visible but blank* — the source module hasn't received
+  any telemetry yet. Start a session in LFS or load a replay.
+* *Overlay desktop window also visible in flat monitor* — that's
+  intentional. Both targets share the same Qt widget; you can move
+  the desktop window off-screen if you only want the VR panel.
 
 > **Cars supported by Overlay**: stock LFS cars and verified mods
 > (those that have a record in `config/cars.json`, in the bundled
