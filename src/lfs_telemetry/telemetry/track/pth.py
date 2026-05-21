@@ -6,9 +6,20 @@ verified visually against the BL1 layout):
   Bytes 0..5   : ASCII magic 'SRPATH'
   Byte 6       : 0x00
   Byte 7       : version byte (e.g. 0xFC for current LFS)
-  Bytes 8..55  : header — version dwords plus other metadata
-                 (we surface as raw bytes; only magic + version + node count
-                 are required to read the geometry).
+  Bytes 8..55  : header — version dwords plus other metadata.
+                 The fields we have identified empirically are:
+                   bytes 24..27 : int32 ``finish_line_node``  (-1 = none)
+                   bytes 28..31 : int32 ``split_node_1``      (-1 = none)
+                   bytes 32..35 : int32 ``split_node_2``      (-1 = none)
+                   bytes 36..39 : int32 ``split_node_3``      (-1 = none)
+                 ``finish_line_node`` is the index of the LFS
+                 start/finish line within the path; PTH node 0 is
+                 typically NOT on the start/finish line, so callers
+                 that want ``s = 0`` to mean "crossing the line"
+                 must roll the node array by ``-finish_line_node``.
+                 The other header bytes (offsets 8..23, 40..55) carry
+                 version / flag dwords whose meaning is not required
+                 to decode the geometry; we surface them as raw bytes.
   Bytes 56..   : N nodes of 44 bytes each.
 
 Per-node layout (44 B), little-endian:
@@ -47,6 +58,10 @@ HEADER_BYTES = 56
 NODE_BYTES = 44
 FIXED_POINT_DIVISOR = 65536.0  # Q16.16
 
+# Byte offsets of the checkpoint-node int32 fields inside the 56-byte header.
+FINISH_LINE_OFFSET = 24
+SPLIT_OFFSETS = (28, 32, 36)
+
 
 @dataclass(slots=True, frozen=True)
 class PthNode:
@@ -72,6 +87,14 @@ class Path:
     version: int
     raw_header: bytes
     nodes: list[PthNode]
+    # Index of the LFS start/finish line within ``nodes`` (-1 / ``None``
+    # for paths that have no defined finish line, e.g. autocross layouts).
+    # Note: PTH node 0 is generally NOT on the start/finish line; callers
+    # that want ``s = 0`` at the line must roll the centerline by
+    # ``-finish_line_node`` (``compute_profile`` does this automatically).
+    finish_line_node: int | None = None
+    # Indices of split / sector lines (``-1`` entries are dropped).
+    split_nodes: tuple[int, ...] = ()
 
     @property
     def pos(self) -> np.ndarray:
@@ -140,6 +163,15 @@ def parse_pth_bytes(data: bytes, name: str = "") -> Path:
             f"PTH body {len(body)} bytes is not a multiple of {NODE_BYTES}"
         )
     n_nodes = len(body) // NODE_BYTES
+    finish_raw = struct.unpack_from("<i", data, FINISH_LINE_OFFSET)[0]
+    finish_line_node: int | None = (
+        int(finish_raw) if 0 <= finish_raw < n_nodes else None
+    )
+    split_nodes: tuple[int, ...] = tuple(
+        int(struct.unpack_from("<i", data, off)[0])
+        for off in SPLIT_OFFSETS
+        if 0 <= struct.unpack_from("<i", data, off)[0] < n_nodes
+    )
     nodes: list[PthNode] = []
     for i in range(n_nodes):
         off = i * NODE_BYTES
@@ -163,7 +195,9 @@ def parse_pth_bytes(data: bytes, name: str = "") -> Path:
             )
         )
     return Path(name=name, version=version,
-                raw_header=data[:HEADER_BYTES], nodes=nodes)
+                raw_header=data[:HEADER_BYTES], nodes=nodes,
+                finish_line_node=finish_line_node,
+                split_nodes=split_nodes)
 
 
 # ----------------------------------------------------------------------------
@@ -268,6 +302,34 @@ def compute_profile(path: Path, *, max_segment_m: float = 50.0) -> TrackProfile:
         seg = seg_all[: cut - 1]
     else:
         seg = seg_all
+
+    # Roll the node ring so the LFS finish line sits at index 0.
+    # PTH node 0 is generally NOT on the start/finish line — for BL1
+    # for example node 0 is just before the hairpin while the actual
+    # finish line is at node 364 — so without this roll ``s = 0`` and
+    # the first row of any per-node table would land at an arbitrary
+    # point along the lap rather than at the line crossed by OutSim's
+    # ``current_lap_dist_m``. We only roll when (a) the parsed finish
+    # node is valid, (b) it falls inside the post-teleport racing loop,
+    # and (c) the loop is closed enough that the wrap segment stays
+    # comparable to its neighbours; otherwise we leave the path as-is.
+    finish = path.finish_line_node
+    if (
+        finish is not None
+        and 0 < finish < len(pos)
+        and len(pos) >= 4
+    ):
+        wrap_seg = float(np.linalg.norm(pos[0] - pos[-1]))
+        median_seg = float(np.median(seg)) if seg.size else 0.0
+        if median_seg > 0.0 and wrap_seg < max(10.0 * median_seg, 5.0):
+            pos = np.roll(pos, -finish, axis=0)
+            dirs = np.roll(dirs, -finish, axis=0)
+            drv_l = np.roll(drv_l, -finish)
+            drv_r = np.roll(drv_r, -finish)
+            lim_l = np.roll(lim_l, -finish)
+            lim_r = np.roll(lim_r, -finish)
+            deltas = np.diff(pos, axis=0)
+            seg = np.linalg.norm(deltas, axis=1)
     s = np.concatenate(([0.0], np.cumsum(seg)))
 
     # Force strictly increasing s for stable np.gradient.

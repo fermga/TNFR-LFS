@@ -30,6 +30,39 @@ def test_magic_and_layout_bl1():
     assert p.raw_header[:6] == PTH_MAGIC
 
 
+def test_finish_line_node_parsed():
+    # Empirically verified across BL1/AS3/KY1/SO1/FE1/WE1/RO1: the int32
+    # at byte offset 24 of the PTH header is the finish-line node index
+    # (and the next three int32s are split lines, with -1 = absent).
+    # Autocross paths (AU1) carry -1 at every checkpoint slot.
+    p = parse_pth(SMX_DIR / "BL1.pth")
+    assert p.finish_line_node == 364
+    assert p.split_nodes == (94, 254)
+    p = parse_pth(SMX_DIR / "AS3.pth")
+    assert p.finish_line_node == 535
+    if (SMX_DIR / "AU1.pth").exists():
+        p = parse_pth(SMX_DIR / "AU1.pth")
+        assert p.finish_line_node is None
+        assert p.split_nodes == ()
+
+
+def test_profile_starts_at_finish_line():
+    """``compute_profile`` rolls the centerline so ``s = 0`` is the
+    LFS start/finish line. The first sample should therefore land near
+    the raw PTH node ``finish_line_node`` instead of node 0.
+    """
+    p = parse_pth(SMX_DIR / "BL1.pth")
+    prof = compute_profile(p)
+    # First profile point must coincide with the raw finish-line node,
+    # not the raw node 0.
+    raw_finish_xy = p.nodes[p.finish_line_node].pos[:2]
+    raw_zero_xy = p.nodes[0].pos[:2]
+    d_finish = float(np.linalg.norm(prof.pos[0, :2] - raw_finish_xy))
+    d_zero = float(np.linalg.norm(prof.pos[0, :2] - raw_zero_xy))
+    assert d_finish < 1.0, f"profile[0] not at finish (d={d_finish:.2f}m)"
+    assert d_zero > 50.0, f"profile[0] still at PTH node 0 (d={d_zero:.2f}m)"
+
+
 def test_all_pth_files_parse():
     files = list_path_files(SMX_DIR)
     assert len(files) >= 80, f"only {len(files)} PTH files found"
