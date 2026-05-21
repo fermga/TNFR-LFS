@@ -32,6 +32,7 @@ from ...lfs_paths import QSETTINGS_APP as APP
 from ...lfs_paths import QSETTINGS_ORG as ORG
 from ..i18n import tr
 from ..signals import SignalBus
+from ..vr import VrMirror
 from .live_data_source import LiveDataSource
 from .live_modules import (
     DeltaBarWindow,
@@ -124,6 +125,10 @@ class LiveTab(QWidget):
         }
         self._checkboxes: dict[str, QCheckBox] = {}
         self._opacity_spins: dict[str, QSpinBox] = {}
+
+        # VR mirror is created lazily on first enable so absence of
+        # SteamVR / openvr is silent when the user never opts in.
+        self._vr_mirror: VrMirror | None = None
 
         # ----- Scrollable module toggles ------------------------------
         modules_box = QGroupBox(
@@ -307,6 +312,31 @@ class LiveTab(QWidget):
         misc_box = QGroupBox(tr("G-meter"), self)
         misc_box.setLayout(misc_form)
 
+        # ----- VR mirror ----------------------------------------------
+        # Same content layer as the desktop overlay — the mirror reads
+        # render_to_image() from each visible module and uploads it to
+        # SteamVR as an IVROverlay. Toggle is a no-op if SteamVR isn't
+        # running or the optional ``openvr`` dep isn't installed.
+        self._vr_enable = QCheckBox(
+            tr("Mirror overlays to VR (SteamVR / OpenVR)"), self,
+        )
+        self._vr_enable.setToolTip(
+            tr(
+                "Show the same overlay modules inside your VR headset "
+                "via SteamVR. Requires SteamVR running and the optional "
+                "'openvr' Python package. Layout, opacity and content "
+                "are identical to the desktop overlay.",
+            ),
+        )
+        self._vr_enable.toggled.connect(self._toggle_vr_mirror)
+        self._vr_status = QLabel("", self)
+        self._vr_status.setWordWrap(True)
+        vr_form = QFormLayout()
+        vr_form.addRow("", self._vr_enable)
+        vr_form.addRow("", self._vr_status)
+        vr_box = QGroupBox(tr("VR"), self)
+        vr_box.setLayout(vr_form)
+
         # ----- Status label -------------------------------------------
         self._status = QLabel(
             tr(
@@ -326,6 +356,7 @@ class LiveTab(QWidget):
         grid.addWidget(delta_box, 0, 1)
         grid.addWidget(rpm_box, 1, 0)
         grid.addWidget(misc_box, 1, 1)
+        grid.addWidget(vr_box, 2, 0, 1, 2)
         layout.addLayout(grid)
         layout.addWidget(self._status)
 
@@ -361,6 +392,43 @@ class LiveTab(QWidget):
         for cb in self._checkboxes.values():
             if cb.isChecked():
                 cb.setChecked(False)
+
+    def _toggle_vr_mirror(self, on: bool) -> None:
+        """Enable/disable the SteamVR mirror of every visible module.
+
+        Same widgets, same paint pipeline — the mirror just polls
+        ``render_to_image()`` and uploads the bytes to OpenVR.
+        """
+        if on:
+            if self._vr_mirror is None:
+                # Pass a callable so the mirror always sees the *current*
+                # widget map, including modules toggled on after enable.
+                self._vr_mirror = VrMirror(
+                    provider=lambda: dict(self._widgets),
+                    parent=self,
+                )
+            ok = self._vr_mirror.enable()
+            if ok:
+                self._vr_status.setText(
+                    tr("VR mirror active (SteamVR overlay).")
+                )
+            else:
+                err = (
+                    self._vr_mirror._sink.init_error  # noqa: SLF001
+                    if self._vr_mirror._sink is not None  # noqa: SLF001
+                    else "unavailable"
+                )
+                self._vr_status.setText(
+                    tr("VR mirror unavailable: ") + str(err or "")
+                )
+                # Bounce the checkbox back so the UI matches reality.
+                self._vr_enable.blockSignals(True)
+                self._vr_enable.setChecked(False)
+                self._vr_enable.blockSignals(False)
+        else:
+            if self._vr_mirror is not None:
+                self._vr_mirror.disable()
+            self._vr_status.setText("")
 
     def _toggle_module(self, mid: str, on: bool) -> None:
         w = self._widgets.get(mid)
@@ -509,6 +577,9 @@ class LiveTab(QWidget):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        if self._vr_mirror is not None:
+            self._vr_mirror.shutdown()
+            self._vr_mirror = None
         for w in self._widgets.values():
             if w is not None:
                 w.close()
