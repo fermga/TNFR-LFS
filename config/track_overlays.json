@@ -1,0 +1,10 @@
+{
+  "AS": { "fill_fraction": 0.60, "flip_y": true },
+  "AU": { "fill_fraction": 0.55, "flip_y": true },
+  "BL": { "fill_fraction": 0.60, "flip_y": true },
+  "FE": { "fill_fraction": 0.60, "flip_y": true },
+  "KY": { "fill_fraction": 0.60, "flip_y": true },
+  "RO": { "fill_fraction": 0.60, "flip_y": true },
+  "SO": { "fill_fraction": 0.60, "flip_y": true },
+  "WE": { "fill_fraction": 0.60, "flip_y": true }
+}

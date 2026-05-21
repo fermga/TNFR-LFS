@@ -21,11 +21,27 @@ from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPen
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QRectF
+from PySide6.QtGui import QImage, QPen
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QHBoxLayout,
+    QLabel,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ...telemetry import LapTelemetry
+from ...telemetry.track.overlay import (
+    DEFAULT_CALIBRATION,
+    OverlayCalibration,
+    OverlayExtent,
+    compute_overlay_extent,
+    find_overlay_image,
+    load_overlay_calibrations,
+    track_to_environment,
+)
 from ...telemetry.track_map import TrackMap
 from ..models import LapLoader
 from ..signals import SignalBus
@@ -107,9 +123,40 @@ class TrackMapDock(QWidget):
         self._knw_cache: dict[tuple, np.ndarray | None] = {}
         self._current_car: str | None = None
 
+        # Track-map TIF overlay (per-environment top-down image).
+        self._overlay_item: pg.ImageItem | None = None
+        self._overlay_calibrations: dict[str, OverlayCalibration] = (
+            load_overlay_calibrations()
+        )
+        self._overlay_image_cache: dict[Path, np.ndarray | None] = {}
+        self._overlay_extent_cache: dict[str, OverlayExtent | None] = {}
+        self._overlay_visible: bool = True
+        self._overlay_opacity: float = 0.35
+        self._current_env: str | None = None
+
+        # UI controls for the overlay (opacity slider + show toggle).
+        self._overlay_check = QCheckBox("Track image", self)
+        self._overlay_check.setChecked(self._overlay_visible)
+        self._overlay_check.toggled.connect(self._on_overlay_toggled)
+        self._overlay_slider = QSlider(Qt.Orientation.Horizontal, self)
+        self._overlay_slider.setRange(0, 100)
+        self._overlay_slider.setValue(int(self._overlay_opacity * 100))
+        self._overlay_slider.setFixedWidth(140)
+        self._overlay_slider.setToolTip("Track image opacity")
+        self._overlay_slider.valueChanged.connect(self._on_overlay_opacity)
+        overlay_label = QLabel("Opacity", self)
+        overlay_label.setStyleSheet(f"color: {MUTED_COLOR};")
+        controls_row = QHBoxLayout()
+        controls_row.setContentsMargins(2, 0, 2, 0)
+        controls_row.addWidget(self._overlay_check)
+        controls_row.addStretch(1)
+        controls_row.addWidget(overlay_label)
+        controls_row.addWidget(self._overlay_slider)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(self._plot)
+        layout.addLayout(controls_row)
         layout.addWidget(self._legend)
 
         signals.laps_selected.connect(self._on_laps_selected)
@@ -227,6 +274,7 @@ class TrackMapDock(QWidget):
                     car = None
         self._render_racing_line(track)
         self._render_knw_line(track, car)
+        self._render_track_overlay(track)
 
         # Re-fit the view to the new geometry.
         self._plot.getViewBox().enableAutoRange()
@@ -428,6 +476,94 @@ class TrackMapDock(QWidget):
         self._knw_item.setOpacity(0.85)
         self._knw_item.setZValue(-0.5)
         self._plot.addItem(self._knw_item)
+
+    # ------------------------------------------------------------------
+    # Per-environment top-down image overlay (LFS official .tif)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _qimage_to_array(qimg: QImage) -> np.ndarray | None:
+        """Convert a QImage to an (H, W, 4) RGBA uint8 ndarray."""
+        if qimg.isNull():
+            return None
+        rgba = qimg.convertToFormat(QImage.Format.Format_RGBA8888)
+        w = rgba.width()
+        h = rgba.height()
+        if w <= 0 or h <= 0:
+            return None
+        bpl = rgba.bytesPerLine()
+        ptr = rgba.constBits()
+        if ptr is None:
+            return None
+        buf = bytes(ptr)
+        arr = np.frombuffer(buf, dtype=np.uint8)
+        try:
+            arr = arr.reshape((h, bpl // 4, 4))[:, :w, :]
+        except ValueError:
+            return None
+        return np.ascontiguousarray(arr)
+
+    def _load_overlay_image(self, env: str) -> np.ndarray | None:
+        path = find_overlay_image(env)
+        if path is None:
+            return None
+        if path in self._overlay_image_cache:
+            return self._overlay_image_cache[path]
+        qimg = QImage(str(path))
+        arr = self._qimage_to_array(qimg)
+        self._overlay_image_cache[path] = arr
+        return arr
+
+    def _calibration_for(self, env: str) -> OverlayCalibration:
+        return self._overlay_calibrations.get(env, DEFAULT_CALIBRATION)
+
+    def _overlay_extent_for(self, env: str) -> OverlayExtent | None:
+        if env in self._overlay_extent_cache:
+            return self._overlay_extent_cache[env]
+        ext = compute_overlay_extent(env, self._calibration_for(env))
+        self._overlay_extent_cache[env] = ext
+        return ext
+
+    def _render_track_overlay(self, track: str | None) -> None:
+        if self._overlay_item is not None:
+            self._plot.removeItem(self._overlay_item)
+            self._overlay_item = None
+        env = track_to_environment(track or "")
+        self._current_env = env
+        if not env or not self._overlay_visible:
+            return
+        img = self._load_overlay_image(env)
+        if img is None:
+            return
+        extent = self._overlay_extent_for(env)
+        if extent is None:
+            return
+        if extent.flip_y:
+            img_to_show = np.ascontiguousarray(img[::-1, :, :])
+        else:
+            img_to_show = img
+        item = pg.ImageItem(img_to_show, axisOrder="row-major")
+        item.setRect(QRectF(
+            extent.x0_m, extent.y0_m, extent.width_m, extent.height_m,
+        ))
+        item.setOpacity(self._overlay_opacity)
+        # Sit underneath every other item (racing line is at z=-1).
+        item.setZValue(-10)
+        self._plot.addItem(item)
+        self._overlay_item = item
+
+    def _on_overlay_toggled(self, checked: bool) -> None:
+        self._overlay_visible = bool(checked)
+        if not self._overlay_visible and self._overlay_item is not None:
+            self._plot.removeItem(self._overlay_item)
+            self._overlay_item = None
+        elif self._overlay_visible and self._overlay_item is None:
+            self._render_track_overlay(self._current_env)
+
+    def _on_overlay_opacity(self, value: int) -> None:
+        self._overlay_opacity = max(0.0, min(1.0, float(value) / 100.0))
+        if self._overlay_item is not None:
+            self._overlay_item.setOpacity(self._overlay_opacity)
 
 
 __all__ = ["TrackMapDock"]
