@@ -84,8 +84,10 @@ repositorio como utilidad para futuras ampliaciones, pero **no están
 cableados en `CenterTabs`** en la build actual.
 
 El menú *Tools* abre `widgets/lfs_config_dialog.py` para parchear
-`cfg.txt` y, opcionalmente, el cargador de racing lines
-(`widgets/racing_line_loader.py`).
+`cfg.txt`. El módulo `widgets/racing_line_loader.py` sigue en el
+repositorio porque lo usan internamente los renderers de mini-mapa y
+brújula (compass/map), pero **ya no aparece como entrada de menú** en
+la build actual.
 
 ---
 
@@ -133,10 +135,10 @@ El menú *Tools* abre `widgets/lfs_config_dialog.py` para parchear
 | `dampers_tab.py` | Histogramas HS/LS por rueda (`damper_histogram`). |
 | `capture_tab.py` | Botones Start/Stop sobre `app.capture_runner`. Formulario (stem, host/puerto InSim, puertos OutSim/OutGauge), checkbox **"Overlay only (no CSV recording)"** que pasa `write_csv=False` al runner (CLI `--no-csv`), LED de estado InSim (gris=idle / ámbar=esperando / verde=conectado), log embebido y contador de vueltas. |
 | `live_tab.py` | Race-engineer overlay live a partir del snapshot JSON. |
-| `live_modules.py` | Módulos componibles del Live tab (radar, fuel, splits, delta, traffic). |
+| `live_modules/` | Sub-paquete con los módulos componibles del Live tab (`_base`, `simple`, `inputs`, `gaps`, `session`, `diagnostics`, `tyre_risk`, `compass_map`, `radar`, `delta_bar`). El antiguo `live_modules.py` está reemplazado por este paquete; las clases públicas se re-exportan desde `live_modules/__init__.py` para mantener compatibilidad. |
 | `live_data_source.py` | Lector y watcher del fichero JSON publicado por `live_publisher`. |
 | `lfs_config_dialog.py` | Diálogo *Configure LFS…* (selección de carpeta + patch automático). |
-| `racing_line_loader.py` | Diálogo de carga manual de racing lines alternativas. |
+| `racing_line_loader.py` | Cargador/parser de `racing_lines/<TRACK>_racing.csv`. Lo usan internamente `track_map_dock` y los renderers compass/mini-map; no es un diálogo modal expuesto al usuario. |
 | `_format.py` | Formateadores compartidos: `format_finite`, `format_signed_finite`, `format_lap_time_s`, `format_lap_time_ms`, `format_clock_ms`, `format_signed_delta_s`, `format_signed_delta_ms`, `format_gap_seconds`, `format_gap_meters` y constante `EMDASH = "—"`. Toda la UI debe usar estas funciones (no recrearlas localmente). |
 
 ---
@@ -158,7 +160,7 @@ subprocess de captura:
   muestras, last error).
 
 Studio detiene la subprocess enviando `CTRL_BREAK_EVENT` (manejado en
-`cli.py`) para que el bucle asyncio se cierre limpiamente y los
+`cli/__init__.py`) para que el bucle asyncio se cierre limpiamente y los
 buffers se descarguen al CSV.
 
 ---
@@ -187,7 +189,7 @@ funciona normalmente, pero no se buferean muestras en memoria ni se
 escriben CSV per-lap o agregados. Útil para usar el HUD sin
 dejar registros de telemetría en el workspace.
 
-Módulos Live disponibles (`live_modules.py`):
+Módulos Live disponibles (sub-paquete `widgets/live_modules/`):
 
 * Radar 360° de tráfico con coches relativos.
 * Strip de delta-time vs vuelta de referencia.

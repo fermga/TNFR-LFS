@@ -70,7 +70,7 @@ los eventos de cruce de línea.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ File   View   Tools   Help                       │  Idioma     │
+│ File   View (… → Language)   Tools   Help                        │
 ├──────────────────────────────────────────────────────────────────┤
 │ Captures  │                                       │  Channels    │
 │ (vueltas) │     Pestañas centrales:               │  (canales)   │
@@ -100,8 +100,11 @@ los eventos de cruce de línea.
 | <kbd>F1</kbd> | **Help → Channel guide…** (qué mide cada canal) |
 | <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Salir |
 
-La entrada **Help → User manual…** abre este mismo documento
-desde la propia aplicación (en el idioma activo).
+El menú **Help** también incluye **About** con la información de
+versión. Este manual se distribuye junto a la aplicación en
+`docs/MANUAL.<lang>.md`; ábrelo desde el explorador de ficheros,
+desde el repositorio o desde la página de release de GitHub — la
+aplicación no incluye un lector interno para él.
 
 ---
 
@@ -471,8 +474,6 @@ manual.)
 
 ## 8 bis. Menú Help
 
-* **User manual…** — abre este manual dentro de la app, en el
-  idioma activo.
 * **Channel guide…** (<kbd>F1</kbd>) — guía de telemetría: qué mide
   cada canal y cómo interpretarlo.
 * **About** — información de la versión.
@@ -505,4 +506,5 @@ manual.)
 | Patch dice "LFS folder inválido" | La carpeta no contiene `LFS.exe` | Usa **Browse…** y elige la carpeta correcta. |
 | El Overlay no muestra fuel range / desgaste | Coche no incluido en la lista de soportados | Captura normalmente; los demás paneles funcionan. Para añadirlo manualmente, ejecuta la calibración (uso avanzado). |
 | LFS sobrescribió mis cambios | LFS estaba abierto al patchear | Cierra LFS y vuelve a aplicar Tools → Configure LFS. |
-| Quiero el `cfg.txt` original | El patch dejó `cfg.txt.bak` | Renómbralo a `cfg.txt` con LFS cerrado. || **Start** se queda parado al instante o salta *"Access/Permission denied"* al grabar | El workspace está en una carpeta sin permisos de escritura para tu usuario (Program Files, Windows, unidad de red protegida…) | **File → Open Workspace…** y elige una carpeta donde tengas permisos, por ejemplo dentro de `Documentos` o `Escritorio`. |
+| Quiero el `cfg.txt` original | El patch dejó `cfg.txt.bak` | Renómbralo a `cfg.txt` con LFS cerrado. |
+| **Start** se queda parado al instante o salta *"Access/Permission denied"* al grabar | El workspace está en una carpeta sin permisos de escritura para tu usuario (Program Files, Windows, unidad de red protegida…) | **File → Open Workspace…** y elige una carpeta donde tengas permisos, por ejemplo dentro de `Documentos` o `Escritorio`. |

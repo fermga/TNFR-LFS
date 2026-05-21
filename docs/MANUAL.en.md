@@ -71,7 +71,7 @@ events.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ File   View   Tools   Help                       │  Language    │
+│ File   View (… → Language)   Tools   Help                       │
 ├──────────────────────────────────────────────────────────────────┤
 │ Captures  │                                       │  Channels    │
 │ (laps)    │     Center tabs:                      │              │
@@ -101,8 +101,11 @@ events.
 | <kbd>F1</kbd> | **Help → Channel guide…** (what each channel measures) |
 | <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Quit |
 
-The **Help → User manual…** entry opens this very document from
-inside the application (in the active UI language).
+The **Help** menu also exposes an **About** entry with the version
+information. This manual is shipped alongside the application under
+`docs/MANUAL.<lang>.md`; open it from your file browser, from the
+repository, or from the GitHub release page — the application does
+not bundle an in-app reader for it.
 
 ---
 
@@ -460,8 +463,6 @@ loader dialog.)
 
 ## 8 bis. Help menu
 
-* **User manual…** — open this manual from inside the app, in the
-  active UI language.
 * **Channel guide…** (<kbd>F1</kbd>) — telemetry guide: what each
   channel measures and how to read it.
 * **About** — version information.

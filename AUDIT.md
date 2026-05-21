@@ -3,10 +3,11 @@
 Tracking document for the audit of 2026-05-21. Tick items as they are completed.
 Status legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[-]` rejected/out of scope.
 
-Baseline metrics (2026-05-21):
-- Total `src/` Python files: **95**
-- Total `src/` LOC: **32 920**
-- Bundle size: **371 MB** · Installer: **151.1 MB** · Version: **0.4.4** (locked)
+Baseline metrics (2026-05-21, post-rollout):
+- Total `src/` Python files: **115** (was 95 pre-audit — sub-package splits)
+- Total `src/` LOC: **29 550** (was 32 920 — dead-code removal + de-duplication)
+- Bundle size: **386 MB** · Installer: **151.1 MB** · Version: **0.4.4** (locked)
+- Test suite: **307 passed, 15 skipped** (was 280 pre-audit; +27 from T1/T2)
 
 ---
 

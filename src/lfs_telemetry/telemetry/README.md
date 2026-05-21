@@ -73,7 +73,9 @@ unrelated values, and creates a `.bak` backup.
 | `fuel_tracker` | Online fuel usage/range estimation. |
 | `node_delta` | Node-by-node delta against a reference lap. |
 | `track_map` | `TrackMap` averaged from several laps. |
-| `channels` | `ChannelInfo` registry (~123 columns). |
+| `channels` | `ChannelInfo` registry + English labels/descriptions (~123 columns). |
+| `channel_interpretations` | Interpretation/focus tables (EN + ES) consumed by `channels`. |
+| `i18n_es` | Spanish group/label/description/interpretation tables (extracted from `channels`). |
 | `catalog` | CSV discovery/inspection inside a workspace. |
 | `derived` | `enrich_dataframe`: adds ~30 derived columns. |
 | `damper_histogram` | HS/LS damper histograms per wheel. |
@@ -81,9 +83,12 @@ unrelated values, and creates a `.bak` backup.
 | `calibrate` | Mu and mass estimators from raw telemetry. |
 | `car_calibration` | Persistent user calibration (`CarSpecStore`) + `RestCalibrator`. |
 | `car_info_bin` | Parser for LFS `car_info.bin`. |
+| `raf` | Parser for LFS `.raf` (Replay Analyser File) v2 → sample stream. |
 | `live_publisher` | JSON snapshot consumed by Studio Live tab. |
 | `heading` | Local-frame projection helpers. |
-| `protocol/` | Low-level packet parsers (OutSim, OutGauge, InSim). |
+| `protocol/packets` | OutGauge + InSim packet codecs (re-exports OutSim types from `packets_outsim`). |
+| `protocol/packets_outsim` | `OutSimPacket`, `OutSimPack2`, `OutSimWheel`, `OSO_*` / `OUTSIM_*` constants. |
+| `protocol/insim` | `InSimClient` (TCP) and IS_* event types. |
 | `track/` | `.pth`, `.smx`, `.pin`, `.knw` parsers + geometry/racing line. |
 
 `telemetry/__init__.py` re-exports the public API from `__all__`, so
@@ -305,6 +310,7 @@ Includes packet structs and helpers:
 - `track.geom3d`: banking/surface/corridor geometry helpers
 - `track.enrich`: geometry enrichment for DataFrames
 - `track.racing_line`: geometric or KNW-driven racing-line generation
+- `track.overlay`: top-down TIF map calibration for the Studio track-map dock (`config/track_overlays.json`).
 - `track.loader`: cached lookup and loading for track geometry assets
 
 ---

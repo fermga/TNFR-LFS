@@ -11,13 +11,15 @@ a stint browser.
 * Package: `lfs-race-engineer` · entry points: `lfs-race-engineer`
   (Studio GUI) and `lfs-telemetry` (CLI).
 * Python ≥ 3.11 · core: `numpy`, `pandas`, `scipy` · `[studio]` extra:
-  `PySide6`, `pyqtgraph` · `[build]` extra: `pyinstaller`.
+  `PySide6`, `pyqtgraph` · `[vr]` extra: `openvr` (Windows) · `[build]`
+  extra: `pyinstaller` · `[scripts]` extra: `matplotlib` (for the
+  stand-alone viewers under `scripts/` and `tools/`).
 * Studio UI is fully bilingual (English / Español) via an in-process
-  `QTranslator`; the active language is chosen under *Tools → Language*
+  `QTranslator`; the active language is chosen under *View → Language*
   and persisted in `QSettings`.
 * CSV replay schema version `1.1` (preamble
   `# lfs-telemetry telemetry schema=1.1`).
-* Test suite: **249 passed, 15 skipped** running headless
+* Test suite: **307 passed, 15 skipped** running headless
   (`QT_QPA_PLATFORM=offscreen`). The 15 skips require either a live LFS
   session (`tests/test_live_lfs_integration.py`) or on-disk LFS data
   (`C:\LFS\data\smx`, `…\car_info.bin`, etc.).
@@ -57,11 +59,23 @@ a stint browser.
 src/lfs_telemetry/
   __init__.py                 # package metadata (__version__ from importlib.metadata)
   __main__.py                 # python -m lfs_telemetry → Studio
-  cli.py                      # lfs-telemetry: capture | calibrate | reslice
+  app_paths.py                # bundled-asset / racing-line / doc / config path lookup
   lfs_config.py               # patch LFS\cfg.txt to emit OutSim/OutGauge
   lfs_paths.py                # detect LFS install + data folders
+  constants.py                # unit-conversion constants (SPEED_MS_TO_KMH, …)
+  cli/                        # `lfs-telemetry` subcommand sub-package
+    __init__.py               # main() + argparse dispatch (capture/calibrate/reslice/raf-import)
+    _common.py                # _add_lfs_flags, _harden_std_streams, _ResilientTextStream, _request_stop
+    _state.py                 # STOP_REQUESTED / CAPTURE_LOOP / CAPTURE_TASK globals
+    capture.py                # _cmd_capture (UDP+InSim loop, per-lap writer, live-snapshot writer)
+    calibrate.py              # _cmd_calibrate (auto mass + weight distribution)
+    reslice.py                # _cmd_reslice (split aggregate CSV into per-lap files)
+    raf_import.py             # _cmd_raf_import (LFS .raf replay → per-lap CSVs)
   telemetry/                  # framework-neutral telemetry core
     protocol/                 # OutSim, OutGauge, InSim wire-format parsers
+      packets.py              # OutGauge + InSim packets (+ re-exports of OutSim)
+      packets_outsim.py       # OutSimPacket / OutSimPack2 / OutSimWheel + OSO_* / OUTSIM_* constants
+      insim.py                # InSimClient + IS_* event types
     track/                    # .pth, .smx, .pin, .knw parsers + enrichment
     live.py                   # asyncio capture + fusion (LiveTelemetry)
     replay.py                 # CSV schema 1.1: write/read/detect
@@ -77,7 +91,9 @@ src/lfs_telemetry/
     fuel_tracker.py           # online fuel consumption + range estimator
     node_delta.py             # node-by-node delta against reference lap
     track_map.py              # averaged TrackMap / TrackBounds
-    channels.py               # ChannelInfo registry (~123 columns)
+    channels.py               # ChannelInfo registry + EN labels (~123 columns)
+    channel_interpretations.py # EN + ES interpretation/focus tables for ChannelInfo
+    i18n_es.py                # Spanish group/label/description/interpretation tables
     catalog.py                # discover_captures (workspace browser)
     derived.py                # enrich_dataframe (~30 derived columns)
     damper_histogram.py       # high/low speed damper duty histograms
@@ -85,23 +101,37 @@ src/lfs_telemetry/
     calibrate.py              # μ / mass estimators from raw telemetry
     car_calibration.py        # CarSpecStore (persistent calibration)
     car_info_bin.py           # parse LFS car_info.bin (setup defaults)
+    raf.py                    # parse LFS .raf replay analyser files
     live_publisher.py         # JSON snapshot for the Studio Live tab
     heading.py                # local-frame geometry helpers
   studio/                     # PySide6 Race Engineer UI
     __main__.py               # `python -m lfs_telemetry.studio`
     app.py                    # QApplication boot + signal/timer wiring
     main_window.py            # frameless QMainWindow with all docks
-    theme.py                  # dark in-game palette and stylesheets
+    theme.py                  # dark in-game palette + semantic colours (LED, proximity, status)
     signals.py                # cross-widget Qt signal bus
     workspace_state.py        # persisted UI state
     i18n.py                   # English/Spanish translation table + tr()
     models/                   # Qt models (captures, channels, lap loader)
     charts/                   # pyqtgraph multi-channel chart + decimation
     widgets/                  # docks + center tabs (see studio README)
+      live_modules/           # floating overlay-window sub-package
+        _base.py              # _LiveModuleWindow / _LabeledValueWindow base classes
+        simple.py             # Position / FuelPct / FuelLapsRemaining / Speed
+        inputs.py             # Gear / Rpm / throttle / brake / clutch
+        gaps.py               # GapAhead / GapBehind
+        session.py            # SessionInfoWindow (dynamic standings)
+        diagnostics.py        # Flags / PitLimiter / TcAbs / GMeter
+        tyre_risk.py          # per-wheel grip/risk indicator
+        compass_map.py        # GapCompass + MiniMap
+        radar.py              # 360° traffic radar
+        delta_bar.py          # DeltaBar / SpeedDeltaBar
+    vr/                       # SteamVR / OpenVR mirror (extra `[vr]`)
+      openvr_overlay.py       # IVROverlay panel manager
   app/                        # capture-process support (used by Studio)
     capture_runner.py         # spawn CLI as subprocess, watch stop file
     state.py                  # dataclass mirror of capture state
-tests/                        # 264 tests collected (249 pass headless, 15 skipped)
+tests/                        # 322 tests collected (307 pass headless, 15 skipped)
 scripts/                      # ops + dev helpers (see Scripts section)
 tools/                        # binary-format research helpers
 tracks/                       # per-variant elevation profiles + overviews
@@ -129,7 +159,7 @@ Run the test suite headless:
 $env:PYTHONIOENCODING = "utf-8"
 $env:QT_QPA_PLATFORM  = "offscreen"
 python -m pytest -q
-# 249 passed, 15 skipped
+# 307 passed, 15 skipped
 ```
 
 The 15 skipped tests exercise the on-disk LFS install layout
@@ -200,6 +230,9 @@ lfs-telemetry reslice captures\stint.csv --out-dir captures\laps
 
 # Calibrate mass + weight distribution from a rest window
 lfs-telemetry calibrate --insim-host 127.0.0.1
+
+# Convert an LFS .raf replay file into per-lap CSVs (Studio-compatible schema)
+lfs-telemetry raf-import path\to\replay.raf --out-dir captures\raf_laps
 ```
 
 ### `capture` flags
@@ -252,6 +285,21 @@ before exiting.
 | `--store` | `~/.lfs-telemetry/cars.json` | destination `CarSpecStore` JSON. |
 | `--show` | off | just print existing store contents and exit. |
 
+### `raf-import` flags
+
+Converts an LFS Replay Analyser File (`.raf`, v2) into one CSV per
+detected lap using the Studio schema (1.1), so RAF replays — including
+those recorded by other drivers — can be opened from the Captures dock
+for cross-driver comparison.
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `input` (positional) | — | `.raf` file produced by LFS. |
+| `--out-dir` | `<input>_raf_laps` next to the file | output directory for per-lap CSVs. |
+| `--keep-outlap` | off | also export the lead-in partial lap (before the first start/finish crossing). |
+| `--min-samples` | `100` | discard lap segments shorter than this many samples. |
+| `--inspect N` | `0` | diagnostic: parse but do NOT write CSVs; dump header + first N decoded blocks. |
+
 ## Race Engineer Studio
 
 ```powershell
@@ -302,9 +350,13 @@ Order in the build, top to bottom:
 6. **Overlay** — `widgets/live_tab.py`. Race-engineer HUD fed by the
    JSON snapshot written by `live_publisher.write_snapshot_atomic`
    and watched by `widgets/live_data_source.py`. The HUD is composed
-   of the modules in `widgets/live_modules.py`: 360° traffic radar,
-   delta-vs-reference strip, predicted lap, gap to best, fuel range,
-   mini-map cursor, plus flag / pit-window / penalty decoding.
+   of independent frameless always-on-top windows defined under
+   `widgets/live_modules/` (see the studio README for the full module
+   list): 360° traffic radar, delta-vs-reference strip, predicted lap,
+   gap to best, fuel range, mini-map cursor, plus flag / pit-window /
+   penalty decoding. When SteamVR is running, the **VR mirror** group
+   in the Live tab pushes every visible overlay to an `IVROverlay`
+   panel via `studio/vr/openvr_overlay.py` (extra `[vr]`).
 
 ### Car coverage
 
@@ -329,10 +381,16 @@ The menu *Tools* contains:
 
 * *Configure LFS…* — `widgets/lfs_config_dialog.py`. Pick the LFS
   install folder and patch `cfg.txt` in place (with a `.bak` backup).
-* *Load racing line…* — `widgets/racing_line_loader.py`. Override the
-  bundled racing line for the active track.
-* *Language* — switch between English and Español live; the choice is
-  persisted in `QSettings`.
+
+(The bundled racing line for a track is loaded automatically from
+`racing_lines/<TRACK>_racing.csv`; `widgets/racing_line_loader.py`
+remains as a helper used internally by the compass / mini-map
+renderers, not as a user-facing dialog.)
+
+The menu *View* contains the dock visibility toggles plus *Language*,
+which switches between English and Español live; the choice is
+persisted in `QSettings`. *Help* exposes *Channel guide…*
+(<kbd>F1</kbd>) and *About*.
 
 The `setup_tab.py` and `setup_editor_tab.py` modules exist in the
 source tree as the seed of a future setup advisor, but they are
@@ -418,6 +476,38 @@ the repo:
 | `full_lap_plots.py` / `full_lap_report.py` | Build a per-lap PDF/MD report. |
 | `sniff_lfs_data.py` | Continuous capture of all UDP/TCP traffic. |
 | `sniff_pth_trailing.py` | Probe trailing bytes of `.pth` for hidden fields. |
+
+## Development tooling
+
+* **Continuous integration** — `.github/workflows/test.yml` runs
+  `ruff check .` and `pytest -q` on every push and pull request. The
+  Linux matrix covers Python 3.11 / 3.12 / 3.13 (with the
+  `libgl1 / libegl1 / libxkbcommon0 / libxcb-cursor0 / libdbus /
+  libfontconfig1` system libs needed by PySide6 under
+  `QT_QPA_PLATFORM=offscreen`); a Windows job runs Python 3.13 as a
+  smoke check.
+* **Pre-commit** — `.pre-commit-config.yaml` wires
+  [`pre-commit-hooks`](https://github.com/pre-commit/pre-commit-hooks)
+  v5 (trailing whitespace, end-of-file fixer, YAML/TOML/merge-conflict
+  checks, LF line endings) and
+  [`ruff-pre-commit`](https://github.com/astral-sh/ruff-pre-commit)
+  v0.7.4 (`ruff --fix` + `ruff format`). Install with
+  `pip install pre-commit && pre-commit install`.
+* **Linting** — `ruff` selects
+  `E, F, I, UP, B, SIM, C4, PIE, RUF, ERA, ASYNC`; `RUF001/002/003`
+  (Greek letters ν, Δ used in TNFR notation plus the Spanish i18n
+  tables) and `ERA001` (annotated physics derivations look like
+  commented-out code) are ignored project-wide. `tools/**` and
+  `scripts/**` get per-file relaxations so the diagnostic one-liners
+  there don't trip the broader rules.
+* **Type checking** — `[tool.mypy]` in `pyproject.toml` ships a
+  gradual configuration (`python_version = "3.13"`,
+  `ignore_missing_imports = true`, `disallow_untyped_defs = false`).
+  Stricter knobs (`disallow_untyped_defs`,
+  `no_implicit_optional`, `check_untyped_defs`) are intended to be
+  enabled per-module as coverage improves; `build/`, `dist/`,
+  `installer/Output/`, `tools/`, `scripts/` and `tests/` are
+  excluded.
 
 ## Data folders
 
