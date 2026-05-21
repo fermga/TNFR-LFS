@@ -32,6 +32,7 @@ import pandas as pd
 
 from . import lap_cache as _lap_cache
 from .channels import ChannelInfo, channel_info, channels_by_group
+from .constants import SPEED_MS_TO_KMH
 from .derived import enrich_dataframe
 from .observables import CarSpec, car_spec_for
 from .replay import detect_schema_version, read_csv_dataframe
@@ -181,7 +182,7 @@ class LapTelemetry:
         """Compact dict of headline numbers for UI / list views."""
         df = self.raw
         out: dict[str, Any] = {
-            "samples": int(len(df)),
+            "samples": len(df),
             "car": str(df["car"].iloc[0]) if "car" in df and len(df) else None,
             "schema_version": self.schema_version,
             "is_race_start": bool(self.is_race_start),
@@ -192,7 +193,7 @@ class LapTelemetry:
             d = df["current_lap_dist_m"]
             out["distance_m"] = float(d.max() - d.min())
         if "speed_ms" in df and len(df):
-            out["top_speed_kmh"] = float(df["speed_ms"].max() * 3.6)
+            out["top_speed_kmh"] = float(df["speed_ms"].max() * SPEED_MS_TO_KMH)
         if "accel_x" in df and "accel_y" in df and len(df):
             out["peak_long_g"] = float(df["accel_x"].abs().max() / self.car.g)
             out["peak_lat_g"] = float(df["accel_y"].abs().max() / self.car.g)

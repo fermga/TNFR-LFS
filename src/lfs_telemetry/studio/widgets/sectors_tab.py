@@ -177,7 +177,7 @@ class SectorsTab(QWidget):
                     boundaries_m=boundaries,
                     n_equal=3,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 secs = []
             if not secs:
                 continue

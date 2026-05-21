@@ -187,7 +187,7 @@ def _parse_data_block(
     pos_x_q, pos_y_q, pos_z_q = struct.unpack_from("<iii", buf, off + 32)
     engine_rads = struct.unpack_from("<f", buf, off + 44)[0]
     index_distance_m = struct.unpack_from("<f", buf, off + 48)[0]
-    rx, ry, rz = struct.unpack_from("<hhh", buf, off + 52)
+    _rx, _ry, rz = struct.unpack_from("<hhh", buf, off + 52)
     fx, fy, fz = struct.unpack_from("<hhh", buf, off + 58)
 
     # Quantised G → m/s² (signed char * 20 means ±6 g range, see spec)
@@ -455,8 +455,8 @@ def raf_to_lap_csvs(
 
 __all__ = [
     "RafHeader",
-    "parse_raf_header",
     "parse_raf",
-    "split_into_laps",
+    "parse_raf_header",
     "raf_to_lap_csvs",
+    "split_into_laps",
 ]

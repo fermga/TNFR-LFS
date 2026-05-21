@@ -13,13 +13,16 @@ captured track.
 from __future__ import annotations
 
 import logging
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
+
+from ...app_paths import (
+    candidate_racing_lines_dirs as _candidate_racing_lines_dirs,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -32,33 +35,10 @@ _LOG = logging.getLogger(__name__)
 def candidate_racing_lines_dirs() -> list[Path]:
     """Return every plausible directory holding ``<TRACK>_racing.csv`` files.
 
-    Mirrors the resolution order used by the Live overlay so the same
-    bundled-vs-dev path applies everywhere:
-
-    1. ``$PWD/racing_lines``
-    2. PyInstaller ``_MEIPASS/racing_lines`` (frozen builds)
-    3. ``<exe_dir>/racing_lines``
-    4. ``<repo_root>/racing_lines``  (developer checkout)
+    Thin wrapper around :func:`lfs_telemetry.app_paths.candidate_racing_lines_dirs`,
+    kept for backwards compatibility with the public import path.
     """
-    cands: list[Path] = [Path.cwd() / "racing_lines"]
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        cands.append(Path(meipass) / "racing_lines")
-    exe_dir = Path(sys.argv[0]).resolve().parent if sys.argv else None
-    if exe_dir:
-        cands.append(exe_dir / "racing_lines")
-    repo_root = Path(__file__).resolve().parents[4]
-    cands.append(repo_root / "racing_lines")
-    # De-duplicate while keeping order.
-    seen: set[Path] = set()
-    out: list[Path] = []
-    for p in cands:
-        rp = p.resolve() if p.exists() else p
-        if rp in seen:
-            continue
-        seen.add(rp)
-        out.append(p)
-    return out
+    return _candidate_racing_lines_dirs()
 
 
 def find_racing_line_csv(track: str) -> Path | None:
@@ -141,7 +121,7 @@ def load_track_geometry(track: str, *,
     p = Path(path)
     try:
         df = pd.read_csv(p)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _LOG.warning("could not read %s: %s", p, exc)
         return None
     required = (
@@ -194,8 +174,8 @@ def cached_track_geometry(track: str) -> TrackGeometry | None:
 
 __all__ = [
     "TrackGeometry",
-    "candidate_racing_lines_dirs",
     "cached_track_geometry",
+    "candidate_racing_lines_dirs",
     "find_racing_line_csv",
     "load_track_geometry",
 ]

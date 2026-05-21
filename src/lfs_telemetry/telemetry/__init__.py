@@ -130,36 +130,63 @@ from .track_map import TrackBounds, TrackMap
 from .traffic import TrafficSnapshot, traffic_snapshot
 
 __all__ = [
-    "__version__",
-    # live
-    "LiveTelemetry", "TelemetrySample",
+    # channel registry / catalog
+    "CHANNELS",
     # persistence
-    "SCHEMA_VERSION", "detect_schema_version",
-    "read_csv_dataframe", "read_csv_replay", "write_csv_replay",
+    "SCHEMA_VERSION",
+    "CaptureInfo",
+    "CarCalibration",
+    # observables
+    "CarSpec",
+    "CarSpecStore",
+    "ChannelInfo",
+    "LapComparison",
+    # race context
+    "LapRecord",
+    "LapSlice",
     # facade
     "LapTelemetry",
-    "StintTelemetry",
-    "LapComparison",
-    "Sector", "lap_sectors", "sector_times_s", "insim_split_distances_m",
-    "TrackMap", "TrackBounds",
-    "LapSlice", "find_line_crossings", "slice_into_laps",
-    "write_per_lap_files", "reslice_csv",
+    # live
+    "LiveTelemetry",
+    "RestCalibrator",
+    "Sector",
     "SplitPredictor",
-    # channel registry / catalog
-    "CHANNELS", "ChannelInfo", "channel_info", "channels_by_group",
-    "CaptureInfo", "captures_to_dataframe",
-    "discover_captures", "inspect_capture",
+    "StintTelemetry",
+    "TelemetrySample",
+    "TrackBounds",
+    "TrackMap",
+    "TrafficSnapshot",
+    "__version__",
+    "build_lap_records",
+    # calibration
+    "calibrate_spec",
+    "calibration_report",
+    "captures_to_dataframe",
+    "car_spec_for",
+    "channel_info",
+    "channels_by_group",
+    "detect_schema_version",
+    "discover_captures",
+    "dump_lap_records",
     # derived
     "enrich_dataframe",
-    # observables
-    "CarSpec", "car_spec_for", "observe_sample", "observe_window",
-    # calibration
-    "calibrate_spec", "calibration_report",
-    "estimate_mass_kg", "estimate_mu_lat",
-    "estimate_mu_lat_curve", "estimate_mu_long",
-    "CarCalibration", "CarSpecStore", "RestCalibrator",
-    # race context
-    "LapRecord", "build_lap_records",
-    "dump_lap_records", "load_lap_records",
-    "TrafficSnapshot", "traffic_snapshot",
+    "estimate_mass_kg",
+    "estimate_mu_lat",
+    "estimate_mu_lat_curve",
+    "estimate_mu_long",
+    "find_line_crossings",
+    "insim_split_distances_m",
+    "inspect_capture",
+    "lap_sectors",
+    "load_lap_records",
+    "observe_sample",
+    "observe_window",
+    "read_csv_dataframe",
+    "read_csv_replay",
+    "reslice_csv",
+    "sector_times_s",
+    "slice_into_laps",
+    "traffic_snapshot",
+    "write_csv_replay",
+    "write_per_lap_files",
 ]

@@ -518,13 +518,15 @@ class TrackElevationDock(QWidget):
                 centreline_xyz, mesh_full, classes=classes,
                 half_width_m=12.0, slice_thickness_m=3.0,
             )
-        except Exception:  # noqa: BLE001
+        except (ValueError, IndexError, AttributeError):
+            # Sparse/degenerate mesh — banking profile not computable.
             banking = np.full(d_grid.size, np.nan)
 
         # Apex visibility (line-of-sight in metres).
         try:
             apex_vis = geom3d.apex_visibility_distance(d_grid, z_lap)
-        except Exception:  # noqa: BLE001
+        except (ValueError, IndexError):
+            # Centreline too short for line-of-sight integration.
             apex_vis = np.zeros(d_grid.size)
 
         # BVH-style barrier scan: distance to first non-drivable
@@ -535,7 +537,8 @@ class TrackElevationDock(QWidget):
                 centreline, tangents, mesh_full, classes=classes,
                 max_search_m=40.0,
             )
-        except Exception:  # noqa: BLE001
+        except (ValueError, IndexError, AttributeError):
+            # Mesh lacks barrier surfaces or topology is degenerate.
             barrier_left = np.full(d_grid.size, np.nan)
             barrier_right = np.full(d_grid.size, np.nan)
 

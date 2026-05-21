@@ -376,7 +376,7 @@ def load_all(smx_dir: _Path | str = DEFAULT_SMX_DIR) -> dict[str, Path]:
     for f in list_path_files(smx_dir):
         try:
             out[f.stem] = parse_pth(f)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             out[f.stem] = exc  # type: ignore[assignment]
     return out
 

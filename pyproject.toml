@@ -21,6 +21,12 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
+    # Studio tests (tests/studio/*) instantiate Qt widgets, which
+    # transitively import pyqtgraph and PySide6. Listing them here lets
+    # contributors run `pip install -e ".[dev]"` and have a green test
+    # suite without remembering to also pass `studio`.
+    "PySide6>=6.7",
+    "pyqtgraph>=0.13",
 ]
 studio = [
     "PySide6>=6.7",
@@ -31,6 +37,13 @@ vr = [
 ]
 build = [
     "pyinstaller>=6.6",
+]
+# Stand-alone matplotlib viewers under scripts/ and tools/
+# (motec_view, racing_line_view, track_view, wheel_view,
+# tools/full_lap_plots). Not needed by the Studio GUI or the
+# packaged installer; opt-in via `pip install -e ".[scripts]"`.
+scripts = [
+    "matplotlib>=3.7",
 ]
 
 [project.scripts]
@@ -53,5 +66,42 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "PIE", "RUF", "ERA", "ASYNC"]
+# Project uses Greek letters (νf, ΔNFR) per TNFR canonical notation and
+# Spanish prose in i18n tables; the RUF00x ambiguous-unicode family is
+# noise here. ERA001 (commented-out code) is too aggressive given the
+# annotated physics derivations in several modules.
+ignore = ["E501", "RUF001", "RUF002", "RUF003", "ERA001"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# Dev/diagnostic scripts in tools/ and scripts/ use ad-hoc one-liners
+# (semicolons, single-letter loop vars, try/except/pass for best-effort
+# parsing of unknown binary layouts) that don't justify a refactor.
+[tool.ruff.lint.per-file-ignores]
+"tools/**/*.py" = ["E702", "E741", "RUF059", "B905"]
+"scripts/**/*.py" = ["E702", "SIM105", "F841"]
+
+# TG3 — gradual mypy. Advisory only: missing imports and untyped defs are
+# permitted while we incrementally add annotations. Enable stricter knobs
+# (`disallow_untyped_defs`, `no_implicit_optional`) per-module as coverage
+# improves.
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+disallow_untyped_defs = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = false
+follow_imports = "silent"
+exclude = [
+    "build/",
+    "dist/",
+    "installer/Output/",
+    "tools/",
+    "scripts/",
+    "tests/",
+]

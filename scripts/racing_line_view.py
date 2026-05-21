@@ -38,22 +38,26 @@ from matplotlib.collections import LineCollection
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lfs_telemetry.telemetry.track.enrich import segment_track  # noqa: E402
-from lfs_telemetry.telemetry.track.pin import (  # noqa: E402
+from lfs_telemetry.telemetry.track.enrich import segment_track
+from lfs_telemetry.telemetry.track.knw import (
+    DEFAULT_KNW_DIR,
+)
+from lfs_telemetry.telemetry.track.knw import (
+    load_for as load_knw_for,
+)
+from lfs_telemetry.telemetry.track.pin import (
     PinInfo,
+)
+from lfs_telemetry.telemetry.track.pin import (
     load_all as load_all_pins,
 )
-from lfs_telemetry.telemetry.track.pth import (  # noqa: E402
+from lfs_telemetry.telemetry.track.pth import (
     DEFAULT_SMX_DIR,
     compute_profile,
     list_path_files,
     parse_pth,
 )
-from lfs_telemetry.telemetry.track.knw import (  # noqa: E402
-    DEFAULT_KNW_DIR,
-    load_for as load_knw_for,
-)
-from lfs_telemetry.telemetry.track.racing_line import (  # noqa: E402
+from lfs_telemetry.telemetry.track.racing_line import (
     compute_edges,
     compute_geometric_line,
     compute_knw_line,
@@ -342,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
                 knw_car=args.knw_car,
                 knw_dir=args.knw_dir,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"[error] {pth.stem}: {exc}", file=sys.stderr)
             traceback.print_exc()
             continue

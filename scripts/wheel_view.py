@@ -56,7 +56,7 @@ def plot_wheels(df: pd.DataFrame, title: str) -> plt.Figure:
         ("ang_vel_rads",           "Wheel ω (rad/s)",        1.0),
         ("air_temp_c",             "Tyre air temp (°C)",     1.0),
     ]
-    for ax, (suffix, ylabel, scale) in zip(axes, panels):
+    for ax, (suffix, ylabel, scale) in zip(axes, panels, strict=False):
         for w in WHEELS:
             ax.plot(t, df[f"wheel_{w}_{suffix}"].values * scale,
                     color=COLORS[w], lw=0.7, label=w)

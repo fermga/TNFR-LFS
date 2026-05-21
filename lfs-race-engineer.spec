@@ -153,6 +153,62 @@ a = Analysis(
         "PyQt5",
         "PyQt6",
         "PySide2",
+        # ML / data-science deps that some env-installed packages
+        # (sentence-transformers, datasets, streamlit, jax) pull into
+        # the venv but the Studio runtime never imports. Without these
+        # excludes PyInstaller collects ~3.6 GB of CUDA DLLs from torch
+        # plus jaxlib/pyarrow/torchvision/torchaudio (see build_log).
+        "torch",
+        "torchvision",
+        "torchaudio",
+        "sentence_transformers",
+        "transformers",
+        "huggingface_hub",
+        "tokenizers",
+        "safetensors",
+        "jax",
+        "jaxlib",
+        "pyarrow",
+        "datasets",
+        "streamlit",
+        "tensorflow",
+        "sklearn",
+        "scikit_learn",
+        "cupy",
+        # Numerical/data ecosystem we never import — these only land in
+        # the bundle when the build env has user-site contamination
+        # (e.g. global ``pip install numba``). The Studio runtime stays
+        # on plain numpy/scipy/pandas, so excluding them is safe and
+        # shaves 100s of MB from the dist.
+        "numba",
+        "llvmlite",
+        "dask",
+        "xarray",
+        "netCDF4",
+        "cftime",
+        "statsmodels",
+        "sqlalchemy",
+        "asyncpg",
+        "aiohttp",
+        "lxml",
+        "tornado",
+        "zmq",
+        # Dev / notebook / docs tooling. Never imported at runtime.
+        "IPython",
+        "jedi",
+        "parso",
+        "black",
+        "blib2to3",
+        "sphinx",
+        "alabaster",
+        "docutils",
+        "nbformat",
+        "jsonschema",
+        "jsonschema_specifications",
+        "coverage",
+        "cryptography",
+        # Audio/game libs that leak via transitive installs.
+        "pygame",
     ],
     noarchive=False,
 )

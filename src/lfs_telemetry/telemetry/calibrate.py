@@ -175,7 +175,7 @@ def calibrate_spec(df: pd.DataFrame,
     """
     base = car_spec_for(car_name)
     overrides: dict[str, float] = {}
-    mu0, k_aero, n_bins = estimate_mu_lat_curve(df, percentile=percentile)
+    mu0, k_aero, _n_bins = estimate_mu_lat_curve(df, percentile=percentile)
     if np.isfinite(mu0):
         overrides["mu_lat"] = mu0 * safety_factor
         overrides["mu_lat_aero_k"] = k_aero * safety_factor
@@ -201,7 +201,7 @@ def calibration_report(df: pd.DataFrame,
     mu0, k_aero, n_bins = estimate_mu_lat_curve(df, percentile=98.0)
     return {
         "car_name": car_name or "?",
-        "n_samples": int(len(df)),
+        "n_samples": len(df),
         "mu_lat_p98": estimate_mu_lat(df, percentile=98.0),
         "mu_lat_p99": estimate_mu_lat(df, percentile=99.0),
         "mu_lat_curve_mu0": mu0,

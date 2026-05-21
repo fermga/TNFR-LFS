@@ -135,9 +135,9 @@ def _empty_histogram(low_speed_mps: float) -> DamperHistogram:
 
 
 __all__ = [
+    "DEFAULT_BIN_WIDTH_MPS",
+    "DEFAULT_LOW_SPEED_MPS",
+    "DEFAULT_MAX_ABS_MPS",
     "DamperHistogram",
     "damper_histogram",
-    "DEFAULT_LOW_SPEED_MPS",
-    "DEFAULT_BIN_WIDTH_MPS",
-    "DEFAULT_MAX_ABS_MPS",
 ]

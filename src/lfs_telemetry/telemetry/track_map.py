@@ -84,7 +84,7 @@ class TrackMap:
         post-line distance window so the average is well-defined.
         Laps with no usable position data are skipped.
         """
-        laps = [lap for lap in laps]
+        laps = list(laps)
         if not laps:
             raise ValueError("from_laps requires at least one lap")
         # Find common distance window across all laps. The window may
@@ -243,7 +243,7 @@ def _xy_along_distance(
     lap: LapTelemetry,
     n_points: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    idx, d, _ = _unwrapped_lap_arrays(lap)
+    _idx, d, _ = _unwrapped_lap_arrays(lap)
     if d.size < 2:
         raise ValueError("lap has no usable distance data")
     df = lap.raw

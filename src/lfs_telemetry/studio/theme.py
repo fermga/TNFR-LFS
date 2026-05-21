@@ -40,6 +40,18 @@ TEXT_COLOR = "#d8dde3"
 MUTED_COLOR = "#5b6470"
 CURSOR_COLOR = "#ffd166"
 
+# Semantic status / overlay colours. Keep these here so widgets never
+# hard-code raw hex/RGB. Shades match the dark palette above.
+STATUS_ERROR_COLOR = "#c0392b"          # validation/error text
+LED_IDLE_COLOR = "#5a5f66"              # grey LED (idle)
+LED_ERROR_COLOR = "#d04848"             # red LED (failure)
+LED_OK_COLOR = "#3fbf5a"                # green LED (connected)
+PROXIMITY_RED = QColor(255, 60, 60)     # imminent collision
+PROXIMITY_YELLOW = QColor(255, 220, 60) # within yellow band
+PROXIMITY_WHITE = QColor(230, 230, 230) # within white band
+PROXIMITY_FAR = QColor(140, 140, 140)   # outside detection ring
+COMPARE_OUTLINE_COLOR = "#ffffff"       # damper-histogram compare lap
+
 
 def trace_color(index: int) -> str:
     """Return the trace color at ``index`` modulo the palette."""
@@ -174,7 +186,10 @@ QScrollBar::add-line, QScrollBar::sub-line {
 
 
 __all__ = [
-    "BG_COLOR", "CAND_COLOR", "CURSOR_COLOR", "GRID_COLOR", "MUTED_COLOR",
-    "PANEL_COLOR", "REF_COLOR", "TEXT_COLOR", "TRACE_COLORS",
+    "BG_COLOR", "CAND_COLOR", "COMPARE_OUTLINE_COLOR", "CURSOR_COLOR",
+    "GRID_COLOR", "LED_ERROR_COLOR", "LED_IDLE_COLOR", "LED_OK_COLOR",
+    "MUTED_COLOR", "PANEL_COLOR", "PROXIMITY_FAR", "PROXIMITY_RED",
+    "PROXIMITY_WHITE", "PROXIMITY_YELLOW", "REF_COLOR", "STATUS_ERROR_COLOR",
+    "TEXT_COLOR", "TRACE_COLORS",
     "apply_dark_palette", "configure_pyqtgraph", "trace_color",
 ]

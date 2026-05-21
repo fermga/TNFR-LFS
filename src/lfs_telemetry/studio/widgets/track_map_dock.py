@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, QRectF, QTimer
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QImage, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -314,7 +314,8 @@ class TrackMapDock(QWidget):
         self._loaded_laps[path] = lap
         try:
             tmap = TrackMap.from_lap(lap)
-        except Exception:
+        except (ValueError, KeyError, AttributeError):
+            # Lap is missing required telemetry columns or has bad data.
             return
         self._maps[path] = tmap
         # Cache (t_s, distance_m) for playback. Both columns exist in
@@ -337,7 +338,8 @@ class TrackMapDock(QWidget):
                     # Force monotone t_s (sorted by time).
                     order = np.argsort(t_s)
                     self._lap_t_d[path] = (t_s[order], d[order])
-        except Exception:  # noqa: BLE001
+        except (KeyError, ValueError, AttributeError, IndexError):
+            # Missing/short t/distance columns — skip caching for this lap.
             pass
         self._redraw()
         self._refresh_replay_ui()
@@ -439,7 +441,8 @@ class TrackMapDock(QWidget):
                 try:
                     track = str(lap.summary.get("track") or "") or None
                     car = str(lap.summary.get("car") or "") or None
-                except Exception:  # noqa: BLE001
+                except (AttributeError, KeyError, TypeError):
+                    # Old lap summary schema or unexpected type — overlays off.
                     track = None
                     car = None
         self._render_racing_line(track)
@@ -511,7 +514,7 @@ class TrackMapDock(QWidget):
             val = 0
         else:
             frac = max(0.0, min(1.0, self._playback_t_s / dur))
-            val = int(round(frac * self._scrub_slider.maximum()))
+            val = round(frac * self._scrub_slider.maximum())
         self._scrub_slider.blockSignals(True)
         self._scrub_slider.setValue(val)
         self._scrub_slider.blockSignals(False)
@@ -757,12 +760,8 @@ class TrackMapDock(QWidget):
     @staticmethod
     def _racing_line_dirs() -> list[Path]:
         """Search dirs for ``racing_lines/<TRACK>_racing.csv``."""
-        out: list[Path] = [Path.cwd() / "racing_lines"]
-        meipass = getattr(sys, "_MEIPASS", None)
-        if meipass:
-            out.append(Path(meipass) / "racing_lines")
-        out.append(Path(sys.argv[0]).resolve().parent / "racing_lines")
-        return out
+        from ...app_paths import candidate_racing_lines_dirs
+        return candidate_racing_lines_dirs()
 
     def _load_racing_line(
         self, track: str,
@@ -913,7 +912,8 @@ class TrackMapDock(QWidget):
             knw = parse_knw(knw_path)
             line = compute_knw_line(profile, knw)
             xy = np.asarray(line.line_xy, dtype=float)
-        except Exception:  # noqa: BLE001
+        except (OSError, ValueError, KeyError, AttributeError):
+            # File-not-found, malformed KNW/PTH binary, or geometry mismatch.
             self._knw_cache[key] = None
             return None
         if xy.ndim != 2 or xy.shape[0] < 2:
@@ -1026,10 +1026,7 @@ class TrackMapDock(QWidget):
         extent = self._overlay_extent_for(env, image=img)
         if extent is None:
             return
-        if extent.flip_y:
-            img_to_show = np.ascontiguousarray(img[::-1, :, :])
-        else:
-            img_to_show = img
+        img_to_show = np.ascontiguousarray(img[::-1, :, :]) if extent.flip_y else img
         # ``autoDownsample=True`` is required for the 2560×2560 LFS
         # track images: without it pyqtgraph keeps a full-resolution
         # QPixmap cache that silently drops at large zoom factors,

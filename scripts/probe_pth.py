@@ -1,5 +1,6 @@
 """Cross-track PTH probe — verify (size-56)/44 = integer for many tracks."""
-import struct, glob, os
+import glob
+import os
 
 DIR = r"C:\LFS\data\smx"
 print(f"{'file':14} {'size':>8} {'(size-56)/44':>15} {'ok':>4}")

@@ -39,17 +39,17 @@ from .smx import SmxMesh, cross_section_at
 __all__ = [
     "SURFACE_CLASSES",
     "SURFACE_INDEX",
+    "CheckpointGeom",
+    "CorridorHeightmap",
+    "apex_visibility_distance",
     "classify_surface",
     "compute_banking_profile",
-    "surface_distribution_along",
-    "kerb_mask_along",
-    "CheckpointGeom",
-    "extract_checkpoint_geometry",
-    "CorridorHeightmap",
-    "corridor_heightmap",
-    "apex_visibility_distance",
-    "enrich_profile_with_smx",
     "compute_barrier_offsets",
+    "corridor_heightmap",
+    "enrich_profile_with_smx",
+    "extract_checkpoint_geometry",
+    "kerb_mask_along",
+    "surface_distribution_along",
 ]
 
 # ---------------------------------------------------------------------------
@@ -386,7 +386,7 @@ def extract_checkpoint_geometry(mesh: SmxMesh) -> list[CheckpointGeom]:
         # 2D PCA on the hull to recover the principal axis.
         centred = xy - xy.mean(axis=0)
         cov = centred.T @ centred / max(1, centred.shape[0] - 1)
-        eigvals, eigvecs = np.linalg.eigh(cov)
+        _eigvals, eigvecs = np.linalg.eigh(cov)
         # eigh returns ascending; principal axis = last column.
         axis = eigvecs[:, -1]
         axis = axis / max(np.linalg.norm(axis), 1e-9)

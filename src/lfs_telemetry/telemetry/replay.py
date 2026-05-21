@@ -366,8 +366,8 @@ def _row_to_outsim2(row: dict[str, str], time_ms: int) -> OutSimPack2 | None:
                 ang_vel_rads=_fnum(row.get(f"wheel_{c}_ang_vel_rads", 0.0)),
                 lean_rel_road_rad=_fnum(row.get(f"wheel_{c}_lean_rel_road_rad", 0.0)),
                 air_temp_c=int(_fnum(row.get(f"wheel_{c}_air_temp_c", 0))),
-                slip_fraction_byte=int(round(
-                    _fnum(row.get(f"wheel_{c}_slip_fraction", 0.0)) * 255.0)),
+                slip_fraction_byte=round(
+                    _fnum(row.get(f"wheel_{c}_slip_fraction", 0.0)) * 255.0),
                 touching=int(_fnum(row.get(f"wheel_{c}_touching", 0))),
                 slip_ratio=_fnum(row[f"wheel_{c}_slip_ratio"]),
                 tan_slip_angle=_fnum(row[f"wheel_{c}_tan_slip_angle"]),

@@ -37,10 +37,10 @@ def dump(name: str, label: str, n_samples: int = 6) -> None:
     print(f"\n=== {name}  ({label})  nodes={n_nodes} ===")
     # Sample evenly.
     idxs = np.linspace(0, n_nodes - 1, n_samples).astype(int)
-    print(f"  idx | center XYZ                 | dir XYZ                | f4 f5 f6 f7")
+    print("  idx | center XYZ                 | dir XYZ                | f4 f5 f6 f7")
     for i in idxs:
         off = i * NODE_BYTES
-        flags, ix, iy, iz = struct.unpack_from("<i3i", body, off)
+        _flags, ix, iy, iz = struct.unpack_from("<i3i", body, off)
         dx, dy, dz = struct.unpack_from("<3f", body, off + 16)
         f4, f5, f6, f7 = struct.unpack_from("<4f", body, off + 28)
         cx, cy, cz = ix / 65536.0, iy / 65536.0, iz / 65536.0

@@ -32,6 +32,7 @@ just exposes a small imperative API: ``ensure_overlay``, ``upload``,
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 from dataclasses import dataclass
@@ -208,13 +209,15 @@ class OpenVROverlaySink:
     # ----- Overlay lifecycle ------------------------------------------
 
     def ensure_overlay(
-        self, module_id: str, *, pose: OverlayPose = OverlayPose(),
+        self, module_id: str, *, pose: OverlayPose | None = None,
     ) -> bool:
         """Create the IVROverlay for ``module_id`` if missing.
 
         Returns ``True`` on success, ``False`` if VR isn't available.
         Idempotent — repeated calls just return ``True``.
         """
+        if pose is None:
+            pose = OverlayPose()
         if not self.available:
             return False
         with self._lock:
@@ -259,7 +262,7 @@ class OpenVROverlaySink:
 
     # ----- Frame upload ------------------------------------------------
 
-    def upload(self, module_id: str, image: "QImage") -> bool:
+    def upload(self, module_id: str, image: QImage) -> bool:
         """Upload a QImage frame to the overlay for ``module_id``.
 
         Converts to RGBA8888 (byte-order RGBA on all platforms) before
@@ -389,10 +392,8 @@ class OpenVROverlaySink:
             return
         with self._lock:
             for entry in list(self._entries.values()):
-                try:
+                with contextlib.suppress(Exception):  # pragma: no cover
                     self._vr_overlay.destroyOverlay(entry.handle)
-                except Exception:  # pragma: no cover - runtime
-                    pass
             self._entries.clear()
             try:
                 if self._openvr is not None:

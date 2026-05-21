@@ -24,7 +24,7 @@ def test_clean_excludes_laps_above_103pct() -> None:
     keep = int(best * CLEAN_THRESHOLD) - 500  # inside threshold
     out = compute_lap_averages([best, keep, slow, best])
     # slow lap excluded → mean of [best, keep, best]
-    expected = int(round((best + keep + best) / 3))
+    expected = round((best + keep + best) / 3)
     assert out["clean"] == expected
 
 
@@ -34,10 +34,10 @@ def test_stint_excludes_lap1_pit_in_and_outlap() -> None:
     laps = [95_000, 90_000, 90_500, 96_000, 95_500, 90_200]
     out = compute_lap_averages(laps, pit_in_laps=[4])
     # stint keeps L2, L3, L6
-    expected = int(round((90_000 + 90_500 + 90_200) / 3))
+    expected = round((90_000 + 90_500 + 90_200) / 3)
     assert out["stint"] == expected
     # total includes everything
-    assert out["total"] == int(round(sum(laps) / len(laps)))
+    assert out["total"] == round(sum(laps) / len(laps))
 
 
 def test_stint_none_when_only_lap1() -> None:

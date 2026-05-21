@@ -22,9 +22,32 @@ INSIM_DEFAULT_PORT: int = 29999
 OUTSIM_DEFAULT_PORT: int = 30000
 OUTGAUGE_DEFAULT_PORT: int = 30001
 
+# ---------------------------------------------------------------------------
+# Unit conversions.
+# Use these instead of inlining magic factors (``* 3.6``, ``- 273.15`` …).
+# ---------------------------------------------------------------------------
+# Speed.
+SPEED_MS_TO_KMH: float = 3.6
+SPEED_KMH_TO_MS: float = 1.0 / 3.6
+SPEED_MS_TO_MPH: float = 2.2369362920544
+# Temperature (the conversions are additive, not multiplicative).
+TEMP_K_TO_C_OFFSET: float = 273.15
+# Pressure.
+PRESSURE_PA_TO_BAR: float = 1e-5
+PRESSURE_PA_TO_PSI: float = 1.4503773773e-4
+# Torque.
+TORQUE_NM_TO_LBFT: float = 0.7375621493
+
 __all__ = [
     "GRAVITY",
     "INSIM_DEFAULT_PORT",
-    "OUTSIM_DEFAULT_PORT",
     "OUTGAUGE_DEFAULT_PORT",
+    "OUTSIM_DEFAULT_PORT",
+    "PRESSURE_PA_TO_BAR",
+    "PRESSURE_PA_TO_PSI",
+    "SPEED_KMH_TO_MS",
+    "SPEED_MS_TO_KMH",
+    "SPEED_MS_TO_MPH",
+    "TEMP_K_TO_C_OFFSET",
+    "TORQUE_NM_TO_LBFT",
 ]

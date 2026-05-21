@@ -378,7 +378,7 @@ class MultiChannelChart(QWidget):
                 if np.isfinite(t) and t < per_sector_min[i]:
                     per_sector_min[i] = float(t)
         # Cumulative gap vs reference, evaluated at each sector end.
-        sector_ends = boundaries + [total_d]
+        sector_ends = [*boundaries, total_d]
         cum_gap = np.cumsum(
             np.array(per_sector_min, dtype=float)
             - np.array(ref_times, dtype=float)

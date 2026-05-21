@@ -51,14 +51,14 @@ from pathlib import Path
 import numpy as np
 
 __all__ = [
-    "SmxObject",
-    "SmxMesh",
-    "parse_smx",
     "DEFAULT_SMX_DIR",
-    "list_smx_files",
-    "find_smx_for_track",
-    "elevation_envelope",
+    "SmxMesh",
+    "SmxObject",
     "cross_section_at",
+    "elevation_envelope",
+    "find_smx_for_track",
+    "list_smx_files",
+    "parse_smx",
 ]
 
 SMX_MAGIC = b"LFSSMX"

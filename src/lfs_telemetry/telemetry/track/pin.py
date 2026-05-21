@@ -106,7 +106,8 @@ def load_all(smx_dir: _Path | str = DEFAULT_SMX_DIR) -> dict[str, PinInfo]:
         try:
             info = parse_pin(f)
             out[info.env] = info
-        except Exception:  # noqa: BLE001
+        except (OSError, ValueError, struct.error):
+            # Skip unreadable / malformed PIN files.
             continue
     return out
 

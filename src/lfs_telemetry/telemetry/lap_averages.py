@@ -41,13 +41,13 @@ def compute_lap_averages(
     if not laps:
         return {"stint": None, "clean": None, "total": None}
 
-    total_avg = int(round(sum(laps) / len(laps)))
+    total_avg = round(sum(laps) / len(laps))
 
     best = min(laps)
     threshold = best * CLEAN_THRESHOLD
     clean_laps = [t for t in laps if t <= threshold]
     clean_avg: int | None = (
-        int(round(sum(clean_laps) / len(clean_laps)))
+        round(sum(clean_laps) / len(clean_laps))
         if clean_laps else None
     )
 
@@ -60,11 +60,11 @@ def compute_lap_averages(
         t for i, t in enumerate(laps, start=1) if i not in skip
     ]
     stint_avg: int | None = (
-        int(round(sum(stint_laps) / len(stint_laps)))
+        round(sum(stint_laps) / len(stint_laps))
         if stint_laps else None
     )
 
     return {"stint": stint_avg, "clean": clean_avg, "total": total_avg}
 
 
-__all__ = ["compute_lap_averages", "CLEAN_THRESHOLD"]
+__all__ = ["CLEAN_THRESHOLD", "compute_lap_averages"]

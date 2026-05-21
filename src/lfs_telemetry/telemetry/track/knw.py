@@ -43,6 +43,8 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..constants import SPEED_MS_TO_KMH
+
 _LOG = logging.getLogger(__name__)
 
 KNW_MAGIC = b"LFSKNW"
@@ -87,11 +89,11 @@ class KnwInfo:
 
     @property
     def speed_metric_a_kmh(self) -> float:
-        return self.speed_metric_a_ms * 3.6
+        return self.speed_metric_a_ms * SPEED_MS_TO_KMH
 
     @property
     def speed_metric_b_kmh(self) -> float:
-        return self.speed_metric_b_ms * 3.6
+        return self.speed_metric_b_ms * SPEED_MS_TO_KMH
 
 
 def _split_layout_car(stem: str) -> tuple[str, str]:
@@ -226,9 +228,9 @@ __all__ = [
     "KNW_MAGIC",
     "KNW_VERSION",
     "KNW_VERSIONS_KNOWN",
+    "RECORD_SIZE",
     "KnwInfo",
     "KnwSegment",
-    "RECORD_SIZE",
     "list_knw_files",
     "load_all_for_layout",
     "load_for",

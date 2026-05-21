@@ -25,7 +25,7 @@ def lap_x_array(lap, axis_kind: str) -> np.ndarray:
     don't fold the trace back on itself; ``time`` is elapsed seconds
     relative to the lap start.
     """
-    idx, d, t = _unwrapped_lap_arrays(lap)
+    _idx, d, t = _unwrapped_lap_arrays(lap)
     if axis_kind == "distance":
         return d
     return t

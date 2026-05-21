@@ -15,6 +15,7 @@ trimming…) instead of duplicating it inside the viewer.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -151,22 +152,18 @@ class CaptureRunner:
         # fails with WinError 6, so we fall back to a file the child
         # polls.
         stop_file = session_dir / ".stop"
-        try:
+        with contextlib.suppress(OSError):
             stop_file.unlink()
-        except OSError:
-            pass
         argv += ["--stop-file", str(stop_file)]
 
         # Live snapshot file (consumed by the Studio Live tab to drive
         # the in-game-style overlay). The CLI refreshes it at ~10 Hz.
         live_file = session_dir / "live.json"
-        try:
+        with contextlib.suppress(OSError):
             live_file.unlink()
-        except OSError:
-            pass
         argv += ["--live-file", str(live_file)]
 
-        cmd = [sys.executable] + argv
+        cmd = [sys.executable, *argv]
 
         creationflags = 0
         if os.name == "nt":
@@ -212,7 +209,7 @@ class CaptureRunner:
             for line in proc.stdout:
                 with self._lock:
                     self._log.append(line.rstrip("\r\n"))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             with self._lock:
                 self._log.append(f"[runner] reader error: {exc}")
         finally:
@@ -245,6 +242,6 @@ class CaptureRunner:
                 proc.send_signal(signal.CTRL_BREAK_EVENT)
             else:
                 proc.send_signal(signal.SIGINT)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return f"Stop failed: {exc}"
         return "Stopping\u2026"

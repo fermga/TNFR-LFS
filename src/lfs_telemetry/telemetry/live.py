@@ -298,4 +298,4 @@ def _outsim2_to_basic(pkt2: OutSimPack2) -> OutSimPacket | None:
     )
 
 
-__all__ = ["TelemetrySample", "LiveTelemetry"]
+__all__ = ["LiveTelemetry", "TelemetrySample"]

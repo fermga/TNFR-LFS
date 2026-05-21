@@ -30,7 +30,7 @@ from lfs_telemetry.telemetry.track.racing_line import (
 
 class _Profile:
     """Tiny stand-in for ``TrackProfile`` exposing only the fields used."""
-    __slots__ = ("s", "pos", "direction", "width")
+    __slots__ = ("direction", "pos", "s", "width")
 
     def __init__(self, n: int = 50, width: float = 12.0):
         self.s = np.linspace(0.0, n - 1, n)

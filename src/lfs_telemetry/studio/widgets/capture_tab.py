@@ -38,7 +38,7 @@ from ...telemetry.constants import (
 )
 from ..i18n import tr
 from ..signals import SignalBus
-from ..theme import MUTED_COLOR
+from ..theme import LED_ERROR_COLOR, LED_IDLE_COLOR, LED_OK_COLOR, MUTED_COLOR
 
 _LAP_DONE_RE = re.compile(r"flying lap (\d+)")
 _OUT_LAP_RE = re.compile(r"out-lap complete")
@@ -150,7 +150,7 @@ class CaptureTab(QWidget):
 
         # LFS connection LED.
         self._led = QLabel(self)
-        self._led.setStyleSheet(_led_qss("#5a5f66"))  # grey = idle
+        self._led.setStyleSheet(_led_qss(LED_IDLE_COLOR))  # grey = idle
         self._led.setToolTip(tr("LFS InSim status: idle"))
         self._led_label = QLabel(tr("LFS"), self)
         self._led_label.setStyleSheet(f"color: {MUTED_COLOR};")
@@ -248,7 +248,7 @@ class CaptureTab(QWidget):
                 outgauge_port=int(self._outgauge_port.value()),
                 write_csv=not self._overlay_only.isChecked(),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._status.setText(
                 tr("Start failed: {error}").format(error=exc),
             )
@@ -327,13 +327,13 @@ class CaptureTab(QWidget):
         #   running, InSim not yet up  -> red
         #   running, InSim up          -> green
         if not running:
-            led_color = "#5a5f66"
+            led_color = LED_IDLE_COLOR
             led_tip = tr("LFS InSim status: idle")
         elif insim_waiting and not insim_ready:
-            led_color = "#d04848"
+            led_color = LED_ERROR_COLOR
             led_tip = tr("LFS InSim status: waiting for connection")
         else:
-            led_color = "#3fbf5a"
+            led_color = LED_OK_COLOR
             led_tip = tr("LFS InSim status: connected")
         self._led.setStyleSheet(_led_qss(led_color))
         self._led.setToolTip(led_tip)

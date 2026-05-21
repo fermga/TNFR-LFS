@@ -37,7 +37,7 @@ from dataclasses import dataclass, replace
 
 from .car_info_bin import CarInfoBin, CarInfoWheel
 
-__all__ = ["SetupOverrides", "from_baseline", "apply"]
+__all__ = ["SetupOverrides", "apply", "from_baseline"]
 
 
 # Wheel index convention from ``CarInfoBin.wheels``: (RL, RR, FL, FR).
@@ -252,6 +252,6 @@ def apply(baseline: CarInfoBin, overrides: SetupOverrides) -> CarInfoBin:
             )
         # Preserve the reverse slot at index 0 from the baseline.
         reverse = baseline.gear_ratios[0]
-        patch["gear_ratios"] = (reverse,) + new_forward
+        patch["gear_ratios"] = (reverse, *new_forward)
 
     return replace(baseline, **patch)

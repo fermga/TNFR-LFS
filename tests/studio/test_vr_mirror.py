@@ -35,7 +35,7 @@ def no_openvr(monkeypatch, qapp):
 
 
 def test_mirror_enable_returns_false_without_openvr(no_openvr):
-    mirror = no_openvr.VrMirror(provider=lambda: {})
+    mirror = no_openvr.VrMirror(provider=dict)
     try:
         assert mirror.enable() is False
         assert mirror.is_enabled is False
@@ -45,7 +45,7 @@ def test_mirror_enable_returns_false_without_openvr(no_openvr):
 
 
 def test_mirror_disable_is_safe_when_never_enabled(no_openvr):
-    mirror = no_openvr.VrMirror(provider=lambda: {})
+    mirror = no_openvr.VrMirror(provider=dict)
     # disable() before enable() must not raise.
     mirror.disable()
     mirror.shutdown()

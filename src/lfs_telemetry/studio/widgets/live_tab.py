@@ -178,7 +178,7 @@ class LiveTab(QWidget):
             )
             try:
                 pct = (
-                    int(round(float(stored) * 100))
+                    round(float(stored) * 100)
                     if stored is not None else 85
                 )
             except (TypeError, ValueError):
@@ -451,8 +451,8 @@ class LiveTab(QWidget):
                 self._vr_status.setText(self._compose_vr_status_text())
             else:
                 err = (
-                    self._vr_mirror._sink.init_error  # noqa: SLF001
-                    if self._vr_mirror._sink is not None  # noqa: SLF001
+                    self._vr_mirror._sink.init_error
+                    if self._vr_mirror._sink is not None
                     else "unavailable"
                 )
                 self._vr_status.setText(
@@ -482,7 +482,7 @@ class LiveTab(QWidget):
         lines: list[str] = [tr("VR mirror active (SteamVR overlay).")]
 
         sink = (
-            self._vr_mirror._sink if self._vr_mirror else None  # noqa: SLF001
+            self._vr_mirror._sink if self._vr_mirror else None
         )
         status = sink.runtime_status() if sink is not None else None
 
@@ -673,7 +673,7 @@ class LiveTab(QWidget):
     # Cleanup
     # ------------------------------------------------------------------
 
-    def closeEvent(self, event) -> None:  # noqa: N802
+    def closeEvent(self, event) -> None:
         if self._vr_mirror is not None:
             self._vr_mirror.shutdown()
             self._vr_mirror = None

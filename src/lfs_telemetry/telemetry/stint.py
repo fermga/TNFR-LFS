@@ -129,8 +129,8 @@ class StintTelemetry:
             excluded = []
 
         out: dict[str, Any] = {
-            "num_laps_total": int(len(full)),
-            "num_laps": int(len(df)),
+            "num_laps_total": len(full),
+            "num_laps": len(df),
             "excluded_lap_indices": excluded,
             "car": str(full["car"].iloc[0]) if "car" in full else None,
             "track": str(full["track"].iloc[0]) if "track" in full and full["track"].notna().any() else None,
@@ -291,7 +291,7 @@ class StintTelemetry:
             "best_sector_s": best_s,
             "best_sector_lap": best_lap,
             "n_sectors": len(sec_cols),
-            "n_laps_used": int(len(usable)),
+            "n_laps_used": len(usable),
             "excluded_lap_indices": excluded,
         }
 

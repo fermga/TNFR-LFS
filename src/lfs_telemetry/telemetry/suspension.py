@@ -506,12 +506,12 @@ def compare(
 
 
 __all__ = [
+    "TARGETS_BY_CLASS",
     "AssessmentItem",
     "AxleSuspension",
     "CornerSuspension",
     "SuspensionDynamic",
     "SuspensionStatic",
-    "TARGETS_BY_CLASS",
     "WheelDynamics",
     "assess_static",
     "compare",
