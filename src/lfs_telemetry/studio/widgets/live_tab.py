@@ -254,14 +254,19 @@ class LiveTab(QWidget):
         rpm_box = QGroupBox(tr("RPM"), self)
         rpm_box.setLayout(rpm_form)
 
-        # ----- G full-scale -------------------------------------------
+        # ----- G-meter ------------------------------------------------
         self._g_full_scale = QDoubleSpinBox(self)
         self._g_full_scale.setRange(0.5, 4.0)
         self._g_full_scale.setSingleStep(0.25)
         self._g_full_scale.setSuffix(" g")
         self._g_full_scale.setValue(2.0)
+        gmeter_form = QFormLayout()
+        gmeter_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        gmeter_form.addRow(tr("Full scale:"), self._g_full_scale)
+        gmeter_box = QGroupBox(tr("G-meter"), self)
+        gmeter_box.setLayout(gmeter_form)
 
-        # ----- Pit limiter speed --------------------------------------
+        # ----- Pit limiter --------------------------------------------
         self._pit_limit_kmh = QDoubleSpinBox(self)
         self._pit_limit_kmh.setRange(20.0, 200.0)
         self._pit_limit_kmh.setSingleStep(1.0)
@@ -279,8 +284,14 @@ class LiveTab(QWidget):
                 "to compute the speed vs limit delta. LFS default: 80 km/h.",
             ),
         )
+        pit_form = QFormLayout()
+        pit_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        pit_form.addRow(tr("Speed limit:"), self._pit_limit_kmh)
+        pit_box = QGroupBox(tr("Pit limiter"), self)
+        pit_box.setLayout(pit_form)
 
-        self._session_compact = QCheckBox(tr("Session overlay compact"), self)
+        # ----- Session info -------------------------------------------
+        self._session_compact = QCheckBox(tr("Compact layout"), self)
         self._session_compact.setToolTip(
             tr("Show condensed session info in the session overlay module."),
         )
@@ -289,7 +300,12 @@ class LiveTab(QWidget):
             "1", "true", "yes", "on"
         }
         self._session_compact.setChecked(compact_on)
+        session_form = QFormLayout()
+        session_form.addRow("", self._session_compact)
+        session_box = QGroupBox(tr("Session info"), self)
+        session_box.setLayout(session_form)
 
+        # ----- Display compatibility ----------------------------------
         self._fullscreen_compat = QCheckBox(
             tr("Borderless / windowed-fullscreen compat"), self,
         )
@@ -321,15 +337,11 @@ class LiveTab(QWidget):
         self._fullscreen_hint.setWordWrap(True)
         self._fullscreen_hint.setStyleSheet("color: #888; font-size: 10px;")
 
-        misc_form = QFormLayout()
-        misc_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        misc_form.addRow(tr("G-meter full scale:"), self._g_full_scale)
-        misc_form.addRow(tr("Pit-lane speed limit:"), self._pit_limit_kmh)
-        misc_form.addRow("", self._session_compact)
-        misc_form.addRow("", self._fullscreen_compat)
-        misc_form.addRow("", self._fullscreen_hint)
-        misc_box = QGroupBox(tr("G-meter"), self)
-        misc_box.setLayout(misc_form)
+        display_layout = QVBoxLayout()
+        display_layout.addWidget(self._fullscreen_compat)
+        display_layout.addWidget(self._fullscreen_hint)
+        display_box = QGroupBox(tr("Display compatibility"), self)
+        display_box.setLayout(display_layout)
 
         # ----- VR mirror ----------------------------------------------
         # Same content layer as the desktop overlay — the mirror reads
@@ -371,11 +383,19 @@ class LiveTab(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(scroll, 1)
         grid = QGridLayout()
-        grid.addWidget(radar_box, 0, 0)
-        grid.addWidget(delta_box, 0, 1)
-        grid.addWidget(rpm_box, 1, 0)
-        grid.addWidget(misc_box, 1, 1)
-        grid.addWidget(vr_box, 2, 0, 1, 2)
+        # Row 0: visual aids / timing
+        grid.addWidget(radar_box,   0, 0)
+        grid.addWidget(delta_box,   0, 1)
+        # Row 1: drivetrain / forces
+        grid.addWidget(rpm_box,     1, 0)
+        grid.addWidget(gmeter_box,  1, 1)
+        # Row 2: situational / pit
+        grid.addWidget(session_box, 2, 0)
+        grid.addWidget(pit_box,     2, 1)
+        # Row 3: window-mode plumbing (full-width, applies to every module)
+        grid.addWidget(display_box, 3, 0, 1, 2)
+        # Row 4: VR mirror (full-width, applies to every module)
+        grid.addWidget(vr_box,      4, 0, 1, 2)
         layout.addLayout(grid)
         layout.addWidget(self._status)
 
