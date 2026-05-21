@@ -662,7 +662,6 @@ class InSimClient:
         """
         if self.connect_retry_interval_s <= 0:
             return await asyncio.open_connection(self.host, self.port)
-        import sys as _sys
         attempts = 0
         while True:
             try:
@@ -671,11 +670,9 @@ class InSimClient:
                     ConnectionAbortedError, OSError) as exc:
                 attempts += 1
                 if attempts == 1 or attempts % 10 == 0:
-                    print(
-                        f"[insim] waiting for LFS on "
-                        f"{self.host}:{self.port} "
-                        f"({type(exc).__name__}; attempt {attempts})",
-                        file=_sys.stderr,
+                    _LOG.warning(
+                        "waiting for LFS on %s:%d (%s; attempt %d)",
+                        self.host, self.port, type(exc).__name__, attempts,
                     )
                 await asyncio.sleep(self.connect_retry_interval_s)
 
@@ -687,7 +684,7 @@ class InSimClient:
                 await task
             except asyncio.CancelledError:
                 pass
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _LOG.debug(
                     "InSim background task raised on shutdown: %s", exc,
                 )
@@ -696,7 +693,7 @@ class InSimClient:
             try:
                 self._writer.close()
                 await self._writer.wait_closed()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _LOG.debug("InSim writer close failed: %s", exc)
         self._writer = None
         self._reader = None
@@ -713,7 +710,7 @@ class InSimClient:
             self._writer.write(build_msl_packet(text))
             await self._writer.drain()
             return True
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _LOG.debug("send_message failed: %s", exc)
             return False
 
@@ -747,13 +744,13 @@ class InSimClient:
                 continue
             try:
                 evt = parser(packet)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _LOG.warning("InSim parse error type=%d size=%d: %s",
                              ptype, size, exc)
                 continue
             try:
                 self.context.update(evt)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 # A single malformed/unexpected packet must never kill
                 # the read loop: if it does, every InSim-driven feature
                 # (radar, standings, gaps, view PLID) freezes silently

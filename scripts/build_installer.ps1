@@ -1,3 +1,18 @@
+# Build the "LFS Race Engineer" Windows installer (.exe) via Inno Setup.
+#
+# Assumes the PyInstaller bundle already exists under build/lfs-race-engineer/.
+# Locates `iscc.exe` across the standard Inno Setup 5/6 install paths and
+# compiles installer/lfs-race-engineer.iss. Output lands in
+# installer/Output/.
+#
+# When to use this script:
+#   .\scripts\build_installer.ps1          # build installer from current bundle
+#   .\scripts\build_installer.ps1 -Force   # rebuild even if output exists
+#
+# Prerequisite: run scripts/build_app.ps1 (or build_app_simple.ps1) first
+# so the PyInstaller bundle is present. To do both in one step, use
+# `scripts/build_app.ps1 -Full`.
+
 param([switch]$Force)
 
 $repoRoot = Split-Path -Parent $PSScriptRoot

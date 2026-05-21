@@ -157,7 +157,7 @@ class SetupBaselineTab(QWidget):
                 Path(chosen),
                 target_key=car_hint or None,
             )
-        except Exception as exc:  # noqa: BLE001 - surface UI-level error
+        except Exception as exc:
             QMessageBox.critical(
                 self, "Import failed",
                 f"Could not import {chosen}:\n\n"
@@ -747,4 +747,4 @@ class SetupTab(QWidget):
         layout.addWidget(tabs)
 
 
-__all__ = ["SetupTab", "SetupBaselineTab"]
+__all__ = ["SetupBaselineTab", "SetupTab"]

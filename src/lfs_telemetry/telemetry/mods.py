@@ -23,7 +23,6 @@ persist them can use :func:`save_mod_database`.
 from __future__ import annotations
 
 import json
-import os
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -34,23 +33,22 @@ from .protocol.packets import _STOCK_CARS
 __all__ = [
     "STOCK_CARS",
     "ModInfo",
-    "is_stock_car",
-    "is_mod_car",
-    "classify_car",
-    "mod_dimensions_m",
-    "is_known_mod",
-    "register_mod",
-    "load_mod_database",
-    "save_mod_database",
-    "mod_database_path",
     "all_known_mods",
+    "classify_car",
+    "is_known_mod",
+    "is_mod_car",
+    "is_stock_car",
+    "load_mod_database",
+    "mod_database_path",
+    "mod_dimensions_m",
+    "register_mod",
+    "save_mod_database",
 ]
 
 # Public alias for the stock-car set. The leading underscore on the source
 # symbol is historical (it predates external consumers).
 STOCK_CARS: frozenset[str] = _STOCK_CARS
 
-_PACKAGE_ROOT = Path(__file__).resolve().parents[3]
 _LOCK = threading.RLock()
 _MODS: dict[str, ModInfo] = {}
 _LOADED = False
@@ -99,13 +97,8 @@ def mod_database_path() -> Path:
     prefers ``./assets/source/mods/mod_sizes.json`` (developer checkout)
     and falls back to the bundled copy alongside the package.
     """
-    env = os.environ.get("LFS_TELEMETRY_MOD_DB")
-    if env:
-        return Path(env)
-    cwd_path = Path.cwd() / "assets" / "source" / "mods" / "mod_sizes.json"
-    if cwd_path.exists():
-        return cwd_path
-    return _PACKAGE_ROOT / "assets" / "source" / "mods" / "mod_sizes.json"
+    from ..app_paths import mod_database_path as _mod_database_path
+    return _mod_database_path()
 
 
 def _coerce_entry(skin_id: str, raw: dict) -> ModInfo | None:

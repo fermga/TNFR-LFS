@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QImage, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -35,6 +35,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSlider,
+    QStyle,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -169,10 +171,130 @@ class TrackMapDock(QWidget):
         controls_row.addWidget(overlay_label)
         controls_row.addWidget(self._overlay_slider)
 
+        # ----- Replay transport bar -----------------------------------
+        # Animate the cursor along the anchor lap (and ghost dots along
+        # every other selected lap) at variable speed. Drives the same
+        # ``cursor_moved`` signal used by the chart crosshairs, so every
+        # dock follows in lockstep — no extra wiring needed.
+        self._playback_speeds: tuple[float, ...] = (
+            0.25, 0.5, 1.0, 2.0, 4.0, 8.0,
+        )
+        self._playback_speed_idx: int = 2  # 1.0×
+        self._playback_t_s: float = 0.0
+        self._playback_loop: bool = False
+        self._playback_axis_kind_before: str | None = None
+        self._anchor_path: Path | None = None
+        # Per-lap monotone (time_s, distance_m) arrays for time→dist
+        # interpolation. Populated from raw on lap-load.
+        self._lap_t_d: dict[Path, tuple[np.ndarray, np.ndarray]] = {}
+        # Ghost dots for non-anchor selected laps, keyed by capture path.
+        self._ghost_dots: dict[Path, pg.ScatterPlotItem] = {}
+
+        self._playback_timer = QTimer(self)
+        self._playback_timer.setInterval(33)  # ~30 Hz
+        self._playback_timer.timeout.connect(self._on_playback_tick)
+
+        style = self.style()
+
+        def _tb(icon_enum, tip: str) -> QToolButton:
+            btn = QToolButton(self)
+            btn.setIcon(style.standardIcon(icon_enum))
+            btn.setToolTip(tip)
+            btn.setAutoRaise(True)
+            return btn
+
+        self._btn_skip_back = _tb(
+            QStyle.StandardPixmap.SP_MediaSkipBackward,
+            "Back to start (keep paused)",
+        )
+        self._btn_slow = _tb(
+            QStyle.StandardPixmap.SP_MediaSeekBackward,
+            "Slow motion (decrease playback speed)",
+        )
+        self._btn_play = _tb(
+            QStyle.StandardPixmap.SP_MediaPlay,
+            "Play / Pause animation along the lap",
+        )
+        self._btn_stop = _tb(
+            QStyle.StandardPixmap.SP_MediaStop,
+            "Stop and hide cursor",
+        )
+        self._btn_fast = _tb(
+            QStyle.StandardPixmap.SP_MediaSeekForward,
+            "Speed up playback",
+        )
+        self._btn_skip_fwd = _tb(
+            QStyle.StandardPixmap.SP_MediaSkipForward,
+            "Jump to end of lap",
+        )
+
+        self._speed_label = QLabel("1.0×", self)
+        self._speed_label.setMinimumWidth(38)
+        self._speed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._speed_label.setStyleSheet(f"color: {TEXT_COLOR};")
+
+        self._loop_check = QCheckBox("Loop", self)
+        self._loop_check.setToolTip(
+            "Restart from t=0 when the end of the lap is reached.",
+        )
+
+        self._scrub_slider = QSlider(Qt.Orientation.Horizontal, self)
+        self._scrub_slider.setRange(0, 1000)
+        self._scrub_slider.setValue(0)
+        self._scrub_slider.setToolTip(
+            "Scrub through the lap. Drag to seek; the cursor and chart"
+            " crosshairs follow.",
+        )
+        # While the user drags, suspend autoplay so the slider position
+        # isn't fought by the timer.
+        self._scrub_slider.sliderPressed.connect(
+            self._on_scrub_pressed,
+        )
+        self._scrub_slider.sliderReleased.connect(
+            self._on_scrub_released,
+        )
+        self._scrub_slider.valueChanged.connect(self._on_scrub_changed)
+        self._scrub_was_playing: bool = False
+
+        self._time_label = QLabel("00:00.000 / 00:00.000", self)
+        self._time_label.setStyleSheet(f"color: {MUTED_COLOR};")
+        self._time_label.setMinimumWidth(135)
+        self._time_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+        )
+
+        self._btn_skip_back.clicked.connect(self._on_skip_back)
+        self._btn_slow.clicked.connect(self._on_slower)
+        self._btn_play.clicked.connect(self._on_play_pause)
+        self._btn_stop.clicked.connect(self._on_stop)
+        self._btn_fast.clicked.connect(self._on_faster)
+        self._btn_skip_fwd.clicked.connect(self._on_skip_forward)
+        self._loop_check.toggled.connect(self._on_loop_toggled)
+
+        replay_row = QHBoxLayout()
+        replay_row.setContentsMargins(2, 0, 2, 0)
+        for w in (
+            self._btn_skip_back,
+            self._btn_slow,
+            self._btn_play,
+            self._btn_stop,
+            self._btn_fast,
+            self._btn_skip_fwd,
+        ):
+            replay_row.addWidget(w)
+        replay_row.addWidget(self._speed_label)
+        replay_row.addSpacing(8)
+        replay_row.addWidget(self._loop_check)
+        replay_row.addWidget(self._scrub_slider, 1)
+        replay_row.addWidget(self._time_label)
+        # Disabled until at least one lap with a usable time-axis lands.
+        self._set_replay_enabled(False)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(self._plot)
         layout.addLayout(controls_row)
+        layout.addLayout(replay_row)
         layout.addWidget(self._legend)
 
         signals.laps_selected.connect(self._on_laps_selected)
@@ -192,10 +314,35 @@ class TrackMapDock(QWidget):
         self._loaded_laps[path] = lap
         try:
             tmap = TrackMap.from_lap(lap)
-        except Exception:
+        except (ValueError, KeyError, AttributeError):
+            # Lap is missing required telemetry columns or has bad data.
             return
         self._maps[path] = tmap
+        # Cache (t_s, distance_m) for playback. Both columns exist in
+        # every schema version since 1.0; if either is missing or the
+        # lap is too short, leave the entry out — playback will simply
+        # ignore that lap.
+        try:
+            df = lap.raw
+            if (
+                "time_ms" in df.columns
+                and "current_lap_dist_m" in df.columns
+                and len(df) >= 2
+            ):
+                t_ms = np.asarray(df["time_ms"], dtype=float)
+                d_m = np.asarray(df["current_lap_dist_m"], dtype=float)
+                mask = np.isfinite(t_ms) & np.isfinite(d_m)
+                if mask.sum() >= 2:
+                    t_s = (t_ms[mask] - t_ms[mask][0]) / 1000.0
+                    d = d_m[mask]
+                    # Force monotone t_s (sorted by time).
+                    order = np.argsort(t_s)
+                    self._lap_t_d[path] = (t_s[order], d[order])
+        except (KeyError, ValueError, AttributeError, IndexError):
+            # Missing/short t/distance columns — skip caching for this lap.
+            pass
         self._redraw()
+        self._refresh_replay_ui()
 
     # ------------------------------------------------------------------
     # Slots
@@ -208,9 +355,17 @@ class TrackMapDock(QWidget):
             if p not in wanted:
                 self._maps.pop(p, None)
                 self._loaded_laps.pop(p, None)
+                self._lap_t_d.pop(p, None)
+                ghost = self._ghost_dots.pop(p, None)
+                if ghost is not None:
+                    self._plot.removeItem(ghost)
         # Track lap order so the first selected becomes the anchor.
         self._selection_order = [Path(p) for p in paths]
+        # Selection changed → reset playback so the slider/label reflect
+        # the new anchor lap and ghosts vanish until the user replays.
+        self._stop_playback(restore_axis=False)
         self._redraw()
+        self._refresh_replay_ui()
 
     def _on_cursor_moved(self, x: float) -> None:
         if self._anchor_map is None or self._axis_kind != "distance":
@@ -274,6 +429,7 @@ class TrackMapDock(QWidget):
                 anchor_path = path
         if self._anchor_map is None:
             self._dot.hide()
+        self._anchor_path = anchor_path
 
         # Reference racing line overlay (ideal line from precomputed
         # CSV in racing_lines/<TRACK>_racing.csv, if available).
@@ -285,7 +441,8 @@ class TrackMapDock(QWidget):
                 try:
                     track = str(lap.summary.get("track") or "") or None
                     car = str(lap.summary.get("car") or "") or None
-                except Exception:  # noqa: BLE001
+                except (AttributeError, KeyError, TypeError):
+                    # Old lap summary schema or unexpected type — overlays off.
                     track = None
                     car = None
         self._render_racing_line(track)
@@ -297,18 +454,314 @@ class TrackMapDock(QWidget):
         self._plot.getViewBox().autoRange()
 
     # ------------------------------------------------------------------
+    # Replay transport (play / pause / stop / scrub / ghosts)
+    # ------------------------------------------------------------------
+
+    def _anchor_duration_s(self) -> float:
+        """Lap duration of the anchor lap, or 0 if not playable."""
+        path = self._anchor_path
+        if path is None:
+            return 0.0
+        td = self._lap_t_d.get(path)
+        if td is None:
+            return 0.0
+        t_s = td[0]
+        if t_s.size < 2:
+            return 0.0
+        return float(t_s[-1] - t_s[0])
+
+    def _set_replay_enabled(self, enabled: bool) -> None:
+        for w in (
+            self._btn_skip_back, self._btn_slow, self._btn_play,
+            self._btn_stop, self._btn_fast, self._btn_skip_fwd,
+            self._loop_check, self._scrub_slider,
+        ):
+            w.setEnabled(enabled)
+
+    def _refresh_replay_ui(self) -> None:
+        """Sync the transport bar with the current anchor lap."""
+        dur = self._anchor_duration_s()
+        playable = dur > 0.0
+        self._set_replay_enabled(playable)
+        if not playable:
+            self._stop_playback(restore_axis=False)
+            self._time_label.setText("00:00.000 / 00:00.000")
+            self._scrub_slider.blockSignals(True)
+            self._scrub_slider.setValue(0)
+            self._scrub_slider.blockSignals(False)
+            return
+        # Clamp current playback time into the new lap's range.
+        self._playback_t_s = max(0.0, min(self._playback_t_s, dur))
+        self._update_time_label()
+        self._sync_slider_from_time()
+
+    def _update_time_label(self) -> None:
+        dur = self._anchor_duration_s()
+
+        def fmt(t: float) -> str:
+            t = max(0.0, t)
+            m = int(t // 60)
+            s = t - 60 * m
+            return f"{m:02d}:{s:06.3f}"
+
+        self._time_label.setText(
+            f"{fmt(self._playback_t_s)} / {fmt(dur)}"
+        )
+
+    def _sync_slider_from_time(self) -> None:
+        dur = self._anchor_duration_s()
+        if dur <= 0:
+            val = 0
+        else:
+            frac = max(0.0, min(1.0, self._playback_t_s / dur))
+            val = round(frac * self._scrub_slider.maximum())
+        self._scrub_slider.blockSignals(True)
+        self._scrub_slider.setValue(val)
+        self._scrub_slider.blockSignals(False)
+
+    def _t_to_distance(self, path: Path, t_s: float) -> float | None:
+        td = self._lap_t_d.get(path)
+        if td is None:
+            return None
+        ts, ds = td
+        if ts.size < 2:
+            return None
+        t_clamped = float(np.clip(t_s, ts[0], ts[-1]))
+        return float(np.interp(t_clamped, ts, ds))
+
+    def _emit_anchor_cursor(self) -> None:
+        """Drive the shared cursor signal from current ``_playback_t_s``.
+
+        Reuses the existing ``cursor_moved`` channel so the chart
+        crosshairs and the track-map dot move in lockstep — the dock
+        already handles the dot when the x-axis is in distance mode.
+        """
+        if self._anchor_path is None:
+            return
+        d = self._t_to_distance(self._anchor_path, self._playback_t_s)
+        if d is None:
+            return
+        # Make sure the dot is visible: distance-mode is required by
+        # ``_on_cursor_moved``. Switch the global axis kind on first
+        # play; restore on stop.
+        if self._axis_kind != "distance":
+            self._signals.x_axis_changed.emit("distance")
+        self._signals.cursor_moved.emit(d)
+
+    def _update_ghost_dots(self) -> None:
+        """Place a ghost dot on each non-anchor selected lap.
+
+        Each lap is sampled at the *same* elapsed playback time on its
+        own ``(time_ms, current_lap_dist_m)`` mapping, so the dots
+        race along the geometry just like a MoTeC overlay replay.
+        """
+        order = getattr(self, "_selection_order", [])
+        if not order or self._anchor_path is None:
+            for p, item in list(self._ghost_dots.items()):
+                self._plot.removeItem(item)
+                self._ghost_dots.pop(p, None)
+            return
+
+        for idx, path in enumerate(order):
+            if path == self._anchor_path:
+                continue
+            tmap = self._maps.get(path)
+            d = self._t_to_distance(path, self._playback_t_s)
+            if tmap is None or d is None or tmap.distance_m.size < 2:
+                ghost = self._ghost_dots.pop(path, None)
+                if ghost is not None:
+                    self._plot.removeItem(ghost)
+                continue
+            d_arr = tmap.distance_m
+            d = float(np.clip(d, d_arr[0], d_arr[-1]))
+            i = int(np.searchsorted(d_arr, d))
+            if i >= d_arr.size:
+                i = d_arr.size - 1
+            if i > 0 and (d - d_arr[i - 1]) < (d_arr[i] - d):
+                i -= 1
+            xm = float(tmap.x_m[i])
+            ym = float(tmap.y_m[i])
+            ghost = self._ghost_dots.get(path)
+            if ghost is None:
+                color = trace_color(idx)
+                ghost = pg.ScatterPlotItem(
+                    size=9,
+                    pen=pg.mkPen(color, width=1.0),
+                    brush=pg.mkBrush(color),
+                )
+                ghost.setZValue(19)  # just below the anchor cursor
+                self._plot.addItem(ghost, ignoreBounds=True)
+                self._ghost_dots[path] = ghost
+            ghost.setData([xm], [ym])
+            ghost.show()
+
+        # Drop ghosts for laps no longer selected.
+        keep = set(order)
+        for p, item in list(self._ghost_dots.items()):
+            if p not in keep or p == self._anchor_path:
+                self._plot.removeItem(item)
+                self._ghost_dots.pop(p, None)
+
+    def _hide_ghost_dots(self) -> None:
+        for p, item in list(self._ghost_dots.items()):
+            self._plot.removeItem(item)
+            self._ghost_dots.pop(p, None)
+
+    def _start_playback(self) -> None:
+        if self._anchor_duration_s() <= 0:
+            return
+        if self._playback_axis_kind_before is None:
+            self._playback_axis_kind_before = self._axis_kind
+        self._playback_timer.start()
+        self._btn_play.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause),
+        )
+        self._btn_play.setToolTip("Pause animation")
+        # Push the cursor immediately so the user sees feedback even
+        # before the first timer tick fires.
+        self._emit_anchor_cursor()
+        self._update_ghost_dots()
+
+    def _pause_playback(self) -> None:
+        self._playback_timer.stop()
+        self._btn_play.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay),
+        )
+        self._btn_play.setToolTip("Play animation along the lap")
+
+    def _stop_playback(self, *, restore_axis: bool = True) -> None:
+        self._playback_timer.stop()
+        self._btn_play.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay),
+        )
+        self._btn_play.setToolTip("Play animation along the lap")
+        self._playback_t_s = 0.0
+        self._update_time_label()
+        self._sync_slider_from_time()
+        self._hide_ghost_dots()
+        self._signals.cursor_left.emit()
+        if (
+            restore_axis
+            and self._playback_axis_kind_before is not None
+            and self._playback_axis_kind_before != self._axis_kind
+        ):
+            self._signals.x_axis_changed.emit(
+                self._playback_axis_kind_before,
+            )
+        self._playback_axis_kind_before = None
+
+    def _is_playing(self) -> bool:
+        return self._playback_timer.isActive()
+
+    def _on_play_pause(self) -> None:
+        if self._is_playing():
+            self._pause_playback()
+        else:
+            # If we're at (or beyond) the end, rewind so Play does the
+            # natural thing instead of refusing to start.
+            if self._playback_t_s >= self._anchor_duration_s() - 1e-3:
+                self._playback_t_s = 0.0
+                self._update_time_label()
+                self._sync_slider_from_time()
+            self._start_playback()
+
+    def _on_stop(self) -> None:
+        self._stop_playback(restore_axis=True)
+
+    def _on_skip_back(self) -> None:
+        was_playing = self._is_playing()
+        self._pause_playback()
+        self._playback_t_s = 0.0
+        self._update_time_label()
+        self._sync_slider_from_time()
+        self._emit_anchor_cursor()
+        self._update_ghost_dots()
+        # Skip-back parks at t=0 paused, like a video player rewind.
+        # Honour user expectation: don't auto-resume.
+        del was_playing
+
+    def _on_skip_forward(self) -> None:
+        dur = self._anchor_duration_s()
+        if dur <= 0:
+            return
+        self._pause_playback()
+        self._playback_t_s = dur
+        self._update_time_label()
+        self._sync_slider_from_time()
+        self._emit_anchor_cursor()
+        self._update_ghost_dots()
+
+    def _set_speed_index(self, idx: int) -> None:
+        idx = max(0, min(len(self._playback_speeds) - 1, idx))
+        self._playback_speed_idx = idx
+        self._speed_label.setText(
+            f"{self._playback_speeds[idx]:g}×"
+        )
+
+    def _on_slower(self) -> None:
+        self._set_speed_index(self._playback_speed_idx - 1)
+
+    def _on_faster(self) -> None:
+        self._set_speed_index(self._playback_speed_idx + 1)
+
+    def _on_loop_toggled(self, checked: bool) -> None:
+        self._playback_loop = bool(checked)
+
+    def _on_scrub_pressed(self) -> None:
+        self._scrub_was_playing = self._is_playing()
+        if self._scrub_was_playing:
+            self._pause_playback()
+
+    def _on_scrub_released(self) -> None:
+        if self._scrub_was_playing:
+            self._start_playback()
+        self._scrub_was_playing = False
+
+    def _on_scrub_changed(self, value: int) -> None:
+        dur = self._anchor_duration_s()
+        if dur <= 0:
+            return
+        frac = float(value) / float(self._scrub_slider.maximum() or 1)
+        self._playback_t_s = max(0.0, min(dur, frac * dur))
+        self._update_time_label()
+        self._emit_anchor_cursor()
+        self._update_ghost_dots()
+
+    def _on_playback_tick(self) -> None:
+        dur = self._anchor_duration_s()
+        if dur <= 0:
+            self._stop_playback(restore_axis=True)
+            return
+        dt = self._playback_timer.interval() / 1000.0
+        speed = self._playback_speeds[self._playback_speed_idx]
+        self._playback_t_s += dt * speed
+        if self._playback_t_s >= dur:
+            if self._playback_loop:
+                # Wrap modulo lap duration so high speeds don't skip a
+                # whole lap when the overshoot exceeds dt × 1.
+                self._playback_t_s = self._playback_t_s % dur
+            else:
+                self._playback_t_s = dur
+                self._emit_anchor_cursor()
+                self._update_ghost_dots()
+                self._update_time_label()
+                self._sync_slider_from_time()
+                self._pause_playback()
+                return
+        self._emit_anchor_cursor()
+        self._update_ghost_dots()
+        self._update_time_label()
+        self._sync_slider_from_time()
+
+    # ------------------------------------------------------------------
     # Racing line overlay
     # ------------------------------------------------------------------
 
     @staticmethod
     def _racing_line_dirs() -> list[Path]:
         """Search dirs for ``racing_lines/<TRACK>_racing.csv``."""
-        out: list[Path] = [Path.cwd() / "racing_lines"]
-        meipass = getattr(sys, "_MEIPASS", None)
-        if meipass:
-            out.append(Path(meipass) / "racing_lines")
-        out.append(Path(sys.argv[0]).resolve().parent / "racing_lines")
-        return out
+        from ...app_paths import candidate_racing_lines_dirs
+        return candidate_racing_lines_dirs()
 
     def _load_racing_line(
         self, track: str,
@@ -459,7 +912,8 @@ class TrackMapDock(QWidget):
             knw = parse_knw(knw_path)
             line = compute_knw_line(profile, knw)
             xy = np.asarray(line.line_xy, dtype=float)
-        except Exception:  # noqa: BLE001
+        except (OSError, ValueError, KeyError, AttributeError):
+            # File-not-found, malformed KNW/PTH binary, or geometry mismatch.
             self._knw_cache[key] = None
             return None
         if xy.ndim != 2 or xy.shape[0] < 2:
@@ -572,10 +1026,7 @@ class TrackMapDock(QWidget):
         extent = self._overlay_extent_for(env, image=img)
         if extent is None:
             return
-        if extent.flip_y:
-            img_to_show = np.ascontiguousarray(img[::-1, :, :])
-        else:
-            img_to_show = img
+        img_to_show = np.ascontiguousarray(img[::-1, :, :]) if extent.flip_y else img
         # ``autoDownsample=True`` is required for the 2560×2560 LFS
         # track images: without it pyqtgraph keeps a full-resolution
         # QPixmap cache that silently drops at large zoom factors,

@@ -34,9 +34,9 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lfs_telemetry.telemetry.observables import CarSpec, car_spec_for  # noqa: E402
-from lfs_telemetry.telemetry.lap import LapTelemetry  # noqa: E402
 from lfs_telemetry.telemetry.constants import GRAVITY  # noqa: E402
+from lfs_telemetry.telemetry.lap import LapTelemetry  # noqa: E402
+from lfs_telemetry.telemetry.observables import CarSpec, car_spec_for  # noqa: E402
 
 WHEEL_ORDER = ("RL", "RR", "FL", "FR")
 DT = 0.01  # 100 Hz fixed-step
@@ -203,7 +203,7 @@ def wheel_forces(
             f_lat["FL"] *= (1.0 - loss * 0.5)  # FWD: milder, plus understeer signature
             f_lat["FR"] *= (1.0 - loss * 0.5)
     # Longitudinal: RWD → rear only on accel, brake-bias on braking.
-    f_long = {c: 0.0 for c in WHEEL_ORDER}
+    f_long = dict.fromkeys(WHEEL_ORDER, 0.0)
     if total_long >= 0:
         # Acceleration on driven axle (rear for FBM)
         if spec.driven == "RWD":
@@ -307,8 +307,7 @@ def generate_lap(
     T_core = {c: T_carcass[c] for c in WHEEL_ORDER}
 
     # Previous values for derivatives.
-    v_prev = v
-    heading_prev = float(track.heading[0])
+    float(track.heading[0])
     kappa_prev = float(track.curvature[0]) * -1.0
 
     step = 0
@@ -518,10 +517,8 @@ def generate_lap(
         # Advance.
         v = v_new
         s = s_new
-        v_prev = v
-        heading_prev = heading
         kappa_prev = kappa
-        t_ms += int(round(DT * 1000))
+        t_ms += round(DT * 1000)
         step += 1
 
     df = pd.DataFrame(rows)

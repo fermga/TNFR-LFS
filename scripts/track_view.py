@@ -24,12 +24,11 @@ import pandas as pd
 # allow running from repo root without install
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lfs_telemetry.telemetry.track.pth import (  # noqa: E402
+from lfs_telemetry.telemetry.track.pth import (
     DEFAULT_SMX_DIR,
     compute_profile,
     list_path_files,
     parse_pth,
-    summary_table,
 )
 
 
@@ -181,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
         for f in files:
             try:
                 rows.append(process_one(str(f), out_dir, smx_dir))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 print(f"  {f.stem}: ERROR {exc}")
         if rows:
             pd.DataFrame(rows).to_csv(out_dir / "_summary.csv", index=False)

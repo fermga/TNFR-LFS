@@ -19,7 +19,7 @@ def _make_outsim(time_ms: int = 1234) -> bytes:
         0.1, 0.02, -0.03,             # heading, pitch, roll
         2.0, 1.5, 9.81,               # accel (long, lat, vert)
         25.0, 0.0, 0.0,               # vel
-        int(100 * 65536), int(50 * 65536), 0,  # pos
+        (100 * 65536), (50 * 65536), 0,  # pos
     )
 
 
@@ -105,7 +105,7 @@ def _build_outsimpack2_all() -> bytes:
         0.1, 0.02, -0.03,
         2.0, 1.5, 9.81,
         25.0, 0.0, 0.0,
-        int(100 * 65536), int(50 * 65536), 0,
+        (100 * 65536), (50 * 65536), 0,
     ))
     # INPUTS (20): 5 floats
     parts.append(struct.pack("<5f", 0.8, 0.1, 0.05, 0.0, 0.0))

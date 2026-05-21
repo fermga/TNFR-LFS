@@ -42,6 +42,7 @@ from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
 from ..theme import (
+    COMPARE_OUTLINE_COLOR,
     MUTED_COLOR,
     PANEL_COLOR,
     TEXT_COLOR,
@@ -157,7 +158,7 @@ class _WheelHistogramPlot(QWidget):
 
         # Compare lap overlay as a thin stepped outline.
         if compare is not None and compare.bins.size:
-            cpen = pg.mkPen("#ffffff", width=1.5,
+            cpen = pg.mkPen(COMPARE_OUTLINE_COLOR, width=1.5,
                             style=Qt.PenStyle.DashLine)
             # Build a stepped curve aligned with bin centres.
             x_edges = np.concatenate([

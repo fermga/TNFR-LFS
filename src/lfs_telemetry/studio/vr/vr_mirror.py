@@ -20,7 +20,8 @@ when VR is disabled or unavailable.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, QTimer
 
@@ -100,7 +101,7 @@ class VrMirror(QObject):
         super().__init__(parent)
         self._provider = provider
         self._sink: OpenVROverlaySink | None = sink
-        self._tick_ms = max(10, int(round(1000 / max(1, tick_hz))))
+        self._tick_ms = max(10, round(1000 / max(1, tick_hz)))
         self._timer = QTimer(self)
         self._timer.setInterval(self._tick_ms)
         self._timer.timeout.connect(self._tick)
@@ -204,4 +205,4 @@ class VrMirror(QObject):
                 sink.set_visible(mid, False)
 
 
-__all__ = ["VrMirror", "DEFAULT_TICK_HZ"]
+__all__ = ["DEFAULT_TICK_HZ", "VrMirror"]

@@ -25,6 +25,7 @@ from ...lfs_paths import QSETTINGS_ORG as ORG
 from ..i18n import tr
 from ..models import ChannelTreeModel
 from ..signals import SignalBus
+from ..theme import STATUS_ERROR_COLOR
 
 # Hard cap on simultaneously plotted channels: above this the chart
 # stack and the track-map overlay degrade. Enforced at tick time.
@@ -226,7 +227,7 @@ class ChannelsDock(QWidget):
                 ).format(n=MAX_SELECTED_CHANNELS),
             )
             self._status.setStyleSheet(
-                "color: #c0392b; padding: 2px; font-weight: bold;"
+                f"color: {STATUS_ERROR_COLOR}; padding: 2px; font-weight: bold;"
             )
             return
         self._update_status()
@@ -344,9 +345,9 @@ class ChannelsDock(QWidget):
 
 
 __all__ = [
-    "ChannelsDock",
     "DEFAULT_CHANNELS",
     "FRICTION_CIRCLE_CHANNELS",
     "LOAD_TRANSFER_CHANNELS",
     "MAX_SELECTED_CHANNELS",
+    "ChannelsDock",
 ]

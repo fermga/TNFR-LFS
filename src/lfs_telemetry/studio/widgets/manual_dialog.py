@@ -16,7 +16,6 @@ one, then to a short inline message so the action never fails.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -29,51 +28,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...app_paths import manual_doc_path
 from ..i18n import LANG_SPANISH, current_language, tr
-
-
-def _candidate_doc_roots() -> list[Path]:
-    """Return the directories where ``docs/MANUAL.*.md`` may live."""
-    roots: list[Path] = []
-    # 1. Working directory (the PyInstaller runtime hook chdirs to the
-    #    .exe folder; in dev runs from repo root this also matches).
-    roots.append(Path.cwd())
-    # 2. Directory of the .exe / python launcher.
-    exe = Path(getattr(sys, "argv", [""])[0] or "").resolve().parent
-    if exe.exists():
-        roots.append(exe)
-    # 3. PyInstaller-extracted bundle (sys._MEIPASS).
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        roots.append(Path(meipass))
-    # 4. Dev fallback: climb from this file to the repo root that
-    #    contains a ``docs`` sibling of ``src``.
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        if (parent / "docs").is_dir():
-            roots.append(parent)
-            break
-    # Deduplicate while keeping order.
-    seen: set[Path] = set()
-    out: list[Path] = []
-    for r in roots:
-        if r in seen:
-            continue
-        seen.add(r)
-        out.append(r)
-    return out
 
 
 def _resolve_manual_path(lang: str) -> Path | None:
     """Find the manual file for ``lang`` (with English fallback)."""
-    primary = "MANUAL.es.md" if lang == LANG_SPANISH else "MANUAL.en.md"
-    fallback = "MANUAL.en.md"
-    for root in _candidate_doc_roots():
-        for fname in (primary, fallback):
-            candidate = root / "docs" / fname
-            if candidate.is_file():
-                return candidate
-    return None
+    return manual_doc_path(lang, spanish_code=LANG_SPANISH)
 
 
 class ManualDialog(QDialog):

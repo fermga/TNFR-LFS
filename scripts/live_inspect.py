@@ -26,7 +26,7 @@ def fmt_wheels(pkt2) -> str:
     if pkt2 is None or pkt2.wheels is None:
         return "  (no extended OutSim — wheels unavailable)"
     # Remap to FL/FR/RL/RR for display.
-    by_lfs = dict(zip(WHEEL_ORDER, pkt2.wheels))
+    by_lfs = dict(zip(WHEEL_ORDER, pkt2.wheels, strict=False))
     lines = ["  wheel        load_N   slipR  slipA(deg)  airT  touch  susp(mm)"]
     for c in ("FL", "FR", "RL", "RR"):
         w = by_lfs[c]
@@ -79,11 +79,10 @@ async def run(host: str | None) -> int:
                       f"hdg={math.degrees(os_p.heading):+6.1f}deg")
                 print(f"POS  : x={os_p.pos[0]:+8.2f}  y={os_p.pos[1]:+8.2f}  "
                       f"z={os_p.pos[2]:+7.2f} m")
-            if p2 is not None:
-                if p2.current_lap_dist_m is not None:
-                    print(f"DIST : lap={p2.current_lap_dist_m:8.1f} m   "
-                          f"steerTorque={p2.steer_torque_nm or 0:+6.2f} Nm   "
-                          f"engRPM={(p2.engine_ang_vel_rads or 0) * 60 / (2 * math.pi):6.0f}")
+            if p2 is not None and p2.current_lap_dist_m is not None:
+                print(f"DIST : lap={p2.current_lap_dist_m:8.1f} m   "
+                      f"steerTorque={p2.steer_torque_nm or 0:+6.2f} Nm   "
+                      f"engRPM={(p2.engine_ang_vel_rads or 0) * 60 / (2 * math.pi):6.0f}")
             print("\nWHEELS (remapped FL/FR/RL/RR):")
             print(fmt_wheels(p2))
             if ctx is not None:

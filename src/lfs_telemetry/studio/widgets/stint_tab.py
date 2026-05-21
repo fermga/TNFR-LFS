@@ -232,7 +232,7 @@ class StintTab(QWidget):
             stint = StintTelemetry.from_laps(ordered)
             df = stint.per_lap
             trends = stint.trends
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._summary.setText(
                 tr("Stint build failed: {error}").format(error=exc),
             )
@@ -251,7 +251,7 @@ class StintTab(QWidget):
             line1.append(f"mean {_fmt_time(trends['lap_time_mean_s'])}")
         try:
             tb = stint.theoretical_best_lap()
-        except Exception:  # noqa: BLE001
+        except Exception:
             tb = {}
         if tb and np.isfinite(tb.get("theoretical_best_s", float("nan"))):
             line1.append(

@@ -20,6 +20,7 @@ official LFS lap time stays attached to each canonical slice.
 """
 from __future__ import annotations
 
+import itertools
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -138,7 +139,7 @@ def slice_into_laps(
                     lap_ms=lap_ms,
                 )
             )
-    for n, (a, b) in enumerate(zip(crossings, crossings[1:], strict=False), start=1):
+    for n, (a, b) in enumerate(itertools.pairwise(crossings), start=1):
         slice_samples = list(samples[a:b])
         if not slice_samples:
             continue
@@ -247,7 +248,7 @@ def reslice_csv(
 __all__ = [
     "LapSlice",
     "find_line_crossings",
+    "reslice_csv",
     "slice_into_laps",
     "write_per_lap_files",
-    "reslice_csv",
 ]

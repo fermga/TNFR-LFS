@@ -212,7 +212,7 @@ def test_traffic_gap_arclength_falls_back_to_euclidean_on_lap_wrap():
     # Sanity check must return the euclidean value instead.
     from lfs_telemetry.telemetry.traffic import _gap_on_track_m
     track_length = 3000.0
-    node_to_s = [float(i) for i in range(0, int(track_length))]
+    node_to_s = [float(i) for i in range(int(track_length))]
     view = _cc(plid=1, pos=0, x=0.0, y=0.0, speed=50.0)
     view.node = 5  # s=5.0
     other = _cc(plid=2, pos=0, x=5.0, y=0.0, speed=50.0)

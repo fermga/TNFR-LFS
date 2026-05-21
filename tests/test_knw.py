@@ -148,7 +148,7 @@ def test_install_full_inventory_parses():
     for p in files:
         try:
             parse_knw(p)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             failures.append((p, str(exc)))
     assert not failures, f"{len(failures)} files failed: {failures[:3]}"
 

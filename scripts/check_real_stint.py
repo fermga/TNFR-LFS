@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from lfs_telemetry.telemetry import LapTelemetry, StintTelemetry, TrackMap
@@ -37,7 +36,7 @@ def main() -> None:
     for i, lap in enumerate(laps, start=1):
         s = lap.summary
         d_raw = pd.to_numeric(lap.raw["current_lap_dist_m"], errors="coerce").to_numpy()
-        idx, d_unw, t_unw = _unwrapped_lap_arrays(lap)
+        _idx, d_unw, _t_unw = _unwrapped_lap_arrays(lap)
         post_line = d_unw[d_unw >= 0]
         coverage_pct = (post_line.max() / track_length_m * 100.0) if post_line.size else 0.0
         print(f"  lap {i}:  duration={s.get('lap_time_s'):.3f}s  "
@@ -66,7 +65,7 @@ def main() -> None:
     print(f"  bounds: x=[{b.x_min:.1f},{b.x_max:.1f}] y=[{b.y_min:.1f},{b.y_max:.1f}]\n")
 
     print("=== F. Verdict ===")
-    short = sum(1 for lap in laps
+    sum(1 for lap in laps
                 if pd.to_numeric(lap.raw["current_lap_dist_m"],
                                  errors="coerce").max() < 0.95 * track_length_m)
     if all(pd.to_numeric(lap.raw["current_lap_dist_m"],

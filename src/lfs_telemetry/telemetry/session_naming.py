@@ -52,7 +52,7 @@ def timestamp_tag(now: datetime | None = None) -> str:
     return (now or datetime.now()).strftime("%Y%m%d-%H%M%S")
 
 
-def session_tag(samples: "list[TelemetrySample]",
+def session_tag(samples: list[TelemetrySample],
                 *, now: datetime | None = None) -> str:
     """Build ``YYYYMMDD-HHMMSS_CAR_TRACK`` from the first sample that
     carries the relevant attribute. Missing values become ``unknown``.

@@ -31,6 +31,7 @@ vendor/tnfr-engine/.git/
 # Runtime logs
 stderr.txt
 *.log
+pytest_*.txt
 
 # Build artefacts (publish via GitHub Releases instead)
 installer/Output/

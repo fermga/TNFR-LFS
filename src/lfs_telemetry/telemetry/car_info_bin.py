@@ -22,10 +22,10 @@ from pathlib import Path
 from typing import ClassVar
 
 __all__ = [
-    "CarInfoWheel",
-    "CarInfoBin",
-    "parse_car_info_bin",
     "DRIVE_NAMES",
+    "CarInfoBin",
+    "CarInfoWheel",
+    "parse_car_info_bin",
 ]
 
 DRIVE_NAMES: dict[int, str] = {
@@ -166,15 +166,15 @@ class CarInfoBin:
 
     def to_car_spec_kwargs(self) -> dict:
         """Return kwargs ready for :class:`CarSpec(**kwargs)`."""
-        return dict(
-            mass_kg=self.mass_kg,
-            wheelbase_m=self.wheelbase_m,
-            track_front_m=self.track_front_m,
-            track_rear_m=self.track_rear_m,
-            cg_height_m=self.cg_height_m,
-            weight_dist_front=self.weight_dist_front,
-            driven=self.drive if self.drive in ("RWD", "FWD", "AWD") else "RWD",
-        )
+        return {
+            "mass_kg": self.mass_kg,
+            "wheelbase_m": self.wheelbase_m,
+            "track_front_m": self.track_front_m,
+            "track_rear_m": self.track_rear_m,
+            "cg_height_m": self.cg_height_m,
+            "weight_dist_front": self.weight_dist_front,
+            "driven": self.drive if self.drive in ("RWD", "FWD", "AWD") else "RWD",
+        }
 
 
 # ---------------------------------------------------------------------------

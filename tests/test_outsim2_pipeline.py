@@ -32,7 +32,7 @@ def _build_outsim2_full(time_ms: int = 5000) -> bytes:
         0.0, 0.0, 0.0,
         2.0, 0.5, 9.81,
         25.0, 0.0, 0.0,
-        int(0 * 65536), int(0 * 65536), 0,
+        (0 * 65536), (0 * 65536), 0,
     ))
     # INPUTS: 5f
     parts.append(struct.pack("<5f", 0.7, 0.0, 0.05, 0.0, 0.0))

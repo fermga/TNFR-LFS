@@ -29,13 +29,13 @@ _LOG = logging.getLogger(__name__)
 # Defaults for unknown classes — wheelbase / track / CG cannot be observed
 # from telemetry, so we keep generic Formula values. mass + weight_dist
 # are overwritten by the rest-state measurement.
-_GENERIC_FALLBACK = dict(
-    wheelbase_m=2.55,
-    track_front_m=1.50,
-    track_rear_m=1.40,
-    cg_height_m=0.30,
-    driven="RWD",
-)
+_GENERIC_FALLBACK = {
+    "wheelbase_m": 2.55,
+    "track_front_m": 1.50,
+    "track_rear_m": 1.40,
+    "cg_height_m": 0.30,
+    "driven": "RWD",
+}
 
 # Window of samples used to detect "at rest". 1 s @ 100 Hz.
 _REST_WINDOW = 100
@@ -226,7 +226,7 @@ class CarSpecStore:
 
         from .calibrate import estimate_mu_lat, estimate_mu_lat_curve, estimate_mu_long
 
-        mu0, k_aero, n_bins = estimate_mu_lat_curve(df)
+        mu0, k_aero, _n_bins = estimate_mu_lat_curve(df)
         mu_lat = mu0 if math.isfinite(mu0) else estimate_mu_lat(df)
         mu_long = estimate_mu_long(df)
         if not (math.isfinite(mu_lat) or math.isfinite(mu_long)):
@@ -245,7 +245,7 @@ class CarSpecStore:
                                       if math.isfinite(k_aero) else 0.0)
         if math.isfinite(mu_long):
             existing.mu_long = mu_long * 0.95
-        existing.mu_sample_count = int(len(df))
+        existing.mu_sample_count = len(df)
         self.put(existing)
         return existing
 
@@ -290,7 +290,7 @@ def _measure(samples: list[TelemetrySample], car_id: str) -> CarCalibration:
 
     # Map LFS native order (RL,RR,FL,FR) into FL/FR/RL/RR.
     idx = {name: WHEEL_ORDER.index(name) for name in CORNERS}
-    totals = {c: 0.0 for c in CORNERS}
+    totals = dict.fromkeys(CORNERS, 0.0)
     n = 0
     for s in samples:
         ext = s.outsim2

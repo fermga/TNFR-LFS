@@ -6,8 +6,8 @@ Press Ctrl-C to stop. Should print packet sizes within ~1 second.
 """
 from __future__ import annotations
 
-import socket
 import select
+import socket
 import sys
 import time
 
@@ -35,7 +35,7 @@ def main() -> int:
         while True:
             ready, _, _ = select.select([sims, gauges], [], [], 0.5)
             for s in ready:
-                data, addr = s.recvfrom(4096)
+                data, _addr = s.recvfrom(4096)
                 port = s.getsockname()[1]
                 seen[port]["count"] += 1
                 seen[port]["sizes"].add(len(data))

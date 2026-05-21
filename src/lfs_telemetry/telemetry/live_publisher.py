@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .constants import SPEED_MS_TO_KMH
 from .lap_averages import compute_lap_averages
 from .protocol.insim import RaceContext
 from .protocol.packets import CompCar
@@ -162,7 +163,7 @@ def _build_standings(
             "lap": int(c.lap),
             "last_lap_ms": ctx.last_lap_ms.get(c.player_id),
             "best_lap_ms": int(best) if best is not None else None,
-            "speed_kmh": round(float(c.speed_ms) * 3.6, 1),
+            "speed_kmh": round(float(c.speed_ms) * SPEED_MS_TO_KMH, 1),
             "rank_mode": session_mode,
             "view": (
                 view_plid is not None and c.player_id == view_plid
@@ -379,7 +380,7 @@ def build_snapshot(
             if last_sample_pit_limiter is not None else None
         ),
         "speed_delta_kmh_vs_best": (
-            round(float(speed_delta_ms_vs_best) * 3.6, 2)
+            round(float(speed_delta_ms_vs_best) * SPEED_MS_TO_KMH, 2)
             if speed_delta_ms_vs_best is not None else None
         ),
         "lap_averages_ms": {"stint": None, "clean": None, "total": None},
@@ -394,7 +395,7 @@ def build_snapshot(
     }
     if last_sample_speed_ms is not None:
         snap["view_speed_ms"] = round(float(last_sample_speed_ms), 3)
-        snap["view_speed_kmh"] = round(float(last_sample_speed_ms) * 3.6, 1)
+        snap["view_speed_kmh"] = round(float(last_sample_speed_ms) * SPEED_MS_TO_KMH, 1)
     if last_sample_rpm is not None:
         snap["view_rpm"] = round(float(last_sample_rpm), 0)
     if last_sample_gear is not None:

@@ -1,3 +1,19 @@
+# Minimal PyInstaller wrapper for "LFS Race Engineer" (single-file exe).
+#
+# Use this when you just need a quick rebuild of the bundled .exe for
+# manual smoke-testing. Skips:
+#   - Pre-flight validation (Python version, venv, .spec sanity).
+#   - Output verification and bundle-size diff.
+#   - Installer generation.
+#
+# When to use this script:
+#   .\scripts\build_app_simple.ps1            # fast iteration
+#   .\scripts\build_app_simple.ps1 -Full      # also clean build/ first
+#
+# When to use the full pipeline instead: see scripts/build_app.ps1.
+# When you only need the installer from an existing build: see
+# scripts/build_installer.ps1.
+
 param([switch]$Full)
 
 $ErrorActionPreference = "Stop"

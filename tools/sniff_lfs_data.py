@@ -1,5 +1,4 @@
 """Quick header sniffer for LFS data files."""
-import sys
 from pathlib import Path
 
 paths = [

@@ -382,7 +382,7 @@ def main() -> int:
         elif f in ("borderline", "minor", "INCONSISTENT_STINT"):
             borderlines.append(k)
         print(line)
-        if "msg" in v and v["msg"]:
+        if v.get("msg"):
             print(f"               · {v['msg']}")
 
     print("\n--- DETAIL ---")

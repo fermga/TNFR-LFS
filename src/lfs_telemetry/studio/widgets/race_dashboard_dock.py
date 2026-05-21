@@ -453,7 +453,7 @@ class RaceDashboardDock(QWidget):
     # Cleanup
     # ------------------------------------------------------------------
 
-    def closeEvent(self, event) -> None:  # noqa: N802
+    def closeEvent(self, event) -> None:
         self._source.stop()
         super().closeEvent(event)
 

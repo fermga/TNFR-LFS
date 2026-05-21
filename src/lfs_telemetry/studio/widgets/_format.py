@@ -16,15 +16,15 @@ import math
 
 __all__ = [
     "EMDASH",
-    "format_finite",
-    "format_signed_finite",
-    "format_lap_time_s",
-    "format_lap_time_ms",
     "format_clock_ms",
-    "format_signed_delta_s",
-    "format_signed_delta_ms",
-    "format_gap_seconds",
+    "format_finite",
     "format_gap_meters",
+    "format_gap_seconds",
+    "format_lap_time_ms",
+    "format_lap_time_s",
+    "format_signed_delta_ms",
+    "format_signed_delta_s",
+    "format_signed_finite",
 ]
 
 

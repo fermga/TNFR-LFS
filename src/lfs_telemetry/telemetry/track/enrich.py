@@ -52,7 +52,8 @@ def _pins_for(smx_dir: _Path) -> dict[str, PinInfo]:
     if key not in _PIN_CACHE:
         try:
             _PIN_CACHE[key] = _load_pins(smx_dir)
-        except Exception:  # noqa: BLE001
+        except (OSError, ValueError):
+            # SMX dir missing or PINs malformed — cache empty result.
             _PIN_CACHE[key] = {}
     return _PIN_CACHE[key]
 
@@ -382,7 +383,8 @@ def detect_track(
                 continue
         try:
             prof = compute_profile(parse_pth(pth_file))
-        except Exception:  # noqa: BLE001 - skip broken/empty PTHs
+        except (OSError, ValueError):
+            # Skip unreadable / malformed PTH files.
             continue
         if prof.pos.shape[0] < 2:
             continue
@@ -404,7 +406,7 @@ def detect_track(
     #   - "low" otherwise.
     runner = scores[1][1] if len(scores) > 1 else best_score * 10
     ratio = runner / max(best_score, 1e-6)
-    if best_score < 2.0 or best_score < 5.0 and ratio > 3.0:
+    if best_score < 2.0 or (best_score < 5.0 and ratio > 3.0):
         confidence = "high"
     elif best_score < 25.0 and ratio > 1.5:
         confidence = "medium"

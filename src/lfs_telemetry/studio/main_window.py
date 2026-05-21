@@ -335,7 +335,7 @@ class MainWindow(QMainWindow):
         try:
             from ..telemetry.raf import raf_to_lap_csvs
             written = raf_to_lap_csvs(raf_path, out_dir=out_dir)
-        except Exception as exc:  # noqa: BLE001 — user-facing error
+        except Exception as exc:
             QMessageBox.warning(
                 self,
                 tr("Import RAF"),
