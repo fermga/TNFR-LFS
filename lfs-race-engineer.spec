@@ -109,6 +109,12 @@ datas += _bundle_dir("assets/source/mods", "*.json")
 # Studio "Import CAR_info.bin…" button writes new exports there at
 # runtime when launched from a writable working directory.
 datas += _bundle_dir("assets/source/cars", "*.bin")
+# Per-environment top-down track images (used by the Track map dock
+# overlay in the Studio "Map" panel). Without these, the "Track image"
+# checkbox renders nothing because the candidate-dir search never finds
+# ``<ENV>.tif`` in the installed bundle.
+datas += _bundle_dir("assets/tracks", "*.tif")
+datas += _bundle_dir("assets/tracks", "*.png")
 # Track overview .pngs are nice-to-have; uncomment to ship.
 # datas += _bundle_dir("tracks", "*.png")
 
