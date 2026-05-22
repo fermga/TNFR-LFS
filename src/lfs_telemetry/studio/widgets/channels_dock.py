@@ -140,6 +140,7 @@ class ChannelsDock(QWidget):
         self._suppress_signal = False
         self._defaults_applied = False
         signals.available_columns_changed.connect(self.set_available_columns)
+        signals.channels_requested.connect(self._apply_preset)
         self._reload_presets()
         self._update_status()
 

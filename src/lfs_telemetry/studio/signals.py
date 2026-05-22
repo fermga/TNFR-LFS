@@ -42,6 +42,13 @@ class SignalBus(QObject):
     channels_changed = Signal(list)
     """User toggled channel checkboxes. Argument: list[str] (column names)."""
 
+    channels_requested = Signal(list)
+    """A sibling dock requests a specific channel selection (e.g. the
+    charts dock applying a canonical overlay preset). The channels dock
+    listens and ticks the requested columns, which in turn re-emits
+    ``channels_changed`` through the normal path. Argument:
+    list[str] (column names)."""
+
     available_columns_changed = Signal(list)
     """Columns present on the currently-loaded reference lap. Argument: list[str]."""
 

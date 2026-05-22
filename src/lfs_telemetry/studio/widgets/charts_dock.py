@@ -11,30 +11,74 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter, QPixmap
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtGui import QAction, QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QMessageBox,
     QPushButton,
     QRadioButton,
     QScrollArea,
     QSizePolicy,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from ...lfs_paths import QSETTINGS_APP as APP
+from ...lfs_paths import QSETTINGS_ORG as ORG
 from ...telemetry import LapTelemetry
 from ..charts import MultiChannelChart
 from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
 from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR, trace_color
+
+
+# QSettings keys for the overlay/normalize toggles.
+_SETTINGS_OVERLAY = "chartsdock/overlay"
+_SETTINGS_NORMALIZE = "chartsdock/normalize"
+
+
+# Canonical overlay presets. Each entry: (label, channels, overlay,
+# normalize). The channels list is applied to the channels dock via the
+# ``channels_requested`` signal; missing columns are silently skipped
+# by the dock, so presets that reference advanced channels degrade
+# gracefully on stripped-down captures.
+_CANONICAL_PAIRS: tuple[tuple[str, tuple[str, ...], bool, bool], ...] = (
+    ("Throttle + Brake",
+     ("throttle", "brake"), True, False),
+    ("Throttle + Brake + Clutch",
+     ("throttle", "brake", "clutch"), True, False),
+    ("Speed + Throttle + Brake (norm.)",
+     ("speed_ms", "throttle", "brake"), True, True),
+    ("Steer + Lat. accel (norm.)",
+     ("input_steer", "accel_y"), True, True),
+    ("Slip ratio × 4 wheels",
+     ("wheel_fl_slip_ratio", "wheel_fr_slip_ratio",
+      "wheel_rl_slip_ratio", "wheel_rr_slip_ratio"), True, False),
+    ("Vert. load × 4 wheels",
+     ("wheel_fl_vertical_load_n", "wheel_fr_vertical_load_n",
+      "wheel_rl_vertical_load_n", "wheel_rr_vertical_load_n"), True, False),
+    ("Tyre temp × 4 wheels",
+     ("wheel_fl_air_temp_c", "wheel_fr_air_temp_c",
+      "wheel_rl_air_temp_c", "wheel_rr_air_temp_c"), True, False),
+    ("Susp. travel × 4 wheels",
+     ("wheel_fl_susp_deflect_m", "wheel_fr_susp_deflect_m",
+      "wheel_rl_susp_deflect_m", "wheel_rr_susp_deflect_m"), True, False),
+    ("Friction use × 4 wheels",
+     ("friction_use_fl", "friction_use_fr",
+      "friction_use_rl", "friction_use_rr"), True, False),
+    ("Brake bias + Brake pedal (norm.)",
+     ("brake_bias_front_real", "brake"), True, True),
+)
 
 
 def _color_chip(color_hex: str, size: int = 10) -> QPixmap:
@@ -125,6 +169,37 @@ class ChartsDock(QWidget):
         toolbar.addWidget(self._axis_time)
         toolbar.addSeparator()
 
+        self._chk_overlay = QCheckBox(tr("Overlay"), self)
+        self._chk_overlay.setToolTip(
+            tr("Group channels with the same units into one chart row")
+        )
+        toolbar.addWidget(self._chk_overlay)
+
+        self._chk_normalize = QCheckBox(tr("Normalize"), self)
+        self._chk_normalize.setToolTip(
+            tr("Rescale every trace to its own 0–1 range so channels "
+               "with very different magnitudes stay comparable")
+        )
+        toolbar.addWidget(self._chk_normalize)
+
+        # Canonical overlay presets (drop-down).
+        self._pairs_btn = QToolButton(self)
+        self._pairs_btn.setText(tr("Canonical pairs…"))
+        self._pairs_btn.setToolTip(
+            tr("Apply a recommended channel overlay (e.g. Throttle + "
+               "Brake, Slip ratio × 4 wheels)")
+        )
+        self._pairs_btn.setPopupMode(QToolButton.InstantPopup)
+        self._pairs_menu = QMenu(self._pairs_btn)
+        for label, channels, overlay, normalize in _CANONICAL_PAIRS:
+            action = QAction(tr(label), self._pairs_menu)
+            action.setData((tuple(channels), overlay, normalize))
+            action.triggered.connect(self._on_canonical_pair_triggered)
+            self._pairs_menu.addAction(action)
+        self._pairs_btn.setMenu(self._pairs_menu)
+        toolbar.addWidget(self._pairs_btn)
+        toolbar.addSeparator()
+
         export_png = QPushButton(tr("Export PNG…"), self)
         export_png.clicked.connect(self._export_all_png)
         toolbar.addWidget(export_png)
@@ -170,10 +245,78 @@ class ChartsDock(QWidget):
         self._chart.cursor_moved.connect(signals.cursor_moved)
         self._chart.cursor_left.connect(signals.cursor_left)
 
+        # Restore persisted overlay/normalize toggle state before wiring
+        # the signals, so the initial load doesn't write the defaults
+        # back to disk and we avoid an unnecessary rebuild.
+        s = self._settings()
+        ov = self._coerce_bool(s.value(_SETTINGS_OVERLAY, False))
+        nm = self._coerce_bool(s.value(_SETTINGS_NORMALIZE, False))
+        self._chk_overlay.setChecked(ov)
+        self._chk_normalize.setChecked(nm)
+        self._chart.set_overlay_mode(ov)
+        self._chart.set_normalize(nm)
+        # Wire overlay/normalize after restore so persistence kicks in
+        # only on subsequent user toggles.
+        self._chk_overlay.toggled.connect(self._on_overlay_toggled)
+        self._chk_normalize.toggled.connect(self._on_normalize_toggled)
+
     def _on_axis_toggled(self, *_args) -> None:
         kind = "distance" if self._axis_distance.isChecked() else "time"
         self._chart.set_axis_kind(kind)
         self._signals.x_axis_changed.emit(kind)
+
+    # ------------------------------------------------------------------
+    # Overlay / normalize / canonical pairs
+    # ------------------------------------------------------------------
+
+    def _settings(self) -> QSettings:
+        return QSettings(ORG, APP)
+
+    @staticmethod
+    def _coerce_bool(value) -> bool:
+        # QSettings returns strings on some platforms ("true"/"false").
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on")
+        try:
+            return bool(int(value))
+        except (TypeError, ValueError):
+            return bool(value)
+
+    def _on_overlay_toggled(self, checked: bool) -> None:
+        self._chart.set_overlay_mode(checked)
+        self._settings().setValue(_SETTINGS_OVERLAY, bool(checked))
+
+    def _on_normalize_toggled(self, checked: bool) -> None:
+        self._chart.set_normalize(checked)
+        self._settings().setValue(_SETTINGS_NORMALIZE, bool(checked))
+
+    def _on_canonical_pair_triggered(self) -> None:
+        action = self.sender()
+        if not isinstance(action, QAction):
+            return
+        payload = action.data()
+        if not isinstance(payload, tuple) or len(payload) != 3:
+            return
+        channels, overlay, normalize = payload
+        # Toggle overlay/normalize first so when the channels arrive the
+        # chart already lays them out grouped.
+        if bool(overlay) != self._chk_overlay.isChecked():
+            self._chk_overlay.setChecked(bool(overlay))
+        else:
+            # Same value: ensure the chart honours it (defensive).
+            self._chart.set_overlay_mode(bool(overlay))
+        if bool(normalize) != self._chk_normalize.isChecked():
+            self._chk_normalize.setChecked(bool(normalize))
+        else:
+            self._chart.set_normalize(bool(normalize))
+        # Ask the channels dock to tick the preset's channels.
+        self._signals.channels_requested.emit(list(channels))
+        self._signals.status_message.emit(
+            tr("Applied canonical pair: {name}").format(name=action.text()),
+            3500,
+        )
 
     def _on_laps_selected(self, paths: list[Path]) -> None:
         self._requested_paths = [Path(p) for p in paths]

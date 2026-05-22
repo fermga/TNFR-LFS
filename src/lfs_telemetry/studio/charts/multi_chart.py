@@ -36,19 +36,44 @@ from ..theme import CURSOR_COLOR, GRID_COLOR, MUTED_COLOR, TEXT_COLOR, trace_col
 from .lap_arrays import LapArrayCache
 
 
-class _Row(QObject):
-    """One PlotWidget + the trace items currently drawn on it."""
+# Palette used for channels overlayed in the same row (overlay mode
+# only). Distinct from `trace_color`, which encodes lap index.
+_OVERLAY_CHANNEL_PALETTE: tuple[str, ...] = (
+    "#4ea3ff", "#ff6b6b", "#ffd166", "#06d6a0",
+    "#a78bfa", "#ff9f43", "#48cae4", "#ef476f",
+)
+# Line styles used to disambiguate laps when channel colour is taken.
+_OVERLAY_LAP_STYLES: tuple = (
+    Qt.SolidLine, Qt.DashLine, Qt.DotLine, Qt.DashDotLine,
+)
 
-    def __init__(self, column: str, units: str, parent: MultiChannelChart) -> None:
+
+class _Row(QObject):
+    """One PlotWidget + the trace items currently drawn on it.
+
+    In stacked mode a row maps to a single channel. In overlay mode
+    a row hosts every channel that shares one unit; the legend lists
+    the channels and the y-axis is shared.
+    """
+
+    def __init__(
+        self,
+        group_key: str,
+        channels: list[str],
+        units: str,
+        parent: MultiChannelChart,
+    ) -> None:
         super().__init__(parent)
-        self.column = column
+        # ``column`` kept as alias for the group key so existing call
+        # sites that read it (e.g. exports) keep working.
+        self.group_key = group_key
+        self.column = group_key
+        self.channels = list(channels)
         self.units = units
         self.plot = pg.PlotWidget()
         self.plot.setMinimumHeight(110)
         self.plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.plot.showGrid(x=True, y=True, alpha=0.18)
-        self.plot.getAxis("left").setLabel(_axis_label(column, units),
-                                           color=TEXT_COLOR)
         self.plot.getAxis("bottom").setStyle(showValues=False)
         self.plot.setMouseEnabled(x=True, y=False)
         self.plot.setMenuEnabled(False)
@@ -65,14 +90,29 @@ class _Row(QObject):
         self.cursor.setZValue(10)
         self.cursor.hide()
         self.plot.addItem(self.cursor, ignoreBounds=True)
-        # column → PlotDataItem; one item per (lap, channel) but we
-        # store them in MultiChannelChart, not per row.
-        self.items: dict[int, pg.PlotDataItem] = {}
+        # (lap_idx, column) → PlotDataItem. In stacked mode the column
+        # is always the row's single channel.
+        self.items: dict[tuple[int, str], pg.PlotDataItem] = {}
         # InSim split markers (one InfiniteLine per split). Cleared and
         # rebuilt whenever the lap set or x-axis kind changes.
         self.sector_lines: list[pg.InfiniteLine] = []
         # Optional theoretical-best overlay (delta row only).
         self.theo_best_item: pg.PlotDataItem | None = None
+        # Lazily created when this row hosts >1 channel.
+        self.legend: pg.LegendItem | None = None
+
+    def ensure_legend(self) -> None:
+        if self.legend is None:
+            self.legend = self.plot.addLegend(
+                offset=(8, 4), labelTextColor=TEXT_COLOR,
+            )
+
+    def clear_legend(self) -> None:
+        if self.legend is not None:
+            try:
+                self.legend.clear()
+            except Exception:
+                pass
 
 
 class MultiChannelChart(QWidget):
@@ -96,6 +136,11 @@ class MultiChannelChart(QWidget):
         self._laps: list[LapTelemetry] = []
         self._channels: list[str] = []
         self._axis_kind: str = "distance"
+        # Overlay mode: group channels with the same units into a single
+        # row. Normalize: rescale each trace to its own 0–1 range so
+        # channels with very different magnitudes stay comparable.
+        self._overlay: bool = False
+        self._normalize: bool = False
         self._rows: dict[str, _Row] = {}
         self._row_order: list[str] = []
         # Optional delta-vs-reference row, shown above the channels
@@ -155,6 +200,37 @@ class MultiChannelChart(QWidget):
         self._sync_rows()
         self._rebuild_traces()
 
+    def set_overlay_mode(self, enabled: bool) -> None:
+        """Toggle overlay-by-units mode.
+
+        When enabled, channels with the same physical unit are drawn
+        on the same row; lap index is encoded by line style instead of
+        colour so the channel palette stays readable.
+        """
+        enabled = bool(enabled)
+        if enabled == self._overlay:
+            return
+        self._overlay = enabled
+        self._sync_rows()
+        self._rebuild_traces()
+
+    def set_normalize(self, enabled: bool) -> None:
+        """Toggle per-trace 0–1 normalisation.
+
+        Useful when overlaying channels with incompatible scales
+        (e.g. throttle % vs vertical load N).
+        """
+        enabled = bool(enabled)
+        if enabled == self._normalize:
+            return
+        self._normalize = enabled
+        for row in self._rows.values():
+            row.plot.getAxis("left").setLabel(
+                self._row_axis_label(row.channels, row.units),
+                color=TEXT_COLOR,
+            )
+        self._rebuild_traces()
+
     def set_cursor_x(self, x: float, source: MultiChannelChart | None = None) -> None:
         """Set the crosshair on every row to ``x``. Re-entrancy safe."""
         if source is self:
@@ -173,58 +249,121 @@ class MultiChannelChart(QWidget):
             self._delta_row.cursor.hide()
 
     def exportable_rows(self) -> list[tuple[str, QWidget]]:
-        """Return visible telemetry rows as ``(channel, widget)``.
+        """Return visible telemetry rows as ``(name, widget)``.
 
         Used by the charts dock to export each generated graph as PNG.
+        In overlay mode the name joins all channels in the group.
         """
         out: list[tuple[str, QWidget]] = []
-        for col in self._row_order:
-            row = self._rows.get(col)
+        for key in self._row_order:
+            row = self._rows.get(key)
             if row is None:
                 continue
-            out.append((col, row.plot))
+            name = (
+                row.channels[0] if len(row.channels) == 1
+                else "+".join(row.channels)
+            )
+            out.append((name, row.plot))
         return out
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
+    def _compute_groups(self) -> list[tuple[str, list[str], str]]:
+        """Return ``[(group_key, channels, units), ...]`` in display order.
+
+        Stacked mode: one group per channel. Overlay mode: channels with
+        the same units share a group, ordered by first-occurrence.
+        """
+        if not self._overlay:
+            out: list[tuple[str, list[str], str]] = []
+            for col in self._channels:
+                info = channel_info(col)
+                out.append((col, [col], info.units))
+            return out
+        order: list[str] = []
+        by_unit: dict[str, list[str]] = {}
+        for col in self._channels:
+            units = channel_info(col).units or ""
+            if units not in by_unit:
+                order.append(units)
+                by_unit[units] = []
+            by_unit[units].append(col)
+        return [
+            (f"__group__{u or 'nounit'}", by_unit[u], u)
+            for u in order
+        ]
+
+    def _row_axis_label(self, channels: list[str], units: str) -> str:
+        if self._normalize:
+            tail = f" [{units}]" if units else ""
+            return f"normalized 0–1{tail}"
+        if len(channels) == 1:
+            return _axis_label(channels[0], units)
+        return f"[{units}]" if units else "(mixed)"
+
+    @staticmethod
+    def _normalize_array(y: np.ndarray) -> np.ndarray:
+        y = np.asarray(y, dtype=float)
+        finite = y[np.isfinite(y)] if y.size else y
+        if finite.size == 0:
+            return y
+        lo = float(finite.min())
+        hi = float(finite.max())
+        if hi - lo < 1e-12:
+            return np.zeros_like(y)
+        return (y - lo) / (hi - lo)
+
     def _sync_rows(self) -> None:
-        """Add/remove plot rows so they match ``self._channels``."""
-        wanted = list(self._channels)
+        """Add/remove plot rows so they match the channel groups."""
+        groups = self._compute_groups()
+        wanted_keys = [g[0] for g in groups]
         # Remove rows no longer needed.
-        for col in list(self._rows):
-            if col not in wanted:
-                row = self._rows.pop(col)
+        for key in list(self._rows):
+            if key not in wanted_keys:
+                row = self._rows.pop(key)
                 row.plot.setParent(None)
                 row.plot.deleteLater()
-        # Add new rows in the requested order.
         existing_widgets = {
             self._splitter.widget(i): i for i in range(self._splitter.count())
         }
-        for position, col in enumerate(wanted):
-            if col in self._rows:
-                # Reorder if needed.
-                row = self._rows[col]
-                cur_index = existing_widgets.get(row.plot)
+        for position, (key, channels, units) in enumerate(groups):
+            existing = self._rows.get(key)
+            if existing is not None and (
+                existing.channels != channels or existing.units != units
+            ):
+                # Group composition changed (e.g. another channel of
+                # the same unit was added): rebuild the row in place.
+                existing.plot.setParent(None)
+                existing.plot.deleteLater()
+                self._rows.pop(key)
+                existing = None
+            if existing is not None:
+                cur_index = existing_widgets.get(existing.plot)
                 if cur_index is not None and cur_index != position:
-                    self._splitter.insertWidget(position, row.plot)
+                    self._splitter.insertWidget(position, existing.plot)
                 continue
-            info = channel_info(col)
-            row = _Row(col, info.units, self)
+            row = _Row(key, channels, units, self)
             row.plot.setToolTip(
-                info.tooltip_html(
+                channel_info(channels[0]).tooltip_html(
                     translate=tr,
                     language=current_language(),
                 )
             )
-            self._rows[col] = row
+            row.plot.getAxis("left").setLabel(
+                self._row_axis_label(channels, units),
+                color=TEXT_COLOR,
+            )
+            if len(channels) > 1:
+                row.ensure_legend()
+            self._rows[key] = row
             self._splitter.insertWidget(position, row.plot)
             self._wire_cursor(row)
-        self._row_order = list(wanted)
+        self._row_order = wanted_keys
         # Bottom row gets x tick labels; everyone else hides them.
-        for i, col in enumerate(self._row_order):
-            row = self._rows[col]
+        for i, key in enumerate(self._row_order):
+            row = self._rows[key]
             is_bottom = i == len(self._row_order) - 1
             row.plot.getAxis("bottom").setStyle(showValues=is_bottom)
             row.plot.getAxis("bottom").setLabel(
@@ -241,7 +380,7 @@ class MultiChannelChart(QWidget):
         """
         want = len(self._laps) >= 2 and self._axis_kind == "distance"
         if want and self._delta_row is None:
-            row = _Row("__delta__", "s", self)
+            row = _Row("__delta__", ["__delta__"], "s", self)
             row.plot.getAxis("left").setLabel("Δt vs ref [s]",
                                               color=TEXT_COLOR)
             self._delta_row = row
@@ -301,7 +440,7 @@ class MultiChannelChart(QWidget):
                 name=f"delta_lap{lap_idx}",
             )
             row.plot.addItem(item)
-            row.items[lap_idx] = item
+            row.items[(lap_idx, "__delta__")] = item
         # Zero baseline for reference.
         zero = pg.InfiniteLine(
             angle=0, pos=0.0, movable=False,
@@ -443,43 +582,66 @@ class MultiChannelChart(QWidget):
             for item in list(row.items.values()):
                 row.plot.removeItem(item)
             row.items.clear()
+            row.clear_legend()
         self._rebuild_delta_traces()
         if not self._laps or not self._channels:
             return
         kind = self._axis_kind
-        for lap_idx, lap in enumerate(self._laps):
-            color = trace_color(lap_idx)
-            pen = QPen(pg.mkColor(color))
-            pen.setWidthF(1.0)
-            pen.setCosmetic(True)
-            try:
-                x = self._cache.x(lap, kind)
-            except Exception:
+        n_laps = len(self._laps)
+        for key in self._row_order:
+            row = self._rows.get(key)
+            if row is None:
                 continue
-            if x.size == 0:
-                continue
-            for col in self._channels:
-                row = self._rows.get(col)
-                if row is None:
-                    continue
-                try:
-                    xs, ys = self._cache.xy_decimated(lap, col, kind)
-                except KeyError:
-                    continue  # column missing on this lap
-                item = pg.PlotDataItem(
-                    xs, ys, pen=pen, antialias=True,
-                    autoDownsample=False, clipToView=False,
-                    skipFiniteCheck=True,
-                    name=f"lap{lap_idx}:{col}",
-                )
-                row.plot.addItem(item)
-                row.items[lap_idx] = item
+            channels = row.channels
+            single = len(channels) == 1
+            for ch_idx, col in enumerate(channels):
+                for lap_idx, lap in enumerate(self._laps):
+                    try:
+                        xs, ys = self._cache.xy_decimated(lap, col, kind)
+                    except KeyError:
+                        continue  # column missing on this lap
+                    if xs.size == 0:
+                        continue
+                    if self._normalize:
+                        ys = self._normalize_array(ys)
+                    if single:
+                        color = trace_color(lap_idx)
+                        style = Qt.SolidLine
+                    else:
+                        color = _OVERLAY_CHANNEL_PALETTE[
+                            ch_idx % len(_OVERLAY_CHANNEL_PALETTE)
+                        ]
+                        style = _OVERLAY_LAP_STYLES[
+                            lap_idx % len(_OVERLAY_LAP_STYLES)
+                        ]
+                    pen = QPen(pg.mkColor(color))
+                    pen.setWidthF(1.0)
+                    pen.setStyle(style)
+                    pen.setCosmetic(True)
+                    if single:
+                        name = col
+                    elif n_laps > 1:
+                        name = f"L{lap_idx + 1} · {col}"
+                    else:
+                        name = col
+                    item = pg.PlotDataItem(
+                        xs, ys, pen=pen, antialias=True,
+                        autoDownsample=False, clipToView=False,
+                        skipFiniteCheck=True,
+                        name=name,
+                    )
+                    row.plot.addItem(item)
+                    row.items[(lap_idx, col)] = item
         # After the data is in, autoscale both axes; X is propagated
         # through the link to the sibling rows.
         for row in self._rows.values():
             vb = row.plot.getViewBox()
-            vb.enableAutoRange(axis=vb.XYAxes, enable=True)
-            vb.autoRange()
+            if self._normalize:
+                vb.enableAutoRange(axis=vb.XAxis, enable=True)
+                vb.setYRange(-0.02, 1.02, padding=0)
+            else:
+                vb.enableAutoRange(axis=vb.XYAxes, enable=True)
+                vb.autoRange()
         self._sync_sector_markers()
         self._link_timer.start()
 
