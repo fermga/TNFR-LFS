@@ -55,11 +55,35 @@ hiddenimports += [
 ]
 
 # pyqtgraph occasionally needs runtime templates that hooks miss.
-hiddenimports += collect_submodules("pyqtgraph")
+# Skip the optional ``pyqtgraph.opengl`` (PyOpenGL backend) and
+# ``pyqtgraph.jupyter`` (jupyter_rfb widget) subtrees: neither
+# dependency is installed and we use only the 2D PySide6 backend.
+hiddenimports += collect_submodules(
+    "pyqtgraph",
+    filter=lambda name: not name.startswith(
+        ("pyqtgraph.opengl", "pyqtgraph.jupyter")
+    ),
+)
 
 # scipy lazy submodules (signal.windows, special, ndimage) used by the
-# track and lap analysis pipelines.
-hiddenimports += collect_submodules("scipy")
+# track and lap analysis pipelines. Skip optional array-API backends
+# (``cupy``/``torch``/``dask``) whose top-level packages we never
+# install — the walker would try to import them and warn — and the
+# legacy ``scipy.special._cdflib`` shim that no longer exists as an
+# importable module on scipy>=1.13.
+_SCIPY_SKIP_PREFIXES = (
+    "scipy._lib.array_api_compat.cupy",
+    "scipy._lib.array_api_compat.torch",
+    "scipy._lib.array_api_compat.dask",
+)
+_SCIPY_SKIP_EXACT = {"scipy.special._cdflib"}
+hiddenimports += collect_submodules(
+    "scipy",
+    filter=lambda name: (
+        name not in _SCIPY_SKIP_EXACT
+        and not name.startswith(_SCIPY_SKIP_PREFIXES)
+    ),
+)
 
 # pandas needs openpyxl metadata if the user ever exports to xlsx via
 # Studio.  Optional, but cheap.
@@ -129,7 +153,7 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=[],
+    hookspath=[str(ROOT / "scripts" / "pyi_hooks")],
     hooksconfig={},
     runtime_hooks=[str(ROOT / "scripts" / "pyi_runtime_chdir.py")],
     excludes=[
@@ -175,6 +199,18 @@ a = Analysis(
         "sklearn",
         "scikit_learn",
         "cupy",
+        # Optional OpenGL backend for pyqtgraph — we only use 2D plots,
+        # so neither PyOpenGL nor ``pyqtgraph.opengl`` is needed. Listing
+        # them silences the "Failed to collect submodules" warning that
+        # ``collect_submodules('pyqtgraph')`` would otherwise emit.
+        "OpenGL",
+        "OpenGL_accelerate",
+        "pyqtgraph.opengl",
+        # Removed legacy shim on scipy>=1.13. The bundled scipy hook
+        # still declares it as a hidden import, which trips PyInstaller
+        # with "Hidden import not found!". Listing it here makes the
+        # resolver skip it silently.
+        "scipy.special._cdflib",
         # Numerical/data ecosystem we never import — these only land in
         # the bundle when the build env has user-site contamination
         # (e.g. global ``pip install numba``). The Studio runtime stays
