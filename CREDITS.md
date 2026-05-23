@@ -49,6 +49,23 @@ gap and proximity information.
   binaries from Detect&Monitor are redistributed in this repository**;
   it is credited here for inspiration only.
 
+### MoTeC i2 Pro — Motec Pty Ltd
+
+The "Studio" workspace inside this application — its workbook /
+worksheet / component layout, the per-card splitter-based vertical
+stack of synchronised time-series traces, the cursor that pins values
+across all charts, and the keyboard-driven channel browser — is
+modelled after the look and feel of **MoTeC i2 Pro**, the industry
+reference for motorsport data analysis. No code, assets or data files
+from MoTeC are used or redistributed; the inspiration is purely a UX
+homage so that engineers already familiar with i2 feel at home.
+
+* Author: **Motec Pty Ltd**
+* Upstream: <https://www.motec.com.au/i2/>
+* Licence: proprietary — *Copyright Motec Pty Ltd*. **No MoTeC source
+  code, binaries or workbook files are redistributed in this
+  repository**; it is credited here for UX inspiration only.
+
 ### Live for Speed track geometry (`.smx`, `.pth`)
 
 Track geometry is parsed from files produced by Live for Speed itself.
