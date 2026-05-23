@@ -41,10 +41,16 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMenu,
     QMessageBox,
     QPushButton,
@@ -87,6 +93,190 @@ _SETTINGS_AXIS = "workbooktab/axis_kind"            # "distance" | "time"
 # ``workbooktab/sizes/<workbook>/<sheet_idx>`` as a comma-joined list
 # of integers so QSettings doesn't have to round-trip lists.
 _SETTINGS_SIZES_PREFIX = "workbooktab/sizes"
+
+# Hard cap on channels per component — same limit ChannelsDock enforces
+# so a hand-edited component doesn't blow past what the chart stack can
+# handle.
+_MAX_CHANNELS_PER_COMPONENT = 8
+
+
+# ---------------------------------------------------------------------------
+# Component editor dialog
+# ---------------------------------------------------------------------------
+
+
+class _ComponentEditorDialog(QDialog):
+    """Modal editor for one :class:`Component`.
+
+    Lets the user rename the card, change its type (graph ↔ bar),
+    toggle graph-only options and pick channels from the columns that
+    the currently loaded laps actually expose.
+
+    The dialog mutates its own internal copy on accept; callers read
+    ``title``, ``type``, ``channels`` and ``options`` from the dialog
+    to apply back onto the live :class:`Component`.
+    """
+
+    def __init__(
+        self,
+        component: Component,
+        available_columns: list[str],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(tr("Edit component"))
+        self.setModal(True)
+        self._available = list(available_columns)
+        self._original = component
+
+        form = QFormLayout()
+
+        self._title_edit = QLineEdit(component.title, self)
+        form.addRow(tr("Title"), self._title_edit)
+
+        self._type_combo = QComboBox(self)
+        self._type_combo.addItem(tr("Graph"), "graph")
+        self._type_combo.addItem(tr("Bar"), "bar")
+        self._type_combo.setCurrentIndex(
+            0 if component.type != "bar" else 1
+        )
+        self._type_combo.currentIndexChanged.connect(self._on_type_changed)
+        form.addRow(tr("Type"), self._type_combo)
+
+        # Graph-only options
+        self._chk_overlay = QCheckBox(tr("Overlay traces"), self)
+        self._chk_overlay.setChecked(
+            bool(component.options.get("overlay", True))
+        )
+        form.addRow("", self._chk_overlay)
+
+        self._chk_normalize = QCheckBox(tr("Normalize traces (0–1)"), self)
+        self._chk_normalize.setChecked(
+            bool(component.options.get("normalize", False))
+        )
+        form.addRow("", self._chk_normalize)
+
+        # Channels: list of available columns with check states.
+        # If the loaded laps don't expose the column the component
+        # currently references, show it greyed-out but still checked so
+        # the user can decide explicitly to keep or drop it.
+        self._channels_list = QListWidget(self)
+        self._channels_list.setSelectionMode(
+            QListWidget.SelectionMode.NoSelection
+        )
+        current = list(component.channels)
+        seen: set[str] = set()
+        for col in current + self._available:
+            if col in seen:
+                continue
+            seen.add(col)
+            item = QListWidgetItem(
+                self._channel_label(col), self._channels_list,
+            )
+            item.setData(Qt.ItemDataRole.UserRole, col)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.CheckState.Checked if col in current
+                else Qt.CheckState.Unchecked
+            )
+            if col not in self._available:
+                # Off-schema channel: dim the row to signal it's not in
+                # the current capture.
+                item.setForeground(Qt.GlobalColor.gray)
+            self._channels_list.addItem(item)
+
+        self._cap_label = QLabel("", self)
+        self._cap_label.setStyleSheet(f"color: {MUTED_COLOR};")
+        self._channels_list.itemChanged.connect(self._update_cap_label)
+
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(QLabel(
+            tr("Channels (max {n}):").format(n=_MAX_CHANNELS_PER_COMPONENT),
+            self,
+        ))
+        layout.addWidget(self._channels_list, 1)
+        layout.addWidget(self._cap_label)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self._maybe_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.resize(420, 520)
+        self._on_type_changed()
+        self._update_cap_label()
+
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _channel_label(col: str) -> str:
+        info = channel_info(col)
+        units = f" [{info.units}]" if info.units else ""
+        return f"{info.label}{units}  ·  {col}"
+
+    def _on_type_changed(self) -> None:
+        is_graph = self.type == "graph"
+        self._chk_overlay.setVisible(is_graph)
+        self._chk_normalize.setVisible(is_graph)
+
+    def _checked_columns(self) -> list[str]:
+        cols: list[str] = []
+        for i in range(self._channels_list.count()):
+            item = self._channels_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                cols.append(item.data(Qt.ItemDataRole.UserRole))
+        return cols
+
+    def _update_cap_label(self, *_args) -> None:
+        n = len(self._checked_columns())
+        if n > _MAX_CHANNELS_PER_COMPONENT:
+            self._cap_label.setText(tr(
+                "{n} / {max} selected — over the limit."
+            ).format(n=n, max=_MAX_CHANNELS_PER_COMPONENT))
+            self._cap_label.setStyleSheet("color: #e07a7a;")
+        else:
+            self._cap_label.setText(tr(
+                "{n} / {max} selected."
+            ).format(n=n, max=_MAX_CHANNELS_PER_COMPONENT))
+            self._cap_label.setStyleSheet(f"color: {MUTED_COLOR};")
+
+    def _maybe_accept(self) -> None:
+        if len(self._checked_columns()) > _MAX_CHANNELS_PER_COMPONENT:
+            QMessageBox.warning(
+                self, tr("Too many channels"),
+                tr("Pick at most {n} channels per component.").format(
+                    n=_MAX_CHANNELS_PER_COMPONENT,
+                ),
+            )
+            return
+        self.accept()
+
+    # ---- public accessors --------------------------------------------
+
+    @property
+    def title(self) -> str:
+        return self._title_edit.text().strip() or self._original.title
+
+    @property
+    def type(self) -> str:
+        return self._type_combo.currentData()
+
+    @property
+    def channels(self) -> list[str]:
+        return self._checked_columns()
+
+    @property
+    def options(self) -> dict:
+        opts = dict(self._original.options)
+        if self.type == "graph":
+            opts["overlay"] = self._chk_overlay.isChecked()
+            opts["normalize"] = self._chk_normalize.isChecked()
+        return opts
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +413,8 @@ class _ComponentCard(QFrame):
     # User pressed the up/down arrow on the header. Payload: (self, delta)
     # where delta is -1 (move up) or +1 (move down).
     move_requested = Signal(object, int)
+    # User pressed the ✎ edit button — parent opens the editor dialog.
+    edit_requested = Signal(object)  # self
 
     def __init__(
         self,
@@ -312,6 +504,12 @@ class _ComponentCard(QFrame):
         )
         h.addWidget(down_btn)
 
+        edit_btn = QToolButton(hdr)
+        edit_btn.setText("✎")
+        edit_btn.setToolTip(tr("Edit component…"))
+        edit_btn.clicked.connect(lambda: self.edit_requested.emit(self))
+        h.addWidget(edit_btn)
+
         h.addWidget(close_btn)
 
         # Clicking anywhere in the header (except controls) activates.
@@ -396,6 +594,10 @@ class _ComponentCard(QFrame):
         if self._bar is not None:
             self._bar.set_channels(list(channels))
         self._refresh_channels_label()
+
+    def set_title(self, title: str) -> None:
+        self.component.title = title
+        self._title_lbl.setText(title)
 
     def chart(self) -> MultiChannelChart | None:
         return self._chart
@@ -680,6 +882,7 @@ class WorkbookTab(QWidget):
         card.activated.connect(self._on_card_activated)
         card.remove_requested.connect(self._on_card_remove)
         card.move_requested.connect(self._on_card_move)
+        card.edit_requested.connect(self._on_card_edit)
         # Push current lap / axis state so newly-created cards render
         # immediately even mid-session.
         laps = self._ordered_loaded_laps()
@@ -895,6 +1098,43 @@ class WorkbookTab(QWidget):
         self._clear_splitter_sizes(ws_idx)
         self._rebuild_worksheet_tabs()
         self._ws_tabs.setCurrentIndex(ws_idx)
+
+    def _on_card_edit(self, card: _ComponentCard) -> None:
+        ws_idx = self._ws_tabs.currentIndex()
+        if not (0 <= ws_idx < len(self._workbook.worksheets)):
+            return
+        cols = self._available_columns()
+        dlg = _ComponentEditorDialog(card.component, cols, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        comp = card.component
+        type_changed = dlg.type != comp.type
+        comp.title = dlg.title
+        comp.type = dlg.type
+        comp.options = dlg.options
+        comp.channels = list(dlg.channels)
+        if type_changed:
+            # Body widget must be rebuilt (graph ↔ bar); also discard
+            # persisted sizes since the renderer changed.
+            self._clear_splitter_sizes(ws_idx)
+            self._rebuild_worksheet_tabs()
+            self._ws_tabs.setCurrentIndex(ws_idx)
+        else:
+            card.set_channels(comp.channels)
+            card.set_title(comp.title)
+            chart = card.chart()
+            if chart is not None:
+                chart.set_overlay_mode(bool(comp.options.get("overlay", True)))
+                chart.set_normalize(bool(comp.options.get("normalize", False)))
+            if card is self._active_card:
+                self._push_active_card_channels_to_dock()
+
+    def _available_columns(self) -> list[str]:
+        """Columns exposed by the currently loaded laps (first lap wins)."""
+        laps = self._ordered_loaded_laps()
+        if not laps:
+            return []
+        return list(laps[0].enriched.columns)
 
     # ------------------------------------------------------------------
     # Splitter-size persistence helpers

@@ -19,6 +19,7 @@ from lfs_telemetry.studio.signals import SignalBus  # noqa: E402
 from lfs_telemetry.studio.widgets.workbook_tab import (  # noqa: E402
     WorkbookTab,
     _ComponentCard,
+    _ComponentEditorDialog,
 )
 from lfs_telemetry.studio.workbooks import (  # noqa: E402
     Component,
@@ -174,3 +175,112 @@ def test_splitter_sizes_persist_round_trip(tab):
         # After clear, restore returns defaults again.
         wiped = tab._restore_splitter_sizes(target_idx, len(cards))
         assert wiped == [100] * len(cards)
+
+
+def test_component_editor_dialog_round_trip(qapp):
+    comp = Component(
+        type="graph",
+        title="Driver",
+        channels=["throttle"],
+        options={"overlay": True, "normalize": False},
+    )
+    dlg = _ComponentEditorDialog(comp, ["throttle", "brake", "speed_ms"])
+    assert dlg.title == "Driver"
+    assert dlg.type == "graph"
+    assert dlg.channels == ["throttle"]
+    # Toggle a second channel and confirm it shows up.
+    for i in range(dlg._channels_list.count()):
+        item = dlg._channels_list.item(i)
+        if item.data(0x0100) == "brake":  # Qt.UserRole == 0x0100
+            from PySide6.QtCore import Qt as _Qt
+            item.setCheckState(_Qt.CheckState.Checked)
+    assert "brake" in dlg.channels
+
+
+def test_component_editor_keeps_off_schema_channels(qapp):
+    comp = Component(
+        type="graph",
+        title="X",
+        channels=["nonexistent_channel"],
+        options={},
+    )
+    dlg = _ComponentEditorDialog(comp, ["throttle", "brake"])
+    # The off-schema channel is listed and checked by default so the
+    # user can keep it without surprise.
+    assert "nonexistent_channel" in dlg.channels
+
+
+def test_component_editor_caps_at_max(qapp):
+    comp = Component(type="graph", title="X", channels=[], options={})
+    cols = [f"col_{i}" for i in range(12)]
+    dlg = _ComponentEditorDialog(comp, cols)
+    from PySide6.QtCore import Qt as _Qt
+    for i in range(9):  # tick 9 — over the cap of 8
+        dlg._channels_list.item(i).setCheckState(_Qt.CheckState.Checked)
+    # Direct accept must be blocked; _maybe_accept won't call accept().
+    assert len(dlg.channels) == 9
+    # Patch QMessageBox.warning so the modal popup doesn't hang the
+    # offscreen test harness.
+    from PySide6.QtWidgets import QMessageBox
+    import lfs_telemetry.studio.widgets.workbook_tab as wt_mod
+    original = wt_mod.QMessageBox.warning
+    wt_mod.QMessageBox.warning = staticmethod(
+        lambda *a, **kw: QMessageBox.StandardButton.Ok
+    )
+    try:
+        dlg._maybe_accept()
+    finally:
+        wt_mod.QMessageBox.warning = original
+    # Dialog still open (no result code set) — verify accept was not
+    # actually triggered by checking it's not visible-accepted.
+    assert dlg.result() != 1  # 1 == Accepted
+
+
+def test_card_edit_updates_component_in_place(tab):
+    # Pick a worksheet with at least one graph card.
+    target_idx = None
+    target_card = None
+    for i, (_s, cards) in tab._worksheet_widgets.items():
+        for c in cards:
+            if c.component.type == "graph":
+                target_idx = i
+                target_card = c
+                break
+        if target_card is not None:
+            break
+    if target_card is None:
+        pytest.skip("default workbook has no graph card to edit")
+
+    tab._ws_tabs.setCurrentIndex(target_idx)
+    # Monkey-patch the dialog so the test runs headless without modal
+    # interaction. We construct a real dialog, mutate it, then short
+    # circuit exec().
+    from lfs_telemetry.studio.widgets import workbook_tab as wt_mod
+
+    class _StubDlg:
+        def __init__(self, comp, cols, parent=None):
+            self._comp = comp
+        def exec(self):
+            from PySide6.QtWidgets import QDialog as _QD
+            return _QD.DialogCode.Accepted
+        @property
+        def title(self): return "renamed"
+        @property
+        def type(self): return self._comp.type
+        @property
+        def channels(self): return ["throttle"]
+        @property
+        def options(self):
+            return {"overlay": False, "normalize": True}
+
+    monkey_target = wt_mod._ComponentEditorDialog
+    wt_mod._ComponentEditorDialog = _StubDlg
+    try:
+        tab._on_card_edit(target_card)
+    finally:
+        wt_mod._ComponentEditorDialog = monkey_target
+
+    assert target_card.component.title == "renamed"
+    assert target_card.component.channels == ["throttle"]
+    assert target_card.component.options["overlay"] is False
+    assert target_card.component.options["normalize"] is True
