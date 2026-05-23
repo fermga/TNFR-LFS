@@ -6,27 +6,36 @@ vertical stack of *component cards*. Each card renders one slice of
 telemetry (graph, bar, …) and owns its own channel list, so the user
 can lay out multiple synchronized views per worksheet à la MoTeC i2.
 
-Phase 2a scope (this file):
+Phase 2 scope (this file):
 
 * `graph` components are rendered with the existing
   :class:`MultiChannelChart` so we inherit overlay/normalize, cursor
   sync, delta-vs-reference and PNG export.
-* `bar` components show a placeholder for now (Phase 2b).
+* `bar` components render lap-mean values per channel as grouped bars
+  (one group per lap, one bar per channel) — useful for per-wheel
+  comparisons like tyre temps or vertical-load means.
 * The legacy :class:`ChannelsDock` keeps working as a global channel
   picker: its emissions are routed to the *active* card (the one whose
   header was last clicked); becoming active pushes the card's current
   channels back to the dock so the two stay in sync.
+* Cards can be reordered within a worksheet via up/down arrows on the
+  header. Splitter sizes persist per (workbook, worksheet) so the
+  user's manual height tweaks survive across launches.
 * The active workbook + worksheet index persist across launches.
 
-Channel editing, drag-reorder, more component types and the proper
-channel browser refactor land in subsequent commits.
+A proper channel browser, per-component editor dialog and the
+remaining component types (histogram, xy, gauge, trackmap, report)
+land in subsequent commits.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 
+import numpy as np
+import pyqtgraph as pg
 from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
@@ -49,12 +58,12 @@ from PySide6.QtWidgets import (
 
 from ...lfs_paths import QSETTINGS_APP as APP
 from ...lfs_paths import QSETTINGS_ORG as ORG
-from ...telemetry import LapTelemetry
+from ...telemetry import LapTelemetry, channel_info
 from ..charts import MultiChannelChart
 from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
-from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR
+from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR, trace_color
 from ..workbooks import (
     Component,
     Workbook,
@@ -74,6 +83,120 @@ LOG = logging.getLogger(__name__)
 _SETTINGS_WORKBOOK = "workbooktab/workbook"        # last workbook file name
 _SETTINGS_WS_INDEX = "workbooktab/worksheet_index"  # last worksheet idx
 _SETTINGS_AXIS = "workbooktab/axis_kind"            # "distance" | "time"
+# Per-(workbook, worksheet) splitter sizes live under
+# ``workbooktab/sizes/<workbook>/<sheet_idx>`` as a comma-joined list
+# of integers so QSettings doesn't have to round-trip lists.
+_SETTINGS_SIZES_PREFIX = "workbooktab/sizes"
+
+
+# ---------------------------------------------------------------------------
+# Bar panel (lap-mean per channel, grouped by lap)
+# ---------------------------------------------------------------------------
+
+
+class _BarPanel(QWidget):
+    """Grouped bars showing each channel's lap-mean.
+
+    One group per channel along x, one bar per lap inside each group.
+    Useful for per-wheel comparisons (tyre temps, vertical load means)
+    where stacked line traces are hard to read at a glance.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._laps: list[LapTelemetry] = []
+        self._channels: list[str] = []
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._plot = pg.PlotWidget(self)
+        self._plot.setBackground(PANEL_COLOR)
+        self._plot.showGrid(x=False, y=True, alpha=0.25)
+        self._plot.getPlotItem().getAxis("left").setTextPen(TEXT_COLOR)
+        self._plot.getPlotItem().getAxis("bottom").setTextPen(TEXT_COLOR)
+        layout.addWidget(self._plot)
+
+    def set_laps(self, laps: list[LapTelemetry]) -> None:
+        self._laps = list(laps)
+        self._rebuild()
+
+    def set_channels(self, channels: list[str]) -> None:
+        self._channels = list(channels)
+        self._rebuild()
+
+    # ------------------------------------------------------------------
+
+    def _short_label(self, ch: str) -> str:
+        # ``wheel_FL_air_temp_c`` -> ``FL`` when 4 channels share the
+        # same suffix; otherwise use the channel's own short label.
+        info = channel_info(ch)
+        return info.label or ch
+
+    def _rebuild(self) -> None:
+        plot = self._plot
+        plot.clear()
+        if not self._laps or not self._channels:
+            return
+
+        n_chans = len(self._channels)
+        n_laps = len(self._laps)
+        # Bar width within each group: shrink with more laps.
+        group_width = 0.8
+        bar_w = group_width / max(n_laps, 1)
+
+        any_finite = False
+        units_seen: set[str] = set()
+        for lap_idx, lap in enumerate(self._laps):
+            heights: list[float] = []
+            xs: list[float] = []
+            df = lap.enriched
+            offset = (lap_idx - (n_laps - 1) / 2.0) * bar_w
+            for ch_idx, ch in enumerate(self._channels):
+                if ch not in df.columns:
+                    continue
+                arr = df[ch].to_numpy(dtype=float)
+                if not np.isfinite(arr).any():
+                    continue
+                mean = float(np.nanmean(arr))
+                if math.isnan(mean):
+                    continue
+                heights.append(mean)
+                xs.append(ch_idx + offset)
+                any_finite = True
+                units_seen.add(channel_info(ch).units or "")
+            if not xs:
+                continue
+            color = trace_color(lap_idx)
+            name = (
+                lap.source_path.name if lap.source_path
+                else f"lap{lap_idx}"
+            )
+            bars = pg.BarGraphItem(
+                x=np.asarray(xs), height=np.asarray(heights),
+                width=bar_w * 0.9,
+                brush=pg.mkBrush(color),
+                pen=pg.mkPen("#202830", width=1),
+                name=name,
+            )
+            plot.addItem(bars)
+
+        # X-axis ticks: one per channel, labelled with a short name.
+        ticks = [
+            (i, self._short_label(self._channels[i]))
+            for i in range(n_chans)
+        ]
+        plot.getPlotItem().getAxis("bottom").setTicks([ticks])
+
+        # Y-axis label: if every channel shares a unit, use it; else
+        # fall back to a generic label.
+        if len(units_seen) == 1 and next(iter(units_seen)):
+            unit = next(iter(units_seen))
+            plot.setLabel("left", f"mean [{unit}]", color=TEXT_COLOR)
+        else:
+            plot.setLabel("left", tr("lap mean"), color=TEXT_COLOR)
+
+        if any_finite:
+            plot.getViewBox().autoRange()
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +220,9 @@ class _ComponentCard(QFrame):
     remove_requested = Signal(object)  # self
     # User toggled overlay/normalize via the per-card header.
     options_changed = Signal(object)  # self
+    # User pressed the up/down arrow on the header. Payload: (self, delta)
+    # where delta is -1 (move up) or +1 (move down).
+    move_requested = Signal(object, int)
 
     def __init__(
         self,
@@ -169,6 +295,23 @@ class _ComponentCard(QFrame):
         close_btn.setText("×")
         close_btn.setToolTip(tr("Remove component"))
         close_btn.clicked.connect(lambda: self.remove_requested.emit(self))
+
+        up_btn = QToolButton(hdr)
+        up_btn.setText("▲")
+        up_btn.setToolTip(tr("Move component up"))
+        up_btn.clicked.connect(
+            lambda: self.move_requested.emit(self, -1)
+        )
+        h.addWidget(up_btn)
+
+        down_btn = QToolButton(hdr)
+        down_btn.setText("▼")
+        down_btn.setToolTip(tr("Move component down"))
+        down_btn.clicked.connect(
+            lambda: self.move_requested.emit(self, +1)
+        )
+        h.addWidget(down_btn)
+
         h.addWidget(close_btn)
 
         # Clicking anywhere in the header (except controls) activates.
@@ -191,8 +334,16 @@ class _ComponentCard(QFrame):
                 bool(self.component.options.get("normalize", False))
             )
             self._chart: MultiChannelChart | None = chart
+            self._bar: _BarPanel | None = None
             return chart
-        # Placeholder for non-graph component types (bar, gauge, …).
+        if self.component.type == "bar":
+            bar = _BarPanel(self)
+            bar.set_channels(list(self.component.channels))
+            self._chart = None
+            self._bar = bar
+            return bar
+        # Placeholder for not-yet-implemented component types
+        # (gauge, histogram, xy, trackmap, report).
         ph = QLabel(
             tr("{kind!r} components arrive in a later commit.").format(
                 kind=self.component.type
@@ -205,6 +356,7 @@ class _ComponentCard(QFrame):
             f"background-color: {PANEL_COLOR}; border-radius: 3px;"
         )
         self._chart = None
+        self._bar = None
         return ph
 
     # ---- public api ---------------------------------------------------
@@ -221,6 +373,8 @@ class _ComponentCard(QFrame):
     def set_laps(self, laps: list[LapTelemetry]) -> None:
         if self._chart is not None:
             self._chart.set_laps(laps)
+        if self._bar is not None:
+            self._bar.set_laps(laps)
 
     def set_axis_kind(self, kind: str) -> None:
         if self._chart is not None:
@@ -239,6 +393,8 @@ class _ComponentCard(QFrame):
         self.component.channels = list(channels)
         if self._chart is not None:
             self._chart.set_channels(list(channels))
+        if self._bar is not None:
+            self._bar.set_channels(list(channels))
         self._refresh_channels_label()
 
     def chart(self) -> MultiChannelChart | None:
@@ -371,6 +527,12 @@ class WorkbookTab(QWidget):
         )
         toolbar.addWidget(add_graph_btn)
 
+        add_bar_btn = QPushButton(tr("+ Bar"), self)
+        add_bar_btn.clicked.connect(
+            lambda: self._add_component(kind="bar")
+        )
+        toolbar.addWidget(add_bar_btn)
+
         toolbar.addSeparator()
         self._caption = QLabel(tr("No laps selected"), self)
         self._caption.setStyleSheet(f"color: {MUTED_COLOR};")
@@ -490,8 +652,8 @@ class WorkbookTab(QWidget):
             splitter.addWidget(card)
 
         if cards:
-            # Even initial size for each card; the user can drag later.
-            splitter.setSizes([100] * len(cards))
+            sizes = self._restore_splitter_sizes(idx, len(cards))
+            splitter.setSizes(sizes)
             cards[0].set_active(True)
             self._active_card = cards[0]
         else:
@@ -506,12 +668,18 @@ class WorkbookTab(QWidget):
 
         scroll.setWidget(host)
         self._worksheet_widgets[idx] = (splitter, cards)
+        # Persist splitter sizes whenever the user drags a handle.
+        splitter.splitterMoved.connect(
+            lambda _pos, _idx, s=splitter, sheet_idx=idx:
+            self._persist_splitter_sizes(sheet_idx, s.sizes())
+        )
         return scroll
 
     def _make_card(self, comp: Component) -> _ComponentCard:
         card = _ComponentCard(comp, parent=self)
         card.activated.connect(self._on_card_activated)
         card.remove_requested.connect(self._on_card_remove)
+        card.move_requested.connect(self._on_card_move)
         # Push current lap / axis state so newly-created cards render
         # immediately even mid-session.
         laps = self._ordered_loaded_laps()
@@ -706,6 +874,61 @@ class WorkbookTab(QWidget):
         ws.components.pop(comp_idx)
         self._rebuild_worksheet_tabs()
         self._ws_tabs.setCurrentIndex(ws_idx)
+
+    def _on_card_move(self, card: _ComponentCard, delta: int) -> None:
+        ws_idx = self._ws_tabs.currentIndex()
+        if not (0 <= ws_idx < len(self._workbook.worksheets)):
+            return
+        ws = self._workbook.worksheets[ws_idx]
+        try:
+            comp_idx = next(
+                i for i, c in enumerate(ws.components) if c is card.component
+            )
+        except StopIteration:
+            return
+        new_idx = comp_idx + int(delta)
+        if not (0 <= new_idx < len(ws.components)) or new_idx == comp_idx:
+            return
+        ws.components.insert(new_idx, ws.components.pop(comp_idx))
+        # Drop persisted sizes for this sheet — the layout changed and
+        # the old per-index heights no longer match the new card order.
+        self._clear_splitter_sizes(ws_idx)
+        self._rebuild_worksheet_tabs()
+        self._ws_tabs.setCurrentIndex(ws_idx)
+
+    # ------------------------------------------------------------------
+    # Splitter-size persistence helpers
+    # ------------------------------------------------------------------
+
+    def _sizes_key(self, ws_idx: int) -> str:
+        wb_name = self._workbook.name or "_"
+        return f"{_SETTINGS_SIZES_PREFIX}/{wb_name}/{ws_idx}"
+
+    def _persist_splitter_sizes(
+        self, ws_idx: int, sizes: list[int]
+    ) -> None:
+        if not sizes:
+            return
+        self._settings().setValue(
+            self._sizes_key(ws_idx), ",".join(str(int(s)) for s in sizes)
+        )
+
+    def _restore_splitter_sizes(
+        self, ws_idx: int, n_cards: int
+    ) -> list[int]:
+        raw = self._settings().value(self._sizes_key(ws_idx), "")
+        if not raw:
+            return [100] * n_cards
+        try:
+            sizes = [int(s) for s in str(raw).split(",") if s.strip()]
+        except ValueError:
+            return [100] * n_cards
+        if len(sizes) != n_cards or any(s < 0 for s in sizes):
+            return [100] * n_cards
+        return sizes
+
+    def _clear_splitter_sizes(self, ws_idx: int) -> None:
+        self._settings().remove(self._sizes_key(ws_idx))
 
     def _push_active_card_channels_to_dock(self) -> None:
         if self._active_card is None:

@@ -96,3 +96,81 @@ def test_axis_kind_propagates_to_every_card(tab):
             chart = c.chart()
             if chart is not None:
                 assert chart._axis_kind == "time"
+
+
+def test_bar_component_renders_without_error(tab):
+    # Add a bar component on a fresh worksheet so we control the cards.
+    tab._workbook.worksheets.append(Worksheet(title="bars"))
+    tab._rebuild_worksheet_tabs()
+    idx = len(tab._workbook.worksheets) - 1
+    tab._ws_tabs.setCurrentIndex(idx)
+    ws = tab._workbook.worksheets[idx]
+    ws.components.append(Component(
+        type="bar",
+        title="tyre temps",
+        channels=[
+            "wheel_FL_air_temp_c",
+            "wheel_FR_air_temp_c",
+            "wheel_RL_air_temp_c",
+            "wheel_RR_air_temp_c",
+        ],
+    ))
+    tab._rebuild_worksheet_tabs()
+    tab._ws_tabs.setCurrentIndex(idx)
+    _splitter, cards = tab._worksheet_widgets[idx]
+    assert len(cards) == 1
+    bar_card = cards[0]
+    assert bar_card.component.type == "bar"
+    assert bar_card.chart() is None  # bar cards have no MultiChannelChart
+    assert getattr(bar_card, "_bar", None) is not None
+
+
+def test_card_move_reorders_components(tab):
+    # Build a fresh worksheet with two graph components so order
+    # changes are unambiguous.
+    tab._workbook.worksheets.append(Worksheet(title="move-test"))
+    tab._rebuild_worksheet_tabs()
+    idx = len(tab._workbook.worksheets) - 1
+    tab._ws_tabs.setCurrentIndex(idx)
+    ws = tab._workbook.worksheets[idx]
+    ws.components.append(Component(type="graph", title="A", channels=[]))
+    ws.components.append(Component(type="graph", title="B", channels=[]))
+    tab._rebuild_worksheet_tabs()
+    tab._ws_tabs.setCurrentIndex(idx)
+    _splitter, cards = tab._worksheet_widgets[idx]
+    assert [c.component.title for c in cards] == ["A", "B"]
+
+    tab._on_card_move(cards[0], +1)  # move A down
+    ws = tab._workbook.worksheets[idx]
+    assert [c.title for c in ws.components] == ["B", "A"]
+
+
+def test_splitter_sizes_persist_round_trip(tab):
+    # Pick a worksheet that already has >=2 cards so sizes are
+    # meaningful; default Driver Inputs sheet has two graphs.
+    target_idx = None
+    for i, ws in enumerate(tab._workbook.worksheets):
+        if len(ws.components) >= 2:
+            target_idx = i
+            break
+    if target_idx is None:
+        pytest.skip("default workbook lacks a multi-card worksheet")
+    tab._ws_tabs.setCurrentIndex(target_idx)
+    splitter, cards = tab._worksheet_widgets[target_idx]
+
+    sizes = [120, 240] + [100] * (len(cards) - 2)
+    tab._persist_splitter_sizes(target_idx, sizes)
+
+    restored = tab._restore_splitter_sizes(target_idx, len(cards))
+    assert restored == sizes
+
+    # Mismatched card count falls back to defaults.
+    fallback = tab._restore_splitter_sizes(target_idx, len(cards) + 1)
+    assert fallback == [100] * (len(cards) + 1)
+
+    # Reorder clears the persisted sizes for that sheet.
+    if len(cards) >= 2:
+        tab._on_card_move(cards[0], +1)
+        # After clear, restore returns defaults again.
+        wiped = tab._restore_splitter_sizes(target_idx, len(cards))
+        assert wiped == [100] * len(cards)
