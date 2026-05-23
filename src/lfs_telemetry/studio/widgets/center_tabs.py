@@ -16,11 +16,11 @@ from ..i18n import tr
 from ..models import LapLoader
 from ..signals import SignalBus
 from .capture_tab import CaptureTab
-from .charts_dock import ChartsDock
 from .dampers_tab import DampersTab
 from .live_tab import LiveTab
 from .sectors_tab import SectorsTab
 from .stint_tab import StintTab
+from .workbook_tab import WorkbookTab
 
 
 class CenterTabs(QTabWidget):
@@ -34,7 +34,7 @@ class CenterTabs(QTabWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.charts = ChartsDock(loader, signals, self)
+        self.charts = WorkbookTab(loader, signals, self)
         self.stint = StintTab(loader, signals, self)
         self.sectors = SectorsTab(loader, signals, self)
         self.dampers = DampersTab(loader, signals, self)
