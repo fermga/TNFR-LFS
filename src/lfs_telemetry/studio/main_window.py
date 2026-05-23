@@ -195,6 +195,12 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
+        # Offer to save unsaved workbook edits before we tear anything
+        # down. If the user cancels, ``flush_on_close`` calls
+        # ``event.ignore()`` and we bail out — letting the window stay
+        # open so they can keep editing.
+        if not self._charts.flush_on_close(event):
+            return
         self._save_state()
         self._loader.shutdown()
         # Frameless overlay modules are independent top-level windows

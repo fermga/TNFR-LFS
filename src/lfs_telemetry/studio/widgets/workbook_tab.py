@@ -669,6 +669,13 @@ class WorkbookTab(QWidget):
 
         # Active workbook state.
         self._workbook: Workbook = self._load_persisted_or_default()
+        # Origin of the active workbook so we know whether to
+        # overwrite (user file) or prompt for a name (built-in
+        # template / brand-new default) when saving.
+        self._workbook_origin: tuple[str, str] | None = None
+        # ``True`` when the in-memory workbook diverges from the on
+        # disk version (or has no on-disk version yet).
+        self._dirty: bool = False
         # Map worksheet index -> (splitter, [card,...]).
         self._worksheet_widgets: dict[
             int, tuple[QSplitter, list[_ComponentCard]]
@@ -702,9 +709,9 @@ class WorkbookTab(QWidget):
         templates_btn.setMenu(templates_menu)
         toolbar.addWidget(templates_btn)
 
-        save_btn = QPushButton(tr("Save as…"), self)
-        save_btn.clicked.connect(self._save_workbook_as)
-        toolbar.addWidget(save_btn)
+        self._save_btn = QPushButton(tr("Save as…"), self)
+        self._save_btn.clicked.connect(self._save_workbook_as)
+        toolbar.addWidget(self._save_btn)
 
         toolbar.addSeparator()
 
@@ -763,6 +770,9 @@ class WorkbookTab(QWidget):
         idx = int(self._settings().value(_SETTINGS_WS_INDEX, 0) or 0)
         if 0 <= idx < self._ws_tabs.count():
             self._ws_tabs.setCurrentIndex(idx)
+        # Reflect the restored workbook's origin (user / builtin) on
+        # the Save button label.
+        self._refresh_dirty_indicator()
 
         # ---- signal wiring -------------------------------------------
         signals.laps_selected.connect(self._on_laps_selected)
@@ -784,12 +794,17 @@ class WorkbookTab(QWidget):
         return "time" if str(val) == "time" else "distance"
 
     def _load_persisted_or_default(self) -> Workbook:
+        # Hydrates ``self._workbook_origin`` as a side-effect so
+        # ``flush_on_close`` knows whether to overwrite or prompt.
+        self._workbook_origin = None
         name = self._settings().value(_SETTINGS_WORKBOOK, "")
         if name:
             for path in list_user_workbooks():
                 if path.stem == name or path.name == name:
                     try:
-                        return load_workbook(path)
+                        wb = load_workbook(path)
+                        self._workbook_origin = ("user", str(path))
+                        return wb
                     except Exception:  # noqa: BLE001
                         LOG.warning(
                             "failed to load persisted workbook %s; "
@@ -799,13 +814,132 @@ class WorkbookTab(QWidget):
             # Try built-in by name.
             if name in builtin_template_names():
                 try:
-                    return builtin_template(name)
+                    wb = builtin_template(name)
+                    self._workbook_origin = ("builtin", name)
+                    return wb
                 except Exception:  # noqa: BLE001
                     pass
         return default_workbook()
 
     def _persist_active_workbook_name(self) -> None:
         self._settings().setValue(_SETTINGS_WORKBOOK, self._workbook.name)
+
+    # ------------------------------------------------------------------
+    # Dirty / unsaved-changes tracking
+    # ------------------------------------------------------------------
+
+    def _mark_dirty(self) -> None:
+        if self._dirty:
+            return
+        self._dirty = True
+        self._refresh_dirty_indicator()
+
+    def _mark_clean(self) -> None:
+        if not self._dirty:
+            self._refresh_dirty_indicator()
+            return
+        self._dirty = False
+        self._refresh_dirty_indicator()
+
+    def _refresh_dirty_indicator(self) -> None:
+        # Save button: append a bullet when there are unsaved changes
+        # and switch the label from "Save as…" to "Save" once the
+        # workbook has a known on-disk file we can overwrite.
+        if self._workbook_origin and self._workbook_origin[0] == "user":
+            base = tr("Save")
+        else:
+            base = tr("Save as…")
+        self._save_btn.setText(f"{base} •" if self._dirty else base)
+
+    def _confirm_discard_if_dirty(self) -> bool:
+        """Prompt the user before discarding unsaved workbook edits.
+
+        Returns ``True`` when it is safe to proceed (saved or
+        explicitly discarded), ``False`` when the user cancelled.
+        """
+        if not self._dirty:
+            return True
+        resp = QMessageBox.question(
+            self, tr("Unsaved workbook"),
+            tr(
+                "Workbook ‘{n}’ has unsaved changes. Save before "
+                "switching?"
+            ).format(n=self._workbook.name),
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+        )
+        if resp == QMessageBox.StandardButton.Cancel:
+            return False
+        if resp == QMessageBox.StandardButton.Save:
+            return self._save_workbook(prompt_name=False)
+        # Discard.
+        return True
+
+    def _save_workbook(self, *, prompt_name: bool) -> bool:
+        """Persist the active workbook to disk.
+
+        When the workbook was loaded from a user file we overwrite
+        silently; otherwise (built-in template or freshly-created
+        default) we prompt for a name so the user can't accidentally
+        clobber a template. Returns ``True`` on success.
+        """
+        name = self._workbook.name
+        is_user = bool(
+            self._workbook_origin and self._workbook_origin[0] == "user"
+        )
+        if prompt_name or not is_user:
+            new_name, ok = QInputDialog.getText(
+                self, tr("Save workbook"), tr("Workbook name:"),
+                text=name,
+            )
+            if not ok or not new_name.strip():
+                return False
+            name = new_name.strip()
+        self._workbook.name = name
+        try:
+            path = save_user_workbook(self._workbook)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(
+                self, tr("Save workbook"),
+                tr("Failed to save: {err}").format(err=exc),
+            )
+            return False
+        self._workbook_origin = ("user", str(path))
+        self._mark_clean()
+        self._signals.status_message.emit(
+            tr("Saved workbook ‘{n}’.").format(n=self._workbook.name), 4000,
+        )
+        self._reload_workbook_combo(select_name=self._workbook.name)
+        self._persist_active_workbook_name()
+        return True
+
+    def flush_on_close(self, event=None) -> bool:
+        """Offer to save unsaved changes when the main window closes.
+
+        Called from :meth:`MainWindow.closeEvent`. Returns ``True``
+        when shutdown should proceed; ``False`` when the user chose
+        Cancel (in which case the caller should ``event.ignore()``).
+        """
+        if not self._dirty:
+            return True
+        resp = QMessageBox.question(
+            self, tr("Unsaved workbook"),
+            tr(
+                "Workbook ‘{n}’ has unsaved changes. Save before "
+                "exiting?"
+            ).format(n=self._workbook.name),
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+        )
+        if resp == QMessageBox.StandardButton.Cancel:
+            if event is not None:
+                event.ignore()
+            return False
+        if resp == QMessageBox.StandardButton.Save:
+            return self._save_workbook(prompt_name=False)
+        return True
 
     # ------------------------------------------------------------------
     # Worksheet / component construction
@@ -931,12 +1065,24 @@ class WorkbookTab(QWidget):
         data = self._wb_combo.itemData(index)
         if not data:
             return
+        # Guard against losing unsaved edits when the user picks a
+        # different workbook from the combo. If they cancel we restore
+        # the combo's previous selection.
+        if not self._confirm_discard_if_dirty():
+            prev_idx = self._wb_combo.findData(self._current_combo_data())
+            if prev_idx >= 0 and prev_idx != index:
+                self._wb_combo.blockSignals(True)
+                self._wb_combo.setCurrentIndex(prev_idx)
+                self._wb_combo.blockSignals(False)
+            return
         kind, payload = data
         try:
             if kind == "builtin":
                 self._workbook = builtin_template(payload)
+                self._workbook_origin = ("builtin", payload)
             else:
                 self._workbook = load_workbook(Path(payload))
+                self._workbook_origin = ("user", payload)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(
                 self, tr("Workbook"),
@@ -945,12 +1091,20 @@ class WorkbookTab(QWidget):
             return
         self._rebuild_worksheet_tabs()
         self._persist_active_workbook_name()
+        self._mark_clean()
+
+    def _current_combo_data(self) -> tuple[str, str] | None:
+        """Return the combo entry matching the active workbook origin."""
+        return self._workbook_origin
 
     def _load_template(self, name: str) -> None:
+        if not self._confirm_discard_if_dirty():
+            return
         try:
             self._workbook = builtin_template(name)
         except KeyError:
             return
+        self._workbook_origin = ("builtin", name)
         self._rebuild_worksheet_tabs()
         idx = self._wb_combo.findData(("builtin", name))
         if idx >= 0:
@@ -958,28 +1112,13 @@ class WorkbookTab(QWidget):
             self._wb_combo.setCurrentIndex(idx)
             self._wb_combo.blockSignals(False)
         self._persist_active_workbook_name()
+        self._mark_clean()
 
     def _save_workbook_as(self) -> None:
-        name, ok = QInputDialog.getText(
-            self, tr("Save workbook"), tr("Workbook name:"),
-            text=self._workbook.name,
-        )
-        if not ok or not name.strip():
-            return
-        self._workbook.name = name.strip()
-        try:
-            save_user_workbook(self._workbook)
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(
-                self, tr("Save workbook"),
-                tr("Failed to save: {err}").format(err=exc),
-            )
-            return
-        self._signals.status_message.emit(
-            tr("Saved workbook ‘{n}’.").format(n=self._workbook.name), 4000,
-        )
-        self._reload_workbook_combo(select_name=self._workbook.name)
-        self._persist_active_workbook_name()
+        # Toolbar button: always prompt for a name so the user can
+        # fork a workbook off a template even when the active one is
+        # already a user file. ``_save_workbook`` does the real work.
+        self._save_workbook(prompt_name=True)
 
     def _on_axis_changed(self, index: int) -> None:
         kind = self._axis_combo.itemData(index) or "distance"
@@ -991,6 +1130,9 @@ class WorkbookTab(QWidget):
                 card.set_axis_kind(kind)
         self._signals.x_axis_changed.emit(kind)
         self._settings().setValue(_SETTINGS_AXIS, kind)
+        # Axis kind is a user-tweak that should travel with the
+        # workbook on disk in a future revision; for now we only mark
+        # the workbook dirty so the user is prompted to persist.
 
     def _add_worksheet(self) -> None:
         name, ok = QInputDialog.getText(
@@ -1003,6 +1145,7 @@ class WorkbookTab(QWidget):
         self._workbook.worksheets.append(ws)
         self._rebuild_worksheet_tabs()
         self._ws_tabs.setCurrentIndex(self._ws_tabs.count() - 1)
+        self._mark_dirty()
 
     def _on_close_worksheet(self, index: int) -> None:
         if not (0 <= index < len(self._workbook.worksheets)):
@@ -1024,6 +1167,7 @@ class WorkbookTab(QWidget):
             return
         self._workbook.worksheets.pop(index)
         self._rebuild_worksheet_tabs()
+        self._mark_dirty()
 
     def _on_worksheet_changed(self, index: int) -> None:
         self._settings().setValue(_SETTINGS_WS_INDEX, int(index))
@@ -1047,6 +1191,7 @@ class WorkbookTab(QWidget):
         ws.components.append(Component(type=kind, title=title, channels=[]))
         self._rebuild_worksheet_tabs()
         self._ws_tabs.setCurrentIndex(ws_idx)
+        self._mark_dirty()
 
     # ------------------------------------------------------------------
     # Card / SignalBus routing
@@ -1077,6 +1222,7 @@ class WorkbookTab(QWidget):
         ws.components.pop(comp_idx)
         self._rebuild_worksheet_tabs()
         self._ws_tabs.setCurrentIndex(ws_idx)
+        self._mark_dirty()
 
     def _on_card_move(self, card: _ComponentCard, delta: int) -> None:
         ws_idx = self._ws_tabs.currentIndex()
@@ -1098,6 +1244,7 @@ class WorkbookTab(QWidget):
         self._clear_splitter_sizes(ws_idx)
         self._rebuild_worksheet_tabs()
         self._ws_tabs.setCurrentIndex(ws_idx)
+        self._mark_dirty()
 
     def _on_card_edit(self, card: _ComponentCard) -> None:
         ws_idx = self._ws_tabs.currentIndex()
@@ -1113,6 +1260,7 @@ class WorkbookTab(QWidget):
         comp.type = dlg.type
         comp.options = dlg.options
         comp.channels = list(dlg.channels)
+        self._mark_dirty()
         if type_changed:
             # Body widget must be rebuilt (graph ↔ bar); also discard
             # persisted sizes since the renderer changed.
@@ -1183,7 +1331,11 @@ class WorkbookTab(QWidget):
         # The global channels dock toggled — apply to the active card.
         if self._active_card is None:
             return
-        self._active_card.set_channels(list(channels))
+        new = list(channels)
+        if new == list(self._active_card.component.channels):
+            return
+        self._active_card.set_channels(new)
+        self._mark_dirty()
 
     # ------------------------------------------------------------------
     # Lap loading / cursor sync

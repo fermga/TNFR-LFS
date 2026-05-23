@@ -284,3 +284,149 @@ def test_card_edit_updates_component_in_place(tab):
     assert target_card.component.channels == ["throttle"]
     assert target_card.component.options["overlay"] is False
     assert target_card.component.options["normalize"] is True
+
+
+# ---------------------------------------------------------------------------
+# Phase 4a: dirty marker + auto-save on close
+# ---------------------------------------------------------------------------
+
+
+def test_dirty_marker_starts_clean(tab):
+    assert tab._dirty is False
+    # Save button shows base label (no bullet) on a freshly-loaded
+    # default workbook.
+    assert "•" not in tab._save_btn.text()
+
+
+def test_dirty_marker_set_by_mutators(tab):
+    # Add a worksheet → dirty.
+    tab._workbook.worksheets.append(Worksheet(title="hot"))
+    tab._rebuild_worksheet_tabs()
+    tab._mark_dirty()  # explicit because _rebuild bypasses _add_worksheet
+    assert tab._dirty is True
+    assert tab._save_btn.text().endswith("•")
+
+
+def test_add_component_marks_dirty(tab):
+    tab._mark_clean()
+    tab._ws_tabs.setCurrentIndex(0)
+    tab._add_component(kind="graph")
+    assert tab._dirty is True
+
+
+def test_channels_changed_marks_dirty(tab):
+    tab._mark_clean()
+    # Pick an active graph card.
+    for _s, cards in tab._worksheet_widgets.values():
+        for c in cards:
+            if c.component.type == "graph":
+                tab._on_card_activated(c)
+                break
+        if tab._active_card is not None:
+            break
+    if tab._active_card is None:
+        pytest.skip("no graph card to receive channel updates")
+    new_channels = ["throttle", "brake", "speed_ms"]
+    tab._signals.channels_changed.emit(new_channels)
+    assert tab._dirty is True
+    # Re-emitting the same list should be a no-op (no spurious dirty).
+    tab._mark_clean()
+    tab._signals.channels_changed.emit(new_channels)
+    assert tab._dirty is False
+
+
+def test_save_workbook_clears_dirty(tab, monkeypatch):
+    # Force the workbook to look like a user file so _save_workbook
+    # overwrites silently without prompting.
+    from lfs_telemetry.studio.widgets import workbook_tab as wt_mod
+
+    saved: list = []
+    monkeypatch.setattr(
+        wt_mod, "save_user_workbook",
+        lambda wb: saved.append(wb) or Path("dummy.json"),
+    )
+    tab._workbook.name = "test_wb"
+    tab._workbook_origin = ("user", "test_wb.json")
+    tab._mark_dirty()
+    ok = tab._save_workbook(prompt_name=False)
+    assert ok is True
+    assert tab._dirty is False
+    assert len(saved) == 1
+
+
+def test_flush_on_close_cancel_aborts(tab):
+    from PySide6.QtWidgets import QMessageBox
+    from lfs_telemetry.studio.widgets import workbook_tab as wt_mod
+
+    tab._mark_dirty()
+
+    class _Evt:
+        def __init__(self):
+            self.ignored = False
+
+        def ignore(self):
+            self.ignored = True
+
+    original = wt_mod.QMessageBox.question
+    wt_mod.QMessageBox.question = staticmethod(
+        lambda *a, **kw: QMessageBox.StandardButton.Cancel
+    )
+    try:
+        evt = _Evt()
+        proceed = tab.flush_on_close(evt)
+    finally:
+        wt_mod.QMessageBox.question = original
+
+    assert proceed is False
+    assert evt.ignored is True
+    assert tab._dirty is True  # still dirty
+
+
+def test_flush_on_close_discard_proceeds(tab):
+    from PySide6.QtWidgets import QMessageBox
+    from lfs_telemetry.studio.widgets import workbook_tab as wt_mod
+
+    tab._mark_dirty()
+    original = wt_mod.QMessageBox.question
+    wt_mod.QMessageBox.question = staticmethod(
+        lambda *a, **kw: QMessageBox.StandardButton.Discard
+    )
+    try:
+        proceed = tab.flush_on_close(None)
+    finally:
+        wt_mod.QMessageBox.question = original
+
+    assert proceed is True
+
+
+def test_flush_on_close_clean_is_noop(tab):
+    tab._mark_clean()
+    # No QMessageBox patching needed — should never be invoked.
+    assert tab.flush_on_close(None) is True
+
+
+def test_confirm_discard_save_path(tab, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    from lfs_telemetry.studio.widgets import workbook_tab as wt_mod
+
+    saved: list = []
+    monkeypatch.setattr(
+        wt_mod, "save_user_workbook",
+        lambda wb: saved.append(wb) or Path("dummy.json"),
+    )
+    tab._workbook.name = "confirm_wb"
+    tab._workbook_origin = ("user", "confirm_wb.json")
+    tab._mark_dirty()
+
+    original = wt_mod.QMessageBox.question
+    wt_mod.QMessageBox.question = staticmethod(
+        lambda *a, **kw: QMessageBox.StandardButton.Save
+    )
+    try:
+        ok = tab._confirm_discard_if_dirty()
+    finally:
+        wt_mod.QMessageBox.question = original
+
+    assert ok is True
+    assert tab._dirty is False
+    assert len(saved) == 1
