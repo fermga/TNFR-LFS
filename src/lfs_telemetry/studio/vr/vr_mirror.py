@@ -49,6 +49,7 @@ _DEFAULT_POSES: dict[str, OverlayPose] = {
     "fuel_pct": OverlayPose(x=-0.55, y=-0.05, z=-1.5, width_m=0.18),
     "fuel_laps": OverlayPose(x=-0.55, y=-0.20, z=-1.5, width_m=0.18),
     "delta": OverlayPose(x=0.00, y=-0.05, z=-1.5, width_m=0.40),
+    "speed_delta": OverlayPose(x=0.00, y=0.40, z=-1.5, width_m=0.40),
     "gap_ahead": OverlayPose(x=0.55, y=-0.05, z=-1.5, width_m=0.18),
     "gap_behind": OverlayPose(x=0.55, y=-0.20, z=-1.5, width_m=0.18),
     "grip": OverlayPose(x=-0.55, y=0.10, z=-1.5, width_m=0.18),
@@ -57,9 +58,6 @@ _DEFAULT_POSES: dict[str, OverlayPose] = {
     "pit_limiter": OverlayPose(x=0.00, y=0.10, z=-1.5, width_m=0.20),
     "gmeter": OverlayPose(x=-0.40, y=-0.40, z=-1.5, width_m=0.25),
     "radar": OverlayPose(x=0.40, y=-0.40, z=-1.5, width_m=0.25),
-    "minimap": OverlayPose(x=-0.55, y=0.30, z=-1.5, width_m=0.30),
-    "gap_compass": OverlayPose(x=0.55, y=0.30, z=-1.5, width_m=0.25),
-    "tc_abs": OverlayPose(x=0.00, y=-0.40, z=-1.5, width_m=0.25),
 }
 
 

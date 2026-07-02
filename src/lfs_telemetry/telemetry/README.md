@@ -109,8 +109,8 @@ async def main():
         insim_host="127.0.0.1",
         insim_port=29999,
     )
-    async with live.session():
-        async for sample in live.stream():
+    async with live:
+        async for sample in live.samples():
             print(sample.t_capture_s, sample.speed_ms, sample.rpm)
 ```
 
@@ -348,8 +348,8 @@ from lfs_telemetry.telemetry import LiveTelemetry, write_csv_replay
 async def run():
     live = LiveTelemetry(insim_host="127.0.0.1")
     samples = []
-    async with live.session():
-        async for s in live.stream():
+    async with live:
+        async for s in live.samples():
             samples.append(s)
             if len(samples) > 36000:
                 break

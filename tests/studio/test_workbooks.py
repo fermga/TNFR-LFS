@@ -28,7 +28,6 @@ from lfs_telemetry.studio.workbooks import (
     save_workbook,
 )
 
-
 # ---------------------------------------------------------------------------
 # Component / Worksheet / Workbook validation
 # ---------------------------------------------------------------------------
@@ -92,7 +91,7 @@ def test_workbook_roundtrip_json(tmp_path: Path):
         w.title for w in wb.worksheets
     ]
     # Component ids survive the round-trip.
-    for orig_ws, new_ws in zip(wb.worksheets, restored.worksheets):
+    for orig_ws, new_ws in zip(wb.worksheets, restored.worksheets, strict=True):
         assert [c.id for c in orig_ws.components] == [
             c.id for c in new_ws.components
         ]

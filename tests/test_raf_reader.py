@@ -180,6 +180,16 @@ def test_rejects_future_version():
         parse_raf_header(bytes(blob))
 
 
+def test_rejects_undersized_block_size():
+    # A malformed/truncated header reporting a block smaller than the
+    # fixed layout must raise ValueError (not crash with struct.error)
+    # so callers like raf-import can surface a friendly message.
+    blob = bytearray(_build_header(num_blocks=1))
+    struct.pack_into("<H", blob, 14, _BLOCK_SIZE - 8)
+    with pytest.raises(ValueError, match="block_size"):
+        parse_raf_header(bytes(blob))
+
+
 def test_parse_block_g_and_position(tmp_path):
     blob = _build_header(num_blocks=2)
     body = _build_block(

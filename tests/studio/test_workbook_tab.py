@@ -13,17 +13,16 @@ pytest.importorskip("pyqtgraph")
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from lfs_telemetry.studio.app import create_app  # noqa: E402
-from lfs_telemetry.studio.models import LapLoader  # noqa: E402
-from lfs_telemetry.studio.signals import SignalBus  # noqa: E402
-from lfs_telemetry.studio.widgets.workbook_tab import (  # noqa: E402
+from lfs_telemetry.studio.app import create_app
+from lfs_telemetry.studio.models import LapLoader
+from lfs_telemetry.studio.signals import SignalBus
+from lfs_telemetry.studio.widgets.workbook_tab import (
     WorkbookTab,
     _ComponentCard,
     _ComponentEditorDialog,
 )
-from lfs_telemetry.studio.workbooks import (  # noqa: E402
+from lfs_telemetry.studio.workbooks import (
     Component,
-    Workbook,
     Worksheet,
     builtin_template_names,
 )
@@ -157,7 +156,7 @@ def test_splitter_sizes_persist_round_trip(tab):
     if target_idx is None:
         pytest.skip("default workbook lacks a multi-card worksheet")
     tab._ws_tabs.setCurrentIndex(target_idx)
-    splitter, cards = tab._worksheet_widgets[target_idx]
+    _splitter, cards = tab._worksheet_widgets[target_idx]
 
     sizes = [120, 240] + [100] * (len(cards) - 2)
     tab._persist_splitter_sizes(target_idx, sizes)
@@ -222,6 +221,7 @@ def test_component_editor_caps_at_max(qapp):
     # Patch QMessageBox.warning so the modal popup doesn't hang the
     # offscreen test harness.
     from PySide6.QtWidgets import QMessageBox
+
     import lfs_telemetry.studio.widgets.workbook_tab as wt_mod
     original = wt_mod.QMessageBox.warning
     wt_mod.QMessageBox.warning = staticmethod(
@@ -356,6 +356,7 @@ def test_save_workbook_clears_dirty(tab, monkeypatch):
 
 def test_flush_on_close_cancel_aborts(tab):
     from PySide6.QtWidgets import QMessageBox
+
     from lfs_telemetry.studio.widgets import workbook_tab as wt_mod
 
     tab._mark_dirty()
@@ -384,6 +385,7 @@ def test_flush_on_close_cancel_aborts(tab):
 
 def test_flush_on_close_discard_proceeds(tab):
     from PySide6.QtWidgets import QMessageBox
+
     from lfs_telemetry.studio.widgets import workbook_tab as wt_mod
 
     tab._mark_dirty()
@@ -407,6 +409,7 @@ def test_flush_on_close_clean_is_noop(tab):
 
 def test_confirm_discard_save_path(tab, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
+
     from lfs_telemetry.studio.widgets import workbook_tab as wt_mod
 
     saved: list = []

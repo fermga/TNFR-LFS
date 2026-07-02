@@ -422,6 +422,26 @@ def test_insim_mal_unrestricted():
     assert mal.mod_ids == ()
 
 
+def test_insim_mal_truncated_clamps_to_buffer():
+    """A NumM larger than the payload must not synthesise bogus IDs.
+
+    Guards the buffer-bounds clamp: a malformed/truncated IS_MAL that
+    claims 5 mods but only carries 2 must yield exactly those 2, never
+    zero-padded IDs read past the end of the buffer.
+    """
+    ids = [0x123456, 0xABCDEF]
+    payload_header = struct.pack("<BBBB", 3, 0, 0, 0)  # UCID, Flags, Sp2, Sp3
+    payload_mods = b"".join(struct.pack("<I", i) for i in ids)
+    # NumM claims 5 but only 2 mods' worth of bytes actually follow.
+    packet = (
+        struct.pack("<BBBB", 1, ISP_MAL, 0, 5)
+        + payload_header + payload_mods
+    )
+    mal = InSimModsAllowed.parse(packet)
+    assert mal.connection_id == 3
+    assert mal.mod_ids == ("123456", "abcdef")
+
+
 def test_insim_small_vote_action():
     packet = struct.pack("<BBBB I", 2, ISP_SMALL, 0, SMALL_VTA, VOTE_RESTART)
     sm = InSimSmall.parse(packet)

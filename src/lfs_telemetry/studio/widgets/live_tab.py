@@ -674,9 +674,11 @@ class LiveTab(QWidget):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
+        self._timer.stop()
         if self._vr_mirror is not None:
             self._vr_mirror.shutdown()
             self._vr_mirror = None
+        self._source.stop()
         for w in self._widgets.values():
             if w is not None:
                 w.close()

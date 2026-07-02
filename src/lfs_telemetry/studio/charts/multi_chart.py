@@ -20,6 +20,7 @@ Performance properties (validated empirically):
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Sequence
 
 import numpy as np
@@ -34,7 +35,6 @@ from ...telemetry.sectors import insim_split_distances_m, sector_times_s
 from ..i18n import current_language, tr
 from ..theme import CURSOR_COLOR, GRID_COLOR, MUTED_COLOR, TEXT_COLOR, trace_color
 from .lap_arrays import LapArrayCache
-
 
 # Palette used for channels overlayed in the same row (overlay mode
 # only). Distinct from `trace_color`, which encodes lap index.
@@ -109,10 +109,8 @@ class _Row(QObject):
 
     def clear_legend(self) -> None:
         if self.legend is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self.legend.clear()
-            except Exception:
-                pass
 
 
 class MultiChannelChart(QWidget):
@@ -661,10 +659,6 @@ class MultiChannelChart(QWidget):
             self._pending_cursor = x
             if not self._cursor_throttle.isActive():
                 self._cursor_throttle.start()
-
-        def on_leave(_event):
-            self.hide_cursor()
-            self.cursor_left.emit()
 
         scene.sigMouseMoved.connect(on_move)
         # Hide cursor when the pointer leaves *all* rows; per-row leave

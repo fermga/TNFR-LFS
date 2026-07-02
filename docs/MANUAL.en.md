@@ -313,6 +313,7 @@ capture process.
 | **Radar** | 360° radar with surrounding cars (blue = ahead, red = behind). Scale and colour thresholds are configurable. |
 | **G-meter (friction circle)** | Friction circle with instantaneous longitudinal and lateral acceleration. Full scale configurable in g. |
 | **Delta bar vs personal best** | Horizontal bar with the delta against your personal best lap (green = gaining, red = losing). Full scale configurable in ms. |
+| **Speed delta vs PB (same track point)** | Instantaneous speed difference against your personal best at the same point on track (green = faster, red = slower). |
 | **Session info (dynamic)** | Session summary: current lap, last lap, best lap, session time, etc. In detailed mode the window auto-resizes to fit the full live standings table (every classified driver). Optional compact mode. |
 | **Grip (per wheel)** | Grip/risk indicator per wheel (4 segments), useful to spot grip loss or overheating. |
 | **Gap to driver ahead** | Time gap to the car ahead (decoded from InSim). Robust against disconnected/DNF cars in the position table, stationary pit/spectator cars, and lap-mismatch wrap artifacts. |
@@ -323,6 +324,7 @@ capture process.
 | **Fuel %** | Remaining fuel as a percentage. |
 | **Fuel laps remaining** | Laps remaining with the current fuel at the average consumption observed during the session. |
 | **Flags (BLUE / YELLOW)** | Blue and yellow flag indicator decoded from InSim. |
+| **Pit limiter (flashing + speed delta)** | Flashing band while the pit-lane speed limiter is on, plus current speed vs the configured pit limit (default 80 km/h). |
 
 **Configuration panels** (below the module list):
 

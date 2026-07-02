@@ -1215,10 +1215,13 @@ class InSimModsAllowed:
         # Total packet size = 8 + NumM * 4.
         num_mods = data[3]
         ucid, flags, _sp2, _sp3 = struct.unpack_from("<BBBB", data, 4)
+        # Clamp to the bytes actually present so a truncated or malformed
+        # packet can't synthesise bogus IDs from short/empty slices.
+        available = max(0, (len(data) - 8) // 4)
+        num_mods = min(num_mods, available)
         ids: list[str] = []
         for i in range(num_mods):
-            raw = data[8 + i * 4:12 + i * 4]
-            u32 = int.from_bytes(raw, "little")
+            (u32,) = struct.unpack_from("<I", data, 8 + i * 4)
             ids.append(f"{u32:06x}")
         return cls(connection_id=ucid, flags=flags, mod_ids=tuple(ids))
 
@@ -1281,11 +1284,10 @@ class CarContact:
     x_m: float                # short / 16
     y_m: float                # short / 16
 
-    _STRUCT: ClassVar[struct.Struct] = struct.Struct("<BBb BBB BBB bb hh")
-    # PLID, Info, Sp2, Steer, ThrBrk, CluHan, GearSp, Speed, Direction,
-    # Heading, AccelF, AccelR, X, Y.  Wait: we need PLID(B), Info(B), Sp2(B),
-    # Steer(b), ThrBrk(B), CluHan(B), GearSp(B), Speed(B), Direction(B),
-    # Heading(B), AccelF(b), AccelR(b), X(h), Y(h)  → 1+1+1+1+1+1+1+1+1+1+1+1+2+2 = 16 ✓
+    _STRUCT: ClassVar[struct.Struct] = struct.Struct("<BBBb BBB BBB bb hh")
+    # PLID(B), Info(B), Sp2(B), Steer(b), ThrBrk(B), CluHan(B), GearSp(B),
+    # Speed(B), Direction(B), Heading(B), AccelF(b), AccelR(b), X(h), Y(h)
+    # -> 12 single-byte fields + 2 shorts = 16 bytes.
 
     @classmethod
     def parse(cls, data: bytes, off: int) -> CarContact:
@@ -1293,8 +1295,7 @@ class CarContact:
          thrbrk, cluhan, gearsp,
          speed, direction, heading,
          accel_f, accel_r,
-         x_s, y_s) = struct.unpack_from(
-            "<BBBb BBB BBB bb hh", data, off)
+         x_s, y_s) = cls._STRUCT.unpack_from(data, off)
         return cls(
             player_id=plid, info=info, steer=steer,
             throttle=(thrbrk >> 4) & 0x0F,

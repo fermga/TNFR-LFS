@@ -33,6 +33,7 @@ just exposes a small imperative API: ``ensure_overlay``, ``upload``,
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import logging
 import threading
 from dataclasses import dataclass
@@ -206,6 +207,23 @@ class OpenVROverlaySink:
     def init_error(self) -> str | None:
         return self._init_error
 
+    # ----- Internal helpers -------------------------------------------
+
+    def _build_transform(self, pose: OverlayPose) -> Any:
+        """Convert an :class:`OverlayPose` into an ``HmdMatrix34_t``.
+
+        pyopenvr forwards this structure through ``ctypes.byref``, so it
+        must be a real ctypes structure. A plain Python tuple raises
+        ``TypeError`` inside pyopenvr, which would silently disable the
+        overlay (handle created but never positioned or shown).
+        """
+        matrix = self._openvr.HmdMatrix34_t()
+        rows = pose.to_matrix34()
+        for i in range(3):
+            for j in range(4):
+                matrix.m[i][j] = rows[i][j]
+        return matrix
+
     # ----- Overlay lifecycle ------------------------------------------
 
     def ensure_overlay(
@@ -235,7 +253,7 @@ class OpenVROverlaySink:
                 # configuration toggle.
                 hmd_idx = 0
                 self._vr_overlay.setOverlayTransformTrackedDeviceRelative(
-                    handle, hmd_idx, pose.to_matrix34(),
+                    handle, hmd_idx, self._build_transform(pose),
                 )
                 self._entries[module_id] = _OverlayEntry(
                     handle=handle, width_m=pose.width_m,
@@ -295,7 +313,11 @@ class OpenVROverlaySink:
         if image.bytesPerLine() != expected_stride:
             # Force a packed copy.
             image = image.copy()
-        buf = bytes(image.constBits())
+        raw = bytes(image.constBits())
+        # pyopenvr forwards the pixel buffer through ``ctypes.byref``, so
+        # it must be a ctypes object; a raw ``bytes`` would raise and
+        # silently drop every frame. Wrap it in a packed ctypes array.
+        buf = (ctypes.c_char * len(raw)).from_buffer_copy(raw)
 
         with self._lock:
             try:

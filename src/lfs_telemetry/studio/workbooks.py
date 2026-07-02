@@ -432,8 +432,8 @@ def default_workbook() -> Workbook:
 
 __all__ = [
     "COMPONENT_TYPES",
-    "Component",
     "SCHEMA_VERSION",
+    "Component",
     "Workbook",
     "Worksheet",
     "builtin_template",

@@ -454,6 +454,8 @@ class RaceDashboardDock(QWidget):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
+        self._avg_timer.stop()
+        self._timer.stop()
         self._source.stop()
         super().closeEvent(event)
 

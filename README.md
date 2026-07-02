@@ -19,7 +19,7 @@ a stint browser.
   and persisted in `QSettings`.
 * CSV replay schema version `1.1` (preamble
   `# lfs-telemetry telemetry schema=1.1`).
-* Test suite: **307 passed, 15 skipped** running headless
+* Test suite: **344 passed, 15 skipped** running headless
   (`QT_QPA_PLATFORM=offscreen`). The 15 skips require either a live LFS
   session (`tests/test_live_lfs_integration.py`) or on-disk LFS data
   (`C:\LFS\data\smx`, `…\car_info.bin`, etc.).
@@ -62,7 +62,6 @@ src/lfs_telemetry/
   app_paths.py                # bundled-asset / racing-line / doc / config path lookup
   lfs_config.py               # patch LFS\cfg.txt to emit OutSim/OutGauge
   lfs_paths.py                # detect LFS install + data folders
-  constants.py                # unit-conversion constants (SPEED_MS_TO_KMH, …)
   cli/                        # `lfs-telemetry` subcommand sub-package
     __init__.py               # main() + argparse dispatch (capture/calibrate/reslice/raf-import)
     _common.py                # _add_lfs_flags, _harden_std_streams, _ResilientTextStream, _request_stop
@@ -104,6 +103,7 @@ src/lfs_telemetry/
     raf.py                    # parse LFS .raf replay analyser files
     live_publisher.py         # JSON snapshot for the Studio Live tab
     heading.py                # local-frame geometry helpers
+    constants.py              # unit-conversion constants (SPEED_MS_TO_KMH, …)
   studio/                     # PySide6 Race Engineer UI
     __main__.py               # `python -m lfs_telemetry.studio`
     app.py                    # QApplication boot + signal/timer wiring
@@ -121,17 +121,17 @@ src/lfs_telemetry/
         inputs.py             # Gear / Rpm / throttle / brake / clutch
         gaps.py               # GapAhead / GapBehind
         session.py            # SessionInfoWindow (dynamic standings)
-        diagnostics.py        # Flags / PitLimiter / TcAbs / GMeter
+        diagnostics.py        # Flags / PitLimiter / GMeter
         tyre_risk.py          # per-wheel grip/risk indicator
-        compass_map.py        # GapCompass + MiniMap
         radar.py              # 360° traffic radar
         delta_bar.py          # DeltaBar / SpeedDeltaBar
     vr/                       # SteamVR / OpenVR mirror (extra `[vr]`)
-      openvr_overlay.py       # IVROverlay panel manager
+      openvr_overlay.py       # IVROverlay panel manager (per-module handles)
+      vr_mirror.py            # polls visible overlays, uploads frames to OpenVR
   app/                        # capture-process support (used by Studio)
     capture_runner.py         # spawn CLI as subprocess, watch stop file
     state.py                  # dataclass mirror of capture state
-tests/                        # 322 tests collected (307 pass headless, 15 skipped)
+tests/                        # 359 collected (344 pass headless, 15 skipped)
 scripts/                      # ops + dev helpers (see Scripts section)
 tools/                        # binary-format research helpers
 tracks/                       # per-variant elevation profiles + overviews
@@ -146,8 +146,8 @@ dist/                         # PyInstaller frozen Studio bundle (gitignored)
 ## Installation (developer mode)
 
 ```powershell
-git clone https://github.com/fermga/TNFR-LFS
-cd TNFR-LFS
+git clone https://github.com/fermga/LFS-Race-Engineer
+cd LFS-Race-Engineer
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[studio,dev]"
@@ -159,7 +159,7 @@ Run the test suite headless:
 $env:PYTHONIOENCODING = "utf-8"
 $env:QT_QPA_PLATFORM  = "offscreen"
 python -m pytest -q
-# 307 passed, 15 skipped
+# 344 passed, 15 skipped
 ```
 
 The 15 skipped tests exercise the on-disk LFS install layout
@@ -192,8 +192,8 @@ LFS does not emit telemetry by default. The package can patch
 Manual snippet for `LFS\cfg.txt`:
 
 ```
-OutSim Mode 2             ; 2 = extended OutSimPack2 (280 B)
-OutSim Opts 1ff           ; OSO_ALL → full extended payload
+OutSim Mode 2             ; 0=off 1=driving 2=driving+replay
+OutSim Opts 1ff           ; OSO_ALL → extended OutSimPack2 (280 B)
 OutSim Delay 1            ; 10 ms ≈ 100 Hz
 OutSim IP 127.0.0.1
 OutSim Port 30000
@@ -352,11 +352,10 @@ Order in the build, top to bottom:
    and watched by `widgets/live_data_source.py`. The HUD is composed
    of independent frameless always-on-top windows defined under
    `widgets/live_modules/` (see the studio README for the full module
-   list): 360° traffic radar, delta-vs-reference strip, predicted lap,
-   gap to best, fuel range, mini-map cursor, plus flag / pit-window /
-   penalty decoding. When SteamVR is running, the **VR mirror** group
-   in the Live tab pushes every visible overlay to an `IVROverlay`
-   panel via `studio/vr/openvr_overlay.py` (extra `[vr]`).
+  list): 360° traffic radar, delta and speed-delta strips, per-wheel
+  grip, gaps ahead/behind, gear / RPM / speed, fuel % and laps
+  remaining, dynamic session info, plus flag and pit-limiter modules.
+  When SteamVR is running, the **VR mirror** group
 
 ### Car coverage
 
@@ -383,9 +382,8 @@ The menu *Tools* contains:
   install folder and patch `cfg.txt` in place (with a `.bak` backup).
 
 (The bundled racing line for a track is loaded automatically from
-`racing_lines/<TRACK>_racing.csv`; `widgets/racing_line_loader.py`
-remains as a helper used internally by the compass / mini-map
-renderers, not as a user-facing dialog.)
+`racing_lines/<TRACK>_racing.csv` by the Track map dock via
+`widgets/racing_line_loader.py` (`RacingLine`), not a user-facing dialog.)
 
 The menu *View* contains the dock visibility toggles plus *Language*,
 which switches between English and Español live; the choice is
@@ -624,6 +622,10 @@ Key behaviours encoded in the spec:
   command line; the hard-coded fallback inside the script exists
   only for ad-hoc manual builds and is kept in sync with
   `pyproject.toml`.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Licence
 

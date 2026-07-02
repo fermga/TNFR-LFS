@@ -1,7 +1,9 @@
 """Tiny helper to read ``racing_lines/<TRACK>_racing.csv`` files.
 
-Used by the Live overlay's mini-map module to draw the track centerline
-underneath the moving cars. Pure logic (just CSV parsing + bbox).
+Parses a track's reference line into a :class:`RacingLine` (points +
+bounding box, optional arclength and an optional per-row scalar such as
+target speed). Used by the Track map dock to draw the ideal line and
+apex markers. Pure logic (CSV parsing + bbox), no Qt dependency.
 """
 
 from __future__ import annotations
@@ -24,6 +26,10 @@ class RacingLine:
     # value plus the closing segment (loop back to point 0).
     s_m: list[float] = field(default_factory=list)
     total_length_m: float = 0.0
+    # Optional per-row scalar (e.g. target speed) captured when
+    # ``value_col`` is requested in :func:`load_racing_line`; empty
+    # otherwise. Aligned 1:1 with :attr:`points`.
+    values: list[float] = field(default_factory=list)
 
     @classmethod
     def empty(cls) -> RacingLine:
@@ -63,17 +69,21 @@ def load_racing_line(
     x_col: str = "x_center_m",
     y_col: str = "y_center_m",
     s_col: str = "s_m",
+    value_col: str | None = None,
 ) -> RacingLine:
-    """Read a racing-line CSV and return its centerline + bbox.
+    """Read a racing-line CSV and return its points + bbox.
 
     Returns an empty :class:`RacingLine` if the file is missing or
-    cannot be parsed (Studio renders nothing in that case).
+    cannot be parsed (Studio renders nothing in that case). When
+    ``value_col`` is given, that column is captured per row into
+    :attr:`RacingLine.values` (NaN where missing), aligned with points.
     """
     p = Path(path)
     if not p.exists():
         return RacingLine.empty()
     pts: list[tuple[float, float]] = []
     s_vals: list[float] = []
+    vals: list[float] = []
     try:
         with p.open("r", newline="", encoding="utf-8") as fh:
             reader = csv.DictReader(fh)
@@ -90,6 +100,11 @@ def load_racing_line(
                     s_vals.append(float(row[s_col]))
                 except (KeyError, TypeError, ValueError):
                     s_vals.append(math.nan)
+                if value_col is not None:
+                    try:
+                        vals.append(float(row[value_col]))
+                    except (KeyError, TypeError, ValueError):
+                        vals.append(math.nan)
     except OSError:
         return RacingLine.empty()
     if not pts:
@@ -117,6 +132,7 @@ def load_racing_line(
         bbox=(min(xs), min(ys), max(xs), max(ys)),
         s_m=s_vals,
         total_length_m=total,
+        values=vals,
     )
 
 
@@ -131,7 +147,7 @@ def find_racing_line_for_track(
     if not candidate.exists():
         _LOG.debug(
             "racing line missing for track %s (looked at %s); "
-            "mini-map will render no centerline",
+            "no reference centreline available",
             track, candidate,
         )
     return load_racing_line(candidate)

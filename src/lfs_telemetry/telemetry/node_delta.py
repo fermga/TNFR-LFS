@@ -206,7 +206,7 @@ class NodeDeltaTracker:
     def ghost_node_at(self, *, elapsed_ms: int) -> int | None:
         """Find the PB node whose recorded clock matches ``elapsed_ms``.
 
-        Used by the Live mini-map's "ghost" indicator: where on the
+        Used by the track-map replay ghost dots: where on the
         racing line you would be right now if you were on PB pace.
         Falls back to the last completed valid lap when no PB exists
         yet, mirroring :meth:`delta_ms`. Returns ``None`` until at

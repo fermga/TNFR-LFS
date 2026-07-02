@@ -186,46 +186,6 @@ class PitLimiterWindow(_LiveModuleWindow):
         super()._on_snapshot(snap)
 
 
-class TcAbsWindow(_LiveModuleWindow):
-    """LED that lights when wheel slip exceeds a threshold."""
-
-    def __init__(
-        self, source: LiveDataSource, *,
-        opacity: float = 0.85, slip_threshold: float = 0.20,
-    ) -> None:
-        super().__init__(
-            source, size=(120, 100),
-            title="LFS Live - slip", opacity=opacity,
-        )
-        self._threshold = float(slip_threshold)
-
-    def set_slip_threshold(self, value: float) -> None:
-        self._threshold = float(value)
-        self.update()
-
-    def paintEvent(self, event) -> None:
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        self._paint_card(p)
-        slip = self._snap.get("view_max_slip")
-        active = slip is not None and slip >= self._threshold
-        side = min(self.width(), self.height()) * 0.45
-        cx = self.width() / 2.0
-        cy = self.height() * 0.45
-        led = QRectF(cx - side / 2, cy - side / 2, side, side)
-        p.setPen(QPen(QColor(40, 40, 50), 2))
-        p.setBrush(QColor(255, 80, 80) if active else QColor(50, 30, 30))
-        p.drawEllipse(led)
-        p.setPen(QPen(QColor(220, 220, 230)))
-        p.setFont(self._font(11, QFont.Weight.Bold))
-        p.drawText(
-            QRectF(0, self.height() * 0.78, self.width(),
-                   self.height() * 0.22),
-            int(Qt.AlignmentFlag.AlignCenter),
-            f"SLIP {slip * 100:4.1f}%" if slip is not None else "SLIP --",
-        )
-
-
 # ---------------------------------------------------------------------------
 # G-meter
 # ---------------------------------------------------------------------------
@@ -300,10 +260,5 @@ class GMeterWindow(_LiveModuleWindow):
                 int(Qt.AlignmentFlag.AlignCenter),
                 f"{mag:4.2f} g",
             )
-
-
-# ---------------------------------------------------------------------------
-# Gap compass
-# ---------------------------------------------------------------------------
 
 

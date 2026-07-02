@@ -29,8 +29,8 @@ __main__.py  →  app.main()
   timers globales (refresco Live, polling del fichero stop).
 * `theme.py` aplica el QSS canónico y la paleta dark-in-game.
 * `signals.py` define un *bus* central de `Signal`s tipados que
-  desacopla los docks: `captureSelected(Path)`, `lapChanged(int)`,
-  `liveSnapshotUpdated(dict)`, `channelToggled(str, bool)`…
+  desacopla los docks: `laps_selected(list)`, `channels_changed(list)`,
+  `cursor_moved(float)`, `x_axis_changed(str)`, `captures_refreshed()`…
 * `workspace_state.py` lee/escribe `~/.lfs-telemetry/studio.json` con
   la última captura abierta, splits y dock layout.
 
@@ -84,10 +84,9 @@ repositorio como utilidad para futuras ampliaciones, pero **no están
 cableados en `CenterTabs`** en la build actual.
 
 El menú *Tools* abre `widgets/lfs_config_dialog.py` para parchear
-`cfg.txt`. El módulo `widgets/racing_line_loader.py` sigue en el
-repositorio porque lo usan internamente los renderers de mini-mapa y
-brújula (compass/map), pero **ya no aparece como entrada de menú** en
-la build actual.
+`cfg.txt`. El módulo `widgets/racing_line_loader.py` es el parser
+compartido de `racing_lines/<TRACK>_racing.csv` (`RacingLine`): lo usa
+`track_map_dock` para dibujar la línea ideal y marcar los ápices.
 
 ---
 
@@ -135,10 +134,10 @@ la build actual.
 | `dampers_tab.py` | Histogramas HS/LS por rueda (`damper_histogram`). |
 | `capture_tab.py` | Botones Start/Stop sobre `app.capture_runner`. Formulario (stem, host/puerto InSim, puertos OutSim/OutGauge), checkbox **"Overlay only (no CSV recording)"** que pasa `write_csv=False` al runner (CLI `--no-csv`), LED de estado InSim (gris=idle / ámbar=esperando / verde=conectado), log embebido y contador de vueltas. |
 | `live_tab.py` | Race-engineer overlay live a partir del snapshot JSON. |
-| `live_modules/` | Sub-paquete con los módulos componibles del Live tab (`_base`, `simple`, `inputs`, `gaps`, `session`, `diagnostics`, `tyre_risk`, `compass_map`, `radar`, `delta_bar`). El antiguo `live_modules.py` está reemplazado por este paquete; las clases públicas se re-exportan desde `live_modules/__init__.py` para mantener compatibilidad. |
+| `live_modules/` | Sub-paquete con los módulos componibles del Live tab (`_base`, `simple`, `inputs`, `gaps`, `session`, `diagnostics`, `tyre_risk`, `radar`, `delta_bar`). El antiguo `live_modules.py` está reemplazado por este paquete; las clases públicas se re-exportan desde `live_modules/__init__.py` para mantener compatibilidad. |
 | `live_data_source.py` | Lector y watcher del fichero JSON publicado por `live_publisher`. |
 | `lfs_config_dialog.py` | Diálogo *Configure LFS…* (selección de carpeta + patch automático). |
-| `racing_line_loader.py` | Cargador/parser de `racing_lines/<TRACK>_racing.csv`. Lo usan internamente `track_map_dock` y los renderers compass/mini-map; no es un diálogo modal expuesto al usuario. |
+| `racing_line_loader.py` | Parser compartido de `racing_lines/<TRACK>_racing.csv` → `RacingLine` (puntos + bbox + escalar opcional). Lo usa `track_map_dock` para la línea ideal y los ápices. |
 | `_format.py` | Formateadores compartidos: `format_finite`, `format_signed_finite`, `format_lap_time_s`, `format_lap_time_ms`, `format_clock_ms`, `format_signed_delta_s`, `format_signed_delta_ms`, `format_gap_seconds`, `format_gap_meters` y constante `EMDASH = "—"`. Toda la UI debe usar estas funciones (no recrearlas localmente). |
 
 ---

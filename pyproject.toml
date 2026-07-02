@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lfs-race-engineer"
-version = "0.5.0"
+version = "0.5.1"
 description = "Live-for-Speed real-time telemetry capture and Studio race-engineer overlay."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -37,6 +37,11 @@ vr = [
 ]
 build = [
     "pyinstaller>=6.6",
+    # Bundle the VR mirror into the shipped .exe. The PyInstaller spec
+    # only packages ``openvr`` when it is importable at build time, so
+    # pin it here to guarantee SteamVR/OpenVR support in released builds
+    # (Windows-only, matching the ``vr`` extra).
+    "openvr>=1.26 ; sys_platform == 'win32'",
 ]
 # Stand-alone matplotlib viewers under scripts/ and tools/
 # (motec_view, racing_line_view, track_view, wheel_view,

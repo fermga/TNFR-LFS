@@ -14,10 +14,10 @@
 ; the installer is built by hand without that flag — keep it in sync with
 ; pyproject.toml when you cut a release.
 #ifndef MyAppVersion
-  #define MyAppVersion "0.5.0"
+  #define MyAppVersion "0.5.1"
 #endif
 #define MyAppPublisher  "LFS Race Engineer Contributors"
-#define MyAppURL        "https://github.com/fermga/TNFR-LFS"
+#define MyAppURL        "https://github.com/fermga/LFS-Race-Engineer"
 #define MyAppExeName    "lfs-race-engineer.exe"
 #define MyAppSourceDir  "..\dist\lfs-race-engineer"
 

@@ -114,7 +114,12 @@ def estimate_mu_lat_curve(df: pd.DataFrame, *,
     v_centres = []
     mu_peaks = []
     for i in range(n_bins):
-        m = (speed >= edges[i]) & (speed < edges[i + 1])
+        # Close the rightmost bin on both ends so the fastest sample
+        # (speed == v_hi) isn't dropped from the aero fit.
+        if i == n_bins - 1:
+            m = (speed >= edges[i]) & (speed <= edges[i + 1])
+        else:
+            m = (speed >= edges[i]) & (speed < edges[i + 1])
         if m.sum() < min_per_bin:
             continue
         v_centres.append(0.5 * (edges[i] + edges[i + 1]))

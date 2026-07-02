@@ -82,8 +82,6 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
     flying_lap_start_idx = 0
     completed_flying_laps = 0
     laps_to_skip = max(0, args.warmup_laps)
-    # Per-lap slices: list of (lap_number, list_of_samples, lap_ms_or_None)
-    lap_slices: list[tuple[int, list[TelemetrySample], int | None]] = []
 
     # Streaming per-lap output: when --per-lap is on, write each lap's
     # CSV the moment it closes (canonical line crossing) instead of
@@ -158,7 +156,6 @@ async def _cmd_capture(args: argparse.Namespace) -> int:
         slice_ = samples[flying_lap_start_idx:end_idx_exclusive]
         if slice_:
             lap_index = completed_flying_laps + 1
-            lap_slices.append((lap_index, list(slice_), lap_ms))
             _write_lap_atomic(lap_index, list(slice_), lap_ms)
         flying_lap_start_idx = end_idx_exclusive
 

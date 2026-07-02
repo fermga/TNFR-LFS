@@ -19,13 +19,11 @@ from ._base import (
     _LiveModuleWindow,
     proximity_color,
 )
-from .compass_map import GapCompassWindow, MiniMapWindow
 from .delta_bar import DeltaBarWindow, SpeedDeltaBarWindow
 from .diagnostics import (
     FlagsWindow,
     GMeterWindow,
     PitLimiterWindow,
-    TcAbsWindow,
 )
 from .gaps import GapAheadWindow, GapBehindWindow, _GapWindow
 from .inputs import (
@@ -59,9 +57,7 @@ __all__ = [
     "GMeterWindow",
     "GapAheadWindow",
     "GapBehindWindow",
-    "GapCompassWindow",
     "GearWindow",
-    "MiniMapWindow",
     "PitLimiterWindow",
     "PositionWindow",
     "RadarWindow",
@@ -69,7 +65,6 @@ __all__ = [
     "SessionInfoWindow",
     "SpeedDeltaBarWindow",
     "SpeedWindow",
-    "TcAbsWindow",
     "ThrottleWindow",
     "TyreRiskWindow",
     "_GapWindow",

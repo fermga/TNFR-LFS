@@ -19,8 +19,8 @@ from pathlib import Path
 # ``LFS.exe /insim=29999``. Writing an ``InSim Port`` entry makes LFS
 # show a red "unknown setting" warning at the top of the screen.
 REQUIRED_SETTINGS: dict[str, str] = {
-    "OutSim Mode":     "2",      # 2 = OutSimPack2 extended packets
-    "OutSim Opts":     "1ff",    # full extended payload
+    "OutSim Mode":     "2",      # 0=off 1=driving 2=driving+replay
+    "OutSim Opts":     "1ff",    # OutSimPack2 extended payload (all blocks)
     "OutSim Delay":    "1",      # ~10 ms (LFS ticks at 100 Hz)
     "OutSim IP":       "127.0.0.1",
     "OutSim Port":     "30000",

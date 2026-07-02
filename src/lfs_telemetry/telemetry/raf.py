@@ -118,6 +118,11 @@ def parse_raf_header(buf: bytes) -> RafHeader:
     wheel_block_size = struct.unpack_from("<H", buf, 16)[0]
     wheel_block_offset = struct.unpack_from("<H", buf, 18)[0]
     num_blocks = struct.unpack_from("<i", buf, 20)[0]
+    if block_size < _BLOCK_SIZE:
+        raise ValueError(
+            f"RAF block_size {block_size} < expected {_BLOCK_SIZE}; "
+            "file is malformed or truncated",
+        )
     short_track_name = _cstr(buf[24:28])
     track_ruler_length_m = struct.unpack_from("<f", buf, 28)[0]
     player = _cstr(buf[32:64])

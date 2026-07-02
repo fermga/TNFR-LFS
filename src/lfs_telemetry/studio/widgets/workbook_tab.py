@@ -805,7 +805,7 @@ class WorkbookTab(QWidget):
                         wb = load_workbook(path)
                         self._workbook_origin = ("user", str(path))
                         return wb
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         LOG.warning(
                             "failed to load persisted workbook %s; "
                             "falling back to default", path,
@@ -817,7 +817,7 @@ class WorkbookTab(QWidget):
                     wb = builtin_template(name)
                     self._workbook_origin = ("builtin", name)
                     return wb
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
         return default_workbook()
 
@@ -899,7 +899,7 @@ class WorkbookTab(QWidget):
         self._workbook.name = name
         try:
             path = save_user_workbook(self._workbook)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             QMessageBox.warning(
                 self, tr("Save workbook"),
                 tr("Failed to save: {err}").format(err=exc),
@@ -1083,7 +1083,7 @@ class WorkbookTab(QWidget):
             else:
                 self._workbook = load_workbook(Path(payload))
                 self._workbook_origin = ("user", payload)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             QMessageBox.warning(
                 self, tr("Workbook"),
                 tr("Failed to load workbook: {err}").format(err=exc),
@@ -1184,10 +1184,10 @@ class WorkbookTab(QWidget):
         if not (0 <= ws_idx < len(self._workbook.worksheets)):
             return
         ws = self._workbook.worksheets[ws_idx]
-        if kind == "graph":
-            title = tr("New graph")
-        else:
-            title = tr("New {k}").format(k=kind)
+        title = (
+            tr("New graph") if kind == "graph"
+            else tr("New {k}").format(k=kind)
+        )
         ws.components.append(Component(type=kind, title=title, channels=[]))
         self._rebuild_worksheet_tabs()
         self._ws_tabs.setCurrentIndex(ws_idx)

@@ -317,6 +317,7 @@ proceso de captura.
 | **Radar** | Radar 360° con los coches alrededor (azul = delante, rojo = detrás). Escala y umbrales de color configurables. |
 | **G-meter (friction circle)** | Círculo de fricción con la aceleración longitudinal y lateral instantánea. Escala configurable en g. |
 | **Delta bar vs personal best** | Barra horizontal con el delta frente a tu mejor vuelta personal (verde = ganando, rojo = perdiendo). Fondo de escala configurable en ms. |
+| **Speed delta vs PB (same track point)** | Diferencia de velocidad instantánea frente a tu mejor vuelta personal en el mismo punto de la pista (verde = más rápido, rojo = más lento). |
 | **Session info (dynamic)** | Resumen de la sesión: vuelta actual, última vuelta, mejor vuelta, tiempo de sesión, etc. En modo detallado la ventana se redimensiona automáticamente para mostrar toda la tabla de clasificación en vivo (todos los pilotos clasificados). Modo compacto opcional. |
 | **Grip (per wheel)** | Indicador de agarre/riesgo por rueda (4 segmentos), útil para detectar pérdida de grip o sobrecalentamiento. |
 | **Gap to driver ahead** | Tiempo hasta el coche que va por delante (decodificado desde InSim). Robusto frente a coches desconectados/DNF en la tabla de posiciones, coches parados en pits/espectadores y artefactos de wrap por desfase de vuelta. |
@@ -327,6 +328,7 @@ proceso de captura.
 | **Fuel %** | Porcentaje de combustible restante. |
 | **Fuel laps remaining** | Vueltas restantes con el combustible actual al consumo medio observado en la sesión. |
 | **Flags (BLUE / YELLOW)** | Indicador de banderas azul y amarilla decodificadas desde InSim. |
+| **Pit limiter (flashing + speed delta)** | Banda parpadeante mientras el limitador de pit-lane está activo, más la velocidad actual frente al límite de pit configurado (por defecto 80 km/h). |
 
 **Paneles de configuración** (debajo de la lista de módulos):
 

@@ -1,7 +1,7 @@
 """Module entrypoint so ``python -m lfs_telemetry ...`` works.
 
 Delegates to :func:`lfs_telemetry.cli.main` which dispatches the
-``capture`` / ``calibrate`` / ``reslice`` / ``advise`` subcommands.
+``capture`` / ``calibrate`` / ``reslice`` / ``raf-import`` subcommands.
 """
 
 from __future__ import annotations

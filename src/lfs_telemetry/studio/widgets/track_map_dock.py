@@ -15,7 +15,6 @@ Renders with ``pyqtgraph`` so panning/zoom comes for free.
 
 from __future__ import annotations
 
-import csv
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -57,6 +56,7 @@ from ...telemetry.track_map import TrackMap
 from ..models import LapLoader
 from ..signals import SignalBus
 from ..theme import CURSOR_COLOR, MUTED_COLOR, TEXT_COLOR, trace_color
+from .racing_line_loader import RacingLine, load_racing_line
 
 
 class TrackMapDock(QWidget):
@@ -126,7 +126,7 @@ class TrackMapDock(QWidget):
         # Reference racing line (ideal line from racing_lines/<TRACK>).
         self._rline_item: pg.PlotDataItem | None = None
         self._apex_item: pg.ScatterPlotItem | None = None
-        self._rline_cache: dict[str, tuple] = {}
+        self._rline_cache: dict[str, RacingLine | None] = {}
         self._current_track: str | None = None
 
         # Per-car KNW AI line overlay.
@@ -650,6 +650,12 @@ class TrackMapDock(QWidget):
             )
         self._playback_axis_kind_before = None
 
+    def closeEvent(self, event) -> None:
+        # Stop the ~30 Hz playback timer so it can't fire _on_playback_tick
+        # after the dock is torn down.
+        self._playback_timer.stop()
+        super().closeEvent(event)
+
     def _is_playing(self) -> bool:
         return self._playback_timer.isActive()
 
@@ -763,50 +769,27 @@ class TrackMapDock(QWidget):
         from ...app_paths import candidate_racing_lines_dirs
         return candidate_racing_lines_dirs()
 
-    def _load_racing_line(
-        self, track: str,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
-        """Return (x_line_m, y_line_m, v_target_kmh) or None."""
+    def _load_racing_line(self, track: str) -> RacingLine | None:
+        """Return the reference :class:`RacingLine` for ``track`` or None.
+
+        Reuses :func:`racing_line_loader.load_racing_line`, requesting
+        the driven line (``x_line_m`` / ``y_line_m``) plus the target
+        speed (``v_target_kmh``) used to pick apex markers.
+        """
         if track in self._rline_cache:
             return self._rline_cache[track]
-        path: Path | None = None
+        line: RacingLine | None = None
         for d in self._racing_line_dirs():
             cand = d / f"{track}_racing.csv"
             if cand.exists():
-                path = cand
+                rl = load_racing_line(
+                    cand, x_col="x_line_m", y_col="y_line_m",
+                    value_col="v_target_kmh",
+                )
+                line = None if rl.is_empty else rl
                 break
-        if path is None:
-            self._rline_cache[track] = None  # type: ignore[assignment]
-            return None
-        xs: list[float] = []
-        ys: list[float] = []
-        vs: list[float] = []
-        try:
-            with path.open("r", newline="", encoding="utf-8") as fh:
-                reader = csv.DictReader(fh)
-                for row in reader:
-                    try:
-                        xs.append(float(row["x_line_m"]))
-                        ys.append(float(row["y_line_m"]))
-                    except (KeyError, TypeError, ValueError):
-                        continue
-                    try:
-                        vs.append(float(row.get("v_target_kmh") or "nan"))
-                    except (TypeError, ValueError):
-                        vs.append(float("nan"))
-        except OSError:
-            self._rline_cache[track] = None  # type: ignore[assignment]
-            return None
-        if not xs:
-            self._rline_cache[track] = None  # type: ignore[assignment]
-            return None
-        arr = (
-            np.asarray(xs, dtype=float),
-            np.asarray(ys, dtype=float),
-            np.asarray(vs, dtype=float),
-        )
-        self._rline_cache[track] = arr
-        return arr
+        self._rline_cache[track] = line
+        return line
 
     def _render_racing_line(self, track: str | None) -> None:
         # Clear previous overlay.
@@ -820,9 +803,15 @@ class TrackMapDock(QWidget):
         if not track:
             return
         data = self._load_racing_line(track)
-        if data is None:
+        if data is None or data.is_empty:
             return
-        x_line, y_line, v_target = data
+        pts = np.asarray(data.points, dtype=float)
+        x_line = pts[:, 0]
+        y_line = pts[:, 1]
+        v_target = (
+            np.asarray(data.values, dtype=float)
+            if data.values else np.full(x_line.shape, np.nan)
+        )
         # Dashed ideal-line polyline, low z so lap traces stay on top.
         pen = QPen(pg.mkColor("#ffffff"))
         pen.setWidthF(1.0)
@@ -857,8 +846,13 @@ class TrackMapDock(QWidget):
 
     @staticmethod
     def _pth_search_paths(track: str) -> list[Path]:
+        from ...lfs_paths import get_lfs_dir
         out: list[Path] = []
-        # Standard LFS install location.
+        # User-configured LFS install (portable across drives).
+        lfs_dir = get_lfs_dir()
+        if lfs_dir is not None:
+            out.append(lfs_dir / "data" / "smx" / f"{track}.pth")
+        # Standard LFS install location (default install path).
         out.append(Path(r"C:\LFS\data\smx") / f"{track}.pth")
         # Workspace-bundled assets used by tests / dev.
         cwd = Path.cwd()
@@ -875,8 +869,13 @@ class TrackMapDock(QWidget):
 
     @staticmethod
     def _knw_search_paths(track: str, car: str) -> list[Path]:
+        from ...lfs_paths import get_lfs_dir
         out: list[Path] = []
         stem = f"{track}_{car}.knw"
+        # User-configured LFS install (portable across drives).
+        lfs_dir = get_lfs_dir()
+        if lfs_dir is not None:
+            out.append(lfs_dir / "data" / "knw" / stem)
         out.append(Path(r"C:\LFS\data\knw") / stem)
         cwd = Path.cwd()
         for sub in ("assets/knw", "assets", "tracks"):

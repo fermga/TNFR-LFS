@@ -12,6 +12,7 @@ Layout philosophy mirrors MoTeC i2 / AIM RaceStudio:
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt
@@ -202,6 +203,12 @@ class MainWindow(QMainWindow):
         if not self._charts.flush_on_close(event):
             return
         self._save_state()
+        # Stop any in-progress capture so its CLI subprocess doesn't
+        # outlive the Studio window (it holds the OutSim/OutGauge/InSim
+        # UDP ports and keeps writing CSVs otherwise).
+        with contextlib.suppress(Exception):
+            if self._center.capture.runner.running:
+                self._center.capture.runner.stop()
         self._loader.shutdown()
         # Frameless overlay modules are independent top-level windows
         # (no parent), so closing the main window doesn't propagate to

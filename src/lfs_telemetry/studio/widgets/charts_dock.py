@@ -41,7 +41,6 @@ from ..models import LapLoader
 from ..signals import SignalBus
 from ..theme import MUTED_COLOR, PANEL_COLOR, TEXT_COLOR, trace_color
 
-
 # QSettings keys for the overlay/normalize toggles.
 _SETTINGS_OVERLAY = "chartsdock/overlay"
 _SETTINGS_NORMALIZE = "chartsdock/normalize"
