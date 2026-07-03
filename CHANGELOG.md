@@ -27,6 +27,10 @@ versioning; dates are UTC.
   recognising the legacy `OpenVR Mode` / `Oculus Mode` lines. Installs
   configured for an OpenVR or Oculus headset are identified correctly
   and shown in the VR status label.
+- **VR overlay panels now render their text on high-DPI displays.** The
+  off-screen frame is rasterised at the widget's device pixel ratio, so
+  on 4K / 150–200 % scaling the numbers appear in the headset instead
+  of just the panel background.
 
 ## [0.5.1] — 2026-07-02
 
