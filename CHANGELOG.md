@@ -3,6 +3,31 @@
 Notable changes to LFS Race Engineer. This project follows semantic
 versioning; dates are UTC.
 
+## [0.5.2] — 2026-07-03
+
+### Changed
+
+- **VR overlays stay fixed in the cockpit.** Panels are anchored in
+  SteamVR *seated* space (`setOverlayTransformAbsolute` with
+  `TrackingUniverseSeated`) rather than tracking the headset, so they
+  hold their place when you look around. Recenter the VR view (SteamVR
+  or LFS) to set where they sit.
+- The VR status label under *Mirror overlays to VR* refreshes live and
+  reports the connected HMD, whether LFS currently owns the VR scene
+  (`LFS scene detected`), and the display device configured in LFS's
+  `cfg.txt`.
+- The VR mirror copies each frame once — straight from the `QImage`
+  memoryview into the OpenVR pixel buffer — instead of twice per panel
+  on every tick.
+
+### Fixed
+
+- LFS VR-headset detection reads the current `G3D_OPTIONS` line in
+  `cfg.txt` (display-device and VR-system fields), while still
+  recognising the legacy `OpenVR Mode` / `Oculus Mode` lines. Installs
+  configured for an OpenVR or Oculus headset are identified correctly
+  and shown in the VR status label.
+
 ## [0.5.1] — 2026-07-02
 
 ### Fixed

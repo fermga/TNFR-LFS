@@ -38,10 +38,11 @@ log = logging.getLogger(__name__)
 DEFAULT_TICK_HZ = 30
 
 
-# Per-module default poses. Coordinates are HMD-relative meters
-# (x=right, y=up, z=forward-negative). Values chosen so multiple
-# enabled modules don't overlap by default. The user will be able to
-# tweak these from the Overlay tab in a later step.
+# Per-module default poses. Coordinates are seated-space meters
+# (x=right, y=up, z=forward-negative), measured from the VR recenter
+# point so the panels stay fixed in the cockpit. Values chosen so
+# multiple enabled modules don't overlap by default. The user will be
+# able to tweak these from the Overlay tab in a later step.
 _DEFAULT_POSES: dict[str, OverlayPose] = {
     "speed": OverlayPose(x=-0.30, y=-0.20, z=-1.5, width_m=0.20),
     "gear": OverlayPose(x=0.00, y=-0.20, z=-1.5, width_m=0.18),
@@ -118,6 +119,14 @@ class VrMirror(QObject):
         does NOT raise, so UI code can simply attempt enable() and
         report the boolean to the user.
         """
+        # A sink left over from a previous failed attempt (e.g. SteamVR or
+        # the HMD were not ready yet) caches its init error and would never
+        # reconnect. Discard it so this attempt re-runs openvr.init() — this
+        # is what lets the user simply re-tick the box to retry once the
+        # headset is live.
+        if self._sink is not None and not self._sink.available:
+            self._sink.shutdown()
+            self._sink = None
         if self._sink is None:
             self._sink = OpenVROverlaySink()
         if not self._sink.available:

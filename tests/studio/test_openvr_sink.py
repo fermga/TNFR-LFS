@@ -74,6 +74,7 @@ class _FakeOverlay:
 
     def __init__(self) -> None:
         self.transform = None
+        self.tracking_origin = None
         self.raw_buffer = None
         self.shown: list[int] = []
         self._next_handle = 100
@@ -85,9 +86,10 @@ class _FakeOverlay:
     def setOverlayWidthInMeters(self, handle, width):
         self.width = width
 
-    def setOverlayTransformTrackedDeviceRelative(
-        self, handle, device, transform,
+    def setOverlayTransformAbsolute(
+        self, handle, tracking_origin, transform,
     ):
+        self.tracking_origin = tracking_origin
         self.transform = transform
 
     def setOverlayRaw(self, handle, buffer, w, h, bpp):
@@ -118,10 +120,12 @@ def _make_live_sink(openvr_mod, fake_overlay):
 
 
 def test_ensure_overlay_passes_ctypes_transform():
-    """The device-relative transform must be a real ``HmdMatrix34_t``.
+    """Overlays anchor in seated space with a real ``HmdMatrix34_t``.
 
-    pyopenvr calls ``ctypes.byref`` on it; a plain tuple would raise and
-    leave the overlay created-but-invisible.
+    Using an absolute (seated) transform keeps each panel fixed in the
+    cockpit instead of following the gaze. pyopenvr calls
+    ``ctypes.byref`` on the matrix; a plain tuple would raise and leave
+    the overlay created-but-invisible.
     """
     import ctypes
 
@@ -130,6 +134,7 @@ def test_ensure_overlay_passes_ctypes_transform():
     sink = _make_live_sink(openvr, fake)
 
     assert sink.ensure_overlay("speed") is True
+    assert fake.tracking_origin == openvr.TrackingUniverseSeated
     assert isinstance(fake.transform, openvr.HmdMatrix34_t)
     # Must not raise — this is what pyopenvr does internally.
     ctypes.byref(fake.transform)

@@ -248,12 +248,16 @@ class OpenVROverlaySink:
                 self._vr_overlay.setOverlayWidthInMeters(
                     handle, pose.width_m,
                 )
-                # Anchor to HMD (tracked device 0). LFS users overwhelmingly
-                # want HUD-style overlays; world-locked variants are a later
-                # configuration toggle.
-                hmd_idx = 0
-                self._vr_overlay.setOverlayTransformTrackedDeviceRelative(
-                    handle, hmd_idx, self._build_transform(pose),
+                # Anchor in the *seated* tracking space so each panel
+                # stays fixed in the cockpit instead of following the
+                # gaze. The pose is measured from the seated zero (the
+                # recenter point): looking around leaves the overlays
+                # put, and a SteamVR/LFS view-recenter re-places them in
+                # front of the new forward direction.
+                self._vr_overlay.setOverlayTransformAbsolute(
+                    handle,
+                    self._openvr.TrackingUniverseSeated,
+                    self._build_transform(pose),
                 )
                 self._entries[module_id] = _OverlayEntry(
                     handle=handle, width_m=pose.width_m,
@@ -313,11 +317,16 @@ class OpenVROverlaySink:
         if image.bytesPerLine() != expected_stride:
             # Force a packed copy.
             image = image.copy()
-        raw = bytes(image.constBits())
-        # pyopenvr forwards the pixel buffer through ``ctypes.byref``, so
-        # it must be a ctypes object; a raw ``bytes`` would raise and
-        # silently drop every frame. Wrap it in a packed ctypes array.
-        buf = (ctypes.c_char * len(raw)).from_buffer_copy(raw)
+        # ``constBits()`` is a memoryview over the image's backing store
+        # (length == sizeInBytes()), so we can fill the ctypes buffer in
+        # a single copy instead of routing through an intermediate
+        # ``bytes`` object — this runs once per visible module at the
+        # mirror tick rate. pyopenvr forwards the buffer through
+        # ``ctypes.byref``, so it must be a real ctypes object; a plain
+        # ``bytes``/memoryview would raise and silently drop every frame.
+        buf = (ctypes.c_char * (w * h * 4)).from_buffer_copy(
+            image.constBits(),
+        )
 
         with self._lock:
             try:

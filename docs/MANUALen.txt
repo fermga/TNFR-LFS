@@ -353,9 +353,11 @@ The Live tab includes a **VR** group with a single checkbox:
 
 * **Mirror overlays to VR (SteamVR / OpenVR)** — when enabled, every
   visible overlay module is also rendered as an `IVROverlay` panel
-  anchored to the HMD. The same Qt widget is the source of truth:
-  the desktop window and the VR panel show identical content. There
-  is no second look-and-feel to configure.
+  fixed in the cockpit (anchored in SteamVR *seated* space), so the
+  panels stay put when you look around instead of following your
+  gaze. The same Qt widget is the source of truth: the desktop window
+  and the VR panel show identical content. There is no second
+  look-and-feel to configure.
 
 **Why VR works where exclusive fullscreen doesn't**
 
@@ -374,14 +376,21 @@ Meta Quest with Steam Link, etc.).
 * The `openvr` Python package. Already shipped inside the Windows
   installer; if you run from source, install with
   `pip install lfs-race-engineer[vr]`.
-* The HMD has to be tracking (not in standby). The default pose
-  places overlays roughly 1.5 m in front of the headset.
+* The HMD has to be tracking (not in standby). Panels are placed
+  about 1.5 m ahead of your centred view; recenter the VR view once
+  (SteamVR or LFS) while looking forward in the cockpit to set where
+  they sit.
 
 **Behaviour**
 
 * Toggle is a no-op if SteamVR isn't running or the `openvr` module
   is missing — the checkbox bounces back to **off** and the status
   label below it shows the reason (e.g. `VR mirror unavailable: ...`).
+* While enabled, the status label under the checkbox refreshes live
+  and reports the connected HMD, whether LFS currently owns the VR
+  scene (`LFS scene detected`), and the display device LFS is set to
+  in its `cfg.txt` — so you can confirm the whole chain before
+  putting the headset on.
 * While enabled, a 30 Hz timer reads each visible overlay module,
   renders it off-screen to a transparent `QImage`, converts to
   `RGBA8888`, and uploads it via `IVROverlay.SetOverlayRaw`. There
@@ -393,9 +402,10 @@ Meta Quest with Steam Link, etc.).
 
 **Default panel layout**
 
-Overlays are arranged in a soft arc 1.5 m from the headset, slightly
-below eye level so they don't sit on the apex of corners. Each
-overlay is ~40 cm wide in world units. Per-module pose customisation
+Overlays sit about 1.5 m ahead of your recentred view, slightly
+below eye level so they don't cover the apex of corners, and stay
+fixed in that cockpit position as you look around. Panels are up to
+~40 cm wide in world units. Per-module pose customisation
 (move/scale individual panels in the headset) is on the roadmap;
 today the defaults are tuned to be readable without occluding the
 racing line.

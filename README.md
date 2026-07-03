@@ -19,9 +19,9 @@ a stint browser.
   and persisted in `QSettings`.
 * CSV replay schema version `1.1` (preamble
   `# lfs-telemetry telemetry schema=1.1`).
-* Test suite: **344 passed, 15 skipped** running headless
-  (`QT_QPA_PLATFORM=offscreen`). The 15 skips require either a live LFS
-  session (`tests/test_live_lfs_integration.py`) or on-disk LFS data
+* Test suite runs fully headless (`QT_QPA_PLATFORM=offscreen`). A few
+  tests skip automatically unless they find a live LFS session
+  (`tests/test_live_lfs_integration.py`) or on-disk LFS data
   (`C:\LFS\data\smx`, `…\car_info.bin`, etc.).
 
 ```
@@ -131,7 +131,7 @@ src/lfs_telemetry/
   app/                        # capture-process support (used by Studio)
     capture_runner.py         # spawn CLI as subprocess, watch stop file
     state.py                  # dataclass mirror of capture state
-tests/                        # 359 collected (344 pass headless, 15 skipped)
+tests/                        # pytest suite (headless via QT_QPA_PLATFORM=offscreen)
 scripts/                      # ops + dev helpers (see Scripts section)
 tools/                        # binary-format research helpers
 tracks/                       # per-variant elevation profiles + overviews
@@ -159,10 +159,10 @@ Run the test suite headless:
 $env:PYTHONIOENCODING = "utf-8"
 $env:QT_QPA_PLATFORM  = "offscreen"
 python -m pytest -q
-# 344 passed, 15 skipped
+# passes headless; a few tests skip without a live LFS session or on-disk data
 ```
 
-The 15 skipped tests exercise the on-disk LFS install layout
+The skipped tests exercise the on-disk LFS install layout
 (`C:\LFS\data\smx\*.smx`, `…\car_info.bin`) and the live integration
 suite; they run only with a real LFS folder and a live session (see
 below).

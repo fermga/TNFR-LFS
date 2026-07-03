@@ -359,9 +359,11 @@ La pestaña Live incluye un grupo **VR** con una sola casilla:
 
 * **Mirror overlays to VR (SteamVR / OpenVR)** — al activarla, cada
   módulo de overlay visible se dibuja también como un panel
-  `IVROverlay` anclado al casco. El widget Qt es la única fuente de
-  verdad: la ventana de escritorio y el panel VR muestran contenido
-  idéntico. No hay un segundo *look & feel* que configurar.
+  `IVROverlay` fijo en la cabina (anclado en el espacio *seated* de
+  SteamVR), así que los paneles se quedan quietos cuando miras
+  alrededor en vez de seguir tu mirada. El widget Qt es la única
+  fuente de verdad: la ventana de escritorio y el panel VR muestran
+  contenido idéntico. No hay un segundo *look & feel* que configurar.
 
 **Por qué VR funciona donde fullscreen exclusivo no**
 
@@ -381,14 +383,21 @@ Steam Link, etc.).
 * El paquete Python `openvr`. Ya empaquetado dentro del instalador
   de Windows; si ejecutas desde código, instala con
   `pip install lfs-race-engineer[vr]`.
-* El casco debe estar trackeando (no en standby). La pose por
-  defecto coloca los overlays a ~1.5 m frente al casco.
+* El casco debe estar trackeando (no en standby). Los paneles se
+  colocan a ~1.5 m frente a tu vista centrada; recentra la vista VR
+  una vez (SteamVR o LFS) mirando al frente en la cabina para fijar
+  dónde quedan.
 
 **Comportamiento**
 
 * La casilla es un *no-op* si SteamVR no está corriendo o si falta
   el módulo `openvr` — vuelve sola a **off** y la etiqueta de estado
   bajo ella muestra el motivo (p. ej. `VR mirror unavailable: ...`).
+* Con la casilla activa, la etiqueta de estado bajo ella se refresca
+  en vivo e informa del casco conectado, de si LFS controla ahora la
+  escena VR (`LFS scene detected`) y del dispositivo de pantalla que
+  LFS tiene en su `cfg.txt` — así confirmas toda la cadena antes de
+  ponerte el casco.
 * Mientras esté activa, un timer a 30 Hz lee cada módulo de overlay
   visible, lo renderiza off-screen en un `QImage` transparente, lo
   convierte a `RGBA8888` y lo sube vía `IVROverlay.SetOverlayRaw`.
@@ -400,9 +409,10 @@ Steam Link, etc.).
 
 **Disposición por defecto de los paneles**
 
-Los overlays se distribuyen en un arco suave a 1.5 m del casco,
-ligeramente por debajo del nivel de los ojos para no sentarse sobre
-el ápice de las curvas. Cada overlay mide ~40 cm de ancho en
+Los overlays quedan a ~1.5 m frente a tu vista recentrada,
+ligeramente por debajo del nivel de los ojos para no tapar el ápice
+de las curvas, y permanecen fijos en esa posición de la cabina
+cuando miras alrededor. Los paneles miden hasta ~40 cm de ancho en
 unidades de mundo. La personalización de pose por módulo
 (mover/escalar paneles individuales dentro del casco) está en la
 hoja de ruta; hoy los valores por defecto están calibrados para

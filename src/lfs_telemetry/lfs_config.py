@@ -240,21 +240,28 @@ def _looks_like_lfs_dir(path: Path) -> bool:
 
 
 def read_lfs_vr_mode(lfs_dir: Path) -> tuple[str, int] | None:
-    """Detect whether LFS is configured for VR in ``cfg.txt``.
+    """Detect whether LFS is set to render to a VR headset in ``cfg.txt``.
 
-    Returns ``(backend, mode)`` where ``backend`` is ``"OpenVR"``,
-    ``"Oculus"`` or ``"VR"`` and ``mode`` is the integer value when
-    it is non-zero; ``None`` otherwise (no cfg.txt, or every VR-mode
-    line is 0/missing/unparseable).
+    Returns ``(backend, vr_system)`` where ``backend`` is ``"OpenVR"``
+    or ``"Oculus"`` and ``vr_system`` is LFS's raw VR-system index, or
+    ``None`` when LFS targets a flat monitor / 3D-display device (no
+    headset), when ``cfg.txt`` is missing, or when the setting cannot
+    be parsed.
 
-    LFS exposes its VR backend via cfg.txt lines like::
+    Modern LFS (0.6+) stores the display device on a single
+    ``G3D_OPTIONS`` line::
 
-        OpenVR Mode 1
-        Oculus Mode 0
+        G3D_OPTIONS <a> <b> <c> <d> <device> <vr_system> <fmt>
 
-    We do not try to be exhaustive — any line whose first token is
-    ``OpenVR``/``Oculus``/``VR`` and whose second token is ``Mode`` is
-    accepted, with the integer immediately following.
+    where ``device`` is ``0`` = TV / monitor / projector, ``1`` = 3D
+    display device and ``2`` = VR headset, and ``vr_system`` is ``0`` =
+    Oculus Rift, ``1`` = OpenVR (SteamVR). The field positions are
+    confirmed against LFS's own language strings (``3h_g3ddev*`` for
+    the device selector, ``3h_hsriftvr``/``3h_hsopenvr`` for the VR
+    system). When present, this line is authoritative.
+
+    Legacy builds used discrete ``OpenVR Mode N`` / ``Oculus Mode N``
+    lines; those remain recognised for backward compatibility.
     """
     cfg = cfg_path_for(lfs_dir)
     if not cfg.exists():
@@ -263,22 +270,43 @@ def read_lfs_vr_mode(lfs_dir: Path) -> tuple[str, int] | None:
         text = cfg.read_text(encoding="latin-1")
     except OSError:
         return None
+
+    legacy: tuple[str, int] | None = None
     for line in text.splitlines():
         parts = line.split()
-        if len(parts) < 3:
+        if not parts:
             continue
-        backend, key = parts[0], parts[1]
-        if backend not in {"OpenVR", "Oculus", "VR"}:
-            continue
-        if key != "Mode":
-            continue
-        try:
-            value = int(parts[2])
-        except ValueError:
-            continue
-        if value > 0:
-            return backend, value
-    return None
+
+        # Modern single-line form. When present it decides the answer:
+        # a non-headset device means VR is off, regardless of any other
+        # (stale) line still sitting in the file. ``parts[0]`` is the
+        # ``G3D_OPTIONS`` key itself, so the 5th value (device) is at
+        # index 5 and the 6th (vr_system) at index 6.
+        if parts[0] == "G3D_OPTIONS" and len(parts) >= 7:
+            try:
+                device = int(parts[5])
+                vr_system = int(parts[6])
+            except ValueError:
+                continue
+            if device != 2:  # 0 = monitor, 1 = 3D display — not a headset
+                return None
+            backend = "OpenVR" if vr_system == 1 else "Oculus"
+            return backend, vr_system
+
+        # Legacy discrete form: "OpenVR Mode 1" / "Oculus Mode 0".
+        if (
+            len(parts) >= 3
+            and parts[0] in {"OpenVR", "Oculus", "VR"}
+            and parts[1] == "Mode"
+        ):
+            try:
+                value = int(parts[2])
+            except ValueError:
+                continue
+            if value > 0:
+                legacy = (parts[0], value)
+
+    return legacy
 
 
 __all__ = [

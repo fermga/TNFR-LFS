@@ -191,12 +191,13 @@ dejar registros de telemetría en el workspace.
 Módulos Live disponibles (sub-paquete `widgets/live_modules/`):
 
 * Radar 360° de tráfico con coches relativos.
-* Strip de delta-time vs vuelta de referencia.
-* Predicted lap (`SplitPredictor.predicted_lap_ms`) y gap a best.
-* Fuel range (`FuelTracker.range_laps`).
-* Mini track map con cursor.
-* Bandera / pit window / penalizaciones (decodificadas vía
-  `protocol.packets.penalty_name`).
+* Strip de delta-time vs mejor vuelta y delta de velocidad en el
+  mismo punto de pista.
+* Velocidad, marcha, barra de RPM y G-metro (círculo de fricción).
+* Combustible: % restante y vueltas restantes (`FuelTracker`).
+* Huecos al coche de delante/detrás e info de sesión dinámica.
+* Grip por rueda, banderas y pit limiter (penalizaciones decodificadas
+  vía `protocol.packets.penalty_name`).
 
 ---
 

@@ -131,6 +131,12 @@ class LiveTab(QWidget):
         # VR mirror is created lazily on first enable so absence of
         # SteamVR / openvr is silent when the user never opts in.
         self._vr_mirror: VrMirror | None = None
+        # While the mirror is on, re-poll the SteamVR runtime so the
+        # status label reflects LFS entering/leaving the VR scene live
+        # (e.g. the moment LFS starts presenting to the headset).
+        self._vr_status_timer = QTimer(self)
+        self._vr_status_timer.setInterval(1500)
+        self._vr_status_timer.timeout.connect(self._refresh_vr_status)
 
         # ----- Scrollable module toggles ------------------------------
         modules_box = QGroupBox(
@@ -449,7 +455,9 @@ class LiveTab(QWidget):
             ok = self._vr_mirror.enable()
             if ok:
                 self._vr_status.setText(self._compose_vr_status_text())
+                self._vr_status_timer.start()
             else:
+                self._vr_status_timer.stop()
                 err = (
                     self._vr_mirror._sink.init_error
                     if self._vr_mirror._sink is not None
@@ -463,9 +471,22 @@ class LiveTab(QWidget):
                 self._vr_enable.setChecked(False)
                 self._vr_enable.blockSignals(False)
         else:
+            self._vr_status_timer.stop()
             if self._vr_mirror is not None:
                 self._vr_mirror.disable()
             self._vr_status.setText("")
+
+    def _refresh_vr_status(self) -> None:
+        """Live-update the VR status label while the mirror is enabled.
+
+        Stops itself if the mirror was torn down, so a stale timer can
+        never poke a dead sink.
+        """
+        mirror = self._vr_mirror
+        if mirror is None or not mirror.is_enabled:
+            self._vr_status_timer.stop()
+            return
+        self._vr_status.setText(self._compose_vr_status_text())
 
     def _compose_vr_status_text(self) -> str:
         """Build the multi-line status shown after a successful enable.
@@ -512,7 +533,9 @@ class LiveTab(QWidget):
                        "to see overlays in your headset."),
                 )
 
-        # Read LFS cfg.txt for OpenVR/Oculus mode (best-effort).
+        # Read LFS cfg.txt for the selected display device (best-effort).
+        # This is the pre-flight complement to the runtime scene check:
+        # it tells the user whether LFS will even try to enter VR.
         lfs_dir = get_lfs_dir() or autodetect_lfs_dir()
         if lfs_dir is not None:
             try:
@@ -520,9 +543,17 @@ class LiveTab(QWidget):
             except Exception:
                 vr_mode = None
             if vr_mode is not None:
-                backend, mode = vr_mode
+                backend, _system = vr_mode
                 lines.append(
-                    tr("LFS cfg.txt: ") + f"{backend} Mode {mode}",
+                    tr("LFS display device: VR headset (")
+                    + backend + ").",
+                )
+            else:
+                lines.append(
+                    tr("LFS is not set to a VR headset (Options \u2192 "
+                       "Display \u2192 3D/VR). It renders to the flat "
+                       "monitor, so SteamVR shows the desktop, not your "
+                       "overlays."),
                 )
 
         return "\n".join(lines)
@@ -675,6 +706,7 @@ class LiveTab(QWidget):
 
     def closeEvent(self, event) -> None:
         self._timer.stop()
+        self._vr_status_timer.stop()
         if self._vr_mirror is not None:
             self._vr_mirror.shutdown()
             self._vr_mirror = None
